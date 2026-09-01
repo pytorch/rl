@@ -1,0 +1,896 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>RolloutFromModel &mdash; torchrl 0.4 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="TensorDictTokenizer" href="torchrl.data.TensorDictTokenizer.html" />
+    <link rel="prev" title="RewardData" href="torchrl.data.RewardData.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-117752657-2"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'UA-117752657-2');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.4
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="../data.html">torchrl.data package</a> &gt;</li>
+        
+      <li>RolloutFromModel</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/reference/generated/torchrl.data.RolloutFromModel.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+          <div class="pytorch-call-to-action-links">
+            <div id="tutorial-type">reference/generated/torchrl.data.RolloutFromModel</div>
+
+            <div id="google-colab-link">
+              <img class="call-to-action-img" src="../../_static/images/pytorch-colab.svg"/>
+              <div class="call-to-action-desktop-view">Run in Google Colab</div>
+              <div class="call-to-action-mobile-view">Colab</div>
+            </div>
+            <div id="download-notebook-link">
+              <img class="call-to-action-notebook-img" src="../../_static/images/pytorch-download.svg"/>
+              <div class="call-to-action-desktop-view">Download Notebook</div>
+              <div class="call-to-action-mobile-view">Notebook</div>
+            </div>
+            <div id="github-view-link">
+              <img class="call-to-action-img" src="../../_static/images/pytorch-github.svg"/>
+              <div class="call-to-action-desktop-view">View on GitHub</div>
+              <div class="call-to-action-mobile-view">GitHub</div>
+            </div>
+          </div>
+
+        
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="rolloutfrommodel">
+<h1>RolloutFromModel<a class="headerlink" href="#rolloutfrommodel" title="Permalink to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrl.data.RolloutFromModel">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.</span></span><span class="sig-name descname"><span class="pre">RolloutFromModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ref_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_coef</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_new_tokens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_clip</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kl_scheduler</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">KLControllerBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/rlhf/utils.html#RolloutFromModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.RolloutFromModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>A class for performing rollouts with causal language models.</p>
+<p>It is assumed that the model this class wraps takes as input tokenized text and
+whose task is to predict the next word in a sentence having read the n previous
+words.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>transformers.Transformer</em>) – the model to be used. Should have a
+<a class="reference internal" href="#torchrl.data.RolloutFromModel.generate" title="torchrl.data.RolloutFromModel.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> method.</p></li>
+<li><p><strong>ref_model</strong> (<em>transformers.Transformer</em>) – a frozen version of <code class="docutils literal notranslate"><span class="pre">model</span></code>
+where params are in their initial configuration. This is used to compute a
+KL penalty for the reward, to stop the model from straying too far from the
+reference model during training.</p></li>
+<li><p><strong>reward_model</strong> – (nn.Module, tensordict.nn.TensorDictModule): a model which, given
+<code class="docutils literal notranslate"><span class="pre">input_ids</span></code> and <code class="docutils literal notranslate"><span class="pre">attention_mask</span></code>, calculates rewards for each token and
+end_scores (the reward for the final token in each sequence).</p></li>
+<li><p><strong>kl_coef</strong> – (float, optional): initial kl coefficient.</p></li>
+<li><p><strong>max_new_tokens</strong> (<em>int</em><em>, </em><em>optional</em>) – the maximum length of the sequence.
+Defaults to 50.</p></li>
+<li><p><strong>score_clip</strong> (<em>float</em><em>, </em><em>optional</em>) – Scores from the reward model are clipped to the
+range <code class="docutils literal notranslate"><span class="pre">(-score_clip,</span> <span class="pre">score_clip)</span></code>. Defaults to 10.</p></li>
+<li><p><strong>kl_scheduler</strong> (<em>KLControllerBase</em><em>, </em><em>optional</em>) – the KL coefficient scheduler.</p></li>
+<li><p><strong>num_steps</strong> (<em>int</em><em>, </em><em>optional</em>) – number of steps between two optimization.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.models.rlhf</span> <span class="kn">import</span> <span class="n">GPT2RewardModel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.rlhf.utils</span> <span class="kn">import</span> <span class="n">RolloutFromModel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.rlhf.dataset</span> <span class="kn">import</span> <span class="n">get_dataloader</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.rlhf.prompt</span> <span class="kn">import</span> <span class="n">PromptData</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">GPT2LMHeadModel</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dl</span> <span class="o">=</span> <span class="n">get_dataloader</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">block_size</span><span class="o">=</span><span class="mi">550</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">tensorclass_type</span><span class="o">=</span><span class="n">PromptData</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">dataset_name</span><span class="o">=</span><span class="s2">&quot;CarperAI/openai_summarize_tldr&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">GPT2LMHeadModel</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># we load ref_model with random weights so it differs from model</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ref_model</span> <span class="o">=</span> <span class="n">GPT2LMHeadModel</span><span class="p">(</span><span class="n">GPT2LMHeadModel</span><span class="o">.</span><span class="n">config_class</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reward_model</span> <span class="o">=</span> <span class="n">GPT2RewardModel</span><span class="p">(</span><span class="n">model_path</span><span class="o">=</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rollout_from_model</span> <span class="o">=</span> <span class="n">RolloutFromModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">ref_model</span><span class="p">,</span> <span class="n">reward_model</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">dl</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rollout</span> <span class="o">=</span> <span class="n">rollout_from_model</span><span class="o">.</span><span class="n">rollout_from_data</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rollout</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        action: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        attention_mask: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">        input_ids: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">        next: TensorDict(</span>
+<span class="go">            fields={</span>
+<span class="go">                attention_mask: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">                done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="go">                input_ids: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">                reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">                reward_kl: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">                reward_raw: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">            batch_size=torch.Size([4, 50]),</span>
+<span class="go">            device=cpu,</span>
+<span class="go">            is_shared=False),</span>
+<span class="go">        sample_log_prob: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([4, 50]),</span>
+<span class="go">    device=cpu,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.RolloutFromModel.create_rollout_td">
+<span class="sig-name descname"><span class="pre">create_rollout_td</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generated</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_probs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_ratio</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/rlhf/utils.html#RolloutFromModel.create_rollout_td"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.RolloutFromModel.create_rollout_td" title="Permalink to this definition">¶</a></dt>
+<dd><p>A TensorDict wrapper for generated data.</p>
+<p>This function takes a batch plus the generated tokens and replicates the
+tensordict structure that would have been obtained from a rollout with a TorchRL
+env that sampled one token each timestep.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch</strong> (<em>TensorDict</em>) – A batch of data containing the original prompt together with a field
+“rindex” indicating the right index of the prompt.</p></li>
+<li><p><strong>generated</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><em>torch.Tensor</em></a>) – Tokenized prompt followed by generated tokens. This can be obtained
+by calling the <code class="docutils literal notranslate"><span class="pre">generate</span></code> method.</p></li>
+<li><p><strong>log_probs</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><em>torch.Tensor</em></a>) – The log probabilities of the generated tokens. Can be obtained by
+calling the <code class="docutils literal notranslate"><span class="pre">generate</span></code> method.</p></li>
+<li><p><strong>log_ratio</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><em>torch.Tensor</em></a>) – The log ratio of the probabilities of the generated tokens
+according to the generative model and the reference model. Can be
+obtained by calling the <code class="docutils literal notranslate"><span class="pre">generate</span></code> method.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code>: the sequence of actions (generated tokens)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;input_ids&quot;</span></code>: the input_ids passed to the generative model at each time
+step.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;attention_mask&quot;</span></code>: the attention_masks passed to the generative model at
+each time step</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;sample_log_prob&quot;</span></code>: the log probability of each token during generation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;input_ids&quot;)</span></code>: the sequence of tokens after generation. Makes up
+part of the inputs that will be used for generating the next token.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;attention_mask&quot;)</span></code>: updated attention_mask after token has been
+generated. Passed to the generative model on the next time step</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;terminated&quot;)</span></code>: Boolean array indicating whether we’ve reached a
+terminal state (either because we generated EOS token or because we
+reached the token limit)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code>: Boolean array indicating whether we’ve reached a
+final state. Currently a copy of <code class="docutils literal notranslate"><span class="pre">&quot;terminated&quot;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;reward&quot;)</span></code>: The reward received at each time step</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;reward_raw&quot;)</span></code>: The raw reward from the reward model, without the
+KL term. This is mainly for debugging and logging, it is not used in
+training</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;reward_kl&quot;)</span></code>: The KL term from the reward. This is mainly for
+debugging and logging, it is not used in training.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> with the following keys</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.RolloutFromModel.generate">
+<span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.PromptData.html#torchrl.data.PromptData" title="torchrl.data.rlhf.prompt.PromptData"><span class="pre">PromptData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">generation_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/rlhf/utils.html#RolloutFromModel.generate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.RolloutFromModel.generate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates a sequence of tokens from a batch of data sampled from the data collector.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch</strong> (<a class="reference internal" href="torchrl.data.PromptData.html#torchrl.data.PromptData" title="torchrl.data.PromptData"><em>PromptData</em></a>) – the data to be used. Must have <code class="docutils literal notranslate"><span class="pre">input_ids</span></code>
+and <code class="docutils literal notranslate"><span class="pre">prompt_rindex</span></code> fields.</p></li>
+<li><p><strong>generation_config</strong> (<em>GenerationConfig</em><em>, </em><em>optional</em>) – the configuration for the
+call to generate.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>a [B x (Ti +To)] sequence of integers (tokens),</dt><dd><p>where Ti is the length of the input sequence and To is the length
+of the generated sequence.</p>
+</dd>
+</dl>
+<p>log_probs_gen: the log-probabilities of the token generated.
+log_ratio: the log ratio between probabilities under the generative</p>
+<blockquote>
+<div><p>model and the frozen version.</p>
+</div></blockquote>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>generated (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)">torch.Tensor</a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.RolloutFromModel.logprobs_of_labels">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">logprobs_of_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/rlhf/utils.html#RolloutFromModel.logprobs_of_labels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.RolloutFromModel.logprobs_of_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log probabilities of the labels.</p>
+<p>These are calculated from the logits. The labels (token ids) are used to index
+the logits along the relevant dimension.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="torchrl.data.TensorDictTokenizer.html" class="btn btn-neutral float-right" title="TensorDictTokenizer" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="torchrl.data.RewardData.html" class="btn btn-neutral" title="RewardData" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">RolloutFromModel</a></li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+         <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+         <script src="../../_static/jquery.js"></script>
+         <script src="../../_static/underscore.js"></script>
+         <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../_static/doctools.js"></script>
+         <script src="../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

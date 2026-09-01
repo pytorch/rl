@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.record.loggers.monitoring
+
+
+Every
+=====
+
+.. autofunction:: Every

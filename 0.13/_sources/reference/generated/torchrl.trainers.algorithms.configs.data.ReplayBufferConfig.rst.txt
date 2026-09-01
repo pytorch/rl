@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.data.ReplayBufferConfig
+===========================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.data
+
+.. autoclass:: ReplayBufferConfig

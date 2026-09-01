@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DreamerV3BlockGRU
+=================
+
+.. autoclass:: DreamerV3BlockGRU
+    :members:

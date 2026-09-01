@@ -1,0 +1,634 @@
+{
+  "history": [
+    {
+      "date": "2026-06-01",
+      "flaky_count": 6,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 28581
+    },
+    {
+      "date": "2026-06-02",
+      "flaky_count": 6,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 28581
+    },
+    {
+      "date": "2026-06-03",
+      "flaky_count": 6,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 28564
+    },
+    {
+      "date": "2026-06-04",
+      "flaky_count": 1,
+      "new_flaky_count": 1,
+      "resolved_count": 0,
+      "total_tests": 28610
+    },
+    {
+      "date": "2026-06-05",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 28633
+    },
+    {
+      "date": "2026-06-06",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 28634
+    },
+    {
+      "date": "2026-06-07",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 28662
+    },
+    {
+      "date": "2026-06-08",
+      "flaky_count": 1,
+      "new_flaky_count": 1,
+      "resolved_count": 0,
+      "total_tests": 28662
+    },
+    {
+      "date": "2026-06-09",
+      "flaky_count": 1,
+      "new_flaky_count": 1,
+      "resolved_count": 0,
+      "total_tests": 28662
+    },
+    {
+      "date": "2026-06-10",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 28885
+    },
+    {
+      "date": "2026-06-11",
+      "flaky_count": 3,
+      "new_flaky_count": 3,
+      "resolved_count": 0,
+      "total_tests": 28908
+    },
+    {
+      "date": "2026-06-12",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 29083
+    },
+    {
+      "date": "2026-06-13",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 29088
+    },
+    {
+      "date": "2026-06-14",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 29088
+    },
+    {
+      "date": "2026-06-15",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 29088
+    },
+    {
+      "date": "2026-06-16",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 29088
+    },
+    {
+      "date": "2026-06-17",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 29092
+    },
+    {
+      "date": "2026-06-18",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 29152
+    },
+    {
+      "date": "2026-06-19",
+      "flaky_count": 2,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29225
+    },
+    {
+      "date": "2026-06-20",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29249
+    },
+    {
+      "date": "2026-06-21",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29249
+    },
+    {
+      "date": "2026-06-22",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29249
+    },
+    {
+      "date": "2026-06-23",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29317
+    },
+    {
+      "date": "2026-06-24",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29360
+    },
+    {
+      "date": "2026-06-25",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29387
+    },
+    {
+      "date": "2026-06-26",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29387
+    },
+    {
+      "date": "2026-06-27",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29387
+    },
+    {
+      "date": "2026-06-28",
+      "flaky_count": 17,
+      "new_flaky_count": 17,
+      "resolved_count": 0,
+      "total_tests": 29423
+    },
+    {
+      "date": "2026-06-29",
+      "flaky_count": 17,
+      "new_flaky_count": 17,
+      "resolved_count": 0,
+      "total_tests": 29423
+    },
+    {
+      "date": "2026-06-30",
+      "flaky_count": 17,
+      "new_flaky_count": 17,
+      "resolved_count": 0,
+      "total_tests": 29445
+    },
+    {
+      "date": "2026-07-01",
+      "flaky_count": 17,
+      "new_flaky_count": 17,
+      "resolved_count": 0,
+      "total_tests": 29446
+    },
+    {
+      "date": "2026-07-02",
+      "flaky_count": 17,
+      "new_flaky_count": 17,
+      "resolved_count": 0,
+      "total_tests": 29446
+    },
+    {
+      "date": "2026-07-03",
+      "flaky_count": 17,
+      "new_flaky_count": 17,
+      "resolved_count": 0,
+      "total_tests": 29446
+    },
+    {
+      "date": "2026-07-04",
+      "flaky_count": 17,
+      "new_flaky_count": 17,
+      "resolved_count": 0,
+      "total_tests": 29446
+    },
+    {
+      "date": "2026-07-05",
+      "flaky_count": 17,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29446
+    },
+    {
+      "date": "2026-07-06",
+      "flaky_count": 17,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29447
+    },
+    {
+      "date": "2026-07-07",
+      "flaky_count": 17,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29519
+    },
+    {
+      "date": "2026-07-08",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29569
+    },
+    {
+      "date": "2026-07-09",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29739
+    },
+    {
+      "date": "2026-07-10",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29767
+    },
+    {
+      "date": "2026-07-11",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29767
+    },
+    {
+      "date": "2026-07-12",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29767
+    },
+    {
+      "date": "2026-07-13",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 29767
+    },
+    {
+      "date": "2026-07-14",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30821
+    },
+    {
+      "date": "2026-07-15",
+      "flaky_count": 0,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30871
+    },
+    {
+      "date": "2026-07-16",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30918
+    },
+    {
+      "date": "2026-07-17",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30947
+    },
+    {
+      "date": "2026-07-18",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-19",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-20",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-21",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-22",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-23",
+      "flaky_count": 4,
+      "new_flaky_count": 4,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-24",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-25",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-26",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-27",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-28",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-29",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-07-31",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-08-01",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-08-02",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-08-03",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-08-04",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-08-05",
+      "flaky_count": 4,
+      "new_flaky_count": 0,
+      "resolved_count": 0,
+      "total_tests": 30975
+    },
+    {
+      "date": "2026-08-06",
+      "flaky_count": 131,
+      "new_flaky_count": 127,
+      "resolved_count": 0,
+      "total_tests": 30981
+    },
+    {
+      "date": "2026-08-07",
+      "flaky_count": 130,
+      "new_flaky_count": 128,
+      "resolved_count": 0,
+      "total_tests": 31216
+    },
+    {
+      "date": "2026-08-08",
+      "flaky_count": 129,
+      "new_flaky_count": 129,
+      "resolved_count": 0,
+      "total_tests": 31295
+    },
+    {
+      "date": "2026-08-09",
+      "flaky_count": 129,
+      "new_flaky_count": 129,
+      "resolved_count": 0,
+      "total_tests": 31295
+    },
+    {
+      "date": "2026-08-10",
+      "flaky_count": 129,
+      "new_flaky_count": 129,
+      "resolved_count": 0,
+      "total_tests": 31295
+    },
+    {
+      "date": "2026-08-11",
+      "flaky_count": 20,
+      "new_flaky_count": 20,
+      "resolved_count": 0,
+      "total_tests": 31295
+    },
+    {
+      "date": "2026-08-13",
+      "flaky_count": 3,
+      "new_flaky_count": 3,
+      "resolved_count": 0,
+      "total_tests": 31382
+    },
+    {
+      "date": "2026-08-14",
+      "flaky_count": 7,
+      "new_flaky_count": 7,
+      "resolved_count": 0,
+      "total_tests": 31513
+    },
+    {
+      "date": "2026-08-15",
+      "flaky_count": 7,
+      "new_flaky_count": 7,
+      "resolved_count": 0,
+      "total_tests": 31526
+    },
+    {
+      "date": "2026-08-16",
+      "flaky_count": 10,
+      "new_flaky_count": 10,
+      "resolved_count": 0,
+      "total_tests": 31526
+    },
+    {
+      "date": "2026-08-17",
+      "flaky_count": 9,
+      "new_flaky_count": 9,
+      "resolved_count": 0,
+      "total_tests": 31536
+    },
+    {
+      "date": "2026-08-18",
+      "flaky_count": 8,
+      "new_flaky_count": 8,
+      "resolved_count": 0,
+      "total_tests": 31546
+    },
+    {
+      "date": "2026-08-19",
+      "flaky_count": 9,
+      "new_flaky_count": 9,
+      "resolved_count": 0,
+      "total_tests": 31554
+    },
+    {
+      "date": "2026-08-20",
+      "flaky_count": 9,
+      "new_flaky_count": 9,
+      "resolved_count": 0,
+      "total_tests": 31554
+    },
+    {
+      "date": "2026-08-21",
+      "flaky_count": 8,
+      "new_flaky_count": 8,
+      "resolved_count": 0,
+      "total_tests": 31554
+    },
+    {
+      "date": "2026-08-22",
+      "flaky_count": 10,
+      "new_flaky_count": 10,
+      "resolved_count": 0,
+      "total_tests": 31570
+    },
+    {
+      "date": "2026-08-23",
+      "flaky_count": 10,
+      "new_flaky_count": 10,
+      "resolved_count": 0,
+      "total_tests": 31570
+    },
+    {
+      "date": "2026-08-24",
+      "flaky_count": 9,
+      "new_flaky_count": 1,
+      "resolved_count": 0,
+      "total_tests": 31576
+    },
+    {
+      "date": "2026-08-25",
+      "flaky_count": 16,
+      "new_flaky_count": 9,
+      "resolved_count": 0,
+      "total_tests": 31588
+    },
+    {
+      "date": "2026-08-26",
+      "flaky_count": 16,
+      "new_flaky_count": 9,
+      "resolved_count": 0,
+      "total_tests": 31588
+    },
+    {
+      "date": "2026-08-27",
+      "flaky_count": 226,
+      "new_flaky_count": 226,
+      "resolved_count": 0,
+      "total_tests": 31604
+    },
+    {
+      "date": "2026-08-28",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 31688
+    },
+    {
+      "date": "2026-08-29",
+      "flaky_count": 3,
+      "new_flaky_count": 3,
+      "resolved_count": 0,
+      "total_tests": 32426
+    },
+    {
+      "date": "2026-08-30",
+      "flaky_count": 3,
+      "new_flaky_count": 3,
+      "resolved_count": 0,
+      "total_tests": 32426
+    },
+    {
+      "date": "2026-08-31",
+      "flaky_count": 2,
+      "new_flaky_count": 2,
+      "resolved_count": 0,
+      "total_tests": 32428
+    }
+  ]
+}

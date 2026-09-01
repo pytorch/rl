@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs.model_based.world_model_env
+
+
+WorldModelEnv
+=============
+
+.. autofunction:: WorldModelEnv

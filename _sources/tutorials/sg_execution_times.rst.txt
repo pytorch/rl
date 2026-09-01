@@ -1,0 +1,88 @@
+
+:orphan:
+
+.. _sphx_glr_tutorials_sg_execution_times:
+
+
+Computation times
+=================
+**23:38.698** total execution time for 18 files **from tutorials**:
+
+.. container::
+
+  .. raw:: html
+
+    <style scoped>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    </style>
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script type="text/javascript" class="init">
+    $(document).ready( function () {
+        $('table.sg-datatable').DataTable({order: [[1, 'desc']]});
+    } );
+    </script>
+
+  .. list-table::
+   :header-rows: 1
+   :class: table table-striped sg-datatable
+
+   * - Example
+     - Time
+     - Mem (MB)
+   * - :ref:`sphx_glr_tutorials_torchrl_demo.py` (``torchrl_demo.py``)
+     - 03:57.034
+     - 14.4
+   * - :ref:`sphx_glr_tutorials_rb_tutorial.py` (``rb_tutorial.py``)
+     - 02:51.338
+     - 4339.3
+   * - :ref:`sphx_glr_tutorials_coding_dqn.py` (``coding_dqn.py``)
+     - 02:38.407
+     - 731.0
+   * - :ref:`sphx_glr_tutorials_pendulum.py` (``pendulum.py``)
+     - 02:35.575
+     - 7.6
+   * - :ref:`sphx_glr_tutorials_multiagent_ppo.py` (``multiagent_ppo.py``)
+     - 02:05.646
+     - 12.2
+   * - :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py` (``multiagent_competitive_ddpg.py``)
+     - 01:36.422
+     - 4331.4
+   * - :ref:`sphx_glr_tutorials_coding_ddpg.py` (``coding_ddpg.py``)
+     - 01:32.545
+     - 4332.7
+   * - :ref:`sphx_glr_tutorials_coding_ppo.py` (``coding_ppo.py``)
+     - 01:27.575
+     - 10.0
+   * - :ref:`sphx_glr_tutorials_torchrl_envs.py` (``torchrl_envs.py``)
+     - 01:00.686
+     - 4065.7
+   * - :ref:`sphx_glr_tutorials_pretrained_models.py` (``pretrained_models.py``)
+     - 00:50.400
+     - 3582.3
+   * - :ref:`sphx_glr_tutorials_getting-started-0.py` (``getting-started-0.py``)
+     - 00:42.996
+     - 9.1
+   * - :ref:`sphx_glr_tutorials_getting-started-1.py` (``getting-started-1.py``)
+     - 00:38.049
+     - 4055.2
+   * - :ref:`sphx_glr_tutorials_dqn_with_rnn.py` (``dqn_with_rnn.py``)
+     - 00:37.175
+     - 4059.3
+   * - :ref:`sphx_glr_tutorials_getting-started-2.py` (``getting-started-2.py``)
+     - 00:23.503
+     - 21.6
+   * - :ref:`sphx_glr_tutorials_getting-started-3.py` (``getting-started-3.py``)
+     - 00:18.838
+     - 28.1
+   * - :ref:`sphx_glr_tutorials_getting-started-4.py` (``getting-started-4.py``)
+     - 00:13.658
+     - 52.1
+   * - :ref:`sphx_glr_tutorials_multi_task.py` (``multi_task.py``)
+     - 00:05.982
+     - 4055.5
+   * - :ref:`sphx_glr_tutorials_getting-started-5.py` (``getting-started-5.py``)
+     - 00:02.870
+     - 4054.6

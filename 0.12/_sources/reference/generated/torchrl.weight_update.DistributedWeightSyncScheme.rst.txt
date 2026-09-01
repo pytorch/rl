@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.weight_update
+
+
+DistributedWeightSyncScheme
+===========================
+
+.. autoclass:: DistributedWeightSyncScheme
+    :members:
+    :inherited-members:

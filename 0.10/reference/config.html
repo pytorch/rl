@@ -1,0 +1,1634 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>TorchRL Configuration System &mdash; torchrl 0.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="torchrl.trainers.algorithms.configs.common.ConfigBase" href="generated/torchrl.trainers.algorithms.configs.common.ConfigBase.html" />
+    <link rel="prev" title="auto_unwrap_transformed_env" href="generated/torchrl.auto_unwrap_transformed_env.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.0 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+      <li>TorchRL Configuration System</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/config.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="torchrl-configuration-system">
+<h1>TorchRL Configuration System<a class="headerlink" href="#torchrl-configuration-system" title="Permalink to this heading">¶</a></h1>
+<p>TorchRL provides a powerful configuration system built on top of <a class="reference external" href="https://hydra.cc/">Hydra</a> that enables you to easily configure
+and run reinforcement learning experiments. This system uses structured dataclass-based configurations that can be composed, overridden, and extended.</p>
+<p>The advantages of using a configuration system are:
+- Quick and easy to get started: provide your task and let the system handle the rest
+- Get a glimpse of the available options and their default values in one go: <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">sota-implementations/ppo_trainer/train.py</span> <span class="pre">--help</span></code> will show you all the available options and their default values
+- Easy to override and extend: you can override any option in the configuration file, and you can also extend the configuration file with your own custom configurations
+- Easy to share and reproduce: you can share your configuration file with others, and they can reproduce your results by simply running the same command.
+- Easy to version control: you can easily version control your configuration file</p>
+<section id="quick-start-with-a-simple-example">
+<h2>Quick Start with a Simple Example<a class="headerlink" href="#quick-start-with-a-simple-example" title="Permalink to this heading">¶</a></h2>
+<p>Let’s start with a simple example that creates a Gym environment. Here’s a minimal configuration file:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># config.yaml</span>
+<span class="nt">defaults</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env@training_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gym</span>
+
+<span class="nt">training_env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">env_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CartPole-v1</span>
+</pre></div>
+</div>
+<p>This configuration has two main parts:</p>
+<p><strong>1. The</strong> <code class="docutils literal notranslate"><span class="pre">defaults</span></code> <strong>section</strong></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">defaults</span></code> section tells Hydra which configuration groups to include. In this case:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">env&#64;training_env:</span> <span class="pre">gym</span></code> means “use the ‘gym’ configuration from the ‘env’ group for the ‘training_env’ target”</p></li>
+</ul>
+<p>This is equivalent to including a predefined configuration for Gym environments, which sets up the proper target class and default parameters.</p>
+<p><strong>2. The configuration override</strong></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">training_env</span></code> section allows you to override or specify parameters for the selected configuration:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">env_name:</span> <span class="pre">CartPole-v1</span></code> sets the specific environment name</p></li>
+</ul>
+</section>
+<section id="configuration-categories-and-groups">
+<h2>Configuration Categories and Groups<a class="headerlink" href="#configuration-categories-and-groups" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL organizes configurations into several categories using the <code class="docutils literal notranslate"><span class="pre">&#64;</span></code> syntax for targeted configuration:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">env&#64;&lt;target&gt;</span></code>: Environment configurations (Gym, DMControl, Brax, etc.) as well as batched environments</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">transform&#64;&lt;target&gt;</span></code>: Transform configurations (observation/reward processing)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">model&#64;&lt;target&gt;</span></code>: Model configurations (policy and value networks)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">network&#64;&lt;target&gt;</span></code>: Neural network configurations (MLP, ConvNet)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">collector&#64;&lt;target&gt;</span></code>: Data collection configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">replay_buffer&#64;&lt;target&gt;</span></code>: Replay buffer configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">storage&#64;&lt;target&gt;</span></code>: Storage backend configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sampler&#64;&lt;target&gt;</span></code>: Sampling strategy configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">writer&#64;&lt;target&gt;</span></code>: Writer strategy configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trainer&#64;&lt;target&gt;</span></code>: Training loop configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">optimizer&#64;&lt;target&gt;</span></code>: Optimizer configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">loss&#64;&lt;target&gt;</span></code>: Loss function configurations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">logger&#64;&lt;target&gt;</span></code>: Logging configurations</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">&#64;&lt;target&gt;</span></code> syntax allows you to assign configurations to specific locations in your config structure.</p>
+</section>
+<section id="more-complex-example-parallel-environment-with-transforms">
+<h2>More Complex Example: Parallel Environment with Transforms<a class="headerlink" href="#more-complex-example-parallel-environment-with-transforms" title="Permalink to this heading">¶</a></h2>
+<p>Here’s a more complex example that creates a parallel environment with multiple transforms applied to each worker:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env@training_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batched_env</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env@training_env.create_env_fn</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">transformed_env</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env@training_env.create_env_fn.base_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gym</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">transform@training_env.create_env_fn.transform</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">compose</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">transform@transform0</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">noop_reset</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">transform@transform1</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">step_counter</span>
+
+<span class="c1"># Transform configurations</span>
+<span class="nt">transform0</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">noops</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">  </span><span class="nt">random</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="nt">transform1</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">max_steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
+<span class="w">  </span><span class="nt">step_count_key</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;step_count&quot;</span>
+
+<span class="c1"># Environment configuration</span>
+<span class="nt">training_env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">num_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">create_env_fn</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">base_env</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">env_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Pendulum-v1</span>
+<span class="w">    </span><span class="nt">transform</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">transforms</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${transform0}</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${transform1}</span>
+<span class="w">    </span><span class="nt">_partial_</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p><strong>What this configuration creates:</strong></p>
+<p>This configuration builds a <strong>parallel environment with 4 workers</strong>, where each worker runs a <strong>Pendulum-v1 environment with two transforms applied</strong>:</p>
+<ol class="arabic simple">
+<li><p><strong>Parallel Environment Structure</strong>:
+- <code class="docutils literal notranslate"><span class="pre">batched_env</span></code> creates a parallel environment that runs multiple environment instances
+- <code class="docutils literal notranslate"><span class="pre">num_workers:</span> <span class="pre">4</span></code> means 4 parallel environment processes</p></li>
+<li><p><strong>Individual Environment Construction</strong> (repeated for each of the 4 workers):
+- <strong>Base Environment</strong>: <code class="docutils literal notranslate"><span class="pre">gym</span></code> with <code class="docutils literal notranslate"><span class="pre">env_name:</span> <span class="pre">Pendulum-v1</span></code> creates a Pendulum environment
+- <strong>Transform Layer 1</strong>: <code class="docutils literal notranslate"><span class="pre">noop_reset</span></code> performs 30 random no-op actions at episode start
+- <strong>Transform Layer 2</strong>: <code class="docutils literal notranslate"><span class="pre">step_counter</span></code> limits episodes to 200 steps and tracks step count
+- <strong>Transform Composition</strong>: <code class="docutils literal notranslate"><span class="pre">compose</span></code> combines both transforms into a single transformation</p></li>
+<li><p><strong>Final Result</strong>: 4 parallel Pendulum environments, each with:
+- Random no-op resets (0-30 actions at start)
+- Maximum episode length of 200 steps
+- Step counting functionality</p></li>
+</ol>
+<p><strong>Key Configuration Concepts:</strong></p>
+<ol class="arabic simple">
+<li><p><strong>Nested targeting</strong>: <code class="docutils literal notranslate"><span class="pre">env&#64;training_env.create_env_fn.base_env:</span> <span class="pre">gym</span></code> places a gym config deep inside the structure</p></li>
+<li><p><strong>Function factories</strong>: <code class="docutils literal notranslate"><span class="pre">_partial_:</span> <span class="pre">true</span></code> creates a function that can be called multiple times (once per worker)</p></li>
+<li><p><strong>Transform composition</strong>: Multiple transforms are combined and applied to each environment instance</p></li>
+<li><p><strong>Variable interpolation</strong>: <code class="docutils literal notranslate"><span class="pre">${transform0}</span></code> and <code class="docutils literal notranslate"><span class="pre">${transform1}</span></code> reference the separately defined transform configurations</p></li>
+</ol>
+</section>
+<section id="getting-available-options">
+<h2>Getting Available Options<a class="headerlink" href="#getting-available-options" title="Permalink to this heading">¶</a></h2>
+<p>To explore all available configurations and their parameters, one can use the <code class="docutils literal notranslate"><span class="pre">--help</span></code> flag with any TorchRL script:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span>--help
+</pre></div>
+</div>
+<p>This shows all configuration groups and their options, making it easy to discover what’s available. It should print something like this:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</section>
+<section id="complete-training-example">
+<h2>Complete Training Example<a class="headerlink" href="#complete-training-example" title="Permalink to this heading">¶</a></h2>
+<p>Here’s a complete configuration for PPO training:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">defaults</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env@training_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">batched_env</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env@training_env.create_env_fn</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gym</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">model@models.policy_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tanh_normal</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">model@models.value_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">value</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">network@networks.policy_network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mlp</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">network@networks.value_network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mlp</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">collector</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">replay_buffer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">base</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tensor</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">sampler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">without_replacement</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">writer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">round_robin</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">trainer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ppo</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">optimizer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">adam</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">loss</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ppo</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">logger</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wandb</span>
+
+<span class="c1"># Network configurations</span>
+<span class="nt">networks</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">policy_network</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">out_features</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">in_features</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">    </span><span class="nt">num_cells</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">128</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">128</span><span class="p p-Indicator">]</span>
+
+<span class="w">  </span><span class="nt">value_network</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">out_features</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">    </span><span class="nt">in_features</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">    </span><span class="nt">num_calls</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">128</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">128</span><span class="p p-Indicator">]</span>
+
+<span class="c1"># Model configurations</span>
+<span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">policy_model</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${networks.policy_network}</span>
+<span class="w">    </span><span class="nt">in_keys</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;observation&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">out_keys</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;action&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">  </span><span class="nt">value_model</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${networks.value_network}</span>
+<span class="w">    </span><span class="nt">in_keys</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;observation&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">out_keys</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;state_value&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="c1"># Environment</span>
+<span class="nt">training_env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">num_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">  </span><span class="nt">create_env_fn</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">env_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CartPole-v1</span>
+<span class="w">    </span><span class="nt">_partial_</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="c1"># Training components</span>
+<span class="nt">trainer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">collector</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${collector}</span>
+<span class="w">  </span><span class="nt">optimizer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${optimizer}</span>
+<span class="w">  </span><span class="nt">loss_module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${loss}</span>
+<span class="w">  </span><span class="nt">logger</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${logger}</span>
+<span class="w">  </span><span class="nt">total_frames</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100000</span>
+
+<span class="nt">collector</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">create_env_fn</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${training_env}</span>
+<span class="w">  </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${models.policy_model}</span>
+<span class="w">  </span><span class="nt">frames_per_batch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1024</span>
+
+<span class="nt">optimizer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.001</span>
+
+<span class="nt">loss</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">actor_network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${models.policy_model}</span>
+<span class="w">  </span><span class="nt">critic_network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${models.value_model}</span>
+
+<span class="nt">logger</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">exp_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_experiment</span>
+</pre></div>
+</div>
+</section>
+<section id="running-experiments">
+<h2>Running Experiments<a class="headerlink" href="#running-experiments" title="Permalink to this heading">¶</a></h2>
+<section id="basic-usage">
+<h3>Basic Usage<a class="headerlink" href="#basic-usage" title="Permalink to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Use default configuration</span>
+python<span class="w"> </span>sota-implementations/ppo_trainer/train.py
+
+<span class="c1"># Override specific parameters</span>
+python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span>optimizer.lr<span class="o">=</span><span class="m">0</span>.0001
+
+<span class="c1"># Change environment</span>
+python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span>training_env.create_env_fn.env_name<span class="o">=</span>Pendulum-v1
+
+<span class="c1"># Use different collector</span>
+python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span><span class="nv">collector</span><span class="o">=</span>async
+</pre></div>
+</div>
+</section>
+<section id="hyperparameter-sweeps">
+<h3>Hyperparameter Sweeps<a class="headerlink" href="#hyperparameter-sweeps" title="Permalink to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Sweep over learning rates</span>
+python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span>--multirun<span class="w"> </span>optimizer.lr<span class="o">=</span><span class="m">0</span>.0001,0.001,0.01
+
+<span class="c1"># Multiple parameter sweep</span>
+python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span>--multirun<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>optimizer.lr<span class="o">=</span><span class="m">0</span>.0001,0.001<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>training_env.num_workers<span class="o">=</span><span class="m">2</span>,4,8
+</pre></div>
+</div>
+</section>
+<section id="custom-configuration-files">
+<h3>Custom Configuration Files<a class="headerlink" href="#custom-configuration-files" title="Permalink to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Use custom config file</span>
+python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span class="w"> </span>--config-name<span class="w"> </span>my_custom_config
+</pre></div>
+</div>
+</section>
+</section>
+<section id="configuration-store-implementation-details">
+<h2>Configuration Store Implementation Details<a class="headerlink" href="#configuration-store-implementation-details" title="Permalink to this heading">¶</a></h2>
+<p>Under the hood, TorchRL uses Hydra’s ConfigStore to register all configuration classes. This provides type safety, validation, and IDE support. The registration happens automatically when you import the configs module:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">hydra.core.config_store</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConfigStore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.trainers.algorithms.configs</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+
+<span class="n">cs</span> <span class="o">=</span> <span class="n">ConfigStore</span><span class="o">.</span><span class="n">instance</span><span class="p">()</span>
+
+<span class="c1"># Environments</span>
+<span class="n">cs</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">&quot;env&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;gym&quot;</span><span class="p">,</span> <span class="n">node</span><span class="o">=</span><span class="n">GymEnvConfig</span><span class="p">)</span>
+<span class="n">cs</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">&quot;env&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;batched_env&quot;</span><span class="p">,</span> <span class="n">node</span><span class="o">=</span><span class="n">BatchedEnvConfig</span><span class="p">)</span>
+
+<span class="c1"># Models</span>
+<span class="n">cs</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;tanh_normal&quot;</span><span class="p">,</span> <span class="n">node</span><span class="o">=</span><span class="n">TanhNormalModelConfig</span><span class="p">)</span>
+<span class="c1"># ... and many more</span>
+</pre></div>
+</div>
+</section>
+<section id="available-configuration-classes">
+<h2>Available Configuration Classes<a class="headerlink" href="#available-configuration-classes" title="Permalink to this heading">¶</a></h2>
+<section id="base-classes">
+<h3>Base Classes<a class="headerlink" href="#base-classes" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase" title="torchrl.trainers.algorithms.configs.common.ConfigBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigBase</span></code></a>()</p></td>
+<td><p>Abstract base class for all configuration classes.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="environment-configurations">
+<h3>Environment Configurations<a class="headerlink" href="#environment-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs.EnvConfig.html#torchrl.trainers.algorithms.configs.envs.EnvConfig" title="torchrl.trainers.algorithms.configs.envs.EnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvConfig</span></code></a>([_partial_])</p></td>
+<td><p>Base configuration class for environments.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig.html#torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig" title="torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BatchedEnvConfig</span></code></a>(_partial_, create_env_fn, ...)</p></td>
+<td><p>Configuration for batched environments.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs.TransformedEnvConfig.html#torchrl.trainers.algorithms.configs.envs.TransformedEnvConfig" title="torchrl.trainers.algorithms.configs.envs.TransformedEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformedEnvConfig</span></code></a>([_partial_, base_env, ...])</p></td>
+<td><p>Configuration for transformed environments.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="environment-library-configurations">
+<h3>Environment Library Configurations<a class="headerlink" href="#environment-library-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.EnvLibsConfig.html#torchrl.trainers.algorithms.configs.envs_libs.EnvLibsConfig" title="torchrl.trainers.algorithms.configs.envs_libs.EnvLibsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnvLibsConfig</span></code></a>([_partial_])</p></td>
+<td><p>Base configuration class for environment libs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.GymEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GymEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for GymEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.DMControlEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.DMControlEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.DMControlEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DMControlEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for DMControlEnv environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.BraxEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.BraxEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.BraxEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BraxEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for BraxEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.HabitatEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.HabitatEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.HabitatEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HabitatEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for HabitatEnv environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.IsaacGymEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.IsaacGymEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.IsaacGymEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IsaacGymEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for IsaacGymEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.JumanjiEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.JumanjiEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.JumanjiEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JumanjiEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for JumanjiEnv environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.MeltingpotEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.MeltingpotEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.MeltingpotEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MeltingpotEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for MeltingpotEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.MOGymEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.MOGymEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.MOGymEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MOGymEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for MOGymEnv environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.MultiThreadedEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.MultiThreadedEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.MultiThreadedEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiThreadedEnvConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>Configuration for MultiThreadedEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.OpenMLEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.OpenMLEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.OpenMLEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenMLEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for OpenMLEnv environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.OpenSpielEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.OpenSpielEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.OpenSpielEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpenSpielEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for OpenSpielEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.PettingZooEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.PettingZooEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.PettingZooEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PettingZooEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for PettingZooEnv environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.RoboHiveEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.RoboHiveEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.RoboHiveEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoboHiveEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for RoboHiveEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.SMACv2EnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.SMACv2EnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.SMACv2EnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SMACv2EnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for SMACv2Env environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.UnityMLAgentsEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.UnityMLAgentsEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.UnityMLAgentsEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnityMLAgentsEnvConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>Configuration for UnityMLAgentsEnv environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.envs_libs.VmasEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.VmasEnvConfig" title="torchrl.trainers.algorithms.configs.envs_libs.VmasEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VmasEnvConfig</span></code></a>([_partial_, env_name, ...])</p></td>
+<td><p>Configuration for VmasEnv environment.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="model-and-network-configurations">
+<h3>Model and Network Configurations<a class="headerlink" href="#model-and-network-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.ModelConfig.html#torchrl.trainers.algorithms.configs.modules.ModelConfig" title="torchrl.trainers.algorithms.configs.modules.ModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelConfig</span></code></a>([_partial_, in_keys, out_keys])</p></td>
+<td><p>Parent class to configure a model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html#torchrl.trainers.algorithms.configs.modules.NetworkConfig" title="torchrl.trainers.algorithms.configs.modules.NetworkConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NetworkConfig</span></code></a>([_partial_])</p></td>
+<td><p>Parent class to configure a network.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig" title="torchrl.trainers.algorithms.configs.modules.MLPConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MLPConfig</span></code></a>(_partial_, in_features, ...)</p></td>
+<td><p>A class to configure a multi-layer perceptron.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html#torchrl.trainers.algorithms.configs.modules.ConvNetConfig" title="torchrl.trainers.algorithms.configs.modules.ConvNetConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConvNetConfig</span></code></a>(_partial_, in_features, depth, ...)</p></td>
+<td><p>A class to configure a convolutional network.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html#torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig" title="torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictModuleConfig</span></code></a>([_partial_, in_keys, ...])</p></td>
+<td><p>A class to configure a TensorDictModule.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html#torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig" title="torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TanhNormalModelConfig</span></code></a>([_partial_, in_keys, ...])</p></td>
+<td><p>A class to configure a TanhNormal model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.ValueModelConfig.html#torchrl.trainers.algorithms.configs.modules.ValueModelConfig" title="torchrl.trainers.algorithms.configs.modules.ValueModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueModelConfig</span></code></a>([_partial_, in_keys, ...])</p></td>
+<td><p>A class to configure a Value model.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="transform-configurations">
+<h3>Transform Configurations<a class="headerlink" href="#transform-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TransformConfig.html#torchrl.trainers.algorithms.configs.transforms.TransformConfig" title="torchrl.trainers.algorithms.configs.transforms.TransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformConfig</span></code></a>()</p></td>
+<td><p>Base configuration class for transforms.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ComposeConfig.html#torchrl.trainers.algorithms.configs.transforms.ComposeConfig" title="torchrl.trainers.algorithms.configs.transforms.ComposeConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ComposeConfig</span></code></a>([transforms, _target_])</p></td>
+<td><p>Configuration for Compose transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.NoopResetEnvConfig.html#torchrl.trainers.algorithms.configs.transforms.NoopResetEnvConfig" title="torchrl.trainers.algorithms.configs.transforms.NoopResetEnvConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoopResetEnvConfig</span></code></a>([noops, random, _target_])</p></td>
+<td><p>Configuration for NoopResetEnv transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.StepCounterConfig.html#torchrl.trainers.algorithms.configs.transforms.StepCounterConfig" title="torchrl.trainers.algorithms.configs.transforms.StepCounterConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StepCounterConfig</span></code></a>([max_steps, ...])</p></td>
+<td><p>Configuration for StepCounter transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.DoubleToFloatConfig.html#torchrl.trainers.algorithms.configs.transforms.DoubleToFloatConfig" title="torchrl.trainers.algorithms.configs.transforms.DoubleToFloatConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DoubleToFloatConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for DoubleToFloat transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ToTensorImageConfig.html#torchrl.trainers.algorithms.configs.transforms.ToTensorImageConfig" title="torchrl.trainers.algorithms.configs.transforms.ToTensorImageConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToTensorImageConfig</span></code></a>([from_int, unsqueeze, ...])</p></td>
+<td><p>Configuration for ToTensorImage transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ClipTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.ClipTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.ClipTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipTransformConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for ClipTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ResizeConfig.html#torchrl.trainers.algorithms.configs.transforms.ResizeConfig" title="torchrl.trainers.algorithms.configs.transforms.ResizeConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ResizeConfig</span></code></a>([w, h, interpolation, in_keys, ...])</p></td>
+<td><p>Configuration for Resize transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.CenterCropConfig.html#torchrl.trainers.algorithms.configs.transforms.CenterCropConfig" title="torchrl.trainers.algorithms.configs.transforms.CenterCropConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CenterCropConfig</span></code></a>([height, width, in_keys, ...])</p></td>
+<td><p>Configuration for CenterCrop transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.CropConfig.html#torchrl.trainers.algorithms.configs.transforms.CropConfig" title="torchrl.trainers.algorithms.configs.transforms.CropConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CropConfig</span></code></a>([top, left, height, width, ...])</p></td>
+<td><p>Configuration for Crop transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.FlattenObservationConfig.html#torchrl.trainers.algorithms.configs.transforms.FlattenObservationConfig" title="torchrl.trainers.algorithms.configs.transforms.FlattenObservationConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlattenObservationConfig</span></code></a>([in_keys, ...])</p></td>
+<td><p>Configuration for FlattenObservation transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.GrayScaleConfig.html#torchrl.trainers.algorithms.configs.transforms.GrayScaleConfig" title="torchrl.trainers.algorithms.configs.transforms.GrayScaleConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GrayScaleConfig</span></code></a>([in_keys, out_keys, _target_])</p></td>
+<td><p>Configuration for GrayScale transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ObservationNormConfig.html#torchrl.trainers.algorithms.configs.transforms.ObservationNormConfig" title="torchrl.trainers.algorithms.configs.transforms.ObservationNormConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ObservationNormConfig</span></code></a>([loc, scale, in_keys, ...])</p></td>
+<td><p>Configuration for ObservationNorm transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.CatFramesConfig.html#torchrl.trainers.algorithms.configs.transforms.CatFramesConfig" title="torchrl.trainers.algorithms.configs.transforms.CatFramesConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CatFramesConfig</span></code></a>([N, dim, in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for CatFrames transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.RewardClippingConfig.html#torchrl.trainers.algorithms.configs.transforms.RewardClippingConfig" title="torchrl.trainers.algorithms.configs.transforms.RewardClippingConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardClippingConfig</span></code></a>([clamp_min, clamp_max, ...])</p></td>
+<td><p>Configuration for RewardClipping transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.RewardScalingConfig.html#torchrl.trainers.algorithms.configs.transforms.RewardScalingConfig" title="torchrl.trainers.algorithms.configs.transforms.RewardScalingConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardScalingConfig</span></code></a>([loc, scale, in_keys, ...])</p></td>
+<td><p>Configuration for RewardScaling transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.BinarizeRewardConfig.html#torchrl.trainers.algorithms.configs.transforms.BinarizeRewardConfig" title="torchrl.trainers.algorithms.configs.transforms.BinarizeRewardConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BinarizeRewardConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for BinarizeReward transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TargetReturnConfig.html#torchrl.trainers.algorithms.configs.transforms.TargetReturnConfig" title="torchrl.trainers.algorithms.configs.transforms.TargetReturnConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TargetReturnConfig</span></code></a>([target_return, mode, ...])</p></td>
+<td><p>Configuration for TargetReturn transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.VecNormConfig.html#torchrl.trainers.algorithms.configs.transforms.VecNormConfig" title="torchrl.trainers.algorithms.configs.transforms.VecNormConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VecNormConfig</span></code></a>([in_keys, out_keys, decay, ...])</p></td>
+<td><p>Configuration for VecNorm transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.FrameSkipTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.FrameSkipTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.FrameSkipTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FrameSkipTransformConfig</span></code></a>([frame_skip, ...])</p></td>
+<td><p>Configuration for FrameSkipTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.DeviceCastTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.DeviceCastTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.DeviceCastTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DeviceCastTransformConfig</span></code></a>([device, in_keys, ...])</p></td>
+<td><p>Configuration for DeviceCastTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.DTypeCastTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.DTypeCastTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.DTypeCastTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DTypeCastTransformConfig</span></code></a>([dtype, in_keys, ...])</p></td>
+<td><p>Configuration for DTypeCastTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.UnsqueezeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.UnsqueezeTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.UnsqueezeTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnsqueezeTransformConfig</span></code></a>([dim, in_keys, ...])</p></td>
+<td><p>Configuration for UnsqueezeTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.SqueezeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.SqueezeTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.SqueezeTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SqueezeTransformConfig</span></code></a>([dim, in_keys, ...])</p></td>
+<td><p>Configuration for SqueezeTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.PermuteTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.PermuteTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.PermuteTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PermuteTransformConfig</span></code></a>([dims, in_keys, ...])</p></td>
+<td><p>Configuration for PermuteTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig.html#torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig" title="torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CatTensorsConfig</span></code></a>([dim, in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for CatTensors transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.StackConfig.html#torchrl.trainers.algorithms.configs.transforms.StackConfig" title="torchrl.trainers.algorithms.configs.transforms.StackConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StackConfig</span></code></a>([dim, in_keys, out_keys, _target_])</p></td>
+<td><p>Configuration for Stack transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.DiscreteActionProjectionConfig.html#torchrl.trainers.algorithms.configs.transforms.DiscreteActionProjectionConfig" title="torchrl.trainers.algorithms.configs.transforms.DiscreteActionProjectionConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteActionProjectionConfig</span></code></a>([...])</p></td>
+<td><p>Configuration for DiscreteActionProjection transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TensorDictPrimerConfig.html#torchrl.trainers.algorithms.configs.transforms.TensorDictPrimerConfig" title="torchrl.trainers.algorithms.configs.transforms.TensorDictPrimerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictPrimerConfig</span></code></a>([primer_spec, ...])</p></td>
+<td><p>Configuration for TensorDictPrimer transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.PinMemoryTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.PinMemoryTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.PinMemoryTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PinMemoryTransformConfig</span></code></a>([in_keys, ...])</p></td>
+<td><p>Configuration for PinMemoryTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.RewardSumConfig.html#torchrl.trainers.algorithms.configs.transforms.RewardSumConfig" title="torchrl.trainers.algorithms.configs.transforms.RewardSumConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardSumConfig</span></code></a>([in_keys, out_keys, _target_])</p></td>
+<td><p>Configuration for RewardSum transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ExcludeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.ExcludeTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.ExcludeTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExcludeTransformConfig</span></code></a>([exclude_keys, _target_])</p></td>
+<td><p>Configuration for ExcludeTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.SelectTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.SelectTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.SelectTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SelectTransformConfig</span></code></a>([include_keys, _target_])</p></td>
+<td><p>Configuration for SelectTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TimeMaxPoolConfig.html#torchrl.trainers.algorithms.configs.transforms.TimeMaxPoolConfig" title="torchrl.trainers.algorithms.configs.transforms.TimeMaxPoolConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimeMaxPoolConfig</span></code></a>([dim, in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for TimeMaxPool transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.RandomCropTensorDictConfig.html#torchrl.trainers.algorithms.configs.transforms.RandomCropTensorDictConfig" title="torchrl.trainers.algorithms.configs.transforms.RandomCropTensorDictConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomCropTensorDictConfig</span></code></a>([crop_size, ...])</p></td>
+<td><p>Configuration for RandomCropTensorDict transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.InitTrackerConfig.html#torchrl.trainers.algorithms.configs.transforms.InitTrackerConfig" title="torchrl.trainers.algorithms.configs.transforms.InitTrackerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InitTrackerConfig</span></code></a>([in_keys, out_keys, _target_])</p></td>
+<td><p>Configuration for InitTracker transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.RenameTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.RenameTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.RenameTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RenameTransformConfig</span></code></a>([key_mapping, _target_])</p></td>
+<td><p>Configuration for RenameTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.Reward2GoTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.Reward2GoTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.Reward2GoTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Reward2GoTransformConfig</span></code></a>([gamma, in_keys, ...])</p></td>
+<td><p>Configuration for Reward2GoTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig.html#torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig" title="torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActionMaskConfig</span></code></a>([mask_key, in_keys, ...])</p></td>
+<td><p>Configuration for ActionMask transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.VecGymEnvTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.VecGymEnvTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.VecGymEnvTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VecGymEnvTransformConfig</span></code></a>([in_keys, ...])</p></td>
+<td><p>Configuration for VecGymEnvTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.BurnInTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.BurnInTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.BurnInTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BurnInTransformConfig</span></code></a>([burn_in, in_keys, ...])</p></td>
+<td><p>Configuration for BurnInTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.SignTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.SignTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.SignTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SignTransformConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for SignTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.RemoveEmptySpecsConfig.html#torchrl.trainers.algorithms.configs.transforms.RemoveEmptySpecsConfig" title="torchrl.trainers.algorithms.configs.transforms.RemoveEmptySpecsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoveEmptySpecsConfig</span></code></a>([_target_])</p></td>
+<td><p>Configuration for RemoveEmptySpecs transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.BatchSizeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.BatchSizeTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.BatchSizeTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BatchSizeTransformConfig</span></code></a>([batch_size, ...])</p></td>
+<td><p>Configuration for BatchSizeTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.AutoResetTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.AutoResetTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.AutoResetTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AutoResetTransformConfig</span></code></a>([replace, ...])</p></td>
+<td><p>Configuration for AutoResetTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ActionDiscretizerConfig.html#torchrl.trainers.algorithms.configs.transforms.ActionDiscretizerConfig" title="torchrl.trainers.algorithms.configs.transforms.ActionDiscretizerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActionDiscretizerConfig</span></code></a>([num_intervals, ...])</p></td>
+<td><p>Configuration for ActionDiscretizer transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TrajCounterConfig.html#torchrl.trainers.algorithms.configs.transforms.TrajCounterConfig" title="torchrl.trainers.algorithms.configs.transforms.TrajCounterConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TrajCounterConfig</span></code></a>([out_key, repeats, _target_])</p></td>
+<td><p>Configuration for TrajCounter transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig.html#torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig" title="torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LineariseRewardsConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for LineariseRewards transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig.html#torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig" title="torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConditionalSkipConfig</span></code></a>([cond, _target_])</p></td>
+<td><p>Configuration for ConditionalSkip transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.MultiActionConfig.html#torchrl.trainers.algorithms.configs.transforms.MultiActionConfig" title="torchrl.trainers.algorithms.configs.transforms.MultiActionConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiActionConfig</span></code></a>([dim, stack_rewards, ...])</p></td>
+<td><p>Configuration for MultiAction transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TimerConfig.html#torchrl.trainers.algorithms.configs.transforms.TimerConfig" title="torchrl.trainers.algorithms.configs.transforms.TimerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimerConfig</span></code></a>([out_keys, time_key, _target_])</p></td>
+<td><p>Configuration for Timer transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig.html#torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig" title="torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConditionalPolicySwitchConfig</span></code></a>([policy, ...])</p></td>
+<td><p>Configuration for ConditionalPolicySwitch transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.FiniteTensorDictCheckConfig.html#torchrl.trainers.algorithms.configs.transforms.FiniteTensorDictCheckConfig" title="torchrl.trainers.algorithms.configs.transforms.FiniteTensorDictCheckConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FiniteTensorDictCheckConfig</span></code></a>([in_keys, ...])</p></td>
+<td><p>Configuration for FiniteTensorDictCheck transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.UnaryTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.UnaryTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.UnaryTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UnaryTransformConfig</span></code></a>([fn, in_keys, ...])</p></td>
+<td><p>Configuration for UnaryTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.HashConfig.html#torchrl.trainers.algorithms.configs.transforms.HashConfig" title="torchrl.trainers.algorithms.configs.transforms.HashConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HashConfig</span></code></a>([in_keys, out_keys, _target_])</p></td>
+<td><p>Configuration for Hash transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TokenizerConfig.html#torchrl.trainers.algorithms.configs.transforms.TokenizerConfig" title="torchrl.trainers.algorithms.configs.transforms.TokenizerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TokenizerConfig</span></code></a>([vocab_size, in_keys, ...])</p></td>
+<td><p>Configuration for Tokenizer transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.EndOfLifeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.EndOfLifeTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.EndOfLifeTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EndOfLifeTransformConfig</span></code></a>([eol_key, ...])</p></td>
+<td><p>Configuration for EndOfLifeTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.MultiStepTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.MultiStepTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.MultiStepTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiStepTransformConfig</span></code></a>([n_steps, gamma, ...])</p></td>
+<td><p>Configuration for MultiStepTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransformConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for KLRewardTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.R3MTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.R3MTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.R3MTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">R3MTransformConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for R3MTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.VC1TransformConfig.html#torchrl.trainers.algorithms.configs.transforms.VC1TransformConfig" title="torchrl.trainers.algorithms.configs.transforms.VC1TransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VC1TransformConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for VC1Transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.VIPTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.VIPTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.VIPTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIPTransformConfig</span></code></a>([in_keys, out_keys, ...])</p></td>
+<td><p>Configuration for VIPTransform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.VIPRewardTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.VIPRewardTransformConfig" title="torchrl.trainers.algorithms.configs.transforms.VIPRewardTransformConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIPRewardTransformConfig</span></code></a>([in_keys, ...])</p></td>
+<td><p>Configuration for VIPRewardTransform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.VecNormV2Config.html#torchrl.trainers.algorithms.configs.transforms.VecNormV2Config" title="torchrl.trainers.algorithms.configs.transforms.VecNormV2Config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VecNormV2Config</span></code></a>([in_keys, out_keys, decay, ...])</p></td>
+<td><p>Configuration for VecNormV2 transform.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="data-collection-configurations">
+<h3>Data Collection Configurations<a class="headerlink" href="#data-collection-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.collectors.DataCollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.DataCollectorConfig" title="torchrl.trainers.algorithms.configs.collectors.DataCollectorConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataCollectorConfig</span></code></a>()</p></td>
+<td><p>Parent class to configure a data collector.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.collectors.SyncDataCollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.SyncDataCollectorConfig" title="torchrl.trainers.algorithms.configs.collectors.SyncDataCollectorConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SyncDataCollectorConfig</span></code></a>([create_env_fn, ...])</p></td>
+<td><p>A class to configure a synchronous data collector.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.collectors.AsyncDataCollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.AsyncDataCollectorConfig" title="torchrl.trainers.algorithms.configs.collectors.AsyncDataCollectorConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncDataCollectorConfig</span></code></a>(create_env_fn, ...)</p></td>
+<td><p>Configuration for asynchronous data collector.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.collectors.MultiSyncDataCollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.MultiSyncDataCollectorConfig" title="torchrl.trainers.algorithms.configs.collectors.MultiSyncDataCollectorConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollectorConfig</span></code></a>([...])</p></td>
+<td><p>Configuration for multi-synchronous data collector.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.collectors.MultiaSyncDataCollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.MultiaSyncDataCollectorConfig" title="torchrl.trainers.algorithms.configs.collectors.MultiaSyncDataCollectorConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollectorConfig</span></code></a>([...])</p></td>
+<td><p>Configuration for multi-asynchronous data collector.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="replay-buffer-and-storage-configurations">
+<h3>Replay Buffer and Storage Configurations<a class="headerlink" href="#replay-buffer-and-storage-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.ReplayBufferConfig.html#torchrl.trainers.algorithms.configs.data.ReplayBufferConfig" title="torchrl.trainers.algorithms.configs.data.ReplayBufferConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBufferConfig</span></code></a>([_partial_, _target_, ...])</p></td>
+<td><p>Configuration for generic replay buffer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig.html#torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig" title="torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictReplayBufferConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>Configuration for TensorDict-based replay buffer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.RandomSamplerConfig.html#torchrl.trainers.algorithms.configs.data.RandomSamplerConfig" title="torchrl.trainers.algorithms.configs.data.RandomSamplerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomSamplerConfig</span></code></a>([_target_])</p></td>
+<td><p>Configuration for random sampling from replay buffer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.SamplerWithoutReplacementConfig.html#torchrl.trainers.algorithms.configs.data.SamplerWithoutReplacementConfig" title="torchrl.trainers.algorithms.configs.data.SamplerWithoutReplacementConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SamplerWithoutReplacementConfig</span></code></a>([_target_, ...])</p></td>
+<td><p>Configuration for sampling without replacement.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html#torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig" title="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrioritizedSamplerConfig</span></code></a>([_target_, ...])</p></td>
+<td><p>Configuration for prioritized sampling from replay buffer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerConfig" title="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SliceSamplerConfig</span></code></a>([_target_, num_slices, ...])</p></td>
+<td><p>Configuration for slice sampling from replay buffer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig" title="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SliceSamplerWithoutReplacementConfig</span></code></a>([...])</p></td>
+<td><p>Configuration for slice sampling without replacement.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.ListStorageConfig.html#torchrl.trainers.algorithms.configs.data.ListStorageConfig" title="torchrl.trainers.algorithms.configs.data.ListStorageConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ListStorageConfig</span></code></a>([_partial_, _target_, ...])</p></td>
+<td><p>Configuration for list-based storage in replay buffer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html#torchrl.trainers.algorithms.configs.data.TensorStorageConfig" title="torchrl.trainers.algorithms.configs.data.TensorStorageConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorStorageConfig</span></code></a>([_partial_, _target_, ...])</p></td>
+<td><p>Configuration for tensor-based storage in replay buffer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html#torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig" title="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyTensorStorageConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>Configuration for lazy tensor storage.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.LazyMemmapStorageConfig.html#torchrl.trainers.algorithms.configs.data.LazyMemmapStorageConfig" title="torchrl.trainers.algorithms.configs.data.LazyMemmapStorageConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyMemmapStorageConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>Configuration for lazy memory-mapped storage.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.LazyStackStorageConfig.html#torchrl.trainers.algorithms.configs.data.LazyStackStorageConfig" title="torchrl.trainers.algorithms.configs.data.LazyStackStorageConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyStackStorageConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>Configuration for lazy stack storage.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig.html#torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig" title="torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StorageEnsembleConfig</span></code></a>([_partial_, _target_, ...])</p></td>
+<td><p>Configuration for storage ensemble.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html#torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig" title="torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RoundRobinWriterConfig</span></code></a>([_target_, compilable])</p></td>
+<td><p>Configuration for round-robin writer that distributes data across multiple storages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html#torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig" title="torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StorageEnsembleWriterConfig</span></code></a>([_partial_, ...])</p></td>
+<td><p>Configuration for storage ensemble writer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="training-and-optimization-configurations">
+<h3>Training and Optimization Configurations<a class="headerlink" href="#training-and-optimization-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.TrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TrainerConfig</span></code></a>()</p></td>
+<td><p>Base configuration class for trainers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig" title="torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PPOTrainerConfig</span></code></a>(collector, total_frames, ...)</p></td>
+<td><p>Configuration class for PPO (Proximal Policy Optimization) trainer.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.LossConfig.html#torchrl.trainers.algorithms.configs.objectives.LossConfig" title="torchrl.trainers.algorithms.configs.objectives.LossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LossConfig</span></code></a>([_partial_])</p></td>
+<td><p>A class to configure a loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html#torchrl.trainers.algorithms.configs.objectives.PPOLossConfig" title="torchrl.trainers.algorithms.configs.objectives.PPOLossConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PPOLossConfig</span></code></a>([_partial_, actor_network, ...])</p></td>
+<td><p>A class to configure a PPO loss.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.AdamConfig.html#torchrl.trainers.algorithms.configs.utils.AdamConfig" title="torchrl.trainers.algorithms.configs.utils.AdamConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdamConfig</span></code></a>([lr, betas, eps, weight_decay, ...])</p></td>
+<td><p>Configuration for Adam optimizer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.AdamWConfig.html#torchrl.trainers.algorithms.configs.utils.AdamWConfig" title="torchrl.trainers.algorithms.configs.utils.AdamWConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdamWConfig</span></code></a>([lr, betas, eps, weight_decay, ...])</p></td>
+<td><p>Configuration for AdamW optimizer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.AdamaxConfig.html#torchrl.trainers.algorithms.configs.utils.AdamaxConfig" title="torchrl.trainers.algorithms.configs.utils.AdamaxConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdamaxConfig</span></code></a>([lr, betas, eps, weight_decay, ...])</p></td>
+<td><p>Configuration for Adamax optimizer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.AdadeltaConfig.html#torchrl.trainers.algorithms.configs.utils.AdadeltaConfig" title="torchrl.trainers.algorithms.configs.utils.AdadeltaConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdadeltaConfig</span></code></a>([lr, rho, eps, weight_decay, ...])</p></td>
+<td><p>Configuration for Adadelta optimizer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.AdagradConfig.html#torchrl.trainers.algorithms.configs.utils.AdagradConfig" title="torchrl.trainers.algorithms.configs.utils.AdagradConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdagradConfig</span></code></a>([lr, lr_decay, weight_decay, ...])</p></td>
+<td><p>Configuration for Adagrad optimizer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.ASGDConfig.html#torchrl.trainers.algorithms.configs.utils.ASGDConfig" title="torchrl.trainers.algorithms.configs.utils.ASGDConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ASGDConfig</span></code></a>([lr, lambd, alpha, t0, ...])</p></td>
+<td><p>Configuration for ASGD optimizer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.LBFGSConfig.html#torchrl.trainers.algorithms.configs.utils.LBFGSConfig" title="torchrl.trainers.algorithms.configs.utils.LBFGSConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LBFGSConfig</span></code></a>([lr, max_iter, max_eval, ...])</p></td>
+<td><p>Configuration for LBFGS optimizer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.LionConfig.html#torchrl.trainers.algorithms.configs.utils.LionConfig" title="torchrl.trainers.algorithms.configs.utils.LionConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LionConfig</span></code></a>([lr, betas, weight_decay, ...])</p></td>
+<td><p>Configuration for Lion optimizer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.NAdamConfig.html#torchrl.trainers.algorithms.configs.utils.NAdamConfig" title="torchrl.trainers.algorithms.configs.utils.NAdamConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAdamConfig</span></code></a>([lr, betas, eps, weight_decay, ...])</p></td>
+<td><p>Configuration for NAdam optimizer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.RAdamConfig.html#torchrl.trainers.algorithms.configs.utils.RAdamConfig" title="torchrl.trainers.algorithms.configs.utils.RAdamConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RAdamConfig</span></code></a>([lr, betas, eps, weight_decay, ...])</p></td>
+<td><p>Configuration for RAdam optimizer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.RMSpropConfig.html#torchrl.trainers.algorithms.configs.utils.RMSpropConfig" title="torchrl.trainers.algorithms.configs.utils.RMSpropConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RMSpropConfig</span></code></a>([lr, alpha, eps, ...])</p></td>
+<td><p>Configuration for RMSprop optimizer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.RpropConfig.html#torchrl.trainers.algorithms.configs.utils.RpropConfig" title="torchrl.trainers.algorithms.configs.utils.RpropConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RpropConfig</span></code></a>([lr, etas, step_sizes, foreach, ...])</p></td>
+<td><p>Configuration for Rprop optimizer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.SGDConfig.html#torchrl.trainers.algorithms.configs.utils.SGDConfig" title="torchrl.trainers.algorithms.configs.utils.SGDConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SGDConfig</span></code></a>([lr, momentum, dampening, ...])</p></td>
+<td><p>Configuration for SGD optimizer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.utils.SparseAdamConfig.html#torchrl.trainers.algorithms.configs.utils.SparseAdamConfig" title="torchrl.trainers.algorithms.configs.utils.SparseAdamConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SparseAdamConfig</span></code></a>([lr, betas, eps, _target_, ...])</p></td>
+<td><p>Configuration for SparseAdam optimizer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="logging-configurations">
+<h3>Logging Configurations<a class="headerlink" href="#logging-configurations" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.logging.LoggerConfig.html#torchrl.trainers.algorithms.configs.logging.LoggerConfig" title="torchrl.trainers.algorithms.configs.logging.LoggerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LoggerConfig</span></code></a>()</p></td>
+<td><p>A class to configure a logger.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig" title="torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WandbLoggerConfig</span></code></a>(exp_name[, offline, ...])</p></td>
+<td><p>A class to configure a Wandb logger.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig" title="torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorboardLoggerConfig</span></code></a>(exp_name[, log_dir, ...])</p></td>
+<td><p>A class to configure a Tensorboard logger.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig" title="torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CSVLoggerConfig</span></code></a>(exp_name[, log_dir, ...])</p></td>
+<td><p>A class to configure a CSV logger.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="creating-custom-configurations">
+<h2>Creating Custom Configurations<a class="headerlink" href="#creating-custom-configurations" title="Permalink to this heading">¶</a></h2>
+<p>You can create custom configuration classes by inheriting from the appropriate base classes:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.trainers.algorithms.configs.envs_libs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvLibsConfig</span>
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MyCustomEnvConfig</span><span class="p">(</span><span class="n">EnvLibsConfig</span><span class="p">):</span>
+    <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;my_module.MyCustomEnv&quot;</span>
+    <span class="n">env_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;MyEnv-v1&quot;</span>
+    <span class="n">custom_param</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span>
+
+<span class="c1"># Register with ConfigStore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">hydra.core.config_store</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConfigStore</span>
+<span class="n">cs</span> <span class="o">=</span> <span class="n">ConfigStore</span><span class="o">.</span><span class="n">instance</span><span class="p">()</span>
+<span class="n">cs</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">&quot;env&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_custom&quot;</span><span class="p">,</span> <span class="n">node</span><span class="o">=</span><span class="n">MyCustomEnvConfig</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="best-practices">
+<h2>Best Practices<a class="headerlink" href="#best-practices" title="Permalink to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><strong>Start Simple</strong>: Begin with basic configurations and gradually add complexity</p></li>
+<li><p><strong>Use Defaults</strong>: Leverage the <code class="docutils literal notranslate"><span class="pre">defaults</span></code> section to compose configurations</p></li>
+<li><p><strong>Override Sparingly</strong>: Only override what you need to change</p></li>
+<li><p><strong>Validate Configurations</strong>: Test that your configurations instantiate correctly</p></li>
+<li><p><strong>Version Control</strong>: Keep your configuration files under version control</p></li>
+<li><p><strong>Use Variable Interpolation</strong>: Use <code class="docutils literal notranslate"><span class="pre">${variable}</span></code> syntax to avoid duplication</p></li>
+</ol>
+</section>
+<section id="future-extensions">
+<h2>Future Extensions<a class="headerlink" href="#future-extensions" title="Permalink to this heading">¶</a></h2>
+<p>As TorchRL adds more algorithms beyond PPO (such as SAC, TD3, DQN), the configuration system will expand with:</p>
+<ul class="simple">
+<li><p>New trainer configurations (e.g., <code class="docutils literal notranslate"><span class="pre">SACTrainerConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">TD3TrainerConfig</span></code>)</p></li>
+<li><p>Algorithm-specific loss configurations</p></li>
+<li><p>Specialized collector configurations for different algorithms</p></li>
+<li><p>Additional environment and model configurations</p></li>
+</ul>
+<p>The modular design ensures easy integration while maintaining backward compatibility.</p>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.trainers.algorithms.configs.common.ConfigBase.html" class="btn btn-neutral float-right" title="torchrl.trainers.algorithms.configs.common.ConfigBase" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.auto_unwrap_transformed_env.html" class="btn btn-neutral" title="auto_unwrap_transformed_env" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">TorchRL Configuration System</a><ul>
+<li><a class="reference internal" href="#quick-start-with-a-simple-example">Quick Start with a Simple Example</a></li>
+<li><a class="reference internal" href="#configuration-categories-and-groups">Configuration Categories and Groups</a></li>
+<li><a class="reference internal" href="#more-complex-example-parallel-environment-with-transforms">More Complex Example: Parallel Environment with Transforms</a></li>
+<li><a class="reference internal" href="#getting-available-options">Getting Available Options</a></li>
+<li><a class="reference internal" href="#complete-training-example">Complete Training Example</a></li>
+<li><a class="reference internal" href="#running-experiments">Running Experiments</a><ul>
+<li><a class="reference internal" href="#basic-usage">Basic Usage</a></li>
+<li><a class="reference internal" href="#hyperparameter-sweeps">Hyperparameter Sweeps</a></li>
+<li><a class="reference internal" href="#custom-configuration-files">Custom Configuration Files</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#configuration-store-implementation-details">Configuration Store Implementation Details</a></li>
+<li><a class="reference internal" href="#available-configuration-classes">Available Configuration Classes</a><ul>
+<li><a class="reference internal" href="#base-classes">Base Classes</a></li>
+<li><a class="reference internal" href="#environment-configurations">Environment Configurations</a></li>
+<li><a class="reference internal" href="#environment-library-configurations">Environment Library Configurations</a></li>
+<li><a class="reference internal" href="#model-and-network-configurations">Model and Network Configurations</a></li>
+<li><a class="reference internal" href="#transform-configurations">Transform Configurations</a></li>
+<li><a class="reference internal" href="#data-collection-configurations">Data Collection Configurations</a></li>
+<li><a class="reference internal" href="#replay-buffer-and-storage-configurations">Replay Buffer and Storage Configurations</a></li>
+<li><a class="reference internal" href="#training-and-optimization-configurations">Training and Optimization Configurations</a><ul>
+</ul>
+</li>
+<li><a class="reference internal" href="#logging-configurations">Logging Configurations</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#creating-custom-configurations">Creating Custom Configurations</a></li>
+<li><a class="reference internal" href="#best-practices">Best Practices</a></li>
+<li><a class="reference internal" href="#future-extensions">Future Extensions</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

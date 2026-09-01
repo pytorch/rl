@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+get_env_transforms_from_module
+==============================
+
+.. autoclass:: get_env_transforms_from_module
+    :members:

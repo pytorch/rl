@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+ConditionalUpdateResult
+=======================
+
+.. autoclass:: ConditionalUpdateResult
+    :members:
+    :inherited-members:

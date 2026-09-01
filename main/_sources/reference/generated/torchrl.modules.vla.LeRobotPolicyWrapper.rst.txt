@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.vla
+
+
+LeRobotPolicyWrapper
+====================
+
+.. autoclass:: LeRobotPolicyWrapper
+    :members:

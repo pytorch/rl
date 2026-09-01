@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.PPOLossConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: PPOLossConfig

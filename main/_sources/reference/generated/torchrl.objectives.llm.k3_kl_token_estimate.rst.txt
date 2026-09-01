@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.objectives.llm
+
+
+k3_kl_token_estimate
+====================
+
+.. autoclass:: k3_kl_token_estimate
+    :members:
+    :inherited-members:

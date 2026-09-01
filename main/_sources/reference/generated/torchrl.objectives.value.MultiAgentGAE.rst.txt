@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value
+
+
+MultiAgentGAE
+=============
+
+.. autoclass:: MultiAgentGAE
+    :members:

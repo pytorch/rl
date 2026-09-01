@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value.functional
+
+
+td_lambda_advantage_estimate
+============================
+
+.. autoclass:: td_lambda_advantage_estimate
+    :members:

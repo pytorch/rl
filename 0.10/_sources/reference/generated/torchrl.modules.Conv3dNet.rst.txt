@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+Conv3dNet
+=========
+
+.. autoclass:: Conv3dNet
+    :members:

@@ -1,0 +1,1855 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.collectors._evaluator &mdash; torchrl 0.12 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../versions.html"><span style="font-size:110%">0.12 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/evaluator.html">Using the Evaluator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.collectors._evaluator</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.collectors._evaluator</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="sd">&quot;&quot;&quot;Unified evaluator with pluggable thread / process / Ray backends.</span>
+
+<span class="sd">This module provides :class:`Evaluator`, a single entry-point for running</span>
+<span class="sd">evaluation rollouts either synchronously (blocking) or asynchronously</span>
+<span class="sd">(in the background) during RL training.</span>
+
+<span class="sd">Internally, the evaluator uses a :class:`~torchrl.collectors.Collector` with</span>
+<span class="sd">``trajs_per_batch`` to collect complete trajectories.  The collector</span>
+<span class="sd">pre-allocates buffers and writes in-place — O(1) GPU allocations vs O(n)</span>
+<span class="sd">per step with ``env.rollout()`` — yielding significant speedups for batched</span>
+<span class="sd">eval environments.</span>
+
+<span class="sd">Typical usage -- **thread backend** (default)::</span>
+
+<span class="sd">    from torchrl.collectors import Evaluator</span>
+
+<span class="sd">    evaluator = Evaluator(</span>
+<span class="sd">        make_eval_env,</span>
+<span class="sd">        eval_policy,</span>
+<span class="sd">        max_steps=1000,</span>
+<span class="sd">        on_result=lambda result: logger.log_metrics(</span>
+<span class="sd">            {k: v.item() for k, v in result.items() if k != &quot;eval/step&quot;},</span>
+<span class="sd">            step=result[&quot;eval/step&quot;].item(),</span>
+<span class="sd">        ),</span>
+<span class="sd">    )</span>
+
+<span class="sd">    # Non-blocking: trigger and poll later</span>
+<span class="sd">    evaluator.trigger_eval(train_policy, step=collected_frames)</span>
+<span class="sd">    result = evaluator.poll()  # None while still running</span>
+
+<span class="sd">    # Or blocking:</span>
+<span class="sd">    metrics = evaluator.evaluate(train_policy, step=collected_frames)</span>
+
+<span class="sd">    evaluator.shutdown()</span>
+
+<span class="sd">Typical usage -- **process backend** (dedicated eval device)::</span>
+
+<span class="sd">    evaluator = Evaluator(</span>
+<span class="sd">        lambda: make_eval_env(device=&quot;cuda:7&quot;),</span>
+<span class="sd">        policy_factory=lambda env: make_eval_policy(env).to(&quot;cuda:7&quot;),</span>
+<span class="sd">        max_steps=1000,</span>
+<span class="sd">        backend=&quot;process&quot;,</span>
+<span class="sd">    )</span>
+
+<span class="sd">    evaluator.trigger_eval(train_policy, step=collected_frames)</span>
+<span class="sd">    # ... training continues ...</span>
+<span class="sd">    if not evaluator.pending:</span>
+<span class="sd">        result = evaluator.poll()</span>
+
+<span class="sd">    evaluator.shutdown()</span>
+
+<span class="sd">Typical usage -- **Ray backend**::</span>
+
+<span class="sd">    evaluator = Evaluator(</span>
+<span class="sd">        make_eval_env,</span>
+<span class="sd">        policy_factory=make_eval_policy,</span>
+<span class="sd">        max_steps=1000,</span>
+<span class="sd">        backend=&quot;ray&quot;,</span>
+<span class="sd">        init_fn=my_init_fn,</span>
+<span class="sd">        num_gpus=1,</span>
+<span class="sd">    )</span>
+
+<span class="sd">    evaluator.trigger_eval(weights, step=step)</span>
+<span class="sd">    result = evaluator.poll()</span>
+<span class="sd">    evaluator.shutdown()</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">importlib</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">ExplorationType</span><span class="p">,</span> <span class="n">set_exploration_type</span>
+
+<span class="n">_has_ray</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;ray&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">NestedKey</span> <span class="o">=</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="Evaluator">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator">[docs]</a>
+<span class="k">class</span> <span class="nc">Evaluator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Unified sync / async evaluator with pluggable backend.</span>
+
+<span class="sd">    The evaluator wraps an environment and a policy and provides two modes of</span>
+<span class="sd">    operation:</span>
+
+<span class="sd">    * **Synchronous** -- call :meth:`evaluate` to run a blocking evaluation</span>
+<span class="sd">      and get metrics back immediately.</span>
+<span class="sd">    * **Asynchronous** -- call :meth:`trigger_eval` to kick off an evaluation</span>
+<span class="sd">      in the background, then :meth:`poll` (non-blocking) or :meth:`wait`</span>
+<span class="sd">      (blocking) to retrieve the result.  Use the :attr:`pending` property</span>
+<span class="sd">      to check whether an evaluation is currently in progress. Results can</span>
+<span class="sd">      also be consumed via an ``on_result`` callback.</span>
+
+<span class="sd">    Internally, a :class:`~torchrl.collectors.Collector` is used with</span>
+<span class="sd">    ``trajs_per_batch=num_trajectories`` to collect complete episodes.  The</span>
+<span class="sd">    collector pre-allocates buffers and writes in-place — O(1) GPU</span>
+<span class="sd">    allocations vs O(n) per step — yielding significant speedups for</span>
+<span class="sd">    batched eval environments.</span>
+
+<span class="sd">    Three backends are available:</span>
+
+<span class="sd">    * ``&quot;thread&quot;`` (default) -- runs in a daemon thread.  Low overhead,</span>
+<span class="sd">      well suited for GPU-bound evaluation where the GIL is released by</span>
+<span class="sd">      CUDA ops.  When *env* is a callable **and** *policy_factory* is</span>
+<span class="sd">      provided, both are created lazily inside the worker thread, which is</span>
+<span class="sd">      useful for dedicated eval devices.</span>
+<span class="sd">    * ``&quot;process&quot;`` -- runs in a child process (``spawn`` context).  The</span>
+<span class="sd">      env and policy are always created inside the child process, giving</span>
+<span class="sd">      full CUDA context isolation and avoiding the GIL entirely.  Requires</span>
+<span class="sd">      *env* to be a callable and *policy_factory* to be provided.</span>
+<span class="sd">    * ``&quot;ray&quot;`` -- runs in a Ray actor, suitable for distributed setups.</span>
+<span class="sd">      Requires *env* to be a callable and *policy_factory* to be provided.</span>
+
+<span class="sd">    **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a</span>
+<span class="sd">    previous evaluation is still running either raises immediately</span>
+<span class="sd">    (``busy_policy=&quot;error&quot;``; default) or queues the new request</span>
+<span class="sd">    (``busy_policy=&quot;queue&quot;``). Use :attr:`pending` to conditionally skip</span>
+<span class="sd">    trigger calls::</span>
+
+<span class="sd">        if not evaluator.pending:</span>
+<span class="sd">            evaluator.trigger_eval(weights, step=step)</span>
+
+<span class="sd">    **Callback thread-safety**: when ``on_result`` is provided, it is</span>
+<span class="sd">    invoked from the evaluator&#39;s async coordination thread after the</span>
+<span class="sd">    rollout completes. If the callback writes to a logger, the callback is</span>
+<span class="sd">    responsible for any locking it needs.</span>
+
+<span class="sd">    **Dedicated eval device** (multi-GPU example)::</span>
+
+<span class="sd">        evaluator = Evaluator(</span>
+<span class="sd">            lambda: make_env(device=&quot;cuda:7&quot;),</span>
+<span class="sd">            policy_factory=lambda env: make_policy(env).to(&quot;cuda:7&quot;),</span>
+<span class="sd">            max_steps=1000,</span>
+<span class="sd">            backend=&quot;process&quot;,  # or &quot;thread&quot;</span>
+<span class="sd">        )</span>
+
+<span class="sd">    **Batched eval environments**: for best results, add a</span>
+<span class="sd">    :class:`~torchrl.envs.transforms.RewardSum` transform to the eval</span>
+<span class="sd">    env so that per-episode returns are tracked.  Without it, the</span>
+<span class="sd">    evaluator falls back to summing raw rewards over each trajectory.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env: An :class:`~torchrl.envs.EnvBase` instance **or** a callable</span>
+<span class="sd">            that returns one.  For the ``&quot;process&quot;`` and ``&quot;ray&quot;`` backends</span>
+<span class="sd">            the callable form is required.  For the ``&quot;thread&quot;`` backend,</span>
+<span class="sd">            when combined with *policy_factory*, passing a callable defers</span>
+<span class="sd">            construction to the worker thread.</span>
+<span class="sd">        policy: The evaluation policy.  Mutually exclusive with</span>
+<span class="sd">            *policy_factory*.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        policy_factory: A callable ``(env) -&gt; policy`` used to build the</span>
+<span class="sd">            policy.  Required for the ``&quot;process&quot;`` and ``&quot;ray&quot;`` backends.</span>
+<span class="sd">            For ``&quot;thread&quot;``, if both *env* (callable) and *policy_factory*</span>
+<span class="sd">            are provided, construction is deferred to the worker thread.</span>
+<span class="sd">        num_trajectories (int): Number of complete episodes to collect per</span>
+<span class="sd">            evaluation round.  A :class:`~torchrl.collectors.Collector` is</span>
+<span class="sd">            used internally with ``trajs_per_batch=num_trajectories``.</span>
+<span class="sd">            Default: ``10``.</span>
+<span class="sd">        max_steps (int or None): Maximum environment steps per episode,</span>
+<span class="sd">            passed as ``max_frames_per_traj`` to the internal collector.</span>
+<span class="sd">            When ``None``, episodes run until done with no step limit.</span>
+<span class="sd">            Default: ``None``.</span>
+<span class="sd">        frames_per_batch (int or None): Internal collection batch size</span>
+<span class="sd">            (env steps per collector iteration).  If ``None``, defaults to</span>
+<span class="sd">            ``max_steps``.  This is purely internal — output granularity</span>
+<span class="sd">            is controlled by *num_trajectories*.</span>
+<span class="sd">        collector_cls: Which collector class to use.  Accepts a class or a</span>
+<span class="sd">            string name resolved from :mod:`torchrl.collectors` (e.g.</span>
+<span class="sd">            ``&quot;Collector&quot;``).</span>
+<span class="sd">            Default: ``None`` (uses :class:`~torchrl.collectors.Collector`).</span>
+<span class="sd">        collector_kwargs (dict or None): Extra keyword arguments forwarded</span>
+<span class="sd">            to the collector constructor.</span>
+<span class="sd">        log_prefix (str): Prefix prepended to all logged metric names.</span>
+<span class="sd">            Default: ``&quot;eval&quot;``.</span>
+<span class="sd">        reward_keys: Nested key(s) for reading the reward from the</span>
+<span class="sd">            tensordict.  Default: ``(&quot;next&quot;, &quot;reward&quot;)``.</span>
+<span class="sd">        done_keys: Nested key(s) for reading the done flag.</span>
+<span class="sd">            Default: ``(&quot;next&quot;, &quot;done&quot;)``.</span>
+<span class="sd">        device: Device for the evaluation policy.  If ``None``, inferred</span>
+<span class="sd">            from the policy parameters.</span>
+<span class="sd">        exploration_type: Exploration mode during evaluation.</span>
+<span class="sd">            Default: :attr:`ExplorationType.DETERMINISTIC`.</span>
+<span class="sd">        metrics_fn: Optional ``(TensorDictBase) -&gt; dict[str, float]``</span>
+<span class="sd">            called on every trajectory batch to extract custom metrics.</span>
+<span class="sd">        dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`</span>
+<span class="sd">            transforms after each evaluation (thread backend only).</span>
+<span class="sd">            Default: ``True``.</span>
+<span class="sd">        on_result: Optional ``(TensorDictBase) -&gt; None`` invoked after each</span>
+<span class="sd">            completed evaluation. The callback receives a flat tensordict</span>
+<span class="sd">            with the same prefixed metric names returned by</span>
+<span class="sd">            :meth:`evaluate`, :meth:`poll`, and :meth:`wait`.</span>
+<span class="sd">        busy_policy (str): Behaviour when :meth:`trigger_eval` is called</span>
+<span class="sd">            while another async evaluation is still pending. ``&quot;error&quot;``</span>
+<span class="sd">            raises immediately (default; recommended). ``&quot;queue&quot;`` enqueues</span>
+<span class="sd">            the new request and runs it when the current evaluation</span>
+<span class="sd">            finishes.</span>
+
+<span class="sd">            .. warning::</span>
+<span class="sd">                With ``busy_policy=&quot;queue&quot;``, each queued request stores a</span>
+<span class="sd">                copy of the weights dict. For large models this can consume</span>
+<span class="sd">                significant memory. Prefer checking :attr:`pending` and</span>
+<span class="sd">                skipping triggers instead.</span>
+<span class="sd">        weight_sync_schemes (dict or None): A dict mapping model IDs to</span>
+<span class="sd">            :class:`~torchrl.weight_update.WeightSyncScheme` instances.</span>
+<span class="sd">            When provided, a :class:`~torchrl.collectors.MultiSyncCollector`</span>
+<span class="sd">            with a single worker is used for process-level CUDA isolation</span>
+<span class="sd">            and scheme-based weight transfer.  Model IDs follow the</span>
+<span class="sd">            collector convention: ``&quot;policy&quot;`` for the main policy,</span>
+<span class="sd">            ``&quot;env.transform[0]&quot;`` for env transforms, etc.</span>
+<span class="sd">            Example::</span>
+
+<span class="sd">                from torchrl.weight_update import MultiProcessedWeightSyncScheme</span>
+<span class="sd">                evaluator = Evaluator(</span>
+<span class="sd">                    env=make_eval_env,</span>
+<span class="sd">                    policy_factory=make_eval_policy,</span>
+<span class="sd">                    weight_sync_schemes={</span>
+<span class="sd">                        &quot;policy&quot;: MultiProcessedWeightSyncScheme(),</span>
+<span class="sd">                        &quot;env.transform[0]&quot;: MultiProcessedWeightSyncScheme(),</span>
+<span class="sd">                    },</span>
+<span class="sd">                    max_steps=1000,</span>
+<span class="sd">                )</span>
+<span class="sd">        backend (str): ``&quot;thread&quot;`` (default), ``&quot;process&quot;``, or ``&quot;ray&quot;``.</span>
+<span class="sd">            The ``&quot;process&quot;`` backend is implemented as a thread backend</span>
+<span class="sd">            with a :class:`~torchrl.collectors.MultiSyncCollector` (1</span>
+<span class="sd">            worker) running in a child process.  This provides full CUDA</span>
+<span class="sd">            context isolation without custom queue management.</span>
+<span class="sd">        init_fn: Callable invoked at the start of the worker / actor</span>
+<span class="sd">            process, before any evaluation work (and, ideally, before any</span>
+<span class="sd">            ``torch`` import inside that process).  Used by both the</span>
+<span class="sd">            ``&quot;process&quot;`` and ``&quot;ray&quot;`` backends.  Typical use case: start</span>
+<span class="sd">            Isaac Lab&#39;s ``AppLauncher`` in headless mode.  Ignored by the</span>
+<span class="sd">            ``&quot;thread&quot;`` backend because no new process is spawned.</span>
+<span class="sd">        num_gpus (int): (*Ray only*) GPUs requested for the actor.</span>
+<span class="sd">            Default: ``1``.</span>
+<span class="sd">        ray_kwargs (dict): (*Ray only*) Extra keyword arguments forwarded</span>
+<span class="sd">            to ``ray.remote()``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_trajectories</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_cls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">log_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;eval&quot;</span><span class="p">,</span>
+        <span class="n">reward_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
+        <span class="n">done_keys</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExplorationType</span> <span class="o">=</span> <span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span><span class="p">,</span>
+        <span class="n">metrics_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dump_video</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">on_result</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">busy_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span>
+        <span class="c1"># Backend selection</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+        <span class="c1"># Ray-specific</span>
+        <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">ray_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span> <span class="o">=</span> <span class="n">log_prefix</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span> <span class="o">=</span> <span class="n">reward_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_done_keys</span> <span class="o">=</span> <span class="n">done_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_exploration_type</span> <span class="o">=</span> <span class="n">exploration_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metrics_fn</span> <span class="o">=</span> <span class="n">metrics_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="o">=</span> <span class="n">on_result</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_step_counter</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dump_video</span> <span class="o">=</span> <span class="n">dump_video</span>
+        <span class="k">if</span> <span class="n">busy_policy</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="s2">&quot;queue&quot;</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown busy_policy </span><span class="si">{</span><span class="n">busy_policy</span><span class="si">!r}</span><span class="s2">. Choose &#39;error&#39; or &#39;queue&#39;.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">=</span> <span class="n">busy_policy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span>
+            <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">backend</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;thread&quot;</span><span class="p">,</span> <span class="s2">&quot;process&quot;</span><span class="p">):</span>
+            <span class="c1"># The process backend is implemented as a thread backend</span>
+            <span class="c1"># with a MultiSyncCollector (1 worker) running in a child</span>
+            <span class="c1"># process.  This eliminates custom process management and</span>
+            <span class="c1"># uses the weight_sync_schemes infrastructure for weight</span>
+            <span class="c1"># transfer.</span>
+            <span class="n">use_multi_collector</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;process&quot;</span> <span class="ow">or</span> <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">use_multi_collector</span><span class="p">:</span>
+                <span class="n">env_is_callable</span> <span class="o">=</span> <span class="nb">callable</span><span class="p">(</span><span class="n">env</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">EnvBase</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">env_is_callable</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;The </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2"> backend with weight_sync_schemes &quot;</span>
+                        <span class="s2">&quot;(or backend=&#39;process&#39;) requires `env` to be a callable &quot;</span>
+                        <span class="s2">&quot;(factory function) because the env is created inside &quot;</span>
+                        <span class="s2">&quot;a child process.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;The </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2"> backend with weight_sync_schemes &quot;</span>
+                        <span class="s2">&quot;(or backend=&#39;process&#39;) requires `policy_factory` &quot;</span>
+                        <span class="s2">&quot;(a callable `(env) -&gt; policy`) because the policy is &quot;</span>
+                        <span class="s2">&quot;created inside a child process.&quot;</span>
+                    <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="p">:</span> <span class="n">_EvalBackend</span> <span class="o">=</span> <span class="n">_ThreadEvalBackend</span><span class="p">(</span>
+                <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+                <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+                <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
+                <span class="n">num_trajectories</span><span class="o">=</span><span class="n">num_trajectories</span><span class="p">,</span>
+                <span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">,</span>
+                <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
+                <span class="n">collector_cls</span><span class="o">=</span><span class="n">collector_cls</span><span class="p">,</span>
+                <span class="n">collector_kwargs</span><span class="o">=</span><span class="n">collector_kwargs</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">exploration_type</span><span class="o">=</span><span class="n">exploration_type</span><span class="p">,</span>
+                <span class="n">reward_keys</span><span class="o">=</span><span class="n">reward_keys</span><span class="p">,</span>
+                <span class="n">done_keys</span><span class="o">=</span><span class="n">done_keys</span><span class="p">,</span>
+                <span class="n">metrics_fn</span><span class="o">=</span><span class="n">metrics_fn</span><span class="p">,</span>
+                <span class="n">weight_sync_schemes</span><span class="o">=</span><span class="n">weight_sync_schemes</span><span class="p">,</span>
+                <span class="n">use_multi_collector</span><span class="o">=</span><span class="n">use_multi_collector</span><span class="p">,</span>
+                <span class="n">init_fn</span><span class="o">=</span><span class="n">init_fn</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;ray&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span> <span class="o">=</span> <span class="n">_RayEvalBackend</span><span class="p">(</span>
+                <span class="n">env_maker</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+                <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
+                <span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">,</span>
+                <span class="n">reward_keys</span><span class="o">=</span><span class="n">reward_keys</span><span class="p">,</span>
+                <span class="n">init_fn</span><span class="o">=</span><span class="n">init_fn</span><span class="p">,</span>
+                <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+                <span class="n">ray_kwargs</span><span class="o">=</span><span class="n">ray_kwargs</span> <span class="ow">or</span> <span class="p">{},</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown backend </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2">. &quot;</span> <span class="s2">&quot;Choose &#39;thread&#39;, &#39;process&#39;, or &#39;ray&#39;.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Synchronous API</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="Evaluator.evaluate">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate">[docs]</a>
+    <span class="k">def</span> <span class="nf">evaluate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run a blocking evaluation rollout.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Policy weights to load before the rollout.  Accepts a</span>
+<span class="sd">                :class:`TensorDictBase` (e.g. from</span>
+<span class="sd">                ``TensorDict.from_module(policy).data``) or an</span>
+<span class="sd">                :class:`nn.Module` (weights are extracted automatically).</span>
+<span class="sd">                If ``None`` the current policy weights are used.</span>
+<span class="sd">            step: Logging step.  If ``None`` an internal counter is used.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            weights_dict: A dict mapping ``model_id`` strings to weight</span>
+<span class="sd">                sources (``nn.Module`` or ``TensorDictBase``).  Use this</span>
+<span class="sd">                to sync multiple models (e.g. policy + env transforms).</span>
+<span class="sd">                When provided, *weights* is treated as</span>
+<span class="sd">                ``weights_dict[&quot;policy&quot;]`` if ``&quot;policy&quot;`` is not already</span>
+<span class="sd">                in the dict.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict with at least ``&quot;&lt;prefix&gt;/reward&quot;`` and</span>
+<span class="sd">            ``&quot;&lt;prefix&gt;/episode_length&quot;`` keys.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_weights_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">)</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_step</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">prepared</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_invoke_on_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Asynchronous API</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="Evaluator.trigger_eval">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.trigger_eval">[docs]</a>
+    <span class="k">def</span> <span class="nf">trigger_eval</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an async evaluation.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Policy weights to load.  See :meth:`evaluate`.</span>
+<span class="sd">            step: Logging step.  See :meth:`evaluate`.</span>
+<span class="sd">            weights_dict: Multi-model weights dict.  See :meth:`evaluate`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_weights_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">)</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_step</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">==</span> <span class="s2">&quot;error&quot;</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Evaluation already pending. Wait for completion or set &quot;</span>
+                    <span class="s2">&quot;busy_policy=&#39;queue&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">prepared</span><span class="p">,</span> <span class="n">step</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_async_thread</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Evaluator.poll">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.poll">[docs]</a>
+    <span class="k">def</span> <span class="nf">poll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the latest evaluation result if ready, else ``None``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Seconds to wait.  ``0`` means non-blocking.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pop_ready_result</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Evaluator.wait">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.wait">[docs]</a>
+    <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Block until the current evaluation finishes.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Max seconds to wait.  ``None`` waits forever.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pop_ready_result</span><span class="p">()</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Status</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">pending</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` if an async evaluation is currently in progress.</span>
+
+<span class="sd">        This can be used to avoid triggering overlapping evaluations::</span>
+
+<span class="sd">            if not evaluator.pending:</span>
+<span class="sd">                evaluator.trigger_eval(weights, step=step)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">or</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Lifecycle</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="Evaluator.shutdown">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cancel any running evaluation, clean up resources.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="Evaluator.extract_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.extract_weights">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">extract_weights</span><span class="p">(</span><span class="n">policy</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract detached, cloned, CPU weights from a policy.</span>
+
+<span class="sd">        This is a convenience helper; the returned TensorDict is safe to</span>
+<span class="sd">        pass across threads.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_prepare_single</span><span class="p">(</span><span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare a single weight source for cross-thread transfer.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">Evaluator</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">weights</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_weights_dict</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a ``{model_id: TensorDictBase}`` dict from user inputs.</span>
+
+<span class="sd">        When *weights_dict* is ``None`` and *weights* is provided, the</span>
+<span class="sd">        result is ``{&quot;policy&quot;: prepared_weights}`` for backward</span>
+<span class="sd">        compatibility.  When both are ``None``, returns ``None``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">weights_dict</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">weights_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_single</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_single</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span> <span class="ow">or</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_next_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">step</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_counter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_step_counter</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">s</span>
+
+    <span class="k">def</span> <span class="nf">_ensure_async_thread</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_loop</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;evaluator-async&quot;</span><span class="p">,</span>
+            <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_async_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_async_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_shutdown</span><span class="p">:</span>
+            <span class="n">request</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">:</span>
+                    <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">request</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="o">*</span><span class="n">request</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">raw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_invoke_on_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+                <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                    <span class="n">has_more_requests</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">has_more_requests</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="k">continue</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_pop_ready_result</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ready_results</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ready_result</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">_invoke_on_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_callback_tensordict</span><span class="p">(</span><span class="n">result</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Evaluator on_result callback failed&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_finalize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format metrics and dump video on the caller or coordinator thread.&quot;&quot;&quot;</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">)</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_metrics</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dump_video</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">dump_video</span><span class="p">(</span><span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">metrics</span>
+
+    <span class="k">def</span> <span class="nf">_format_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_prefix</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_std&quot;</span><span class="p">,</span> <span class="s2">&quot;num_episodes&quot;</span><span class="p">,</span> <span class="s2">&quot;episode_length&quot;</span><span class="p">,</span> <span class="s2">&quot;fps&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;frames&quot;</span> <span class="ow">in</span> <span class="n">raw</span> <span class="ow">and</span> <span class="n">raw</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">/video&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;_step&quot;</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">/step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span>
+        <span class="c1"># Custom metrics (already prefixed by backend or metrics_fn)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">raw</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;custom/&quot;</span><span class="p">):</span>
+                <span class="n">out</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">k</span><span class="p">[</span><span class="mi">7</span><span class="p">:]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_to_result_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_to_callback_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_result_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span></div>
+
+
+
+<span class="c1"># ======================================================================</span>
+<span class="c1"># Backend interface</span>
+<span class="c1"># ======================================================================</span>
+
+
+<span class="k">class</span> <span class="nc">_EvalBackend</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Internal contract that each backend implements.</span>
+
+<span class="sd">    All weight arguments are now ``dict[str, TensorDictBase] | None``</span>
+<span class="sd">    mapping model IDs to prepared weight tensordicts.  For backward</span>
+<span class="sd">    compatibility, the ``&quot;policy&quot;`` key holds the main policy weights.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">run_sync</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run a blocking evaluation and return raw results.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an async evaluation.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">poll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Non-blocking check for results.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Blocking wait for results.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">pending</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` if an async evaluation is currently in progress.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clean up resources.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">dump_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dump accumulated video frames (called on caller thread).</span>
+
+<span class="sd">        Default is a no-op; overridden by backends that support video.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="c1"># ======================================================================</span>
+<span class="c1"># Shared metric helpers</span>
+<span class="c1"># ======================================================================</span>
+
+<span class="n">_EPISODE_REWARD_KEY</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;episode_reward&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_extract_metrics_from_trajectories</span><span class="p">(</span>
+    <span class="n">traj_batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="n">reward_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+    <span class="n">done_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+    <span class="n">metrics_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">eval_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract evaluation metrics from a trajectory batch produced by a collector.</span>
+
+<span class="sd">    *traj_batch* has shape ``(num_trajectories, max_traj_len)`` with a</span>
+<span class="sd">    ``(&quot;collector&quot;, &quot;mask&quot;)`` boolean field marking valid timesteps.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">))</span>  <span class="c1"># [N, T]</span>
+    <span class="n">num_trajectories</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">episode_rewards</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">episode_lengths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">total_frames</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="n">ep_reward_td</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_EPISODE_REWARD_KEY</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">step_count_td</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;step_count&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">reward_td</span> <span class="o">=</span> <span class="n">traj_batch</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">reward_keys</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_trajectories</span><span class="p">):</span>
+        <span class="n">traj_mask</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>  <span class="c1"># [T]</span>
+        <span class="k">if</span> <span class="n">traj_mask</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">traj_mask</span> <span class="o">=</span> <span class="n">traj_mask</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">valid_len</span> <span class="o">=</span> <span class="n">traj_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">valid_len</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">total_frames</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">valid_len</span><span class="p">)</span>
+
+        <span class="c1"># Last valid index</span>
+        <span class="n">last_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">valid_len</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="n">ep_reward_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Prefer episode_reward from RewardSum (cumulative return)</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="n">ep_reward_td</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">last_idx</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">r</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">episode_rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="n">reward_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback: sum raw rewards over valid trajectory steps</span>
+            <span class="n">valid_rewards</span> <span class="o">=</span> <span class="n">reward_td</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">valid_len</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="n">valid_rewards</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">valid_rewards</span> <span class="o">=</span> <span class="n">valid_rewards</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">episode_rewards</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">valid_rewards</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="n">step_count_td</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ep_len</span> <span class="o">=</span> <span class="n">step_count_td</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">last_idx</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">ep_len</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">ep_len</span> <span class="o">=</span> <span class="n">ep_len</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">episode_lengths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ep_len</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">episode_lengths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">valid_len</span><span class="p">))</span>
+
+    <span class="n">num_episodes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">episode_rewards</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">num_episodes</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">rewards_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">episode_rewards</span><span class="p">)</span>
+        <span class="n">mean_reward</span> <span class="o">=</span> <span class="n">rewards_t</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="n">std_reward</span> <span class="o">=</span> <span class="n">rewards_t</span><span class="o">.</span><span class="n">std</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">if</span> <span class="n">num_episodes</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">mean_length</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">episode_lengths</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">episode_lengths</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">mean_reward</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
+        <span class="n">std_reward</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
+        <span class="n">mean_length</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
+
+    <span class="n">metrics</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="n">mean_reward</span><span class="p">,</span>
+        <span class="s2">&quot;reward_std&quot;</span><span class="p">:</span> <span class="n">std_reward</span><span class="p">,</span>
+        <span class="s2">&quot;num_episodes&quot;</span><span class="p">:</span> <span class="n">num_episodes</span><span class="p">,</span>
+        <span class="s2">&quot;episode_length&quot;</span><span class="p">:</span> <span class="n">mean_length</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">eval_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">eval_time</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;fps&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">total_frames</span> <span class="o">/</span> <span class="n">eval_time</span>
+    <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;frame_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">total_frames</span>
+
+    <span class="k">if</span> <span class="n">metrics_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">custom</span> <span class="o">=</span> <span class="n">metrics_fn</span><span class="p">(</span><span class="n">traj_batch</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">custom</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">metrics</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;custom/</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+
+    <span class="k">return</span> <span class="n">metrics</span>
+
+
+<span class="k">def</span> <span class="nf">_env_has_step_count</span><span class="p">(</span><span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the environment already has a StepCounter transform.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">output_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">key</span><span class="p">,)</span>
+        <span class="k">if</span> <span class="s2">&quot;step_count&quot;</span> <span class="ow">in</span> <span class="n">key</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span> <span class="nf">_resolve_collector_cls</span><span class="p">(</span><span class="n">cls_or_name</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve a collector class from a string name or return as-is.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">cls_or_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
+
+        <span class="k">return</span> <span class="n">Collector</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cls_or_name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">torchrl.collectors</span> <span class="k">as</span> <span class="nn">mod</span>
+
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="n">cls_or_name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">cls_or_name</span>
+
+
+<span class="k">def</span> <span class="nf">_freeze_vecnorm</span><span class="p">(</span><span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Freeze all VecNorm / VecNormV2 transforms in the env.</span>
+
+<span class="sd">    Evaluation environments should not update running statistics —</span>
+<span class="sd">    they receive stats from the training process via weight sync and</span>
+<span class="sd">    use them as-is.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">TransformedEnv</span>
+    <span class="kn">from</span> <span class="nn">torchrl.envs.transforms.vecnorm</span> <span class="kn">import</span> <span class="n">VecNormV2</span>
+
+    <span class="c1"># Also handle the legacy VecNorm</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">torchrl.envs.transforms.transforms</span> <span class="kn">import</span> <span class="n">VecNorm</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="n">VecNorm</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># noqa: N806</span>
+
+    <span class="k">def</span> <span class="nf">_freeze_transforms</span><span class="p">(</span><span class="n">transform</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">VecNormV2</span><span class="p">):</span>
+            <span class="n">transform</span><span class="o">.</span><span class="n">freeze</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">VecNorm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">VecNorm</span><span class="p">):</span>
+            <span class="n">transform</span><span class="o">.</span><span class="n">freeze</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transform</span><span class="p">:</span>
+                <span class="n">_freeze_transforms</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">TransformedEnv</span><span class="p">):</span>
+        <span class="n">_freeze_transforms</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">env</span>
+
+
+<span class="k">def</span> <span class="nf">_wrap_env_factory_frozen</span><span class="p">(</span>
+    <span class="n">env_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wrap an env factory to freeze VecNorm transforms after creation.</span>
+
+<span class="sd">    If *env_factory* is an :class:`~torchrl.envs.EnvCreator`, the returned</span>
+<span class="sd">    object is also an ``EnvCreator`` (preserving pre-computed ``meta_data``</span>
+<span class="sd">    and shared-memory state dicts) whose ``__call__`` freezes VecNorm</span>
+<span class="sd">    transforms on the newly-created environment.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">torchrl.envs.env_creator</span> <span class="kn">import</span> <span class="n">EnvCreator</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_factory</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">):</span>
+
+        <span class="k">class</span> <span class="nc">_FrozenEnvCreator</span><span class="p">(</span><span class="n">EnvCreator</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;Thin ``EnvCreator`` wrapper that freezes VecNorm after creation.&quot;&quot;&quot;</span>
+
+            <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">original</span><span class="p">:</span> <span class="n">EnvCreator</span><span class="p">):</span>
+                <span class="c1"># Skip parent __init__ (avoids recreating shadow env).</span>
+                <span class="c1"># Copy all state from the original instead.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">original</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_original</span> <span class="o">=</span> <span class="n">original</span>
+
+            <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
+                <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_original</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">_freeze_vecnorm</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">_FrozenEnvCreator</span><span class="p">(</span><span class="n">env_factory</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">wrapper</span><span class="p">():</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">env_factory</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">_freeze_vecnorm</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">wrapper</span>
+
+
+<span class="c1"># ======================================================================</span>
+<span class="c1"># Thread backend</span>
+<span class="c1"># ======================================================================</span>
+
+
+<span class="k">class</span> <span class="nc">_ThreadEvalBackend</span><span class="p">(</span><span class="n">_EvalBackend</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs evaluation in a daemon thread using an internal collector.</span>
+
+<span class="sd">    When *policy_factory* is provided and *env* is a callable, the</span>
+<span class="sd">    environment and policy are created **lazily** on the first evaluation</span>
+<span class="sd">    call.  For async evaluation this means construction happens inside the</span>
+<span class="sd">    worker thread, which is critical for multi-device setups where the</span>
+<span class="sd">    eval environment lives on a dedicated GPU.</span>
+
+<span class="sd">    When *weight_sync_schemes* is provided (or *use_multi_collector* is</span>
+<span class="sd">    ``True``), a :class:`~torchrl.collectors.MultiSyncCollector` with a</span>
+<span class="sd">    single worker is used instead of a plain</span>
+<span class="sd">    :class:`~torchrl.collectors.Collector`.  This provides process-level</span>
+<span class="sd">    CUDA isolation and uses the weight-sync-scheme infrastructure for</span>
+<span class="sd">    cross-process weight transfer — replacing the old</span>
+<span class="sd">    ``_ProcessEvalBackend``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_trajectories</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_cls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExplorationType</span><span class="p">,</span>
+        <span class="n">reward_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+        <span class="n">done_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+        <span class="n">metrics_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">weight_sync_schemes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_multi_collector</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Provide either `policy` or `policy_factory`, not both.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_env_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span> <span class="o">=</span> <span class="n">use_multi_collector</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span> <span class="o">=</span> <span class="n">weight_sync_schemes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_fn</span> <span class="o">=</span> <span class="n">init_fn</span>
+
+        <span class="n">env_is_callable</span> <span class="o">=</span> <span class="nb">callable</span><span class="p">(</span><span class="n">env</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">EnvBase</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span><span class="p">:</span>
+            <span class="c1"># MultiSyncCollector path: always defer construction.</span>
+            <span class="c1"># Wrap the factory to freeze VecNorm transforms in the worker.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env_factory</span> <span class="o">=</span> <span class="n">_wrap_env_factory_frozen</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">elif</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">env_is_callable</span><span class="p">:</span>
+            <span class="c1"># Lazy path: defer both env and policy creation to the worker thread</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env_factory</span> <span class="o">=</span> <span class="n">env</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Eager path (existing behaviour)</span>
+            <span class="k">if</span> <span class="n">env_is_callable</span><span class="p">:</span>
+                <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="p">()</span>
+            <span class="c1"># Freeze VecNorm transforms so eval doesn&#39;t update running stats</span>
+            <span class="n">_freeze_vecnorm</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span> <span class="o">=</span> <span class="n">env</span>
+
+            <span class="k">if</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">policy</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Either `policy` or `policy_factory` must be provided.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span> <span class="o">=</span> <span class="n">policy</span>
+
+        <span class="c1"># Device -- may be set lazily after env/policy creation</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">StopIteration</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_trajectories</span> <span class="o">=</span> <span class="n">num_trajectories</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span> <span class="o">=</span> <span class="n">max_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector_cls</span> <span class="o">=</span> <span class="n">collector_cls</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector_kwargs</span> <span class="o">=</span> <span class="n">collector_kwargs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_exploration_type</span> <span class="o">=</span> <span class="n">exploration_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span> <span class="o">=</span> <span class="n">reward_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_done_keys</span> <span class="o">=</span> <span class="n">done_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metrics_fn</span> <span class="o">=</span> <span class="n">metrics_fn</span>
+
+        <span class="c1"># Collector (created lazily)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector_iter</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># persistent iterator for multi-collector</span>
+
+        <span class="c1"># Threading state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span>
+            <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">int</span>
+        <span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># ---- sync ----</span>
+
+    <span class="k">def</span> <span class="nf">run_sync</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_collector</span><span class="p">()</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_eval</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span>
+        <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
+        <span class="k">return</span> <span class="n">metrics</span>
+
+    <span class="c1"># ---- async ----</span>
+
+    <span class="k">def</span> <span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Evaluation already pending.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_dict</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_thread</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">poll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result</span>
+            <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_result</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result</span>
+            <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_result</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">result</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">pending</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_flag</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>  <span class="c1"># wake thread so it can exit</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+
+    <span class="c1"># ---- internals ----</span>
+
+    <span class="k">def</span> <span class="nf">_ensure_env_and_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create env and policy from factories (lazy initialisation).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Evaluator backend has no env and no env factory -- &quot;</span>
+                <span class="s2">&quot;this should not happen.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env_factory</span><span class="p">()</span>
+        <span class="c1"># Freeze VecNorm transforms so eval doesn&#39;t update running stats</span>
+        <span class="n">_freeze_vecnorm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_factory</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
+        <span class="c1"># Free the factories</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_env_factory</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_policy_factory</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Infer device if not set explicitly</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">StopIteration</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_ensure_thread</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_eval_loop</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_eval_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_collector</span><span class="p">()</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_flag</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_flag</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_eval_ready</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+                <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending_request</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="k">if</span> <span class="n">request</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">weights_dict</span><span class="p">,</span> <span class="n">step</span> <span class="o">=</span> <span class="n">request</span>
+            <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_eval</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span>
+            <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_result</span> <span class="o">=</span> <span class="n">metrics</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_result_ready</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_ensure_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the collector lazily (inside the worker thread).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">fpb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span> <span class="ow">or</span> <span class="mi">1000</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span><span class="p">:</span>
+            <span class="c1"># Process isolation via MultiSyncCollector (1 worker).</span>
+            <span class="c1"># The env and policy are created inside the child process</span>
+            <span class="c1"># by the collector, so we pass factories — not instances.</span>
+            <span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">MultiSyncCollector</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="n">MultiSyncCollector</span><span class="p">(</span>
+                <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_factory</span><span class="p">],</span>
+                <span class="n">policy_factory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_factory</span><span class="p">,</span>
+                <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">fpb</span><span class="p">,</span>
+                <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">max_frames_per_traj</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span><span class="p">,</span>
+                <span class="n">trajs_per_batch</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_trajectories</span><span class="p">,</span>
+                <span class="n">exploration_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_exploration_type</span><span class="p">,</span>
+                <span class="n">weight_sync_schemes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">,</span>
+                <span class="n">init_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_fn</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_env_and_policy</span><span class="p">()</span>
+            <span class="bp">cls</span> <span class="o">=</span> <span class="n">_resolve_collector_cls</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector_cls</span><span class="p">)</span>
+            <span class="c1"># If the env already has a StepCounter (step_count in output),</span>
+            <span class="c1"># set max_frames_per_traj=0 to avoid conflict with the collector</span>
+            <span class="c1"># trying to add a second StepCounter.</span>
+            <span class="n">max_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span>
+            <span class="k">if</span> <span class="n">_env_has_step_count</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">):</span>
+                <span class="n">max_frames</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+                <span class="n">create_env_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span>
+                <span class="n">policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="p">,</span>
+                <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">fpb</span><span class="p">,</span>
+                <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">max_frames_per_traj</span><span class="o">=</span><span class="n">max_frames</span><span class="p">,</span>
+                <span class="n">trajs_per_batch</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_trajectories</span><span class="p">,</span>
+                <span class="n">exploration_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_exploration_type</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_run_eval</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run evaluation using the internal collector.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_collector</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">weights_dict</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span><span class="p">:</span>
+                <span class="c1"># Multi-process: use scheme-based sync via the collector</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">weights_dict</span><span class="o">=</span><span class="n">weights_dict</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Same process: apply weights directly</span>
+                <span class="k">for</span> <span class="n">model_id</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">weights_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">model_id</span> <span class="o">==</span> <span class="s2">&quot;policy&quot;</span><span class="p">:</span>
+                        <span class="n">w</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="kn">from</span> <span class="nn">torchrl.weight_update.utils</span> <span class="kn">import</span> <span class="n">_resolve_model</span>
+
+                        <span class="n">target</span> <span class="o">=</span> <span class="n">_resolve_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="p">,</span> <span class="n">model_id</span><span class="p">)</span>
+                        <span class="n">w</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
+        <span class="n">eval_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exploration_type</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span><span class="p">:</span>
+                <span class="c1"># MultiSyncCollector: use a persistent iterator because</span>
+                <span class="c1"># re-creating the iterator (next(iter(...))) after the first</span>
+                <span class="c1"># batch causes data loss from the queue/pipe based workers.</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_iter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_collector_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="p">)</span>
+                <span class="n">traj_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector_iter</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Single-process Collector: reset and use fresh iterator</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+                <span class="n">traj_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_multi_collector</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">_extract_metrics_from_trajectories</span><span class="p">(</span>
+            <span class="n">traj_batch</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_done_keys</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_metrics_fn</span><span class="p">,</span>
+            <span class="n">eval_time</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">eval_start</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">dump_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dump accumulated video frames from VideoRecorder transforms.</span>
+
+<span class="sd">        Called on the caller thread so that logger writes are thread-safe.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span> <span class="s2">&quot;transform&quot;</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="n">transform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">transform</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">transforms</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="c1"># Single transform, not Compose — wrap in a list</span>
+            <span class="n">transforms</span> <span class="o">=</span> <span class="p">[</span><span class="n">transform</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transforms</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="s2">&quot;dump&quot;</span><span class="p">):</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
+
+
+<span class="c1"># ======================================================================</span>
+<span class="c1"># Ray backend</span>
+<span class="c1"># ======================================================================</span>
+
+
+<span class="k">class</span> <span class="nc">_RayEvalBackend</span><span class="p">(</span><span class="n">_EvalBackend</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wraps :class:`RayEvalWorker` to match the backend contract.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env_maker</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reward_keys</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+        <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ray_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_ray</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Ray is required for backend=&#39;ray&#39; but could not be found. &quot;</span>
+                <span class="s2">&quot;Install it with: pip install ray&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;ray&#39; backend requires `policy_factory` (a callable &quot;</span>
+                <span class="s2">&quot;`(env) -&gt; policy`) because the policy is created inside &quot;</span>
+                <span class="s2">&quot;the Ray actor process.&quot;</span>
+            <span class="p">)</span>
+        <span class="kn">from</span> <span class="nn">torchrl.collectors.distributed</span> <span class="kn">import</span> <span class="n">RayEvalWorker</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_worker</span> <span class="o">=</span> <span class="n">RayEvalWorker</span><span class="p">(</span>
+            <span class="n">init_fn</span><span class="o">=</span><span class="n">init_fn</span><span class="p">,</span>
+            <span class="n">env_maker</span><span class="o">=</span><span class="n">env_maker</span><span class="p">,</span>
+            <span class="n">policy_maker</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
+            <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+            <span class="n">reward_keys</span><span class="o">=</span><span class="n">reward_keys</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward_keys</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+            <span class="k">else</span> <span class="p">(</span><span class="n">reward_keys</span><span class="p">,),</span>
+            <span class="o">**</span><span class="n">ray_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span> <span class="o">=</span> <span class="n">max_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_flag</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">run_sync</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">weights_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;policy&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">weights_dict</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_worker</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+            <span class="n">weights</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Block until done</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;episode_length&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">weights_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;policy&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">weights_dict</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_step</span> <span class="o">=</span> <span class="n">step</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_flag</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_worker</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+            <span class="n">weights</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">pending</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending_flag</span>
+
+    <span class="k">def</span> <span class="nf">poll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_step</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;episode_length&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_steps</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># RayEvalWorker.poll supports timeout=None for blocking wait</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span> <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">1e9</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_worker</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;RayEvalBackend: error during shutdown&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../',
+            VERSION:'0.12',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../_static/sg-tags.js"></script>
+      <script type="text/javascript" src="../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

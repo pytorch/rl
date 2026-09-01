@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.tensordict_module
+
+
+ActorValueOperator
+==================
+
+.. autoclass:: ActorValueOperator
+    :members:

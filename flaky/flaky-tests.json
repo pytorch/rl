@@ -1,0 +1,73 @@
+{
+  "generated_at": "2026-08-31T06:35:06.428682+00:00",
+  "analysis_period": {
+    "start": "2026-08-28",
+    "end": "2026-08-30",
+    "runs_analyzed": 60
+  },
+  "summary": {
+    "total_tests": 32428,
+    "flaky_count": 2,
+    "new_flaky_count": 2,
+    "resolved_count": 0
+  },
+  "flaky_tests": [
+    {
+      "nodeid": "test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity[SiLU-4-1-2-3-dtype4-48]",
+      "executions": 56,
+      "failures": 22,
+      "failure_rate": 0.3929,
+      "flaky_score": 0.7857,
+      "passed": 34,
+      "failed": 22,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 8.986,
+      "recent_failures": [
+        "2026-08-28T20:27:57Z",
+        "2026-08-30T14:04:52Z",
+        "2026-08-30T14:04:52Z",
+        "2026-08-30T14:04:52Z",
+        "2026-08-30T14:04:52Z"
+      ],
+      "first_seen_flaky": "2026-08-28T08:33:24Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/rb/test_rb_core.py::test_replay_buffer_prefetch_dumps_roundtrip",
+      "executions": 140,
+      "failures": 8,
+      "failure_rate": 0.0571,
+      "flaky_score": 0.1143,
+      "passed": 132,
+      "failed": 8,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.009,
+      "recent_failures": [
+        "2026-08-28T20:25:27Z",
+        "2026-08-28T20:26:04Z",
+        "2026-08-28T20:26:04Z",
+        "2026-08-28T20:26:49Z",
+        "2026-08-28T20:26:49Z"
+      ],
+      "first_seen_flaky": "2026-08-28T13:29:05Z",
+      "is_new": true
+    }
+  ],
+  "thresholds": {
+    "min_failure_rate": 0.05,
+    "max_failure_rate": 0.95,
+    "min_failures": 2,
+    "min_executions": 3
+  },
+  "workflows_analyzed": [
+    "test-linux.yml",
+    "test-linux-libs.yml",
+    "test-linux-habitat.yml",
+    "test-linux-llm.yml",
+    "test-linux-sota.yml",
+    "test-linux-tutorials.yml",
+    "test-linux-examples.yml"
+  ]
+}

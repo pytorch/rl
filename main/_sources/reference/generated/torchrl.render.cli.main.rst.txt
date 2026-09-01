@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render.cli
+
+
+main
+====
+
+.. autofunction:: main

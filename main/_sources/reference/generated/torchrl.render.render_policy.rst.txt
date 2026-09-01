@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+render_policy
+=============
+
+.. autofunction:: render_policy

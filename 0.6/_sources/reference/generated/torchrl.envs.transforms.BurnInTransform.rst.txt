@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+BurnInTransform
+===============
+
+.. autoclass:: BurnInTransform
+    :members:

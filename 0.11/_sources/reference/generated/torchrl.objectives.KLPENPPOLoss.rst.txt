@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+KLPENPPOLoss
+============
+
+.. autoclass:: KLPENPPOLoss
+    :members:

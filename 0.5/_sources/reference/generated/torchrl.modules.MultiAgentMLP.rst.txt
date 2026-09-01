@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+MultiAgentMLP
+=============
+
+.. autoclass:: MultiAgentMLP
+    :members:

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.collectors
+
+
+Evaluator
+=========
+
+.. autoclass:: Evaluator
+    :members:
+    :inherited-members:

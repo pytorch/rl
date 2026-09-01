@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.data
+
+
+filter_trajectories
+===================
+
+.. autofunction:: filter_trajectories

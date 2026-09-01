@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+HumanoidEnv
+===========
+
+.. autoclass:: HumanoidEnv
+    :members:
+    :inherited-members:

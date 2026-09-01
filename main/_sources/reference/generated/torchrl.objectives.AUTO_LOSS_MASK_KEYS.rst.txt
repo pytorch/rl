@@ -1,0 +1,6 @@
+﻿torchrl.objectives.AUTO\_LOSS\_MASK\_KEYS
+=========================================
+
+.. currentmodule:: torchrl.objectives
+
+.. autodata:: AUTO_LOSS_MASK_KEYS

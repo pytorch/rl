@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+LeRobotExperienceReplay
+=======================
+
+.. autoclass:: LeRobotExperienceReplay
+    :members:
+    :inherited-members:

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.envs.EnvConfig
+==================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.envs
+
+.. autoclass:: EnvConfig

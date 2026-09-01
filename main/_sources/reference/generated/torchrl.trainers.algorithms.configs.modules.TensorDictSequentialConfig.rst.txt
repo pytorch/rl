@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig
+======================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.modules
+
+.. autoclass:: TensorDictSequentialConfig

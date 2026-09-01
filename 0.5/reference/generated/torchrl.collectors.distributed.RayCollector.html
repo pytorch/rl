@@ -1,0 +1,1061 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>RayCollector &mdash; torchrl 0.5 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="split_trajectories" href="torchrl.collectors.utils.split_trajectories.html" />
+    <link rel="prev" title="submitit_delayed_launcher" href="torchrl.collectors.distributed.submitit_delayed_launcher.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
+                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                  <p></p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../versions.html"><span style="font-size:110%">0.5 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
+        
+      <li>RayCollector</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/reference/generated/torchrl.collectors.distributed.RayCollector.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="raycollector">
+<h1>RayCollector<a class="headerlink" href="#raycollector" title="Permalink to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.distributed.</span></span><span class="sig-name descname"><span class="pre">RayCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">create_env_fn:</span> <span class="pre">Union[Callable,</span> <span class="pre">EnvBase,</span> <span class="pre">List[Callable],</span> <span class="pre">List[EnvBase]],</span> <span class="pre">policy:</span> <span class="pre">Callable[[TensorDict],</span> <span class="pre">TensorDict],</span> <span class="pre">*,</span> <span class="pre">frames_per_batch:</span> <span class="pre">int,</span> <span class="pre">total_frames:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">-1,</span> <span class="pre">device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">List[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">storing_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">List[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">env_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">List[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">policy_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">List[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">max_frames_per_traj=-1,</span> <span class="pre">init_random_frames=-1,</span> <span class="pre">reset_at_each_iter=False,</span> <span class="pre">postproc=None,</span> <span class="pre">split_trajs=False,</span> <span class="pre">exploration_type=InteractionType.RANDOM,</span> <span class="pre">collector_class:</span> <span class="pre">Callable[[TensorDict],</span> <span class="pre">TensorDict]</span> <span class="pre">=</span> <span class="pre">&lt;class</span> <span class="pre">'torchrl.collectors.collectors.SyncDataCollector'&gt;,</span> <span class="pre">collector_kwargs:</span> <span class="pre">Union[Dict,</span> <span class="pre">List[Dict]]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_workers_per_collector:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">sync:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">ray_init_config:</span> <span class="pre">Dict</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">remote_configs:</span> <span class="pre">Union[Dict,</span> <span class="pre">List[Dict]]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_collectors:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">update_after_each_batch=False,</span> <span class="pre">max_weight_update_interval=-1</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Distributed data collector with <a class="reference external" href="https://docs.ray.io/">Ray</a> backend.</p>
+<p>This Python class serves as a ray-based solution to instantiate and coordinate multiple
+data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
+collector is an iterable that yields TensorDicts until a target number of collected
+frames is reached, but handles distributed data collection under the hood.</p>
+<p>The class dictionary input parameter “ray_init_config” can be used to provide the kwargs to
+call Ray initialization method ray.init(). If “ray_init_config” is not provided, the default
+behaviour is to autodetect an existing Ray cluster or start a new Ray instance locally if no
+existing cluster is found. Refer to Ray documentation for advanced initialization kwargs.</p>
+<p>Similarly, dictionary input parameter “remote_configs” can be used to specify the kwargs for
+ray.remote() when called to create each remote collector actor, including collector compute
+resources.The sum of all collector resources should be available in the cluster. Refer to Ray
+documentation for advanced configuration of the ray.remote() method. Default kwargs are:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="s2">&quot;num_cpus&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;num_gpus&quot;</span><span class="p">:</span> <span class="mf">0.2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">&quot;memory&quot;</span><span class="p">:</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">**</span> <span class="mi">3</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>The coordination between collector instances can be specified as “synchronous” or “asynchronous”.
+In synchronous coordination, this class waits for all remote collectors to collect a rollout,
+concatenates all rollouts into a single TensorDict instance and finally yields the concatenated
+data. On the other hand, if the coordination is to be carried out asynchronously, this class
+provides the rollouts as they become available from individual remote collectors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>create_env_fn</strong> (<em>Callable</em><em> or </em><em>List</em><em>[</em><em>Callabled</em><em>]</em>) – list of Callables, each returning an
+instance of <a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a>.</p></li>
+<li><p><strong>policy</strong> (<em>Callable</em>) – <p>Policy to be executed in the environment.
+Must accept <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.tensordict.TensorDictBase</span></code> object as input.
+If <code class="docutils literal notranslate"><span class="pre">None</span></code> is provided, the policy used will be a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RandomPolicy</span></code> instance with the environment
+<code class="docutils literal notranslate"><span class="pre">action_spec</span></code>.
+Accepted policies are usually subclasses of <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code>.
+This is the recommended usage of the collector.
+Other callables are accepted too:
+If the policy is not a <code class="docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code> (e.g., a regular <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.4)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
+instances) it will be wrapped in a <cite>nn.Module</cite> first.
+Then, the collector will try to assess if these
+modules require wrapping in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code> or not.
+- If the policy forward signature matches any of <code class="docutils literal notranslate"><span class="pre">forward(self,</span> <span class="pre">tensordict)</span></code>,</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">forward(self,</span> <span class="pre">td)</span></code> or <code class="docutils literal notranslate"><span class="pre">forward(self,</span> <span class="pre">&lt;anything&gt;:</span> <span class="pre">TensorDictBase)</span></code> (or
+any typing with a single argument typed as a subclass of <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code>)
+then the policy won’t be wrapped in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code>.</p>
+</div></blockquote>
+<ul>
+<li><p>In all other cases an attempt to wrap it will be undergone as such: <code class="docutils literal notranslate"><span class="pre">TensorDictModule(policy,</span> <span class="pre">in_keys=env_obs_key,</span> <span class="pre">out_keys=env.action_keys)</span></code>.</p></li>
+</ul>
+</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>frames_per_batch</strong> (<em>int</em>) – A keyword-only argument representing the
+total number of elements in a batch.</p></li>
+<li><p><strong>total_frames</strong> (<em>int</em><em>, </em><em>Optional</em>) – lower bound of the total number of frames returned by the collector.
+The iterator will stop once the total number of frames equates or exceeds the total number of
+frames passed to the collector. Default value is -1, which mean no target total number of frames
+(i.e. the collector will run indefinitely).</p></li>
+<li><p><strong>device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.4)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The generic device of the
+collector. The <code class="docutils literal notranslate"><span class="pre">device</span></code> args fills any non-specified device: if
+<code class="docutils literal notranslate"><span class="pre">device</span></code> is not <code class="docutils literal notranslate"><span class="pre">None</span></code> and any of <code class="docutils literal notranslate"><span class="pre">storing_device</span></code>, <code class="docutils literal notranslate"><span class="pre">policy_device</span></code> or
+<code class="docutils literal notranslate"><span class="pre">env_device</span></code> is not specified, its value will be set to <code class="docutils literal notranslate"><span class="pre">device</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (No default device).
+Lists of devices are supported.</p></li>
+<li><p><strong>storing_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.4)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+the output <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> will be stored.
+If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed and <code class="docutils literal notranslate"><span class="pre">storing_device</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, it will
+default to the value indicated by <code class="docutils literal notranslate"><span class="pre">device</span></code>.
+For long trajectories, it may be necessary to store the data on a different
+device than the one where the policy and env are executed.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (the output tensordict isn’t on a specific device,
+leaf tensors sit on the device where they were created).
+Lists of devices are supported.</p></li>
+<li><p><strong>env_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.4)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+the environment should be cast (or executed if that functionality is
+supported). If not specified and the env has a non-<code class="docutils literal notranslate"><span class="pre">None</span></code> device,
+<code class="docutils literal notranslate"><span class="pre">env_device</span></code> will default to that value. If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed
+and <code class="docutils literal notranslate"><span class="pre">env_device=None</span></code>, it will default to <code class="docutils literal notranslate"><span class="pre">device</span></code>. If the value
+as such specified of <code class="docutils literal notranslate"><span class="pre">env_device</span></code> differs from <code class="docutils literal notranslate"><span class="pre">policy_device</span></code>
+and one of them is not <code class="docutils literal notranslate"><span class="pre">None</span></code>, the data will be cast to <code class="docutils literal notranslate"><span class="pre">env_device</span></code>
+before being passed to the env (i.e., passing different devices to
+policy and env is supported). Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+Lists of devices are supported.</p></li>
+<li><p><strong>policy_device</strong> (<em>int</em><em>, </em><em>str</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.4)"><em>torch.device</em></a><em>, </em><em>optional</em>) – The <em>remote</em> device on which
+the policy should be cast.
+If <code class="docutils literal notranslate"><span class="pre">device</span></code> is passed and <code class="docutils literal notranslate"><span class="pre">policy_device=None</span></code>, it will default
+to <code class="docutils literal notranslate"><span class="pre">device</span></code>. If the value as such specified of <code class="docutils literal notranslate"><span class="pre">policy_device</span></code>
+differs from <code class="docutils literal notranslate"><span class="pre">env_device</span></code> and one of them is not <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+the data will be cast to <code class="docutils literal notranslate"><span class="pre">policy_device</span></code> before being passed to
+the policy (i.e., passing different devices to policy and env is
+supported). Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+Lists of devices are supported.</p></li>
+<li><p><strong>create_env_kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Dictionary of kwargs for
+<code class="docutils literal notranslate"><span class="pre">create_env_fn</span></code>.</p></li>
+<li><p><strong>max_frames_per_traj</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum steps per trajectory.
+Note that a trajectory can span across multiple batches (unless
+<code class="docutils literal notranslate"><span class="pre">reset_at_each_iter</span></code> is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, see below).
+Once a trajectory reaches <code class="docutils literal notranslate"><span class="pre">n_steps</span></code>, the environment is reset.
+If the environment wraps multiple environments together, the number
+of steps is tracked for each environment independently. Negative
+values are allowed, in which case this argument is ignored.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (i.e., no maximum number of steps).</p></li>
+<li><p><strong>init_random_frames</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of frames for which the
+policy is ignored before it is called. This feature is mainly
+intended to be used in offline/model-based settings, where a
+batch of random trajectories can be used to initialize training.
+If provided, it will be rounded up to the closest multiple of frames_per_batch.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (i.e. no random frames).</p></li>
+<li><p><strong>reset_at_each_iter</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether environments should be reset
+at the beginning of a batch collection.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>postproc</strong> (<em>Callable</em><em>, </em><em>optional</em>) – A post-processing transform, such as
+a <code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code> or a <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiStep</span></code>
+instance.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>split_trajs</strong> (<em>bool</em><em>, </em><em>optional</em>) – Boolean indicating whether the resulting
+TensorDict should be split according to the trajectories.
+See <a class="reference internal" href="torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a> for more
+information.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>exploration_type</strong> (<em>ExplorationType</em><em>, </em><em>optional</em>) – interaction mode to be used when
+collecting data. Must be one of <code class="docutils literal notranslate"><span class="pre">torchrl.envs.utils.ExplorationType.DETERMINISTIC</span></code>,
+<code class="docutils literal notranslate"><span class="pre">torchrl.envs.utils.ExplorationType.RANDOM</span></code>, <code class="docutils literal notranslate"><span class="pre">torchrl.envs.utils.ExplorationType.MODE</span></code>
+or <code class="docutils literal notranslate"><span class="pre">torchrl.envs.utils.ExplorationType.MEAN</span></code>.</p></li>
+<li><p><strong>collector_class</strong> (<em>Python class</em>) – a collector class to be remotely instantiated. Can be
+<a class="reference internal" href="torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>,
+<a class="reference internal" href="torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>,
+<a class="reference internal" href="torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>
+or a derived class of these.
+Defaults to <a class="reference internal" href="torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>.</p></li>
+<li><p><strong>collector_kwargs</strong> (<em>dict</em><em> or </em><em>list</em><em>, </em><em>optional</em>) – a dictionary of parameters to be passed to the
+remote data-collector. If a list is provided, each element will
+correspond to an individual set of keyword arguments for the
+dedicated collector.</p></li>
+<li><p><strong>num_workers_per_collector</strong> (<em>int</em>) – the number of copies of the
+env constructor that is to be used on the remote nodes.
+Defaults to 1 (a single env per collector).
+On a single worker node all the sub-workers will be
+executing the same environment. If different environments need to
+be executed, they should be dispatched across worker nodes, not
+subnodes.</p></li>
+<li><p><strong>ray_init_config</strong> (<em>dict</em><em>, </em><em>Optional</em>) – kwargs used to call ray.init().</p></li>
+<li><p><strong>remote_configs</strong> (<em>list of dicts</em><em>, </em><em>Optional</em>) – ray resource specs for each remote collector.
+A single dict can be provided as well, and will be used in all collectors.</p></li>
+<li><p><strong>num_collectors</strong> (<em>int</em><em>, </em><em>Optional</em>) – total number of collectors to be instantiated.</p></li>
+<li><p><strong>sync</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting tensordict is a stack of all the
+tensordicts collected on each node. If <code class="docutils literal notranslate"><span class="pre">False</span></code> (default), each
+tensordict results from a separate node in a “first-ready,
+first-served” fashion.</p></li>
+<li><p><strong>update_after_each_batch</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the weights will
+be updated after each collection. For <code class="docutils literal notranslate"><span class="pre">sync=True</span></code>, this means that
+all workers will see their weights updated. For <code class="docutils literal notranslate"><span class="pre">sync=False</span></code>,
+only the worker from which the data has been gathered will be
+updated.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>, i.e. updates have to be executed manually
+through
+<code class="docutils literal notranslate"><span class="pre">torchrl.collectors.distributed.RayDistributedCollector.update_policy_weights_()</span></code></p></li>
+<li><p><strong>max_weight_update_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – the maximum number of
+batches that can be collected before the policy weights of a worker
+is updated.
+For sync collections, this parameter is overwritten by <code class="docutils literal notranslate"><span class="pre">update_after_each_batch</span></code>.
+For async collections, it may be that one worker has not seen its
+parameters being updated for a certain time even if <code class="docutils literal notranslate"><span class="pre">update_after_each_batch</span></code>
+is turned on.
+Defaults to -1 (no forced update).</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.collectors.collectors</span> <span class="kn">import</span> <span class="n">SyncDataCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.collectors.distributed</span> <span class="kn">import</span> <span class="n">RayCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env_maker</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">distributed_collector</span> <span class="o">=</span> <span class="n">RayCollector</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="n">env_maker</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">collector_class</span><span class="o">=</span><span class="n">SyncDataCollector</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">max_frames_per_traj</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">init_random_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">reset_at_each_iter</span><span class="o">=-</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">collector_kwargs</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">&quot;storing_device&quot;</span><span class="p">:</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="n">num_collectors</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">total_frames</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">collector</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="k">break</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.add_collectors">
+<span class="sig-name descname"><span class="pre">add_collectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">create_env_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_envs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collector_kwargs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remote_configs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.add_collectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.add_collectors" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates and adds a number of remote collectors to the set.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.load_state_dict">
+<span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">OrderedDict</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">OrderedDict</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.load_state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.load_state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calls parent method for each remote collector.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.local_policy">
+<span class="sig-name descname"><span class="pre">local_policy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.local_policy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.local_policy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns local collector.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.remote_collectors">
+<span class="sig-name descname"><span class="pre">remote_collectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.remote_collectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.remote_collectors" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns list of remote collectors.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.set_seed">
+<span class="sig-name descname"><span class="pre">set_seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">static_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.set_seed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.set_seed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calls parent method for each remote collector iteratively and returns final seed.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.shutdown">
+<span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.shutdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finishes processes started by ray.init().</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.state_dict">
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">OrderedDict</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calls parent method for each remote collector and returns a list of results.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.stop_remote_collectors">
+<span class="sig-name descname"><span class="pre">stop_remote_collectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.stop_remote_collectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.stop_remote_collectors" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stops all remote collectors.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.update_policy_weights_">
+<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">worker_rank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.update_policy_weights_"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates the weights of the worker nodes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>worker_rank</strong> (<em>int</em><em>, </em><em>optional</em>) – if provided, only this worker weights
+will be updated.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="torchrl.collectors.utils.split_trajectories.html" class="btn btn-neutral float-right" title="split_trajectories" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="torchrl.collectors.distributed.submitit_delayed_launcher.html" class="btn btn-neutral" title="submitit_delayed_launcher" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">RayCollector</a></li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+         <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+         <script src="../../_static/jquery.js"></script>
+         <script src="../../_static/underscore.js"></script>
+         <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../_static/doctools.js"></script>
+         <script src="../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>
