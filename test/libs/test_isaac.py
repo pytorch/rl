@@ -392,6 +392,55 @@ def test_isaaclab_all_false_reset_to_state_is_no_op():
     assert (out["policy"] == td["policy"]).all()
 
 
+def test_isaaclab_v3_compat_regressions(monkeypatch):
+    tensor = torch.ones(3, 4)
+    assert isaac_lab_lib._isaac_data_to_torch(tensor) is tensor
+    assert (
+        isaac_lab_lib._isaac_data_to_torch(types.SimpleNamespace(torch=tensor))
+        is tensor
+    )
+
+    env = IsaacLabWrapper.__new__(IsaacLabWrapper)
+    env.from_tiled_camera = False
+    env._rename_policy_to_observation = False
+    reward = torch.ones(4)
+    terminated = torch.zeros(4, dtype=torch.bool)
+    truncated = torch.zeros(4, dtype=torch.bool)
+    _, reward_out, terminated_out, truncated_out, done_out, _ = env._output_transform(
+        ({"policy": torch.ones(4, 2)}, reward, terminated, truncated, {})
+    )
+    reward.add_(1.0)
+    terminated.fill_(True)
+    truncated.fill_(True)
+    assert reward_out.shape == (4, 1)
+    assert (reward_out == 1.0).all()
+    assert not terminated_out.any()
+    assert not truncated_out.any()
+    assert not done_out.any()
+
+    class DirectRLEnvWarp:
+        pass
+
+    fake_mod = types.ModuleType("isaaclab_experimental.envs.direct_rl_env_warp")
+    fake_mod.DirectRLEnvWarp = DirectRLEnvWarp
+    monkeypatch.setitem(
+        sys.modules, "isaaclab_experimental", types.ModuleType("isaaclab_experimental")
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "isaaclab_experimental.envs",
+        types.ModuleType("isaaclab_experimental.envs"),
+    )
+    monkeypatch.setitem(
+        sys.modules, "isaaclab_experimental.envs.direct_rl_env_warp", fake_mod
+    )
+    monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab_experimental", True)
+    assert IsaacLabWrapper._direct_reset_uses_mask(DirectRLEnvWarp())
+    assert not IsaacLabWrapper._direct_reset_uses_mask(object())
+    monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab_experimental", False)
+    assert not IsaacLabWrapper._direct_reset_uses_mask(DirectRLEnvWarp())
+
+
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
 @pytest.mark.parametrize(
     "task",
