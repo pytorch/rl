@@ -56,6 +56,12 @@ from torchrl.modules.tensordict_module.rnn import (
     set_recurrent_mode,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+from torchrl.modules.tensordict_module.transformer import (
+    CausalTransformer,
+    positions_from_is_init,
+    segment_causal_mask_from_is_init,
+    TransformerModule,
+)
 from torchrl.modules.tensordict_module.world_models import WorldModel, WorldModelWrapper
 
 __all__ = [
@@ -77,6 +83,7 @@ __all__ = [
     "QValueHook",
     "QValueModule",
     "TanhModule",
+    "TransformerModule",
     "ValueOperator",
     "SafeModule",
     "VmapModule",
@@ -87,9 +94,11 @@ __all__ = [
     "RandomPolicy",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
+    "positions_from_is_init",
     "SafeProbabilisticModule",
     "SafeProbabilisticTensorDictSequential",
     "canonicalize_rnn_subset",
+    "CausalTransformer",
     "GRU",
     "GRUCell",
     "GRUModule",
@@ -103,6 +112,7 @@ __all__ = [
     "set_recurrent_matmul_precision",
     "set_recurrent_mode",
     "SafeSequential",
+    "segment_causal_mask_from_is_init",
     "WorldModel",
     "WorldModelWrapper",
 ]
