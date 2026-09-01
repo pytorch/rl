@@ -51,6 +51,35 @@ present). Use
 `end_key`. Defaults to `None` (use `end_key`).
 - **traj_key** (*NestedKey**,**optional*) - the key indicating the trajectories.
 Defaults to `"episode"` (commonly used across datasets in TorchRL).
+- **step_key** (*NestedKey**,**optional*) - key containing a non-negative integer step
+number for each item. Used only when `fragmented=True` and defaults
+to `"step_count"`.
+- **fragmented** (*bool**,**optional*) -
+
+if `True`, reconstructs logical trajectory
+slices from `traj_key` and `step_key` even when consecutive steps
+occupy non-adjacent storage positions. Missing logical steps split a
+trajectory into separate sampleable runs. This mode currently supports
+single-dimensional TensorDict-backed storages and sampling with
+replacement. Trajectory ids and step numbers must be scalar integer
+tensors, and every live trajectory-step pair must be unique:
+reusing trajectory ids (for instance a recreated collector
+restarting `("collector", "traj_ids")` at zero while episodes
+from a previous run are still stored) raises an error at sampling
+time. Defaults to `False`. The `span` and `compile` options
+are not currently supported in fragmented mode.
+
+Warning
+
+The fragmented index tracks storage writes through
+the storage's mutation revision. Buffers shared at process
+spawn time keep that counter shared, so writes from other
+processes are detected. A buffer transferred by plain
+pickling (queues, cloudpickle, `torch.save`) receives a
+snapshot of the counter instead: writes made by another
+process afterwards are not detected, even when the storage
+data itself is shared (e.g. memory-mapped storages), and the
+sampler keeps serving the transfer-time layout.
 - **ends** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - a 1d boolean tensor containing the end of run signals.
 To be used whenever the `end_key` or `traj_key` is expensive to get,
 or when this signal is readily available. Must be used with `cache_values=True`
@@ -136,6 +165,9 @@ workers and different episodes. A `SliceSampler` that relies on
 
 To avoid this, either:
 
+- set `fragmented=True` and provide both `traj_key` and `step_key`
+so that logical adjacency is reconstructed independently of storage
+order,
 - set `trajs_per_batch` on the collector so that only **complete**
 trajectories (each ending with `done=True`) are written to the
 buffer (use `ndim=1` on the storage -- `ndim >= 2` is
