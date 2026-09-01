@@ -838,6 +838,32 @@ class TestLock:
         spec["a", "b"] = spec["a", "b"].clone()
         spec["a"].set("b", spec["a", "b"].clone())
 
+    def test_stacked_composite_lock_propagates_to_children(self):
+        """Lock state must propagate through lazy stacks to the stacked children.
+
+        Regression test: the children hold the authoritative state and writes
+        through the stack go to them, so a child that was locked when stacked
+        (e.g. env specs shipped by AsyncEnvPool workers) made every write fail
+        even after ``unlock_(recurse=True)`` on the stack.
+        """
+        child_a = Composite(x=Unbounded((3,)))
+        child_b = Composite(x=Unbounded((4,)))
+        child_a.lock_(recurse=True)
+        child_b.lock_(recurse=True)
+        stacked = torch.stack([child_a, child_b], 0)
+
+        stacked.unlock_(recurse=True)
+        assert not child_a.locked
+        assert not child_b.locked
+        stacked["y"] = Unbounded((2, 5))
+        assert child_a["y"].shape == torch.Size((5,))
+
+        stacked.lock_(recurse=True)
+        assert child_a.locked
+        assert child_b.locked
+        with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
+            stacked["z"] = Unbounded((2, 5))
+
     def test_edge_cases(self):
         level3 = Composite()
         level2 = Composite(level3=level3)
