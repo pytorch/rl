@@ -50,6 +50,7 @@ from torch import nn
 from torchrl import torchrl_logger
 from torchrl.collectors import Collector
 from torchrl.data import (
+    Binary,
     Bounded,
     Composite,
     LazyTensorStorage,
@@ -78,6 +79,22 @@ _psutil_process = None
 
 Backend = Literal["mujoco", "mjx", "mujoco-torch"]
 NUM_JOINTS = 14
+JOINT_NAMES = (
+    "left_hip_yaw",
+    "left_hip_roll",
+    "left_hip_pitch",
+    "left_knee",
+    "left_ankle",
+    "neck_pitch",
+    "head_pitch",
+    "head_yaw",
+    "head_roll",
+    "right_hip_yaw",
+    "right_hip_roll",
+    "right_hip_pitch",
+    "right_knee",
+    "right_ankle",
+)
 OBSERVATION_DIM = 3 + 3 + 2 + NUM_JOINTS * 3
 VELOCITY_TRACKING_STD = 0.25
 STAND_POSE_COMMAND_STD = 0.1
@@ -205,10 +222,54 @@ def _collection_metrics(batch: TensorDictBase) -> tuple[dict[str, float], int]:
         "episode/length_mean": _metric_float(lengths.mean()),
         "episode/length_min": _metric_float(lengths.min()),
         "episode/length_max": _metric_float(lengths.max()),
+        "episode/reward_per_alive_step_mean": _metric_float((returns / lengths).mean()),
         "episode/survival_rate": _metric_float(
             (~terminated[end_indices]).float().mean()
         ),
     }
+    truncated = batch.get(("next", "truncated")).squeeze(-1).bool()
+    metrics["termination/physical_fall_rate"] = _metric_float(
+        terminated[end_indices].float().mean()
+    )
+    metrics["termination/time_limit_rate"] = _metric_float(
+        truncated[end_indices].float().mean()
+    )
+    for name in ("height", "upright", "nonfinite"):
+        reason = batch.get(("next", f"diagnostic_{name}_failure"), None)
+        if reason is not None:
+            metrics[f"termination/{name}_failure_rate"] = _metric_float(
+                reason.squeeze(-1)[end_indices].float().mean()
+            )
+    for name in (
+        "reward_velocity_tracking",
+        "reward_upright",
+        "reward_height",
+        "reward_pose",
+        "reward_lateral_velocity",
+        "reward_roll_yaw_rate",
+        "reward_joint_velocity",
+        "reward_action_rate",
+        "height",
+        "upright",
+        "pitch",
+        "roll",
+        "body_velocity_x",
+        "body_velocity_y",
+        "body_velocity_z",
+        "action_saturation_fraction",
+        "target_clamp_fraction",
+        "action_rate_rms",
+    ):
+        value = batch.get(("next", f"diagnostic_{name}"), None)
+        if value is not None:
+            metrics[f"diagnostic/{name}_mean"] = _metric_float(value.mean())
+    actions = batch["action"]
+    for index, name in enumerate(JOINT_NAMES):
+        joint_action = actions[..., index]
+        metrics[f"action/{name}_mean"] = _metric_float(joint_action.mean())
+        metrics[f"action/{name}_rms"] = _metric_float(
+            joint_action.square().mean().sqrt()
+        )
     policy_scale = batch.get("scale")
     if policy_scale is not None:
         metrics.update(
@@ -285,7 +346,9 @@ def _low_cost_collision_scene(scene_path: Path):
 
     Direct, self-contained MJCF files without an ``<include>`` are yielded
     unchanged. This keeps small fixtures and custom MicroDuck-compatible files
-    working without imposing the upstream asset layout.
+    working without imposing the upstream asset layout. MuJoCo performs the
+    box fitting so its mesh-centering and principal-axis transforms remain part
+    of the compiled geom pose.
     """
     scene_tree = ET.parse(scene_path)
     include = scene_tree.getroot().find("include")
@@ -298,51 +361,15 @@ def _low_cost_collision_scene(scene_path: Path):
         yield scene_path
         return
 
-    import mujoco
-
-    model = mujoco.MjModel.from_xml_path(str(scene_path))
     robot_tree = ET.parse(robot_path)
     robot_root = robot_tree.getroot()
     proxy_count = 0
     for geom in robot_root.iter("geom"):
         if geom.get("class") not in {"collision", "self_collision_only"}:
             continue
-        mesh_name = geom.get("mesh")
-        if mesh_name is None:
+        if geom.get("mesh") is None:
             continue
-        mesh_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MESH, mesh_name)
-        if mesh_id < 0:
-            raise ValueError(f"Could not resolve collision mesh {mesh_name!r}.")
-        vertex_start = int(model.mesh_vertadr[mesh_id])
-        vertex_count = int(model.mesh_vertnum[mesh_id])
-        vertices = torch.from_numpy(
-            model.mesh_vert[vertex_start : vertex_start + vertex_count].copy()
-        )
-        lower = vertices.amin(dim=0)
-        upper = vertices.amax(dim=0)
-        center = (lower + upper) / 2
-        half_size = ((upper - lower) / 2).clamp_min(1e-4)
-
-        position = torch.tensor(
-            [float(value) for value in geom.get("pos", "0 0 0").split()]
-        )
-        quaternion = torch.tensor(
-            [float(value) for value in geom.get("quat", "1 0 0 0").split()]
-        )
-        quaternion = quaternion / quaternion.norm().clamp_min(1e-8)
-        w = quaternion[0]
-        vector = quaternion[1:]
-        rotated_center = (
-            center
-            + 2 * w * torch.cross(vector, center, dim=0)
-            + 2 * torch.cross(vector, torch.cross(vector, center, dim=0), dim=0)
-        )
-        position = position + rotated_center
-
         geom.set("type", "box")
-        geom.set("pos", " ".join(f"{value:.9g}" for value in position.tolist()))
-        geom.set("size", " ".join(f"{value:.9g}" for value in half_size.tolist()))
-        del geom.attrib["mesh"]
         proxy_count += 1
 
     if not proxy_count:
@@ -350,11 +377,14 @@ def _low_cost_collision_scene(scene_path: Path):
         return
 
     compiler = robot_root.find("compiler")
-    if compiler is not None:
-        for attribute in ("meshdir", "texturedir"):
-            directory = compiler.get(attribute)
-            if directory is not None and not Path(directory).is_absolute():
-                compiler.set(attribute, str((robot_path.parent / directory).resolve()))
+    if compiler is None:
+        compiler = ET.Element("compiler")
+        robot_root.insert(0, compiler)
+    compiler.set("fitaabb", "true")
+    for attribute in ("meshdir", "texturedir"):
+        directory = compiler.get(attribute)
+        if directory is not None and not Path(directory).is_absolute():
+            compiler.set(attribute, str((robot_path.parent / directory).resolve()))
 
     with TemporaryDirectory(prefix="torchrl-microduck-") as directory:
         directory = Path(directory)
@@ -515,7 +545,7 @@ class MicroDuckVelocityEnv(MujocoEnv):
         )
 
     def _make_obs_spec(self) -> Composite:
-        return Composite(
+        spec = Composite(
             observation=Unbounded(
                 shape=(self.num_envs, OBSERVATION_DIM),
                 dtype=self.dtype,
@@ -529,10 +559,44 @@ class MicroDuckVelocityEnv(MujocoEnv):
             shape=(self.num_envs,),
             device=self.device,
         )
+        for name in (
+            "reward_velocity_tracking",
+            "reward_upright",
+            "reward_height",
+            "reward_pose",
+            "reward_lateral_velocity",
+            "reward_roll_yaw_rate",
+            "reward_joint_velocity",
+            "reward_action_rate",
+            "height",
+            "upright",
+            "pitch",
+            "roll",
+            "body_velocity_x",
+            "body_velocity_y",
+            "body_velocity_z",
+            "action_saturation_fraction",
+            "target_clamp_fraction",
+            "action_rate_rms",
+        ):
+            spec[f"diagnostic_{name}"] = Unbounded(
+                shape=(self.num_envs, 1),
+                dtype=self.dtype,
+                device=self.device,
+            )
+        for name in ("height", "upright", "nonfinite"):
+            spec[f"diagnostic_{name}_failure"] = Binary(
+                n=1,
+                shape=(self.num_envs, 1),
+                dtype=torch.bool,
+                device=self.device,
+            )
+        return spec
 
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         observation = super()._build_obs_dict(state)
         observation["commanded_x_velocity"] = self._commanded_x_velocity.clone()
+        observation.update(self._diagnostics(state, self._observation_action))
         return observation
 
     def _make_obs(self, state: TensorDictBase) -> torch.Tensor:
@@ -613,18 +677,14 @@ class MicroDuckVelocityEnv(MujocoEnv):
         target = self._home_ctrl + self.action_scale * action
         return target.clamp(self._joint_low, self._joint_high)
 
-    def _compute_reward(
+    def _reward_components(
         self,
-        state: TensorDictBase,
-        action: torch.Tensor,
         next_state: TensorDictBase,
-    ) -> torch.Tensor:
-        del state
+        action: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
         qpos = next_state["qpos"].to(self.dtype)
         qvel = next_state["qvel"].to(self.dtype)
         projected_gravity = _projected_gravity(qpos[..., 3:7])
-        # MuJoCo free-joint linear velocities are world-frame. Angular
-        # velocities are already expressed in the local body frame.
         body_velocity = _body_frame_linear_velocity(qpos[..., 3:7], qvel[..., :3])
         velocity_tracking_reward = torch.exp(
             -(
@@ -643,20 +703,90 @@ class MicroDuckVelocityEnv(MujocoEnv):
         stand_pose_gate = torch.exp(
             -(self._commanded_x_velocity.squeeze(-1) / STAND_POSE_COMMAND_STD).square()
         )
-        lateral_velocity_cost = body_velocity[..., 1].square()
-        roll_yaw_velocity_cost = qvel[..., [3, 5]].square().mean(dim=-1)
-        joint_velocity_cost = qvel[..., 6:].square().mean(dim=-1)
-        action_rate_cost = (action - self._previous_action).square().mean(dim=-1)
-        return (
-            2.0 * velocity_tracking_reward
-            + 0.5 * upright_reward
-            + 0.25 * height_reward
-            + 0.5 * stand_pose_gate * pose_reward
-            - 0.1 * lateral_velocity_cost
-            - 0.02 * roll_yaw_velocity_cost
-            - 0.002 * joint_velocity_cost
-            - 0.02 * action_rate_cost
-        ).unsqueeze(-1)
+        return {
+            "diagnostic_reward_velocity_tracking": (
+                2.0 * velocity_tracking_reward
+            ).unsqueeze(-1),
+            "diagnostic_reward_upright": (0.5 * upright_reward).unsqueeze(-1),
+            "diagnostic_reward_height": (0.25 * height_reward).unsqueeze(-1),
+            "diagnostic_reward_pose": (0.5 * stand_pose_gate * pose_reward).unsqueeze(
+                -1
+            ),
+            "diagnostic_reward_lateral_velocity": (
+                -0.1 * body_velocity[..., 1].square()
+            ).unsqueeze(-1),
+            "diagnostic_reward_roll_yaw_rate": (
+                -0.02 * qvel[..., [3, 5]].square().mean(dim=-1)
+            ).unsqueeze(-1),
+            "diagnostic_reward_joint_velocity": (
+                -0.002 * qvel[..., 6:].square().mean(dim=-1)
+            ).unsqueeze(-1),
+            "diagnostic_reward_action_rate": (
+                -0.02 * (action - self._previous_action).square().mean(dim=-1)
+            ).unsqueeze(-1),
+        }
+
+    def _diagnostics(
+        self,
+        state: TensorDictBase,
+        action: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
+        qpos = state["qpos"].to(self.dtype)
+        qvel = state["qvel"].to(self.dtype)
+        quaternion = qpos[..., 3:7]
+        quaternion = quaternion / quaternion.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+        w, x, y, z = quaternion.unbind(-1)
+        pitch = torch.asin((2.0 * (w * y - z * x)).clamp(-1.0, 1.0))
+        roll = torch.atan2(
+            2.0 * (w * x + y * z),
+            1.0 - 2.0 * (x.square() + y.square()),
+        )
+        projected_gravity = _projected_gravity(quaternion)
+        upright = -projected_gravity[..., 2]
+        body_velocity = _body_frame_linear_velocity(quaternion, qvel[..., :3])
+        clamped_action = action.clamp(-1.0, 1.0)
+        target = self._home_ctrl + self.action_scale * clamped_action
+        target_clamped = (target < self._joint_low) | (target > self._joint_high)
+        finite = torch.isfinite(qpos).all(dim=-1) & torch.isfinite(qvel).all(dim=-1)
+        diagnostics = self._reward_components(state, action)
+        diagnostics.update(
+            {
+                "diagnostic_height": qpos[..., 2:3],
+                "diagnostic_upright": upright.unsqueeze(-1),
+                "diagnostic_pitch": pitch.unsqueeze(-1),
+                "diagnostic_roll": roll.unsqueeze(-1),
+                "diagnostic_body_velocity_x": body_velocity[..., 0:1],
+                "diagnostic_body_velocity_y": body_velocity[..., 1:2],
+                "diagnostic_body_velocity_z": body_velocity[..., 2:3],
+                "diagnostic_action_saturation_fraction": (action.abs() >= 0.99)
+                .to(self.dtype)
+                .mean(dim=-1, keepdim=True),
+                "diagnostic_target_clamp_fraction": target_clamped.to(self.dtype).mean(
+                    dim=-1, keepdim=True
+                ),
+                "diagnostic_action_rate_rms": (action - self._previous_action)
+                .square()
+                .mean(dim=-1, keepdim=True)
+                .sqrt(),
+                "diagnostic_height_failure": (
+                    qpos[..., 2] < 0.55 * self._target_height
+                ).unsqueeze(-1),
+                "diagnostic_upright_failure": (upright < 0.35).unsqueeze(-1),
+                "diagnostic_nonfinite_failure": (~finite).unsqueeze(-1),
+            }
+        )
+        return diagnostics
+
+    def _compute_reward(
+        self,
+        state: TensorDictBase,
+        action: torch.Tensor,
+        next_state: TensorDictBase,
+    ) -> torch.Tensor:
+        del state
+        return torch.stack(
+            tuple(self._reward_components(next_state, action).values())
+        ).sum(dim=0)
 
     def _compute_done(
         self,
@@ -1039,6 +1169,17 @@ def _evaluation_metrics(evaluation: list[dict[str, float]]) -> dict[str, float]:
         metrics[f"evaluation/{field}"] = sum(row[field] for row in evaluation) / len(
             evaluation
         )
+    lengths = torch.tensor([row["episode_length"] for row in evaluation])
+    per_step_rewards = torch.tensor(
+        [row["episode_return"] / row["episode_length"] for row in evaluation]
+    )
+    for name, values in (
+        ("episode_length", lengths),
+        ("reward_per_alive_step", per_step_rewards),
+    ):
+        metrics[f"evaluation/{name}_median"] = _metric_float(values.median())
+        metrics[f"evaluation/{name}_min"] = _metric_float(values.min())
+        metrics[f"evaluation/{name}_max"] = _metric_float(values.max())
     for command in sorted({row["commanded_x_velocity"] for row in evaluation}):
         rows = [row for row in evaluation if row["commanded_x_velocity"] == command]
         command_name = f"{command:+.2f}".replace("+", "plus_").replace("-", "minus_")
@@ -1046,6 +1187,23 @@ def _evaluation_metrics(evaluation: list[dict[str, float]]) -> dict[str, float]:
             metrics[f"evaluation/{command_name}/{field}"] = sum(
                 row[field] for row in rows
             ) / len(rows)
+        command_lengths = torch.tensor([row["episode_length"] for row in rows])
+        command_per_step_rewards = torch.tensor(
+            [row["episode_return"] / row["episode_length"] for row in rows]
+        )
+        for name, values in (
+            ("episode_length", command_lengths),
+            ("reward_per_alive_step", command_per_step_rewards),
+        ):
+            metrics[f"evaluation/{command_name}/{name}_median"] = _metric_float(
+                values.median()
+            )
+            metrics[f"evaluation/{command_name}/{name}_min"] = _metric_float(
+                values.min()
+            )
+            metrics[f"evaluation/{command_name}/{name}_max"] = _metric_float(
+                values.max()
+            )
     return metrics
 
 
@@ -1062,6 +1220,8 @@ def train_ppo(
     learning_rate: float = 1e-4,
     entropy_coeff: float = 1e-3,
     critic_coeff: float = 1.0,
+    discount_factor: float = 0.99,
+    gae_lambda: float = 0.95,
     target_kl: float | None = None,
     anneal_learning_rate: bool = True,
     max_grad_norm: float = 1.0,
@@ -1105,6 +1265,10 @@ def train_ppo(
         math.isfinite(value) for value in (entropy_coeff, critic_coeff)
     ):
         raise ValueError("PPO loss coefficients must be finite and non-negative.")
+    if not math.isfinite(discount_factor) or not 0 < discount_factor <= 1:
+        raise ValueError("discount_factor must be finite and in (0, 1].")
+    if not math.isfinite(gae_lambda) or not 0 <= gae_lambda <= 1:
+        raise ValueError("gae_lambda must be finite and between zero and one.")
     if target_kl is not None and (target_kl <= 0 or not math.isfinite(target_kl)):
         raise ValueError("target_kl must be finite and positive when provided.")
     if evaluation_interval is not None and evaluation_interval < 1:
@@ -1139,8 +1303,8 @@ def train_ppo(
         auto_register_policy_transforms=True,
     )
     advantage = GAE(
-        gamma=0.99,
-        lmbda=0.95,
+        gamma=discount_factor,
+        lmbda=gae_lambda,
         value_network=full_value,
         average_gae=False,
         shifted=True,
@@ -1157,7 +1321,23 @@ def train_ppo(
         loss_critic_type="smooth_l1",
         normalize_advantage=True,
     )
-    parameters = list(actor.parameters()) + list(critic.parameters())
+    actor_parameters = list(actor.parameters())
+    critic_parameters = list(critic.parameters())
+    full_value_parameter_ids = {id(parameter) for parameter in full_value.parameters()}
+    parameter_groups = {
+        "shared_backbone": [
+            parameter
+            for parameter in actor_parameters
+            if id(parameter) in full_value_parameter_ids
+        ],
+        "actor_head": [
+            parameter
+            for parameter in actor_parameters
+            if id(parameter) not in full_value_parameter_ids
+        ],
+        "critic_head": critic_parameters,
+    }
+    parameters = actor_parameters + critic_parameters
     optimizer = torch.optim.Adam(parameters, lr=learning_rate)
     history = []
     collected_transitions = 0
@@ -1248,6 +1428,30 @@ def train_ppo(
             with torch.no_grad(), set_recurrent_mode(True):
                 processed = collected.to(device).clone().refine_names("time")
                 advantage(processed)
+            state_value = processed["state_value"].detach()
+            value_target = processed["value_target"].detach()
+            advantages = processed["advantage"].detach()
+            value_target_variance = value_target.var(unbiased=False)
+            metrics.update(
+                {
+                    "value/prediction_mean": _metric_float(state_value.mean()),
+                    "value/prediction_std": _metric_float(
+                        state_value.std(unbiased=False)
+                    ),
+                    "value/target_mean": _metric_float(value_target.mean()),
+                    "value/target_std": _metric_float(value_target.std(unbiased=False)),
+                    "value/explained_variance": _metric_float(
+                        1.0
+                        - (value_target - state_value).var(unbiased=False)
+                        / value_target_variance.clamp_min(
+                            torch.finfo(value_target.dtype).eps
+                        )
+                    ),
+                    "advantage/mean": _metric_float(advantages.mean()),
+                    "advantage/std": _metric_float(advantages.std(unbiased=False)),
+                    "advantage/absolute_mean": _metric_float(advantages.abs().mean()),
+                }
+            )
             replay_buffer.replace_with_processed_batch(processed.cpu())
 
             current_learning_rate = learning_rate
@@ -1274,6 +1478,11 @@ def train_ppo(
                     ).to(device)
                     sample.refine_names("time")
                     optimizer.zero_grad(set_to_none=True)
+                    with torch.no_grad(), set_recurrent_mode(True):
+                        distribution = actor.get_dist(sample.clone(False))
+                        new_log_prob = distribution.log_prob(sample["action"])
+                        old_log_prob = sample[loss_module.tensor_keys.sample_log_prob]
+                        probability_ratio = (new_log_prob - old_log_prob).exp()
                     with set_recurrent_mode(True):
                         loss_values = loss_module(sample)
                     total_loss = (
@@ -1282,8 +1491,46 @@ def train_ppo(
                         + loss_values["loss_entropy"]
                     )
                     total_loss.backward()
+                    parameters_before = {
+                        name: [parameter.detach().clone() for parameter in group]
+                        for name, group in parameter_groups.items()
+                    }
+                    for name, group in parameter_groups.items():
+                        gradient_norms = [
+                            parameter.grad.detach().norm()
+                            for parameter in group
+                            if parameter.grad is not None
+                        ]
+                        group_grad_norm = (
+                            torch.stack(gradient_norms).norm()
+                            if gradient_norms
+                            else torch.zeros((), device=device)
+                        )
+                        key = f"gradient/{name}_norm"
+                        update_metrics[key] = update_metrics.get(
+                            key, 0.0
+                        ) + _metric_float(group_grad_norm)
                     grad_norm = nn.utils.clip_grad_norm_(parameters, max_grad_norm)
+                    update_metrics["gradient/clipped_fraction"] = update_metrics.get(
+                        "gradient/clipped_fraction", 0.0
+                    ) + float(_metric_float(grad_norm) > max_grad_norm)
                     optimizer.step()
+                    for name, group in parameter_groups.items():
+                        update_norm = torch.stack(
+                            [
+                                (parameter.detach() - before).norm()
+                                for parameter, before in zip(
+                                    group, parameters_before[name]
+                                )
+                            ]
+                        ).norm()
+                        parameter_norm = torch.stack(
+                            [parameter.detach().norm() for parameter in group]
+                        ).norm()
+                        key = f"update/{name}_relative_norm"
+                        update_metrics[key] = update_metrics.get(
+                            key, 0.0
+                        ) + _metric_float(update_norm / parameter_norm.clamp_min(1e-12))
                     training_transitions += sample.numel()
                     update_count += 1
                     epoch_kl += _metric_float(loss_values["kl_approx"])
@@ -1295,6 +1542,12 @@ def train_ppo(
                     update_metrics["ppo/loss_total"] = update_metrics.get(
                         "ppo/loss_total", 0.0
                     ) + _metric_float(total_loss)
+                    update_metrics["ppo/ratio_std"] = update_metrics.get(
+                        "ppo/ratio_std", 0.0
+                    ) + _metric_float(probability_ratio.std(unbiased=False))
+                    update_metrics["ppo/ratio_min"] = update_metrics.get(
+                        "ppo/ratio_min", 0.0
+                    ) + _metric_float(probability_ratio.min())
                     update_metrics["ppo/grad_norm"] = update_metrics.get(
                         "ppo/grad_norm", 0.0
                     ) + _metric_float(grad_norm)
@@ -1433,6 +1686,8 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--entropy-coeff", type=float, default=1e-3)
     parser.add_argument("--critic-coeff", type=float, default=1.0)
+    parser.add_argument("--discount-factor", type=float, default=0.99)
+    parser.add_argument("--gae-lambda", type=float, default=0.95)
     parser.add_argument(
         "--target-kl",
         type=float,
@@ -1557,6 +1812,8 @@ def main(args: argparse.Namespace) -> None:
                     "anneal_learning_rate": args.anneal_learning_rate,
                     "entropy_coeff": args.entropy_coeff,
                     "critic_coeff": args.critic_coeff,
+                    "discount_factor": args.discount_factor,
+                    "gae_lambda": args.gae_lambda,
                     "target_kl": args.target_kl,
                     "seed": args.seed,
                 }
@@ -1573,6 +1830,8 @@ def main(args: argparse.Namespace) -> None:
             learning_rate=args.learning_rate,
             entropy_coeff=args.entropy_coeff,
             critic_coeff=args.critic_coeff,
+            discount_factor=args.discount_factor,
+            gae_lambda=args.gae_lambda,
             target_kl=args.target_kl,
             anneal_learning_rate=args.anneal_learning_rate,
             max_grad_norm=args.max_grad_norm,

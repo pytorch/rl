@@ -331,7 +331,20 @@ class TestMujoco:
         start = original_model.mesh_vertadr[mesh_id]
         stop = start + original_model.mesh_vertnum[mesh_id]
         vertices = original_model.mesh_vert[start:stop]
+        expected_center = (vertices.max(axis=0) + vertices.min(axis=0)) / 2
         expected_half_size = (vertices.max(axis=0) - vertices.min(axis=0)) / 2
+        rotated_center = np.empty(3)
+        original_collision_id = mujoco.mj_name2id(
+            original_model, mujoco.mjtObj.mjOBJ_GEOM, "collision"
+        )
+        mujoco.mju_rotVecQuat(
+            rotated_center,
+            expected_center,
+            original_model.geom_quat[original_collision_id],
+        )
+        expected_position = (
+            original_model.geom_pos[original_collision_id] + rotated_center
+        )
         with _low_cost_collision_scene(scene) as patched_scene:
             model = mujoco.MjModel.from_xml_path(str(patched_scene))
         visual_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "visual")
@@ -339,6 +352,12 @@ class TestMujoco:
         assert model.geom_type[visual_id] == mujoco.mjtGeom.mjGEOM_MESH
         assert model.geom_type[collision_id] == mujoco.mjtGeom.mjGEOM_BOX
         np.testing.assert_allclose(model.geom_size[collision_id], expected_half_size)
+        np.testing.assert_allclose(
+            model.geom_pos[collision_id], expected_position, atol=1e-7
+        )
+        np.testing.assert_allclose(
+            model.geom_quat[collision_id], original_model.geom_quat[collision_id]
+        )
 
     def test_microduck_wandb_requires_explicit_entity(self):
         args = parse_microduck_args(["--wandb-mode", "online"])
@@ -407,6 +426,8 @@ class TestMujoco:
             replay_capacity=500,
             epochs=3,
             minibatch_trajectories=1,
+            discount_factor=1.0,
+            gae_lambda=1.0,
             target_kl=1e-12,
         )
         assert torch.isfinite(torch.tensor(update_history[0]["ppo/loss_total"]))
