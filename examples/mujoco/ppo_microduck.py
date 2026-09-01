@@ -26,6 +26,7 @@ native rendering and the interactive MuJoCo WASM viewer.
 from __future__ import annotations
 
 import argparse
+import functools as ft
 import importlib.util
 import math
 import time
@@ -834,6 +835,57 @@ def make_models(
         actor(fake_tensordict)
         full_value(fake_tensordict)
     return actor, critic, full_value
+
+
+def _prepare_render_recurrent_state(
+    _module: nn.Module,
+    inputs: tuple[TensorDictBase, ...],
+    *,
+    hidden_size: int,
+) -> None:
+    tensordict = inputs[0]
+    observation = tensordict.get("observation")
+    recurrent_state = tensordict.get("recurrent_state", None)
+    is_init = recurrent_state is None
+    if is_init:
+        tensordict.set(
+            "recurrent_state",
+            observation.new_zeros(*tensordict.batch_size, 1, hidden_size),
+        )
+    tensordict.set(
+        "is_init",
+        torch.full(
+            (*tensordict.batch_size, 1),
+            is_init,
+            dtype=torch.bool,
+            device=observation.device,
+        ),
+    )
+
+
+def make_render_policy(
+    env: EnvBase,
+    *,
+    device: torch.device | str = "cpu",
+    hidden_size: int = 128,
+    initial_policy_scale: float = 0.2,
+) -> ProbabilisticActor:
+    """Build the recurrent actor expected by a MicroDuck ``rlrender`` checkpoint.
+
+    ``rlrender`` loads the actor weights after calling this factory. The forward
+    hook supplies the initial GRU state on reset and marks subsequent rollout
+    steps as non-initial without changing the task or checkpoint state dict.
+    """
+    actor, _, _ = make_models(
+        env,
+        device=device,
+        hidden_size=hidden_size,
+        initial_policy_scale=initial_policy_scale,
+    )
+    actor.register_forward_pre_hook(
+        ft.partial(_prepare_render_recurrent_state, hidden_size=hidden_size)
+    )
+    return actor
 
 
 def _prepare_recurrent_reset(

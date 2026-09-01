@@ -26,7 +26,13 @@ from examples.mujoco.ppo_microduck import (
 )
 from examples.mujoco.ppo_microduck import main as main_microduck
 from examples.mujoco.ppo_microduck import (
+    make_env as make_microduck_env,
+)
+from examples.mujoco.ppo_microduck import (
     make_models as make_microduck_models,
+)
+from examples.mujoco.ppo_microduck import (
+    make_render_policy as make_microduck_render_policy,
 )
 from examples.mujoco.ppo_microduck import parse_args as parse_microduck_args
 from examples.mujoco.ppo_microduck import (
@@ -67,6 +73,7 @@ from torchrl.envs.custom.mujoco._math import (
     random_unit_quat,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.render import RenderConfig, render_policy
 
 if _has_mujoco:
     import mujoco
@@ -432,6 +439,56 @@ class TestMujoco:
             torch.testing.assert_close(parameter, checkpoint["actor"][name])
         evaluation_env.close()
         env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_checkpoint_rlrender_rollout(self, tmp_path):
+        scene = self._write_microduck_fixture(tmp_path)
+        proof_env = make_microduck_env(
+            scene,
+            backend="mujoco",
+            commanded_x_velocity=0.3,
+            num_envs=1,
+            seed=0,
+        )
+        actor, _, _ = make_microduck_models(proof_env, hidden_size=16)
+        actor_state = actor.state_dict()
+        output_bias = next(
+            value
+            for key, value in actor_state.items()
+            if key.endswith("module.1.module.0.bias")
+        )
+        output_bias[:14].fill_(0.4)
+        checkpoint = tmp_path / "microduck-render.pt"
+        torch.save({"actor": actor_state}, checkpoint)
+        proof_env.close()
+
+        result = render_policy(
+            RenderConfig(
+                ckpt=checkpoint,
+                policy=make_microduck_render_policy,
+                env=make_microduck_env,
+                state_dict_key="actor",
+                policy_kwargs={"hidden_size": 16},
+                env_kwargs={
+                    "microduck_root": str(scene),
+                    "backend": "mujoco",
+                    "commanded_x_velocity": 0.3,
+                    "num_envs": 1,
+                },
+                render_backend="null",
+                max_steps=3,
+                format="npz",
+                out=tmp_path / "microduck-render.npz",
+                mujoco_qpos_key="qpos",
+            )
+        )
+        rollout = result.trajectories[0]
+        assert rollout["qpos"].shape == torch.Size([1, 3, 21])
+        assert (rollout["action"][..., 0] > 0.1).all()
+        torch.testing.assert_close(
+            rollout["is_init"][0, :, 0],
+            torch.tensor([True, False, False]),
+        )
 
     @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
     def test_torch_backend_rollout_partial_reset(self):

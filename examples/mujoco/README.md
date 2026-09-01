@@ -56,6 +56,34 @@ KL, entropy, and all PPO losses. Use `--wandb-mode disabled` for a local run
 without tracking. When logging is enabled, `--wandb-entity` is required so W&B
 cannot silently fall back to a different default team or personal workspace.
 
+The best checkpoint can be rendered directly into a Jupyter-native MuJoCo-WASM
+notebook while training continues. The checkpoint stores the actor under the
+`actor` key, and the render policy factory reconstructs the shared GRU and
+initializes its recurrent state for a deterministic rollout:
+
+```bash
+MICRODUCK_RL_ROOT=/path/to/microduck_rl
+
+uv run --extra rendering --with mujoco rlrender \
+  --ckpt /path/to/microduck-best.pt \
+  --policy examples/mujoco/ppo_microduck.py:make_render_policy \
+  --env examples/mujoco/ppo_microduck.py:make_env \
+  --state-dict-key actor \
+  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"backend\":\"mujoco\",\"commanded_x_velocity\":0.3,\"num_envs\":1}" \
+  --render-backend null \
+  --deterministic \
+  --max-steps 500 \
+  --format ipynb \
+  --out /tmp/microduck_policy_wasm.ipynb \
+  --notebook-render-backend mujoco-wasm \
+  --mujoco-model-path "$MICRODUCK_RL_ROOT/src/mjlab_microduck/robot/microduck/scene_walk.xml" \
+  --mujoco-qpos-key qpos \
+  --overwrite
+```
+
+Change `commanded_x_velocity` to `-0.3`, `0.0`, or `0.3` to render backward,
+standing, or forward behavior from the same policy checkpoint.
+
 On an Apple-silicon CPU after the collision fix, a zero-action physics-only
 benchmark measured the following steady-state rates. These figures select
 native MuJoCo as the default laptop training backend; they are not
