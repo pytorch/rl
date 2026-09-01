@@ -538,6 +538,7 @@ class TensorDictPrimer(Transform):
                         spec.shape,
                         value,
                         device=spec.device,
+                        dtype=spec.dtype,
                     )
 
             tensordict.set(key, value)
@@ -643,8 +644,11 @@ class TensorDictPrimer(Transform):
                             spec.shape,
                             value,
                             device=spec.device,
+                            dtype=spec.dtype,
                         )
-                        prev_val = tensordict.get(key, 0.0)
+                        prev_val = tensordict.get(key, default=None)
+                        if prev_val is None:
+                            prev_val = torch.zeros_like(value)
                         value = torch.where(
                             expand_as_right(_reset, value), value, prev_val
                         )
