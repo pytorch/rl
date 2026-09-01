@@ -60,7 +60,8 @@ stable moving solution and rules out an intrinsically impossible control task.
 ```bash
 uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
   --microduck-root /path/to/microduck_rl \
-  --num-seeds 100
+  --num-seeds 100 \
+  --render-checkpoint microduck_heuristic_policy.pt
 ```
 
 The script can also perform survival-constrained random search around the
@@ -72,6 +73,34 @@ uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
   --microduck-root /path/to/microduck_rl \
   --search-candidates 128 \
   --search-num-seeds 8
+```
+
+The saved gait configuration can be opened as a live RLRender notebook. The
+notebook stores one rollout for immediate playback and can also reconstruct the
+environment and closed-form policy to collect another rollout in the kernel:
+
+```bash
+MICRODUCK_RL_ROOT=/path/to/microduck_rl
+
+uv run --extra rendering --with mujoco rlrender \
+  --ckpt microduck_heuristic_policy.pt \
+  --policy examples.mujoco.heuristic_microduck:make_render_policy \
+  --env examples.mujoco.ppo_microduck:make_env \
+  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"backend\":\"mujoco\",\"commanded_x_velocity\":0.3,\"num_envs\":1}" \
+  --render-backend env \
+  --no-auto-load-policy \
+  --max-steps 500 \
+  --fps 125 \
+  --format ipynb \
+  --out microduck_heuristic_policy.ipynb \
+  --notebook-render-backend mujoco-wasm \
+  --notebook-rollout-mode both \
+  --mujoco-model-path "$MICRODUCK_RL_ROOT/src/mjlab_microduck/robot/microduck/scene_walk.xml" \
+  --mujoco-qpos-key qpos \
+  --overwrite
+
+uv run --extra rendering --extra notebook --with mujoco \
+  jupyter lab microduck_heuristic_policy.ipynb
 ```
 
 ```bash

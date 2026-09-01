@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from examples.mujoco.heuristic_microduck import (
+    make_render_policy as make_microduck_heuristic_render_policy,
     microduck_heuristic_action,
     MicroDuckGaitConfig,
 )
@@ -69,7 +70,7 @@ from torchrl.envs.custom.mujoco._math import (
     random_unit_quat,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import render_policy, RenderConfig
+from torchrl.render import render_policy, RenderConfig, RenderPolicySpec
 
 if _has_mujoco:
     import mujoco
@@ -328,6 +329,42 @@ class TestMujoco:
         )
         assert balance_action[2] > 0.0
         assert balance_action[11] < 0.0
+
+        step = 7
+        qvel[4] = 0.2
+        expected = microduck_heuristic_action(
+            config,
+            qpos,
+            qvel,
+            step * 0.008,
+        )
+        render_config = RenderConfig(
+            ckpt="unused.pt",
+            policy="unused:policy",
+            env="unused:env",
+        )
+        render_policy_spec = RenderPolicySpec(
+            Path("unused.pt"),
+            {"gait": asdict(config)},
+            None,
+            torch.device("cpu"),
+            None,
+            {},
+            render_config,
+        )
+        policy = make_microduck_heuristic_render_policy(render_policy_spec)
+        observation = torch.zeros(1, 50)
+        observation[..., 4] = qvel[4]
+        tensordict = TensorDict(
+            {
+                "observation": observation,
+                "diagnostic_pitch": torch.tensor([[pitch]]),
+                "step_count": torch.tensor([[step]]),
+            },
+            batch_size=[1],
+        )
+        policy(tensordict)
+        np.testing.assert_allclose(tensordict["action"][0], expected, atol=1e-7)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_collision_meshes_use_runtime_proxies(self, tmp_path):

@@ -31,14 +31,17 @@ import argparse
 import importlib.util
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
+from tensordict import TensorDictBase
 
 from torchrl import torchrl_logger
+from torchrl.render import RenderPolicySpec
 
 if __package__:
     from examples.mujoco.ppo_microduck import (
@@ -60,6 +63,7 @@ _has_mujoco = importlib.util.find_spec("mujoco") is not None
 ACTION_SCALE = 0.35
 MIN_HEIGHT_RATIO = 0.55
 MIN_UPRIGHT = 0.35
+CONTROL_DT = MicroDuckVelocityEnv.FRAME_SKIP * 0.002
 
 
 @dataclass(frozen=True)
@@ -182,6 +186,89 @@ def microduck_heuristic_action(
     action[1] = config.lateral_amplitude * gait_wave
     action[10] = config.lateral_amplitude * gait_wave
     return np.clip(action, -1.0, 1.0)
+
+
+@dataclass
+class _MicroDuckHeuristicRenderPolicy:
+    config: MicroDuckGaitConfig
+    control_dt: float
+
+    def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
+        observation = tensordict["observation"]
+        pitch = tensordict.get("diagnostic_pitch", None)
+        if pitch is None:
+            pitch = observation[..., :1].clamp(-1.0, 1.0).asin()
+        step_count = tensordict.get("step_count", None)
+        if step_count is None:
+            raise KeyError(
+                "The MicroDuck heuristic RLRender policy requires `step_count`; "
+                "pass --max-steps so rlrender adds a StepCounter transform."
+            )
+
+        pitch_rate = observation[..., 4:5]
+        pitch_correction = (
+            self.config.pitch_kp * pitch + self.config.pitch_kd * pitch_rate
+        ).clamp(-0.9, 0.9)
+        elapsed_time = step_count.to(observation.dtype) * self.control_dt
+        phase = (
+            self.config.phase_offset
+            + 2.0 * math.pi * self.config.frequency_hz * elapsed_time
+        )
+        wave = phase.sin()
+        if self.config.ramp_duration_s <= 0:
+            ramp = torch.ones_like(wave)
+        else:
+            ramp = (elapsed_time / self.config.ramp_duration_s).clamp(max=1.0)
+        gait_wave = ramp * wave
+
+        action = observation.new_zeros(*observation.shape[:-1], 14)
+        action[..., 2:3] = -pitch_correction - self.config.hip_amplitude * gait_wave
+        action[..., 11:12] = pitch_correction - self.config.hip_amplitude * gait_wave
+        action[..., 3:4] = self.config.knee_amplitude * ramp * wave.clamp_min(0.0)
+        action[..., 12:13] = self.config.knee_amplitude * ramp * wave.clamp_max(0.0)
+        action[..., 4:5] = self.config.ankle_amplitude * gait_wave
+        action[..., 13:14] = self.config.ankle_amplitude * gait_wave
+        action[..., 1:2] = self.config.lateral_amplitude * gait_wave
+        action[..., 10:11] = self.config.lateral_amplitude * gait_wave
+        tensordict.set("action", action.clamp(-1.0, 1.0))
+        return tensordict
+
+
+def make_render_policy(spec: RenderPolicySpec) -> _MicroDuckHeuristicRenderPolicy:
+    """Build the closed-form policy for an ``rlrender`` rollout.
+
+    The checkpoint may contain a ``gait`` mapping with
+    :class:`MicroDuckGaitConfig` fields. ``policy_kwargs`` override those
+    values and may additionally set ``control_dt``.
+
+    Args:
+        spec: RLRender policy construction context.
+
+    Returns:
+        A TensorDict policy that writes normalized MicroDuck actions.
+
+    Examples:
+        >>> from types import SimpleNamespace
+        >>> spec = SimpleNamespace(checkpoint={}, policy_kwargs={})
+        >>> policy = make_render_policy(spec)
+        >>> policy.config.frequency_hz
+        3.5477
+    """
+    gait: dict[str, Any] = {}
+    checkpoint = spec.checkpoint
+    if isinstance(checkpoint, Mapping) and checkpoint.get("gait") is not None:
+        checkpoint_gait = checkpoint["gait"]
+        if not isinstance(checkpoint_gait, Mapping):
+            raise TypeError("The heuristic checkpoint `gait` entry must be a mapping.")
+        gait.update(checkpoint_gait)
+    gait.update(spec.policy_kwargs)
+    control_dt = float(gait.pop("control_dt", CONTROL_DT))
+    if not math.isfinite(control_dt) or control_dt <= 0:
+        raise ValueError("control_dt must be finite and positive.")
+    return _MicroDuckHeuristicRenderPolicy(
+        MicroDuckGaitConfig(**gait),
+        control_dt,
+    )
 
 
 def _load_model(microduck_root: str | Path | None) -> Any:
@@ -373,6 +460,7 @@ def _parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--search-candidates", type=int, default=0)
     parser.add_argument("--search-num-seeds", type=int, default=8)
     parser.add_argument("--search-seed", type=int, default=0)
+    parser.add_argument("--render-checkpoint", type=Path)
     return parser.parse_args(args)
 
 
@@ -411,6 +499,13 @@ def _main(args: argparse.Namespace) -> None:
         ranked.sort(key=lambda item: item[0], reverse=True)
         config = ranked[0][1]
         torchrl_logger.info("Best searched config: %s", json.dumps(asdict(config)))
+
+    if args.render_checkpoint is not None:
+        args.render_checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"gait": asdict(config)}, args.render_checkpoint)
+        torchrl_logger.info(
+            "Saved RLRender gait checkpoint to %s", args.render_checkpoint
+        )
 
     trials = _evaluate(
         model,
