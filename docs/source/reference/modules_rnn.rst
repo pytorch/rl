@@ -184,6 +184,45 @@ A module-level ``recurrent_matmul_precision=...`` value takes precedence over
 the process-wide setting. Use :func:`get_recurrent_matmul_precision` to inspect
 the resolved concrete mode for the current device.
 
+Transformer temporal policies
+-----------------------------
+
+:class:`TransformerModule` extends the same contract to causal transformers:
+observations are read from the TensorDict, features written back, and the
+``is_init`` key drives state resets. Collection runs one step at a time
+against a fixed-shape key/value cache carried in the TensorDict (declared to
+the environment with
+:meth:`~torchrl.modules.TransformerModule.make_tensordict_primer`), while
+training processes ``[B, T]`` windows under a block-diagonal causal mask so
+attention never crosses an episode boundary. The two paths share parameters
+and produce matching outputs.
+
+.. code-block:: python
+
+    from torchrl.modules import TransformerModule, set_recurrent_mode
+
+    transformer = TransformerModule(
+        input_size=4,
+        hidden_size=64,
+        num_layers=2,
+        num_heads=4,
+        max_seq_len=256,
+        in_key="observation",
+        out_key="features",
+    )
+
+    with set_recurrent_mode(True):
+        batch = transformer(batch)
+
+Unlike the RNN modules, no state is written in recurrent (window) mode: the
+key/value cache is inference state, not experience, and stays out of replay
+buffers. Episode boundaries inside a training window are recovered from
+``is_init`` through :func:`positions_from_is_init` and
+:func:`segment_causal_mask_from_is_init`. Any backbone honoring the
+:class:`CausalTransformer` contract (its ``forward`` signature plus
+``num_layers``, ``num_heads``, ``head_dim`` and ``max_seq_len`` attributes)
+can be passed via the ``transformer`` argument.
+
 Choosing a layout and backend
 -----------------------------
 

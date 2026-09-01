@@ -28,6 +28,10 @@ Value networks estimate the value of states or state-action pairs.
     GRUModule
     canonicalize_rnn_subset
     set_recurrent_mode
+    TransformerModule
+    CausalTransformer
+    positions_from_is_init
+    segment_causal_mask_from_is_init
     OnlineDTActor
     DTActor
     DecisionTransformer
