@@ -96,11 +96,15 @@ topology.
 
 .. tip::
 
-  All distributed collectors support ``trajs_per_batch`` combined with
-  ``replay_buffer``.  When set, each remote worker assembles **complete
-  trajectories** and writes them to the shared buffer as flat 1-D sequences,
-  which is directly compatible with :class:`~torchrl.data.replay_buffers.SliceSampler`.
-  See :ref:`collectors_replay_trajs` for examples and best practices.
+  :class:`~torchrl.collectors.distributed.RayCollector` supports direct replay
+  writes through a Ray-backed ``replay_buffer``. Pass ``flatten_data=True`` for
+  regular fixed-frame collection, or set ``trajs_per_batch`` to have each
+  remote worker assemble complete trajectories. Both paths write flat 1-D
+  sequences compatible with
+  :class:`~torchrl.data.replay_buffers.SliceSampler`. The generic distributed
+  and RPC collectors return data to their caller instead of owning a shared
+  replay-buffer transport. See :ref:`collectors_replay_trajs` for examples and
+  best practices.
 
 .. autosummary::
     :toctree: generated/
