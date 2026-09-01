@@ -219,6 +219,10 @@ class FixedBatchedInference:
             self._dirty_rows[bucket] = [bucket] * self._num_buffers
             self._buf_idx[bucket] = 0
 
+        if self.device.type == "cuda":
+            init_event = torch.cuda.Event()
+            init_event.record(torch.cuda.current_stream(self.device))
+            self._copy_stream.wait_event(init_event)
         self._initialized = True
 
     def _pick_bucket(self, batch_size: int) -> int:
