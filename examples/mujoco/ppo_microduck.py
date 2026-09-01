@@ -6,10 +6,11 @@
 
 The MicroDuck MJCF is shared by all three :class:`~torchrl.envs.MujocoEnv`
 backends. This example supplies a small commanded locomotion task around that
-model: normalized joint-position actions, a 50-value proprioceptive
-observation, and signed longitudinal-velocity tracking. A zero velocity command
-requests standing, while positive and negative velocities command forward and
-backward motion. It intentionally does not reproduce the richer walking task from
+model: normalized joint-position actions, a 53-value phase-aware proprioceptive
+observation, and a direct directional-speed objective. The default curriculum
+requests feasible forward motion at 0.03 m/s. Its compact PPO actor starts from
+a validated closed-form gait and learns a bounded phase-conditioned residual.
+It intentionally does not reproduce the richer walking task from
 ``microduck_rl`` (sensor history, delays, curricula, domain randomization, and
 the BAM actuator model).
 
@@ -95,12 +96,20 @@ JOINT_NAMES = (
     "right_knee",
     "right_ankle",
 )
-OBSERVATION_DIM = 3 + 3 + 2 + NUM_JOINTS * 3
+GAIT_FREQUENCY_HZ = 3.445781260556958
+GAIT_PHASE_OFFSET = 2.855541500587108
+GAIT_RAMP_DURATION_S = 0.4901050146047573
+GAIT_PHASE_START = 3 + 3 + 2 + NUM_JOINTS * 2
+GAIT_FEATURES = 3
+OBSERVATION_DIM = 3 + 3 + 2 + NUM_JOINTS * 3 + GAIT_FEATURES
 VELOCITY_TRACKING_STD = 0.25
-STAND_POSE_COMMAND_STD = 0.1
-DEFAULT_COMMANDS = (-0.3, 0.0, 0.3)
+STAND_POSE_COMMAND_STD = 0.01
+DEFAULT_COMMANDS = (0.03,)
+DEFAULT_EVALUATION_SEEDS = (*range(8), 39, 57, 79)
 MAX_EPISODE_STEPS = 500
 DEFAULT_REPLAY_CAPACITY = 16_384
+FORWARD_VELOCITY_REWARD_SCALE = 5.0
+FALL_PENALTY = 10.0
 
 
 class _CompleteTrajectoryReplayBuffer(TensorDictReplayBuffer):
@@ -249,6 +258,7 @@ def _collection_metrics(batch: TensorDictBase) -> tuple[dict[str, float], int]:
         "reward_roll_yaw_rate",
         "reward_joint_velocity",
         "reward_action_rate",
+        "reward_termination",
         "height",
         "upright",
         "pitch",
@@ -471,19 +481,18 @@ class MicroDuckVelocityEnv(MujocoEnv):
     Actions are normalized offsets around the actuator targets in the
     ``STAND`` keyframe. Observations concatenate projected gravity, base
     angular velocity, measured and commanded body-frame longitudinal velocity,
-    joint-position error, joint velocity, and the previous action. The reward
-    prioritizes signed velocity tracking while uprightness and target height
-    stabilize the motion. A nominal-pose reward applies only near a zero
-    command and smoothly vanishes before locomotion commands.
+    joint-position error, joint velocity, gait phase and ramp, and the previous
+    action. Nonzero commands receive an alive term plus signed forward speed;
+    uprightness, target height, a terminal fall cost, and small smoothness costs
+    stabilize the motion. A nominal-pose reward applies only near zero command.
 
     Args:
         microduck_root: ``microduck_rl`` checkout, package directory, or
             ``scene_walk.xml`` path.
         backend: MuJoCo physics backend.
         commanded_x_velocity: A fixed body-frame longitudinal velocity command,
-            or a sequence sampled uniformly at every reset. The default exact
-            zero and signed commands train standing, forward, and backward
-            motion in one task.
+            or a sequence sampled uniformly at every reset. The default is a
+            forward-only 0.03 m/s locomotion curriculum.
         action_scale: Maximum position-target offset in radians for a unit
             normalized action.
         kwargs: Forwarded to :class:`~torchrl.envs.MujocoEnv`.
@@ -497,7 +506,7 @@ class MicroDuckVelocityEnv(MujocoEnv):
         microduck_root: str | Path | None = None,
         *,
         backend: Backend = "mujoco",
-        commanded_x_velocity: float | Sequence[float] = (-0.3, 0.0, 0.3),
+        commanded_x_velocity: float | Sequence[float] = DEFAULT_COMMANDS,
         action_scale: float = 0.35,
         **kwargs: Any,
     ):
@@ -568,6 +577,7 @@ class MicroDuckVelocityEnv(MujocoEnv):
             "reward_roll_yaw_rate",
             "reward_joint_velocity",
             "reward_action_rate",
+            "reward_termination",
             "height",
             "upright",
             "pitch",
@@ -603,6 +613,13 @@ class MicroDuckVelocityEnv(MujocoEnv):
         qpos = state["qpos"].to(self.dtype)
         qvel = state["qvel"].to(self.dtype)
         body_velocity = _body_frame_linear_velocity(qpos[..., 3:7], qvel[..., :3])
+        elapsed_time = self._step_count.to(self.dtype) * (
+            self.frame_skip * self._backend.timestep
+        )
+        gait_phase = (
+            GAIT_PHASE_OFFSET + 2.0 * math.pi * GAIT_FREQUENCY_HZ * elapsed_time
+        )
+        gait_ramp = (elapsed_time / GAIT_RAMP_DURATION_S).clamp(max=1.0)
         return torch.cat(
             (
                 _projected_gravity(qpos[..., 3:7]),
@@ -611,6 +628,9 @@ class MicroDuckVelocityEnv(MujocoEnv):
                 self._commanded_x_velocity,
                 qpos[..., 7:] - self._home_qpos[7:],
                 qvel[..., 6:],
+                gait_phase.sin().unsqueeze(-1),
+                gait_phase.cos().unsqueeze(-1),
+                gait_ramp.unsqueeze(-1),
                 self._observation_action,
             ),
             dim=-1,
@@ -686,11 +706,21 @@ class MicroDuckVelocityEnv(MujocoEnv):
         qvel = next_state["qvel"].to(self.dtype)
         projected_gravity = _projected_gravity(qpos[..., 3:7])
         body_velocity = _body_frame_linear_velocity(qpos[..., 3:7], qvel[..., :3])
-        velocity_tracking_reward = torch.exp(
+        velocity_tracking_reward = 2.0 * torch.exp(
             -(
                 (body_velocity[..., 0] - self._commanded_x_velocity.squeeze(-1))
                 / VELOCITY_TRACKING_STD
             ).square()
+        )
+        command = self._commanded_x_velocity.squeeze(-1)
+        directional_velocity = command.sign() * body_velocity[..., 0]
+        locomotion_reward = 1.0 + FORWARD_VELOCITY_REWARD_SCALE * (
+            directional_velocity.clamp(-0.2, 0.2)
+        )
+        velocity_reward = torch.where(
+            command.abs() > 1e-6,
+            locomotion_reward,
+            velocity_tracking_reward,
         )
         upright = (-projected_gravity[..., 2]).clamp(-1.0, 1.0)
         upright_reward = torch.exp(-4.0 * (1.0 - upright).square())
@@ -703,10 +733,12 @@ class MicroDuckVelocityEnv(MujocoEnv):
         stand_pose_gate = torch.exp(
             -(self._commanded_x_velocity.squeeze(-1) / STAND_POSE_COMMAND_STD).square()
         )
+        finite = torch.isfinite(qpos).all(dim=-1) & torch.isfinite(qvel).all(dim=-1)
+        fallen = (
+            (qpos[..., 2] < 0.55 * self._target_height) | (upright < 0.35) | ~finite
+        )
         return {
-            "diagnostic_reward_velocity_tracking": (
-                2.0 * velocity_tracking_reward
-            ).unsqueeze(-1),
+            "diagnostic_reward_velocity_tracking": velocity_reward.unsqueeze(-1),
             "diagnostic_reward_upright": (0.5 * upright_reward).unsqueeze(-1),
             "diagnostic_reward_height": (0.25 * height_reward).unsqueeze(-1),
             "diagnostic_reward_pose": (0.5 * stand_pose_gate * pose_reward).unsqueeze(
@@ -723,6 +755,9 @@ class MicroDuckVelocityEnv(MujocoEnv):
             ).unsqueeze(-1),
             "diagnostic_reward_action_rate": (
                 -0.02 * (action - self._previous_action).square().mean(dim=-1)
+            ).unsqueeze(-1),
+            "diagnostic_reward_termination": (
+                -FALL_PENALTY * fallen.to(self.dtype)
             ).unsqueeze(-1),
         }
 
@@ -858,17 +893,22 @@ def make_env(
     microduck_root: str | Path | None = None,
     *,
     backend: Backend = "mujoco",
-    commanded_x_velocity: float | Sequence[float] = (-0.3, 0.0, 0.3),
+    commanded_x_velocity: float | Sequence[float] = DEFAULT_COMMANDS,
     num_envs: int = 4,
     device: torch.device | str = "cpu",
     seed: int = 0,
     parallel: bool = False,
+    camera_id: int = -1,
+    render_width: int = 640,
+    render_height: int = 480,
 ) -> EnvBase:
     """Build a batched MicroDuck commanded-velocity task.
 
     Native MuJoCo uses :class:`~torchrl.envs.SerialEnv` by default for a
     notebook-friendly, multiprocessing-free batch. MJX and ``mujoco-torch``
-    batch directly in their respective array frameworks.
+    batch directly in their respective array frameworks. Rendering defaults to
+    a 640 by 480 external free camera so videos show the complete robot; use
+    camera 0 for the robot's head camera.
     """
     kwargs = {
         "microduck_root": microduck_root,
@@ -878,10 +918,83 @@ def make_env(
         "device": torch.device(device),
         "seed": seed,
         "max_episode_steps": 500,
+        "camera_id": camera_id,
+        "render_width": render_width,
+        "render_height": render_height,
     }
     if backend == "mujoco":
         kwargs["parallel"] = parallel
     return MicroDuckVelocityEnv(**kwargs)
+
+
+class _GaitResidualParams(nn.Module):
+    """Map phase and balance features to a bounded residual around the gait."""
+
+    def __init__(
+        self,
+        action_dim: int,
+        *,
+        initial_policy_scale: float,
+        residual_action_scale: float,
+        device: torch.device,
+    ):
+        super().__init__()
+        if action_dim != NUM_JOINTS:
+            raise ValueError(
+                f"The MicroDuck gait prior expects {NUM_JOINTS} actions, got "
+                f"{action_dim}."
+            )
+        self.residual_action_scale = residual_action_scale
+        self.residual = nn.Linear(6, action_dim, device=device)
+        nn.init.zeros_(self.residual.weight)
+        nn.init.zeros_(self.residual.bias)
+        self.scale = nn.Parameter(torch.zeros(action_dim, device=device))
+        self.param_extractor = NormalParamExtractor(
+            scale_mapping=f"biased_softplus_{initial_policy_scale}"
+        )
+
+    def forward(
+        self,
+        observation: torch.Tensor,
+        pitch: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        gait_sin = observation[..., GAIT_PHASE_START : GAIT_PHASE_START + 1]
+        gait_cos = observation[..., GAIT_PHASE_START + 1 : GAIT_PHASE_START + 2]
+        gait_ramp = observation[..., GAIT_PHASE_START + 2 : GAIT_PHASE_START + 3]
+        direction = observation[..., 7:8].sign()
+        gait_wave = direction * gait_ramp * gait_sin
+        pitch_rate = observation[..., 4:5]
+        residual_features = torch.cat(
+            (
+                torch.ones_like(gait_wave),
+                gait_wave,
+                direction * gait_ramp * gait_cos,
+                pitch,
+                pitch_rate,
+                observation[..., 6:7],
+            ),
+            dim=-1,
+        )
+        residual = self.residual(residual_features)
+        pitch_correction = (
+            -6.77200816215626 * pitch - 0.6609051751875947 * pitch_rate
+        ).clamp(-0.9, 0.9)
+        pitch_correction = pitch_correction * direction.abs()
+
+        nominal = observation.new_zeros(*observation.shape[:-1], NUM_JOINTS)
+        nominal[..., 2:3] = -pitch_correction + 0.1517860344272367 * gait_wave
+        nominal[..., 11:12] = pitch_correction + 0.1517860344272367 * gait_wave
+        nominal[..., 3:4] = 0.015149442212286304 * gait_ramp * gait_sin.clamp_min(0.0)
+        nominal[..., 12:13] = 0.015149442212286304 * gait_ramp * gait_sin.clamp_max(0.0)
+        nominal[..., 4:5] = -0.06058094530934424 * gait_wave
+        nominal[..., 13:14] = -0.06058094530934424 * gait_wave
+        nominal[..., 1:2] = 0.05281012757865912 * gait_wave
+        nominal[..., 10:11] = 0.05281012757865912 * gait_wave
+
+        action_mean = nominal + self.residual_action_scale * residual.tanh()
+        pre_tanh_mean = torch.atanh(action_mean.clamp(-0.999, 0.999))
+        scale = self.scale.expand_as(pre_tanh_mean)
+        return self.param_extractor(torch.cat((pre_tanh_mean, scale), dim=-1))
 
 
 def make_models(
@@ -889,51 +1002,35 @@ def make_models(
     *,
     device: torch.device | str = "cpu",
     hidden_size: int = 128,
-    initial_policy_scale: float = 0.2,
+    initial_policy_scale: float = 0.01,
+    residual_action_scale: float = 0.2,
 ) -> tuple[ProbabilisticActor, ValueOperator, TensorDictSequential]:
-    """Create a GRU actor and value head sharing the recurrent backbone.
+    """Create a phase-residual actor and an independent critic.
 
-    The actor starts with zero deterministic actions and a modest exploration
-    scale so its initial rollouts stay near the ``STAND`` actuator targets. The
-    third returned module is the complete recurrent value network used by GAE
-    and PPO; the second is its non-shared value head.
+    The actor starts at the validated closed-form gait and learns a bounded
+    residual around it. The critic is deliberately separate: value-loss updates
+    cannot move the actor away from the locomotion basin before PPO obtains a
+    useful advantage estimate. The third returned module is the complete value
+    network used by GAE and PPO.
     """
     if not math.isfinite(initial_policy_scale) or initial_policy_scale <= 0:
         raise ValueError("initial_policy_scale must be finite and positive.")
+    if not math.isfinite(residual_action_scale) or residual_action_scale <= 0:
+        raise ValueError("residual_action_scale must be finite and positive.")
     device = torch.device(device)
     action_dim = env.action_spec_unbatched.shape[-1]
-    embed = TensorDictModule(
-        nn.Sequential(
-            nn.LazyLinear(hidden_size, device=device),
-            nn.Tanh(),
-        ),
-        in_keys=["observation"],
-        out_keys=["embed"],
-    )
-    gru = GRUModule(
-        input_size=hidden_size,
-        hidden_size=hidden_size,
-        num_layers=1,
-        in_keys=["embed", "recurrent_state", "is_init"],
-        out_keys=["gru_out", ("next", "recurrent_state")],
-        device=device,
-    )
-    backbone = TensorDictSequential(embed, gru)
-    actor_output = nn.Linear(hidden_size, 2 * action_dim, device=device)
-    nn.init.zeros_(actor_output.weight)
-    nn.init.zeros_(actor_output.bias)
     actor_head = TensorDictModule(
-        nn.Sequential(
-            actor_output,
-            NormalParamExtractor(
-                scale_mapping=f"biased_softplus_{initial_policy_scale}"
-            ),
+        _GaitResidualParams(
+            action_dim,
+            initial_policy_scale=initial_policy_scale,
+            residual_action_scale=residual_action_scale,
+            device=device,
         ),
-        in_keys=["gru_out"],
+        in_keys=["observation", "diagnostic_pitch"],
         out_keys=["loc", "scale"],
     )
     actor = ProbabilisticActor(
-        module=TensorDictSequential(backbone, actor_head),
+        module=actor_head,
         spec=env.action_spec,
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
@@ -943,34 +1040,19 @@ def make_models(
         },
         return_log_prob=True,
     ).to(device)
-    value_feature = TensorDictModule(
-        nn.Identity(), in_keys=["gru_out"], out_keys=["value_gru_out"]
-    )
     critic = ValueOperator(
-        nn.Linear(hidden_size, 1, device=device),
-        in_keys=["value_gru_out"],
+        nn.Sequential(
+            nn.LazyLinear(hidden_size, device=device),
+            nn.Tanh(),
+            nn.Linear(hidden_size, hidden_size, device=device),
+            nn.Tanh(),
+            nn.Linear(hidden_size, 1, device=device),
+        ),
+        in_keys=["observation"],
     ).to(device)
-    full_value = TensorDictSequential(backbone, value_feature, critic)
+    full_value = TensorDictSequential(critic)
     with torch.no_grad():
         fake_tensordict = env.fake_tensordict().to(device)
-        fake_tensordict.set(
-            "is_init",
-            torch.ones(
-                *fake_tensordict.batch_size,
-                1,
-                dtype=torch.bool,
-                device=device,
-            ),
-        )
-        fake_tensordict.set(
-            "recurrent_state",
-            torch.zeros(
-                *fake_tensordict.batch_size,
-                1,
-                hidden_size,
-                device=device,
-            ),
-        )
         actor(fake_tensordict)
         full_value(fake_tensordict)
     return actor, critic, full_value
@@ -1007,19 +1089,21 @@ def make_render_policy(
     *,
     device: torch.device | str = "cpu",
     hidden_size: int = 128,
-    initial_policy_scale: float = 0.2,
+    initial_policy_scale: float = 0.01,
+    residual_action_scale: float = 0.2,
 ) -> ProbabilisticActor:
-    """Build the recurrent actor expected by a MicroDuck ``rlrender`` checkpoint.
+    """Build the phase-residual actor expected by an ``rlrender`` checkpoint.
 
     ``rlrender`` loads the actor weights after calling this factory. The forward
-    hook supplies the initial GRU state on reset and marks subsequent rollout
-    steps as non-initial without changing the task or checkpoint state dict.
+    hook marks the first rollout step and keeps the checkpoint interface
+    compatible with previously generated notebooks.
     """
     actor, _, _ = make_models(
         env,
         device=device,
         hidden_size=hidden_size,
         initial_policy_scale=initial_policy_scale,
+        residual_action_scale=residual_action_scale,
     )
     actor.register_forward_pre_hook(
         ft.partial(_prepare_render_recurrent_state, hidden_size=hidden_size)
@@ -1064,8 +1148,8 @@ def evaluate_policy(
     env: MicroDuckVelocityEnv,
     policy: ProbabilisticActor,
     *,
-    commanded_x_velocities: Sequence[float] = (-0.3, 0.0, 0.3),
-    seeds: Sequence[int] = (0, 1, 2),
+    commanded_x_velocities: Sequence[float] = DEFAULT_COMMANDS,
+    seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
     steps: int = 500,
 ) -> list[dict[str, float]]:
     """Evaluate deterministic fixed-command episodes from controlled seeds.
@@ -1207,6 +1291,26 @@ def _evaluation_metrics(evaluation: list[dict[str, float]]) -> dict[str, float]:
     return metrics
 
 
+def _evaluation_score(evaluation: list[dict[str, float]]) -> tuple[float, ...]:
+    """Rank checkpoints by safety before locomotion performance."""
+    directional_displacements = []
+    for row in evaluation:
+        command = row["commanded_x_velocity"]
+        displacement = row["signed_displacement"]
+        directional_displacements.append(
+            command * displacement / abs(command) if command else -abs(displacement)
+        )
+    wrong_way = sum(value <= 0.0 for value in directional_displacements)
+    return (
+        sum(row["survived"] for row in evaluation),
+        min(row["episode_length"] for row in evaluation),
+        -float(wrong_way),
+        min(directional_displacements),
+        sum(directional_displacements) / len(directional_displacements),
+        sum(row["episode_return"] for row in evaluation) / len(evaluation),
+    )
+
+
 def train_ppo(
     env: EnvBase,
     actor: ProbabilisticActor,
@@ -1216,32 +1320,32 @@ def train_ppo(
     total_transitions: int = 10_000_000,
     replay_capacity: int = DEFAULT_REPLAY_CAPACITY,
     epochs: int = 10,
-    minibatch_trajectories: int = 8,
-    learning_rate: float = 1e-4,
-    entropy_coeff: float = 1e-3,
-    critic_coeff: float = 1.0,
-    discount_factor: float = 0.99,
-    gae_lambda: float = 0.95,
+    minibatch_trajectories: int = 32,
+    learning_rate: float = 3e-5,
+    entropy_coeff: float = 0.0,
+    critic_coeff: float = 0.5,
+    discount_factor: float = 1.0,
+    gae_lambda: float = 1.0,
     target_kl: float | None = None,
-    anneal_learning_rate: bool = True,
+    anneal_learning_rate: bool = False,
     max_grad_norm: float = 1.0,
     evaluation_env: MicroDuckVelocityEnv | None = None,
     evaluation_interval: int | None = None,
     evaluation_commands: Sequence[float] = DEFAULT_COMMANDS,
-    evaluation_seeds: Sequence[int] = (0, 1, 2),
+    evaluation_seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
     evaluation_steps: int = MAX_EPISODE_STEPS,
     best_checkpoint_path: str | Path | None = None,
     experiment_logger: WandbLogger | None = None,
 ) -> list[dict[str, float]]:
-    """Train recurrent PPO from complete on-policy trajectories.
+    """Train PPO from complete on-policy trajectories.
 
     A collector writes only finished episodes to a roughly 16K-transition
-    replay buffer. ``SliceSampler`` draws whole episodes for recurrent PPO,
-    the buffer is replayed for up to ``epochs`` passes, and is then erased
-    before collecting with the updated policy. When ``target_kl`` is provided,
-    an update stops after the first epoch whose mean approximate-KL magnitude
-    exceeds that threshold. Collection stops after at least ``total_transitions``
-    complete-trajectory transitions.
+    replay buffer. ``SliceSampler`` draws whole episodes, the buffer is replayed
+    for up to ``epochs`` passes, and is then erased before collecting with the
+    updated policy. When ``target_kl`` is provided, an update stops after the
+    first epoch whose mean approximate-KL magnitude exceeds that threshold.
+    Collection stops after at least ``total_transitions`` complete-trajectory
+    transitions.
     """
     if (
         min(
@@ -1343,6 +1447,7 @@ def train_ppo(
     collected_transitions = 0
     collection_iteration = 0
     best_evaluation_return = -float("inf")
+    best_evaluation_score: tuple[float, ...] | None = None
     best_actor_state = None
     best_critic_state = None
     checkpoint_path = (
@@ -1376,6 +1481,7 @@ def train_ppo(
     if evaluation_interval is not None:
         initial_evaluation, initial_metrics = run_evaluation()
         best_evaluation_return = initial_metrics["evaluation/episode_return"]
+        best_evaluation_score = _evaluation_score(initial_evaluation)
         best_actor_state = deepcopy(actor.state_dict())
         best_critic_state = deepcopy(critic.state_dict())
         if experiment_logger is not None:
@@ -1388,6 +1494,7 @@ def train_ppo(
                 {
                     "transitions": 0,
                     "evaluation_return": best_evaluation_return,
+                    "evaluation_score": list(best_evaluation_score),
                     "evaluation": initial_evaluation,
                     "actor": best_actor_state,
                     "critic": best_critic_state,
@@ -1516,6 +1623,8 @@ def train_ppo(
                     ) + float(_metric_float(grad_norm) > max_grad_norm)
                     optimizer.step()
                     for name, group in parameter_groups.items():
+                        if not group:
+                            continue
                         update_norm = torch.stack(
                             [
                                 (parameter.detach() - before).norm()
@@ -1586,7 +1695,11 @@ def train_ppo(
                 evaluation, evaluation_metrics = run_evaluation()
                 metrics.update(evaluation_metrics)
                 mean_return = evaluation_metrics["evaluation/episode_return"]
-                if mean_return > best_evaluation_return:
+                evaluation_score = _evaluation_score(evaluation)
+                if best_evaluation_score is None or (
+                    evaluation_score > best_evaluation_score
+                ):
+                    best_evaluation_score = evaluation_score
                     best_evaluation_return = mean_return
                     best_actor_state = deepcopy(actor.state_dict())
                     best_critic_state = deepcopy(critic.state_dict())
@@ -1596,6 +1709,7 @@ def train_ppo(
                             {
                                 "transitions": collected_transitions,
                                 "evaluation_return": mean_return,
+                                "evaluation_score": list(evaluation_score),
                                 "evaluation": evaluation,
                                 "actor": best_actor_state,
                                 "critic": best_critic_state,
@@ -1681,13 +1795,13 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--total-transitions", type=int, default=10_000_000)
     parser.add_argument("--replay-capacity", type=int, default=DEFAULT_REPLAY_CAPACITY)
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--minibatch-trajectories", type=int, default=8)
+    parser.add_argument("--minibatch-trajectories", type=int, default=32)
     parser.add_argument("--hidden-size", type=int, default=128)
-    parser.add_argument("--learning-rate", type=float, default=1e-4)
-    parser.add_argument("--entropy-coeff", type=float, default=1e-3)
-    parser.add_argument("--critic-coeff", type=float, default=1.0)
-    parser.add_argument("--discount-factor", type=float, default=0.99)
-    parser.add_argument("--gae-lambda", type=float, default=0.95)
+    parser.add_argument("--learning-rate", type=float, default=3e-5)
+    parser.add_argument("--entropy-coeff", type=float, default=0.0)
+    parser.add_argument("--critic-coeff", type=float, default=0.5)
+    parser.add_argument("--discount-factor", type=float, default=1.0)
+    parser.add_argument("--gae-lambda", type=float, default=1.0)
     parser.add_argument(
         "--target-kl",
         type=float,
@@ -1701,9 +1815,10 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--anneal-learning-rate",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
     )
-    parser.add_argument("--initial-policy-scale", type=float, default=0.2)
+    parser.add_argument("--initial-policy-scale", type=float, default=0.01)
+    parser.add_argument("--residual-action-scale", type=float, default=0.2)
     parser.add_argument(
         "--commanded-x-velocity",
         action="append",
@@ -1711,13 +1826,13 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         dest="commanded_x_velocities",
         help=(
             "Velocity command to sample at reset. Repeat for multiple commands; "
-            "defaults to -0.3, 0.0, and 0.3 m/s."
+            "defaults to a forward-only 0.03 m/s curriculum."
         ),
     )
     parser.add_argument(
         "--evaluation-interval",
         type=int,
-        default=25,
+        default=1,
         help="Run deterministic fixed-command evaluation every N collections.",
     )
     parser.add_argument("--evaluation-steps", type=int, default=500)
@@ -1778,6 +1893,7 @@ def main(args: argparse.Namespace) -> None:
             device=args.device,
             hidden_size=args.hidden_size,
             initial_policy_scale=args.initial_policy_scale,
+            residual_action_scale=args.residual_action_scale,
         )
         if args.evaluation_interval is not None:
             evaluation_env = MicroDuckVelocityEnv(
@@ -1808,6 +1924,8 @@ def main(args: argparse.Namespace) -> None:
                     "epochs": args.epochs,
                     "minibatch_trajectories": args.minibatch_trajectories,
                     "hidden_size": args.hidden_size,
+                    "initial_policy_scale": args.initial_policy_scale,
+                    "residual_action_scale": args.residual_action_scale,
                     "learning_rate": args.learning_rate,
                     "anneal_learning_rate": args.anneal_learning_rate,
                     "entropy_coeff": args.entropy_coeff,
@@ -1838,6 +1956,7 @@ def main(args: argparse.Namespace) -> None:
             evaluation_env=evaluation_env,
             evaluation_interval=args.evaluation_interval,
             evaluation_commands=commands,
+            evaluation_seeds=DEFAULT_EVALUATION_SEEDS,
             evaluation_steps=args.evaluation_steps,
             best_checkpoint_path=args.best_checkpoint_path,
             experiment_logger=experiment_logger,

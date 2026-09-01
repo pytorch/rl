@@ -45,16 +45,16 @@ from torchrl.render import RenderPolicySpec
 
 if __package__:
     from examples.mujoco.ppo_microduck import (
-        _low_cost_collision_scene,
         MAX_EPISODE_STEPS,
         MicroDuckVelocityEnv,
+        _low_cost_collision_scene,
         resolve_microduck_scene,
     )
 else:
     from ppo_microduck import (
-        _low_cost_collision_scene,
         MAX_EPISODE_STEPS,
         MicroDuckVelocityEnv,
+        _low_cost_collision_scene,
         resolve_microduck_scene,
     )
 
@@ -78,18 +78,18 @@ class MicroDuckGaitConfig:
     Examples:
         >>> config = MicroDuckGaitConfig()
         >>> config.frequency_hz
-        3.5477
+        3.445781260556958
     """
 
-    frequency_hz: float = 3.5477
-    hip_amplitude: float = -0.1837
-    knee_amplitude: float = 0.0151
-    ankle_amplitude: float = -0.0946
-    lateral_amplitude: float = 0.0549
-    phase_offset: float = 2.7925
-    pitch_kp: float = -7.0
-    pitch_kd: float = -0.56
-    ramp_duration_s: float = 0.4
+    frequency_hz: float = 3.445781260556958
+    hip_amplitude: float = -0.1517860344272367
+    knee_amplitude: float = 0.015149442212286304
+    ankle_amplitude: float = -0.06058094530934424
+    lateral_amplitude: float = 0.05281012757865912
+    phase_offset: float = 2.855541500587108
+    pitch_kp: float = -6.77200816215626
+    pitch_kd: float = -0.6609051751875947
+    ramp_duration_s: float = 0.4901050146047573
 
 
 @dataclass(frozen=True)
@@ -252,7 +252,7 @@ def make_render_policy(spec: RenderPolicySpec) -> _MicroDuckHeuristicRenderPolic
         >>> spec = SimpleNamespace(checkpoint={}, policy_kwargs={})
         >>> policy = make_render_policy(spec)
         >>> policy.config.frequency_hz
-        3.5477
+        3.445781260556958
     """
     gait: dict[str, Any] = {}
     checkpoint = spec.checkpoint

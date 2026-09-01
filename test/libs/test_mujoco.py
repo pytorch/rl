@@ -16,25 +16,44 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from tensordict import TensorDict
 
 from examples.mujoco.heuristic_microduck import (
-    make_render_policy as make_microduck_heuristic_render_policy,
-    microduck_heuristic_action,
     MicroDuckGaitConfig,
+    microduck_heuristic_action,
+)
+from examples.mujoco.heuristic_microduck import (
+    make_render_policy as make_microduck_heuristic_render_policy,
 )
 from examples.mujoco.ppo_microduck import (
+    MicroDuckVelocityEnv,
     _low_cost_collision_scene,
     _prepare_recurrent_reset,
+)
+from examples.mujoco.ppo_microduck import (
+    _evaluation_score as microduck_evaluation_score,
+)
+from examples.mujoco.ppo_microduck import (
     evaluate_policy as evaluate_microduck_policy,
+)
+from examples.mujoco.ppo_microduck import (
     main as main_microduck,
+)
+from examples.mujoco.ppo_microduck import (
     make_env as make_microduck_env,
+)
+from examples.mujoco.ppo_microduck import (
     make_models as make_microduck_models,
+)
+from examples.mujoco.ppo_microduck import (
     make_render_policy as make_microduck_render_policy,
-    MicroDuckVelocityEnv,
+)
+from examples.mujoco.ppo_microduck import (
     parse_args as parse_microduck_args,
+)
+from examples.mujoco.ppo_microduck import (
     train_ppo as train_microduck_ppo,
 )
-from tensordict import TensorDict
 from torchrl.envs import (
     AntEnv,
     Compose,
@@ -49,10 +68,10 @@ from torchrl.envs import (
     RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
-    set_exploration_type,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
+    set_exploration_type,
 )
 from torchrl.envs.custom.mujoco._backends import (
     _has_jax,
@@ -70,7 +89,7 @@ from torchrl.envs.custom.mujoco._math import (
     random_unit_quat,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import render_policy, RenderConfig, RenderPolicySpec
+from torchrl.render import RenderConfig, RenderPolicySpec, render_policy
 
 if _has_mujoco:
     import mujoco
@@ -264,6 +283,10 @@ class TestMujoco:
         fallen["qpos"][..., 2] = 0.01
         fallen["qpos"][..., 3:7] = torch.tensor([0.0, 1.0, 0.0, 0.0])
         assert env._compute_done(state, fallen).all()
+        torch.testing.assert_close(
+            env._reward_components(fallen, action)["diagnostic_reward_termination"],
+            torch.full((num_envs, 1), -10.0),
+        )
 
         action.fill_(0.25)
         transition = env.step(reset.set("action", action))
@@ -353,7 +376,7 @@ class TestMujoco:
             render_config,
         )
         policy = make_microduck_heuristic_render_policy(render_policy_spec)
-        observation = torch.zeros(1, 50)
+        observation = torch.zeros(1, 53)
         observation[..., 4] = qvel[4]
         tensordict = TensorDict(
             {
@@ -452,9 +475,16 @@ class TestMujoco:
         actor, critic, full_value = make_microduck_models(env, hidden_size=16)
         with set_exploration_type(ExplorationType.DETERMINISTIC):
             initial = _prepare_recurrent_reset(env.reset(), actor)
+            initial_state = env.get_state()
             actor(initial)
-        torch.testing.assert_close(
-            initial["action"], torch.zeros_like(initial["action"])
+        expected_initial_action = microduck_heuristic_action(
+            MicroDuckGaitConfig(),
+            initial_state["qpos"][0].numpy(),
+            initial_state["qvel"][0].numpy(),
+            0.0,
+        )
+        np.testing.assert_allclose(
+            initial["action"][0].detach(), expected_initial_action
         )
         evaluation = evaluate_microduck_policy(
             evaluation_env,
@@ -543,15 +573,19 @@ class TestMujoco:
             commanded_x_velocity=0.3,
             num_envs=1,
             seed=0,
+            camera_id=-1,
+            render_width=80,
+            render_height=60,
         )
+        frame = proof_env.render()
+        assert frame.shape == (1, 60, 80, 3)
+        assert frame.max() > frame.min()
         actor, _, _ = make_microduck_models(proof_env, hidden_size=16)
         actor_state = actor.state_dict()
         output_bias = next(
-            value
-            for key, value in actor_state.items()
-            if key.endswith("module.1.module.0.bias")
+            value for key, value in actor_state.items() if key.endswith("residual.bias")
         )
-        output_bias[:14].fill_(0.4)
+        output_bias[:14].fill_(1.0)
         checkpoint = tmp_path / "microduck-render.pt"
         torch.save({"actor": actor_state}, checkpoint)
         proof_env.close()
@@ -582,6 +616,33 @@ class TestMujoco:
         torch.testing.assert_close(
             rollout["is_init"][0, :, 0],
             torch.tensor([True, False, False]),
+        )
+
+    def test_microduck_checkpoint_score_prefers_survival_to_forward_fall(self):
+        survived = [
+            {
+                "commanded_x_velocity": 0.03,
+                "seed": 0.0,
+                "episode_return": 800.0,
+                "tracking_error": 0.02,
+                "survived": 1.0,
+                "episode_length": 500.0,
+                "signed_displacement": 0.04,
+            }
+        ]
+        forward_fall = [
+            {
+                "commanded_x_velocity": 0.03,
+                "seed": 0.0,
+                "episode_return": 900.0,
+                "tracking_error": 0.0,
+                "survived": 0.0,
+                "episode_length": 100.0,
+                "signed_displacement": 0.10,
+            }
+        ]
+        assert microduck_evaluation_score(survived) > microduck_evaluation_score(
+            forward_fall
         )
 
     @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
