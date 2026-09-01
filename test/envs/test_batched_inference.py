@@ -130,11 +130,47 @@ def test_changed_keys_raise_instead_of_reusing_stale_values():
         helper(changed_batch)
 
 
+def test_only_policy_input_keys_are_staged():
+    helper = FixedBatchedInference(_make_policy(), "cpu", bucket_sizes=[4])
+    batch = _make_batch(3)
+    batch.set("reward", torch.randn(3, 1))
+
+    out = helper(batch)
+
+    staged = set(helper._staging[4][0].keys())
+    assert "obs" in staged
+    assert "reward" not in staged
+    assert "reward" not in out.keys()
+    # Staged inputs are not echoed back to the caller.
+    assert "obs" not in out.keys()
+    assert out["action"].shape == torch.Size([3, 2])
+
+
+def test_select_keys_for_plain_callables():
+    def policy(td):
+        return td.set("action", td["obs"].sum(-1, keepdim=True))
+
+    helper = FixedBatchedInference(policy, "cpu", bucket_sizes=[4], select_keys=["obs"])
+    batch = _make_batch(3)
+    batch.set("reward", torch.randn(3, 1))
+
+    out = helper(batch)
+
+    assert "reward" not in helper._staging[4][0].keys()
+    torch.testing.assert_close(out["action"], batch["obs"].sum(-1, keepdim=True))
+
+
+@pytest.mark.parametrize(
+    "backend,exchange",
+    [("threading", None), ("multiprocessing", "shm")],
+)
 @set_capture_non_tensor_stack(False)
-def test_async_env_pool_routes_inference_by_env_index():
+def test_async_env_pool_routes_inference_by_env_index(backend, exchange):
+    kwargs = {"exchange": exchange} if exchange is not None else {}
     pool = AsyncEnvPool(
         [partial(CountingEnv, start_val=index, max_steps=100) for index in range(3)],
-        backend="threading",
+        backend=backend,
+        **kwargs,
     )
     helper = FixedBatchedInference(
         TensorDictModule(
@@ -200,6 +236,26 @@ class TestCUDA:
         caller_stream.synchronize()
 
         torch.testing.assert_close(observed.cpu(), batch["obs"])
+
+    def test_device_buffer_is_persistent(self):
+        """With double_buffer=False every call reuses the same device storage.
+
+        Stable input pointers are what manual CUDA-graph capture of the
+        policy requires; a fresh device allocation per call would silently
+        break replay.
+        """
+        helper = FixedBatchedInference(
+            _make_policy(device="cuda:0"),
+            "cuda:0",
+            bucket_sizes=[8],
+            double_buffer=False,
+        )
+        out_first = helper(_make_batch(3))
+        pointer = helper._device_batches[8][0]["obs"].data_ptr()
+        out_second = helper(_make_batch(5))
+        assert helper._device_batches[8][0]["obs"].data_ptr() == pointer
+        assert out_first["action"].shape == torch.Size([3, 2])
+        assert out_second["action"].shape == torch.Size([5, 2])
 
 
 if __name__ == "__main__":
