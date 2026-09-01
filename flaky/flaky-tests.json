@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-31T06:35:06.428682+00:00",
+  "generated_at": "2026-09-01T06:30:20.736736+00:00",
   "analysis_period": {
     "start": "2026-08-28",
-    "end": "2026-08-30",
+    "end": "2026-08-31",
     "runs_analyzed": 60
   },
   "summary": {
-    "total_tests": 32428,
+    "total_tests": 32430,
     "flaky_count": 2,
     "new_flaky_count": 2,
     "resolved_count": 0
@@ -15,14 +15,14 @@
     {
       "nodeid": "test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity[SiLU-4-1-2-3-dtype4-48]",
       "executions": 56,
-      "failures": 22,
-      "failure_rate": 0.3929,
-      "flaky_score": 0.7857,
-      "passed": 34,
-      "failed": 22,
+      "failures": 20,
+      "failure_rate": 0.3571,
+      "flaky_score": 0.7143,
+      "passed": 36,
+      "failed": 20,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 8.986,
+      "avg_duration": 9.016,
       "recent_failures": [
         "2026-08-28T20:27:57Z",
         "2026-08-30T14:04:52Z",
@@ -30,7 +30,7 @@
         "2026-08-30T14:04:52Z",
         "2026-08-30T14:04:52Z"
       ],
-      "first_seen_flaky": "2026-08-28T08:33:24Z",
+      "first_seen_flaky": "2026-08-28T08:49:46Z",
       "is_new": true
     },
     {

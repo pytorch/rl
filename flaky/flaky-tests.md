@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-08-31
+# Flaky Test Report - 2026-09-01
 
 ## Summary
 
 - **Flaky tests**: 2
 - **Newly flaky** (last 7 days): 2
 - **Resolved**: 0
-- **Total tests analyzed**: 32428
+- **Total tests analyzed**: 32430
 - **CI runs analyzed**: 60
 
 ---
@@ -14,7 +14,7 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `..._block_gru_triton_gradient_parity[SiLU-4-1-2-3-dtype4-48]` 🆕 | 39.3% (22/56) | 22 | 0.79 | 2026-08-30 |
+| `..._block_gru_triton_gradient_parity[SiLU-4-1-2-3-dtype4-48]` 🆕 | 35.7% (20/56) | 20 | 0.71 | 2026-08-30 |
 | `...t_rb_core.py::test_replay_buffer_prefetch_dumps_roundtrip` 🆕 | 5.7% (8/140) | 8 | 0.11 | 2026-08-28 |
 
 
@@ -34,4 +34,4 @@
 
 ---
 
-*Generated at 2026-08-31T06:35:06.428682+00:00*
+*Generated at 2026-09-01T06:30:20.736736+00:00*
