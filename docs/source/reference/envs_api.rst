@@ -339,6 +339,14 @@ internal singular configurations of the gimbal Jacobian.
 :class:`~torchrl.envs.CubeBowlEnv` is a compact
 manipulation task for scripted MuJoCo macro-control examples. It composes a
 local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
+:class:`~torchrl.envs.MicroDuckEnv` is a commanded-velocity locomotion task
+for Pollen Robotics' MicroDuck biped. It loads the walking MJCF from a local
+``microduck_rl`` checkout (``MICRODUCK_RL_ROOT``) or an installed
+``mjlab_microduck`` package, replaces the heavy collision meshes with box
+proxies so the accelerated backends fit in memory, and exposes foot contacts
+and foot heights for gait metrics through
+:meth:`~torchrl.envs.MujocoEnv.geom_contacts` and
+:meth:`~torchrl.envs.MujocoEnv.site_positions`.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -355,6 +363,7 @@ state into the parent batch. Boolean masks are not supported.
     CubeBowlEnv
     HopperEnv
     HumanoidEnv
+    MicroDuckEnv
     SatelliteEnv
     Walker2dEnv
 

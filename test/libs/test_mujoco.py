@@ -24,6 +24,7 @@ from torchrl.envs import (
     HumanoidEnv,
     MacroPrimitive,
     MacroPrimitiveTransform,
+    MicroDuckEnv,
     MujocoEnv,
     ParallelEnv,
     RobotMacroAction,
@@ -48,6 +49,7 @@ from torchrl.envs.custom.mujoco._math import (
     quat_mul,
     random_unit_quat,
 )
+from torchrl.envs.custom.mujoco.microduck import _low_cost_collision_scene
 from torchrl.envs.utils import check_env_specs, step_mdp
 
 if _has_mujoco:
@@ -128,6 +130,298 @@ class TestMujoco:
         env.step(td)
         assert torch.equal(state["qpos"], qpos)
         env.close()
+
+    @staticmethod
+    def _write_microduck_fixture(tmp_path: Path) -> Path:
+        """A 14-actuator stand-in for the MicroDuck MJCF that rests on two feet."""
+        lines = [
+            '<mujoco model="microduck-test">',
+            '  <option timestep="0.002"/>',
+            (
+                '  <default><joint damping="0.1" limited="true" range="-1 1"/>'
+                '<geom density="1000" contype="0" conaffinity="0"/></default>'
+            ),
+            '  <worldbody><geom type="plane" size="1 1 0.1" contype="1" conaffinity="1"/>',
+            '    <body name="torso" pos="0 0 0.12"><freejoint name="root"/>',
+            '      <geom type="sphere" size="0.02" mass="0.1"/>',
+        ]
+        for side, y in (("left", 0.03), ("right", -0.03)):
+            lines.extend(
+                (
+                    f'      <body name="{side}_foot_body" pos="0 {y} -0.11">',
+                    f'        <geom name="{side}_foot_collision" type="box" '
+                    'size="0.02 0.01 0.005" contype="1" conaffinity="1" mass="0.02"/>',
+                    f'        <site name="{side}_foot" pos="0 0 -0.005"/>',
+                    "      </body>",
+                )
+            )
+        for index in range(14):
+            axis = ("1", "0", "0") if index % 2 == 0 else ("0", "1", "0")
+            indent = "      " + "  " * index
+            lines.extend(
+                (
+                    f'{indent}<body name="link{index}">',
+                    f'{indent}  <joint name="joint{index}" axis="{" ".join(axis)}"/>',
+                    f'{indent}  <geom type="sphere" size="0.005" mass="0.01"/>',
+                )
+            )
+        for index in reversed(range(14)):
+            lines.append("      " + "  " * index + "</body>")
+        stand_qpos = "0 0 0.12 1 0 0 0 " + " ".join(["0"] * 14)
+        stand_ctrl = " ".join(["0"] * 14)
+        lines.extend(
+            (
+                "    </body>",
+                "  </worldbody>",
+                "  <actuator>",
+                *(
+                    f'    <position name="actuator{index}" joint="joint{index}" '
+                    'kp="5" ctrlrange="-1 1"/>'
+                    for index in range(14)
+                ),
+                "  </actuator>",
+                "  <keyframe>",
+                f'    <key name="STAND" qpos="{stand_qpos}" ctrl="{stand_ctrl}"/>',
+                "  </keyframe>",
+                "</mujoco>",
+            )
+        )
+        scene = tmp_path / "scene_walk.xml"
+        scene.write_text("\n".join(lines))
+        return scene
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_microduck_specs_reward_and_termination(self, tmp_path, backend):
+        num_envs = 1 if backend == "mujoco" else 2
+        env = MicroDuckEnv(
+            self._write_microduck_fixture(tmp_path),
+            backend=backend,
+            num_envs=num_envs,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        check_env_specs(env)
+        reset = env.reset()
+        assert reset["observation"].shape == (num_envs, MicroDuckEnv.OBSERVATION_DIM)
+        torch.testing.assert_close(
+            reset["observation"][..., :3],
+            torch.tensor([[0.0, 0.0, -1.0]]).expand(num_envs, -1),
+        )
+        action = torch.zeros_like(env.action_spec.rand())
+        for command in (-0.3, 0.0, 0.3):
+            command_tensor = torch.full((num_envs, 1), command)
+            reset = env.reset(
+                TensorDict(
+                    {"commanded_x_velocity": command_tensor}, batch_size=(num_envs,)
+                )
+            )
+            torch.testing.assert_close(reset["commanded_x_velocity"], command_tensor)
+            torch.testing.assert_close(reset["observation"][..., 7:8], command_tensor)
+
+            state = env.get_state()
+            matching = state.clone()
+            matching["qvel"][..., 0] = command
+            mismatched = state.clone()
+            mismatched["qvel"][..., 0] = -command if command else 0.3
+            matching_reward = env._compute_reward(state, action, matching)
+            mismatched_reward = env._compute_reward(state, action, mismatched)
+            assert (matching_reward > mismatched_reward).all()
+            pose_offset = matching.clone()
+            pose_offset["qpos"][..., 7:] += 0.35
+            pose_cost = matching_reward - env._compute_reward(
+                state, action, pose_offset
+            )
+            if command:
+                assert (pose_cost < 1e-3).all()
+                stationary_reward = env._compute_reward(state, action, state)
+                assert (matching_reward > stationary_reward).all()
+            else:
+                assert (pose_cost > 0.1).all()
+            assert not env._compute_done(state, mismatched).any()
+
+        # Linear velocity is rotated into the body frame before rewarding it.
+        yawed = state.clone()
+        yawed["qpos"][..., 3:7] = torch.tensor([2**-0.5, 0.0, 0.0, 2**-0.5])
+        body_forward = yawed.clone()
+        body_forward["qvel"][..., 1] = 0.3
+        fixed_world_x = yawed.clone()
+        fixed_world_x["qvel"][..., 0] = 0.3
+        assert (
+            env._compute_reward(state, action, body_forward)
+            > env._compute_reward(state, action, fixed_world_x)
+        ).all()
+
+        fallen = state.clone()
+        fallen["qpos"][..., 2] = 0.01
+        fallen["qpos"][..., 3:7] = torch.tensor([0.0, 1.0, 0.0, 0.0])
+        assert env._compute_done(state, fallen).all()
+        torch.testing.assert_close(
+            env._reward_components(fallen, action)["diagnostic_reward_termination"],
+            torch.full((num_envs, 1), -MicroDuckEnv.FALL_PENALTY),
+        )
+
+        action.fill_(0.25)
+        transition = env.step(reset.set("action", action))
+        torch.testing.assert_close(transition["next", "observation"][..., -14:], action)
+        if num_envs > 1:
+            env.reset(
+                TensorDict(
+                    {"commanded_x_velocity": torch.tensor([[-0.3], [0.3]])},
+                    batch_size=(num_envs,),
+                )
+            )
+            partial_reset = env.reset(
+                TensorDict(
+                    {
+                        "_reset": torch.tensor([True, False]),
+                        "commanded_x_velocity": torch.tensor([[0.0], [0.3]]),
+                    },
+                    batch_size=(num_envs,),
+                )
+            )
+            torch.testing.assert_close(
+                partial_reset["commanded_x_velocity"], torch.tensor([[0.0], [0.3]])
+            )
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_native_backend_is_default_and_batches(self, tmp_path):
+        scene = self._write_microduck_fixture(tmp_path)
+        env = MicroDuckEnv(scene, num_envs=2, parallel=False, seed=0)
+        assert isinstance(env, SerialEnv)
+        rollout = env.rollout(3)
+        assert rollout["commanded_x_velocity"].shape == (2, 1, 3, 1)
+        env.close()
+        with pytest.raises(ValueError, match="microduck_root"):
+            MicroDuckEnv(scene, xml_path=scene)
+
+    def test_microduck_scene_resolution(self, tmp_path, monkeypatch):
+        checkout = tmp_path / "microduck_rl" / "src" / "mjlab_microduck" / "robot"
+        checkout = checkout / "microduck"
+        checkout.mkdir(parents=True)
+        scene = checkout / "scene_walk.xml"
+        scene.write_text("<mujoco/>")
+        monkeypatch.delenv(MicroDuckEnv.ROOT_ENV_VAR, raising=False)
+        monkeypatch.setattr(
+            "torchrl.envs.custom.mujoco.microduck.importlib.util.find_spec",
+            lambda name: None,
+        )
+        with pytest.raises(FileNotFoundError, match=MicroDuckEnv.ROOT_ENV_VAR):
+            MicroDuckEnv.resolve_scene()
+        monkeypatch.setenv(MicroDuckEnv.ROOT_ENV_VAR, str(tmp_path / "microduck_rl"))
+        assert MicroDuckEnv.resolve_scene() == scene.resolve()
+        assert MicroDuckEnv.resolve_scene(checkout) == scene.resolve()
+        assert MicroDuckEnv.resolve_scene(scene) == scene.resolve()
+        with pytest.raises(FileNotFoundError):
+            MicroDuckEnv.resolve_scene(tmp_path / "elsewhere")
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_microduck_foot_contacts_and_heights(self, tmp_path, backend):
+        num_envs = 1 if backend == "mujoco" else 2
+        env = MicroDuckEnv(
+            self._write_microduck_fixture(tmp_path),
+            backend=backend,
+            num_envs=num_envs,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        td = env.reset()
+        assert not env.foot_contacts().any()
+        heights = env.foot_heights()
+        assert heights.shape == (num_envs, 2)
+        torch.testing.assert_close(
+            heights, torch.full((num_envs, 2), 0.005), atol=1e-4, rtol=0
+        )
+        for _ in range(25):
+            td["action"] = torch.zeros_like(env.action_spec.rand())
+            td = env.step(td)["next"]
+        assert env.foot_contacts().all()
+        assert (env.foot_heights().abs() < 5e-3).all()
+        assert not td["terminated"].any()
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_diagnostics_are_opt_in_and_sum_to_reward(self, tmp_path):
+        scene = self._write_microduck_fixture(tmp_path)
+        env = MicroDuckEnv(scene, backend="mujoco", seed=0)
+        assert not any(
+            str(key).startswith("diagnostic_") for key in env.observation_spec.keys()
+        )
+        env.close()
+        env = MicroDuckEnv(scene, backend="mujoco", seed=0, diagnostics=True)
+        check_env_specs(env)
+        rollout = env.rollout(4)
+        components = torch.stack(
+            [
+                rollout["next", f"diagnostic_reward_{name}"]
+                for name in MicroDuckEnv.REWARD_COMPONENTS
+            ]
+        ).sum(0)
+        torch.testing.assert_close(components, rollout["next", "reward"])
+        assert rollout["next", "diagnostic_height"].shape == (1, 4, 1)
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_collision_meshes_use_runtime_proxies(self, tmp_path):
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "foot.obj").write_text(
+            "v -1 -2 -3\n"
+            "v 1 -2 -3\n"
+            "v 0 2 -3\n"
+            "v 0 0 3\n"
+            "f 1 3 2\n"
+            "f 1 2 4\n"
+            "f 2 3 4\n"
+            "f 3 1 4\n"
+        )
+        (tmp_path / "robot.xml").write_text(
+            "<mujoco><compiler meshdir='assets'/>"
+            "<default>"
+            "<default class='visual'><geom contype='0' conaffinity='0'/></default>"
+            "<default class='collision'><geom contype='1' conaffinity='1'/></default>"
+            "</default>"
+            "<asset><mesh name='foot' file='foot.obj'/></asset>"
+            "<worldbody><body><freejoint/>"
+            "<geom name='visual' class='visual' type='mesh' mesh='foot' mass='1'/>"
+            "<geom name='collision' class='collision' type='mesh' mesh='foot'/>"
+            "</body></worldbody></mujoco>"
+        )
+        scene = tmp_path / "scene.xml"
+        scene.write_text("<mujoco><include file='robot.xml'/></mujoco>")
+
+        original_model = mujoco.MjModel.from_xml_path(str(scene))
+        mesh_id = mujoco.mj_name2id(original_model, mujoco.mjtObj.mjOBJ_MESH, "foot")
+        start = original_model.mesh_vertadr[mesh_id]
+        stop = start + original_model.mesh_vertnum[mesh_id]
+        vertices = original_model.mesh_vert[start:stop]
+        expected_center = (vertices.max(axis=0) + vertices.min(axis=0)) / 2
+        expected_half_size = (vertices.max(axis=0) - vertices.min(axis=0)) / 2
+        rotated_center = np.empty(3)
+        original_collision_id = mujoco.mj_name2id(
+            original_model, mujoco.mjtObj.mjOBJ_GEOM, "collision"
+        )
+        mujoco.mju_rotVecQuat(
+            rotated_center,
+            expected_center,
+            original_model.geom_quat[original_collision_id],
+        )
+        expected_position = (
+            original_model.geom_pos[original_collision_id] + rotated_center
+        )
+        with _low_cost_collision_scene(scene) as patched_scene:
+            model = mujoco.MjModel.from_xml_path(str(patched_scene))
+        visual_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "visual")
+        collision_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "collision")
+        assert model.geom_type[visual_id] == mujoco.mjtGeom.mjGEOM_MESH
+        assert model.geom_type[collision_id] == mujoco.mjtGeom.mjGEOM_BOX
+        np.testing.assert_allclose(model.geom_size[collision_id], expected_half_size)
+        np.testing.assert_allclose(
+            model.geom_pos[collision_id], expected_position, atol=1e-7
+        )
+        np.testing.assert_allclose(
+            model.geom_quat[collision_id], original_model.geom_quat[collision_id]
+        )
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_geom_contacts_and_site_positions(self, tmp_path, backend):
