@@ -40,6 +40,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [add_random_module](generated/torchrl.objectives.add_random_module.html)
 - [Masked reduction](objectives_common.html#masked-reduction)
 - [Value Estimators](objectives_common.html#value-estimators)
+- [Optimization utilities](objectives_common.html#optimization-utilities)
 - [Value-Based Methods](objectives_value.html)
 
 - [DQNLoss](generated/torchrl.objectives.DQNLoss.html)

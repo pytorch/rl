@@ -1993,6 +1993,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.VTrace.html">VTrace</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.MultiAgentGAE.html">MultiAgentGAE</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.ValueEstimators.html">ValueEstimators</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.KLAdaptiveLR.html">KLAdaptiveLR</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="objectives_value.html">Value-Based Methods</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2609,6 +2610,17 @@ gradients.</p>
 </table>
 </div>
 </section>
+<section id="optimization-utilities">
+<h2>Optimization utilities<a class="headerlink" href="#optimization-utilities" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.KLAdaptiveLR.html#torchrl.objectives.KLAdaptiveLR" title="torchrl.objectives.KLAdaptiveLR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLAdaptiveLR</span></code></a>(optimizer, target_kl, *[, ...])</p></td>
+<td><p>Adapt an optimizer's learning rate to a target policy KL divergence.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
 
@@ -2732,6 +2744,7 @@ gradients.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#value-estimators">Value Estimators</a><ul class="nav section-nav flex-column">
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optimization-utilities">Optimization utilities</a></li>
 </ul>
   </nav></div>
     
@@ -2984,7 +2997,7 @@ gradients.</p>
        "headline": "Common Components",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/objectives_common.html",
-       "articleBody": "Common Components# Base classes and common utilities for all loss modules. LossModule(*args, **kwargs) A parent class for RL losses. add_random_module(module) Adds a random module to the list of modules that will be detected by vmap_randomness() as random. Masked reduction# Batches of padded sequences carry a per-position validity mask, and positions marked invalid must not contribute to the loss. Every loss reduces through LossModule._reduce_loss(), which reads that mask from the input according to LossModule.loss_mask_key: \"auto\" (the default) looks for each entry of AUTO_LOSS_MASK_KEYS and ANDs the ones it finds, so a batch from SliceSampler with pad_output=True is handled without any configuration. On data carrying none of those entries the reduction is unchanged. a NestedKey restricts masking to that single entry. None disables masking. loss = PPOLoss(actor, critic) loss.loss_mask_key = (\"my_masks\", \"valid\") # use this entry only loss.loss_mask_key = None # reduce over every position Masked positions are selected out rather than multiplied by zero, so a non-finite value at a masked position affects neither the loss nor the gradients. AUTO_LOSS_MASK_KEYS Built-in immutable sequence. Value Estimators# ValueEstimatorBase(*args, **kwargs) An abstract parent class for value function modules. TD0Estimator(*args, **kwargs) Temporal Difference (TD(0)) estimate of advantage function. TD1Estimator(*args, **kwargs) \\(\\infty\\)-Temporal Difference (TD(1)) estimate of advantage function. TDLambdaEstimator(*args, **kwargs) TD(\\(\\lambda\\)) estimate of advantage function. GAE(*args, **kwargs) A class wrapper around the generalized advantage estimate functional. VTrace(*args, **kwargs) A class wrapper around V-Trace estimate functional. MultiAgentGAE(*args, **kwargs) Multi-agent Generalized Advantage Estimator. ValueEstimators(value[, names, module, ...]) Value function enumerator for custom-built estimators.",
+       "articleBody": "Common Components# Base classes and common utilities for all loss modules. LossModule(*args, **kwargs) A parent class for RL losses. add_random_module(module) Adds a random module to the list of modules that will be detected by vmap_randomness() as random. Masked reduction# Batches of padded sequences carry a per-position validity mask, and positions marked invalid must not contribute to the loss. Every loss reduces through LossModule._reduce_loss(), which reads that mask from the input according to LossModule.loss_mask_key: \"auto\" (the default) looks for each entry of AUTO_LOSS_MASK_KEYS and ANDs the ones it finds, so a batch from SliceSampler with pad_output=True is handled without any configuration. On data carrying none of those entries the reduction is unchanged. a NestedKey restricts masking to that single entry. None disables masking. loss = PPOLoss(actor, critic) loss.loss_mask_key = (\"my_masks\", \"valid\") # use this entry only loss.loss_mask_key = None # reduce over every position Masked positions are selected out rather than multiplied by zero, so a non-finite value at a masked position affects neither the loss nor the gradients. AUTO_LOSS_MASK_KEYS Built-in immutable sequence. Value Estimators# ValueEstimatorBase(*args, **kwargs) An abstract parent class for value function modules. TD0Estimator(*args, **kwargs) Temporal Difference (TD(0)) estimate of advantage function. TD1Estimator(*args, **kwargs) \\(\\infty\\)-Temporal Difference (TD(1)) estimate of advantage function. TDLambdaEstimator(*args, **kwargs) TD(\\(\\lambda\\)) estimate of advantage function. GAE(*args, **kwargs) A class wrapper around the generalized advantage estimate functional. VTrace(*args, **kwargs) A class wrapper around V-Trace estimate functional. MultiAgentGAE(*args, **kwargs) Multi-agent Generalized Advantage Estimator. ValueEstimators(value[, names, module, ...]) Value function enumerator for custom-built estimators. Optimization utilities# KLAdaptiveLR(optimizer, target_kl, *[, ...]) Adapt an optimizer\u0027s learning rate to a target policy KL divergence.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

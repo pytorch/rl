@@ -547,6 +547,7 @@
 - [ExponentialQuadraticCost](reference/generated/torchrl.objectives.ExponentialQuadraticCost.md)
 - [GAILLoss](reference/generated/torchrl.objectives.GAILLoss.md)
 - [IQLLoss](reference/generated/torchrl.objectives.IQLLoss.md)
+- [KLAdaptiveLR](reference/generated/torchrl.objectives.KLAdaptiveLR.md)
 - [KLPENPPOLoss](reference/generated/torchrl.objectives.KLPENPPOLoss.md)
 - [LossModule](reference/generated/torchrl.objectives.LossModule.md)
 - [OnlineDTLoss](reference/generated/torchrl.objectives.OnlineDTLoss.md)

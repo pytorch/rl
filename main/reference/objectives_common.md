@@ -47,3 +47,8 @@ gradients.
 
 | [`ValueEstimators`](generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators)(value[, names, module, ...]) | Value function enumerator for custom-built estimators. |
 | --- | --- |
+
+## Optimization utilities
+
+| [`KLAdaptiveLR`](generated/torchrl.objectives.KLAdaptiveLR.html#torchrl.objectives.KLAdaptiveLR)(optimizer, target_kl, *[, ...]) | Adapt an optimizer's learning rate to a target policy KL divergence. |
+| --- | --- |

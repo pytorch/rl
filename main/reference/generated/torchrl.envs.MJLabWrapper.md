@@ -38,6 +38,14 @@ environment row.
 is present, it is selected automatically.
 - **allow_done_after_reset** - Passed to [`EnvBase`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase).
 Defaults to `False`.
+- **log_extras** - If `True`, accumulate the numeric entries of the
+`extras["log"]` mapping that mjlab returns from `reset` and
+`step` (episode reward terms, curriculum levels, termination
+counts, ...). Call `pop_logged_extras()` to retrieve their
+running means and clear the accumulator, typically once per
+training iteration. Entries are averaged over the calls in which
+they appeared, so metrics that mjlab emits only when an episode
+ends are not diluted by silent steps. Defaults to `False`.
 
 mjlab reference: Zakka et al., "mjlab: A Lightweight Framework for
 GPU-Accelerated Robot Learning", arXiv:2601.22074.

@@ -33300,7 +33300,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fec3ff06980>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f89f0357470>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -45915,7 +45915,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fec468f0cc0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f89f2e84cc0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -89800,6 +89800,7 @@ from an mjlab RGB `CameraSensor`.
 - **pixels_only** - See [`MJLabWrapper`](torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper).
 - **pixels_key** - See [`MJLabWrapper`](torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper).
 - **pixels_sensor** - See [`MJLabWrapper`](torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper).
+- **log_extras** - See [`MJLabWrapper`](torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper).
 - **num_workers** - If greater than one, return a
 [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) with one mjlab env per worker.
 Workers report metadata directly to the parent.
@@ -89861,6 +89862,14 @@ environment row.
 is present, it is selected automatically.
 - **allow_done_after_reset** - Passed to [`EnvBase`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase).
 Defaults to `False`.
+- **log_extras** - If `True`, accumulate the numeric entries of the
+`extras["log"]` mapping that mjlab returns from `reset` and
+`step` (episode reward terms, curriculum levels, termination
+counts, ...). Call `pop_logged_extras()` to retrieve their
+running means and clear the accumulator, typically once per
+training iteration. Entries are averaged over the calls in which
+they appeared, so metrics that mjlab emits only when an episode
+ends are not diluted by silent steps. Defaults to `False`.
 
 mjlab reference: Zakka et al., "mjlab: A Lightweight Framework for
 GPU-Accelerated Robot Learning", arXiv:2601.22074.
@@ -228877,6 +228886,82 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 
 ---
 
+# KLAdaptiveLR
+
+*class*torchrl.objectives.KLAdaptiveLR(*optimizer: [Optimizer](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)*, *target_kl: float*, ***, *factor: float = 1.5*, *min_lr: float = 1e-05*, *max_lr: float = 0.01*)[[source]](../../_modules/torchrl/objectives/utils.html#KLAdaptiveLR)
+
+Adapt an optimizer's learning rate to a target policy KL divergence.
+
+After each policy update, compare the measured mean KL divergence between
+the old and the new policy with `target_kl`: when it exceeds
+`2 * target_kl` the learning rate is divided by `factor`, when it is
+positive but below `target_kl / 2` it is multiplied by `factor`, and it
+is left unchanged in between. The learning rate of every parameter group is
+clamped to `[min_lr, max_lr]`. A KL of exactly zero leaves the learning
+rate unchanged, so a policy that did not move does not trigger runaway
+growth.
+
+This is the schedule used by the `rsl_rl` PPO implementation (Rudin et
+al., "Learning to Walk in Minutes Using Massively Parallel Deep
+Reinforcement Learning", [https://arxiv.org/abs/2109.11978](https://arxiv.org/abs/2109.11978)). The
+`kl_approx` output of [`ClipPPOLoss`](torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss) can be
+passed directly to `step()`.
+
+Parameters:
+
+- **optimizer** ([*torch.optim.Optimizer*](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)) - optimizer whose parameter groups are
+rescaled in place.
+- **target_kl** (*float*) - desired mean KL divergence per update.
+
+Keyword Arguments:
+
+- **factor** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - multiplicative change applied when the KL
+leaves the `[target_kl / 2, 2 * target_kl]` band. Must be greater
+than one. Defaults to `1.5`.
+- **min_lr** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - lower bound of the learning rate. Defaults to
+`1e-5`.
+- **max_lr** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - upper bound of the learning rate. Defaults to
+`1e-2`.
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.objectives import KLAdaptiveLR
+>>> params = [torch.nn.Parameter(torch.zeros(1))]
+>>> optimizer = torch.optim.Adam(params, lr=1e-3)
+>>> scheduler = KLAdaptiveLR(optimizer, target_kl=0.01, factor=2.0)
+>>> scheduler.step(kl=0.05) # the update was too large: halve the lr
+>>> optimizer.param_groups[0]["lr"]
+0.0005
+>>> scheduler.step(kl=0.001) # the update was too small: double it
+>>> optimizer.param_groups[0]["lr"]
+0.001
+```
+
+get_last_lr() → list[float][[source]](../../_modules/torchrl/objectives/utils.html#KLAdaptiveLR.get_last_lr)
+
+Return the current learning rate of each parameter group.
+
+load_state_dict(*state_dict: dict[str, Any]*) → None[[source]](../../_modules/torchrl/objectives/utils.html#KLAdaptiveLR.load_state_dict)
+
+Load a state produced by `state_dict()`.
+
+state_dict() → dict[str, Any][[source]](../../_modules/torchrl/objectives/utils.html#KLAdaptiveLR.state_dict)
+
+Return the scheduler state, excluding the optimizer.
+
+step(*kl: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → None[[source]](../../_modules/torchrl/objectives/utils.html#KLAdaptiveLR.step)
+
+Rescale the learning rate from the KL divergence of the last update.
+
+Parameters:
+
+**kl** (*float**or**Tensor*) - mean KL divergence between the policy before
+and after the update. A zero-dimensional tensor is accepted.
+
+---
+
 # KLPENPPOLoss
 
 *class*torchrl.objectives.KLPENPPOLoss(**args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/ppo.html#KLPENPPOLoss)
@@ -257806,7 +257891,7 @@ Configuration for JumanjiEnv environment.
 
 # torchrl.trainers.algorithms.configs.envs_libs.MJLabEnvConfig
 
-*class*torchrl.trainers.algorithms.configs.envs_libs.MJLabEnvConfig(*_partial_: bool = False*, *task_id: str = '???'*, *cfg: Any = None*, *play: bool = False*, *num_envs: int | None = None*, *from_pixels: bool = False*, *pixels_only: bool = False*, *pixels_key: str = 'pixels'*, *pixels_sensor: str | None = None*, *render_mode: str | None = None*, *native_autoreset: bool = False*, *device: str | None = None*, *batch_size: list[int] | None = None*, *allow_done_after_reset: bool = False*, *num_workers: int = 1*, *_target_: str = 'torchrl.envs.libs.mjlab.MJLabEnv'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/envs_libs.html#MJLabEnvConfig)
+*class*torchrl.trainers.algorithms.configs.envs_libs.MJLabEnvConfig(*_partial_: bool = False*, *task_id: str = '???'*, *cfg: Any = None*, *play: bool = False*, *num_envs: int | None = None*, *from_pixels: bool = False*, *pixels_only: bool = False*, *pixels_key: str = 'pixels'*, *pixels_sensor: str | None = None*, *render_mode: str | None = None*, *native_autoreset: bool = False*, *device: str | None = None*, *batch_size: list[int] | None = None*, *allow_done_after_reset: bool = False*, *log_extras: bool = False*, *num_workers: int = 1*, *_target_: str = 'torchrl.envs.libs.mjlab.MJLabEnv'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/envs_libs.html#MJLabEnvConfig)
 
 Configuration for MJLabEnv environment.
 
@@ -266105,6 +266190,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [add_random_module](generated/torchrl.objectives.add_random_module.html)
 - [Masked reduction](objectives_common.html#masked-reduction)
 - [Value Estimators](objectives_common.html#value-estimators)
+- [Optimization utilities](objectives_common.html#optimization-utilities)
 - [Value-Based Methods](objectives_value.html)
 
 - [DQNLoss](generated/torchrl.objectives.DQNLoss.html)
@@ -266230,6 +266316,11 @@ gradients.
 | [`MultiAgentGAE`](generated/torchrl.objectives.value.MultiAgentGAE.html#torchrl.objectives.value.MultiAgentGAE)(*args, **kwargs) | Multi-agent Generalized Advantage Estimator. |
 
 | [`ValueEstimators`](generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators)(value[, names, module, ...]) | Value function enumerator for custom-built estimators. |
+| --- | --- |
+
+## Optimization utilities
+
+| [`KLAdaptiveLR`](generated/torchrl.objectives.KLAdaptiveLR.html#torchrl.objectives.KLAdaptiveLR)(optimizer, target_kl, *[, ...]) | Adapt an optimizer's learning rate to a target policy KL divergence. |
 | --- | --- |
 
 ---
@@ -268903,39 +268994,39 @@ loss.set_keys(
 
 # Computation times
 
-**07:30.472** total execution time for 29 files **from all galleries**:
+**00:00.000** total execution time for 29 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`reference/generated/tutorials/mujoco_cube_bowl_macros.py`) | 02:15.650 | 0.0 |
-| [TorchRL trainer: A DQN example](tutorials/coding_dqn.html#sphx-glr-tutorials-coding-dqn-py) (`reference/generated/tutorials/coding_dqn.py`) | 01:21.287 | 0.0 |
-| [Using pretrained models](tutorials/pretrained_models.html#sphx-glr-tutorials-pretrained-models-py) (`reference/generated/tutorials/pretrained_models.py`) | 00:33.368 | 0.0 |
-| [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:28.714 | 0.0 |
-| [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`reference/generated/tutorials/multiagent_ppo.py`) | 00:26.946 | 0.0 |
-| [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`reference/generated/tutorials/multiagent_competitive_ddpg.py`) | 00:26.204 | 0.0 |
-| [Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/coding_ppo.html#sphx-glr-tutorials-coding-ppo-py) (`reference/generated/tutorials/coding_ppo.py`) | 00:25.711 | 0.0 |
-| [TorchRL envs](tutorials/torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`reference/generated/tutorials/torchrl_envs.py`) | 00:25.211 | 0.0 |
-| [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:23.106 | 0.0 |
-| [LLM Wrappers in TorchRL](tutorials/llm_wrappers.html#sphx-glr-tutorials-llm-wrappers-py) (`reference/generated/tutorials/llm_wrappers.py`) | 00:08.380 | 0.0 |
-| [Using the Evaluator](tutorials/evaluator.html#sphx-glr-tutorials-evaluator-py) (`reference/generated/tutorials/evaluator.py`) | 00:07.227 | 0.0 |
-| [Get started with your own first training loop](tutorials/getting-started-5.html#sphx-glr-tutorials-getting-started-5-py) (`reference/generated/tutorials/getting-started-5.py`) | 00:06.125 | 0.0 |
-| [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`reference/generated/tutorials/dqn_with_rnn.py`) | 00:05.628 | 0.0 |
-| [Introduction to TorchRL](tutorials/torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`reference/generated/tutorials/torchrl_demo.py`) | 00:05.482 | 0.0 |
-| [Pendulum: Writing your environment and transforms with TorchRL](tutorials/pendulum.html#sphx-glr-tutorials-pendulum-py) (`reference/generated/tutorials/pendulum.py`) | 00:04.591 | 0.0 |
-| [Task-specific policy in multi-task environments](tutorials/multi_task.html#sphx-glr-tutorials-multi-task-py) (`reference/generated/tutorials/multi_task.py`) | 00:04.315 | 0.0 |
-| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.875 | 0.0 |
-| [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.397 | 0.0 |
-| [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.391 | 0.0 |
-| [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.331 | 0.0 |
-| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.154 | 0.0 |
-| [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.083 | 0.0 |
-| [Get started with logging](tutorials/getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`reference/generated/tutorials/getting-started-4.py`) | 00:00.076 | 0.0 |
-| [Get started with TorchRL's modules](tutorials/getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`reference/generated/tutorials/getting-started-1.py`) | 00:00.074 | 0.0 |
-| [Getting started with model optimization](tutorials/getting-started-2.html#sphx-glr-tutorials-getting-started-2-py) (`reference/generated/tutorials/getting-started-2.py`) | 00:00.063 | 0.0 |
-| [Get started with Environments, TED and transforms](tutorials/getting-started-0.html#sphx-glr-tutorials-getting-started-0-py) (`reference/generated/tutorials/getting-started-0.py`) | 00:00.032 | 0.0 |
-| [Unified checkpointing in TorchRL](tutorials/checkpointing.html#sphx-glr-tutorials-checkpointing-py) (`reference/generated/tutorials/checkpointing.py`) | 00:00.024 | 0.0 |
-| [Render policy rollouts with rlrender](tutorials/rlrender.html#sphx-glr-tutorials-rlrender-py) (`reference/generated/tutorials/rlrender.py`) | 00:00.016 | 0.0 |
-| [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](tutorials/trl_interop.html#sphx-glr-tutorials-trl-interop-py) (`reference/generated/tutorials/trl_interop.py`) | 00:00.015 | 0.0 |
+| [Unified checkpointing in TorchRL](tutorials/checkpointing.html#sphx-glr-tutorials-checkpointing-py) (`reference/generated/tutorials/checkpointing.py`) | 00:00.000 | 0.0 |
+| [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:00.000 | 0.0 |
+| [TorchRL trainer: A DQN example](tutorials/coding_dqn.html#sphx-glr-tutorials-coding-dqn-py) (`reference/generated/tutorials/coding_dqn.py`) | 00:00.000 | 0.0 |
+| [Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/coding_ppo.html#sphx-glr-tutorials-coding-ppo-py) (`reference/generated/tutorials/coding_ppo.py`) | 00:00.000 | 0.0 |
+| [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.000 | 0.0 |
+| [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`reference/generated/tutorials/dqn_with_rnn.py`) | 00:00.000 | 0.0 |
+| [Using the Evaluator](tutorials/evaluator.html#sphx-glr-tutorials-evaluator-py) (`reference/generated/tutorials/evaluator.py`) | 00:00.000 | 0.0 |
+| [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.000 | 0.0 |
+| [Get started with Environments, TED and transforms](tutorials/getting-started-0.html#sphx-glr-tutorials-getting-started-0-py) (`reference/generated/tutorials/getting-started-0.py`) | 00:00.000 | 0.0 |
+| [Get started with TorchRL's modules](tutorials/getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`reference/generated/tutorials/getting-started-1.py`) | 00:00.000 | 0.0 |
+| [Getting started with model optimization](tutorials/getting-started-2.html#sphx-glr-tutorials-getting-started-2-py) (`reference/generated/tutorials/getting-started-2.py`) | 00:00.000 | 0.0 |
+| [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.000 | 0.0 |
+| [Get started with logging](tutorials/getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`reference/generated/tutorials/getting-started-4.py`) | 00:00.000 | 0.0 |
+| [Get started with your own first training loop](tutorials/getting-started-5.html#sphx-glr-tutorials-getting-started-5-py) (`reference/generated/tutorials/getting-started-5.py`) | 00:00.000 | 0.0 |
+| [LLM Wrappers in TorchRL](tutorials/llm_wrappers.html#sphx-glr-tutorials-llm-wrappers-py) (`reference/generated/tutorials/llm_wrappers.py`) | 00:00.000 | 0.0 |
+| [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.000 | 0.0 |
+| [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`reference/generated/tutorials/mujoco_cube_bowl_macros.py`) | 00:00.000 | 0.0 |
+| [Task-specific policy in multi-task environments](tutorials/multi_task.html#sphx-glr-tutorials-multi-task-py) (`reference/generated/tutorials/multi_task.py`) | 00:00.000 | 0.0 |
+| [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`reference/generated/tutorials/multiagent_competitive_ddpg.py`) | 00:00.000 | 0.0 |
+| [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`reference/generated/tutorials/multiagent_ppo.py`) | 00:00.000 | 0.0 |
+| [Pendulum: Writing your environment and transforms with TorchRL](tutorials/pendulum.html#sphx-glr-tutorials-pendulum-py) (`reference/generated/tutorials/pendulum.py`) | 00:00.000 | 0.0 |
+| [Using pretrained models](tutorials/pretrained_models.html#sphx-glr-tutorials-pretrained-models-py) (`reference/generated/tutorials/pretrained_models.py`) | 00:00.000 | 0.0 |
+| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.000 | 0.0 |
+| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.000 | 0.0 |
+| [Render policy rollouts with rlrender](tutorials/rlrender.html#sphx-glr-tutorials-rlrender-py) (`reference/generated/tutorials/rlrender.py`) | 00:00.000 | 0.0 |
+| [Introduction to TorchRL](tutorials/torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`reference/generated/tutorials/torchrl_demo.py`) | 00:00.000 | 0.0 |
+| [TorchRL envs](tutorials/torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`reference/generated/tutorials/torchrl_envs.py`) | 00:00.000 | 0.0 |
+| [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](tutorials/trl_interop.html#sphx-glr-tutorials-trl-interop-py) (`reference/generated/tutorials/trl_interop.py`) | 00:00.000 | 0.0 |
+| [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.000 | 0.0 |
 
 ---
 
