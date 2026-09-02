@@ -226,7 +226,9 @@ class TestCUDA:
         policy = TensorDictModule(
             torch.nn.Identity(), in_keys=["obs"], out_keys=["action"]
         ).to("cuda:0")
-        helper = FixedBatchedInference(policy, "cuda:0", bucket_sizes=[8])
+        helper = FixedBatchedInference(
+            policy, "cuda:0", bucket_sizes=[8], double_buffer=False
+        )
         batch = _make_batch(5)
         caller_stream = torch.cuda.Stream()
 
@@ -235,7 +237,11 @@ class TestCUDA:
             observed = out["action"].clone()
         caller_stream.synchronize()
 
+        helper(TensorDict({"obs": torch.ones(5, 4)}, batch_size=[5]))
+        torch.cuda.synchronize()
+
         torch.testing.assert_close(observed.cpu(), batch["obs"])
+        torch.testing.assert_close(out["action"].cpu(), batch["obs"])
 
     def test_device_buffer_is_persistent(self):
         """With double_buffer=False every call reuses the same device storage.

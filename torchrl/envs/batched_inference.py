@@ -304,10 +304,6 @@ class FixedBatchedInference:
             self._compute_stream.wait_stream(self._copy_stream)
             with torch.cuda.stream(self._compute_stream):
                 output = self.policy(device_batch)
-            compute_event.record(self._compute_stream)
-
-            caller_stream = torch.cuda.current_stream(self.device)
-            caller_stream.wait_stream(self._compute_stream)
         else:
             if self.device.type == "cpu":
                 device_batch = staging.clone()
@@ -324,8 +320,28 @@ class FixedBatchedInference:
         if exclude_keys:
             result = result.exclude(*exclude_keys)
         if self._copy_stream is not None:
-            # Policy outputs are fresh allocations on the compute stream and
-            # handed to the caller's stream.
+            device_storage_ptrs = {
+                value.untyped_storage().data_ptr()
+                for value in device_batch.values(True, True)
+                if isinstance(value, torch.Tensor) and value.layout == torch.strided
+            }
+            with torch.cuda.stream(self._compute_stream):
+                if any(
+                    isinstance(value, torch.Tensor)
+                    and (
+                        value.layout != torch.strided
+                        or value.untyped_storage().data_ptr() in device_storage_ptrs
+                    )
+                    for value in result.values(True, True)
+                ):
+                    # Policies may return aliases or views of their inputs.
+                    # Detach those outputs before the persistent input buffer
+                    # is made available to the next call.
+                    result = result.clone()
+            compute_event.record(self._compute_stream)
+
+            caller_stream = torch.cuda.current_stream(self.device)
+            caller_stream.wait_stream(self._compute_stream)
             result.record_stream(caller_stream)
 
         for key in self._non_tensor_keys(batch):
