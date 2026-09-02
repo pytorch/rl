@@ -28,11 +28,9 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import math
 from collections import defaultdict
 from collections.abc import Mapping
 from copy import deepcopy
-from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +38,7 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl import timeit
+from torchrl import timeit, torchrl_logger
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -55,7 +53,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.mjlab import MJLabWrapper
 from torchrl.modules import IndependentNormal, ProbabilisticActor, ValueOperator
-from torchrl.objectives import ClipPPOLoss
+from torchrl.objectives import ClipPPOLoss, KLAdaptiveLR
 from torchrl.objectives.value import GAE
 from torchrl.record import CSVLogger
 
@@ -72,60 +70,6 @@ TARGET_KL = 0.01
 MIN_LR = 1.0e-5
 MAX_LR = 1.0e-2
 LR_FACTOR = 1.5
-
-
-class MetricsMJLabWrapper(MJLabWrapper):
-    """Retain numeric MJLab log entries without changing the public wrapper."""
-
-    def __init__(self, *args, **kwargs):
-        self._metric_sums: dict[str, torch.Tensor] = {}
-        self._metric_counts: dict[str, int] = {}
-        super().__init__(*args, **kwargs)
-
-    def _capture_metrics(self) -> None:
-        extras = getattr(self._env, "extras", None)
-        if not isinstance(extras, Mapping):
-            return
-        values = extras.get("log")
-        if not isinstance(values, Mapping):
-            return
-        for key, value in values.items():
-            if isinstance(value, torch.Tensor):
-                if not value.numel():
-                    continue
-                scalar = value.detach().float().mean()
-            elif isinstance(value, Real):
-                scalar = torch.as_tensor(float(value), device=self.device)
-            else:
-                continue
-            key = str(key)
-            previous = self._metric_sums.get(key)
-            self._metric_sums[key] = scalar if previous is None else previous + scalar
-            self._metric_counts[key] = self._metric_counts.get(key, 0) + 1
-
-    def _reset(
-        self,
-        tensordict: TensorDictBase | None = None,
-        **kwargs,
-    ) -> TensorDictBase:
-        result = super()._reset(tensordict, **kwargs)
-        self._capture_metrics()
-        return result
-
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        result = super()._step(tensordict)
-        self._capture_metrics()
-        return result
-
-    def pop_metrics(self) -> dict[str, float]:
-        result = {}
-        for key, value in self._metric_sums.items():
-            mean = (value / self._metric_counts[key]).item()
-            if math.isfinite(mean):
-                result[key] = mean
-        self._metric_sums.clear()
-        self._metric_counts.clear()
-        return result
 
 
 class GaussianPolicyHead(nn.Module):
@@ -156,7 +100,13 @@ def make_env(
     seed: int,
     play: bool = False,
     from_pixels: bool = False,
-) -> tuple[TransformedEnv, Any, MetricsMJLabWrapper, VecNormV2]:
+) -> tuple[TransformedEnv, VecNormV2]:
+    """Build the MicroDuck velocity task wrapped for TorchRL.
+
+    Returns the transformed environment and its observation normalizer. The
+    raw mjlab environment stays reachable as ``env.base_env._env`` for the
+    checkpointed step counters.
+    """
     # These imports are intentionally lazy: MJLab and MicroDuck are optional
     # dependencies of this standalone example.
     import mjlab_microduck.tasks  # noqa: F401
@@ -172,10 +122,11 @@ def make_env(
         device=str(device),
         render_mode="rgb_array" if from_pixels else None,
     )
-    wrapped_env = MetricsMJLabWrapper(
+    wrapped_env = MJLabWrapper(
         raw_env,
         native_autoreset=False,
         from_pixels=from_pixels,
+        log_extras=True,
     )
     normalizer = VecNormV2(
         in_keys=[ACTOR_OBS_KEY, CRITIC_OBS_KEY],
@@ -189,7 +140,7 @@ def make_env(
             StepCounter(),
         ),
     )
-    return env, raw_env, wrapped_env, normalizer
+    return env, normalizer
 
 
 def make_models(
@@ -306,20 +257,6 @@ def _assert_finite_batch(batch: TensorDictBase) -> None:
             raise RuntimeError(f"Non-finite values found under TensorDict key {key!r}.")
 
 
-def _set_adaptive_learning_rate(
-    optimizer: torch.optim.Optimizer,
-    mean_kl: float,
-) -> float:
-    learning_rate = float(optimizer.param_groups[0]["lr"])
-    if mean_kl > 2.0 * TARGET_KL:
-        learning_rate = max(MIN_LR, learning_rate / LR_FACTOR)
-    elif 0.0 < mean_kl < 0.5 * TARGET_KL:
-        learning_rate = min(MAX_LR, learning_rate * LR_FACTOR)
-    for group in optimizer.param_groups:
-        group["lr"] = learning_rate
-    return learning_rate
-
-
 def evaluate(
     *,
     actor: ProbabilisticActor,
@@ -333,7 +270,7 @@ def evaluate(
     cuda_rng_state = torch.cuda.get_rng_state_all()
     eval_env = None
     try:
-        eval_env, raw_eval_env, _, eval_normalizer = make_env(
+        eval_env, eval_normalizer = make_env(
             num_envs=1,
             device=device,
             seed=seed + 1,
@@ -342,7 +279,7 @@ def evaluate(
         )
         eval_normalizer.load_state_dict(train_normalizer.state_dict())
         eval_normalizer.freeze()
-        max_steps = int(getattr(raw_eval_env, "max_episode_length", 1000))
+        max_steps = int(getattr(eval_env.base_env._env, "max_episode_length", 1000))
         with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
             rollout = eval_env.rollout(
                 max_steps=max_steps,
@@ -451,11 +388,12 @@ def train(args: argparse.Namespace) -> None:
         }
     )
 
-    env, raw_env, wrapped_env, normalizer = make_env(
+    env, normalizer = make_env(
         num_envs=args.num_envs,
         device=device,
         seed=args.seed,
     )
+    raw_env = env.base_env._env
     actor, critic = make_models(env, device)
     advantage = GAE(
         gamma=0.99,
@@ -476,6 +414,13 @@ def train(args: argparse.Namespace) -> None:
         normalize_advantage=True,
     )
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=1.0e-3)
+    scheduler = KLAdaptiveLR(
+        optimizer,
+        target_kl=TARGET_KL,
+        factor=LR_FACTOR,
+        min_lr=MIN_LR,
+        max_lr=MAX_LR,
+    )
 
     start_iteration = 1
     total_frames = 0
@@ -528,11 +473,10 @@ def train(args: argparse.Namespace) -> None:
             with timeit("train"):
                 with torch.no_grad():
                     advantage(batch)
-                flat_batch = batch.reshape(-1)
+                replay_buffer.empty()
+                replay_buffer.extend(batch.reshape(-1))
                 accumulated: defaultdict[str, list[torch.Tensor]] = defaultdict(list)
                 for _ in range(NUM_EPOCHS):
-                    replay_buffer.empty()
-                    replay_buffer.extend(flat_batch)
                     for _ in range(NUM_MINIBATCHES):
                         sample = replay_buffer.sample()
                         losses = loss_module(sample)
@@ -570,11 +514,10 @@ def train(args: argparse.Namespace) -> None:
                 key: torch.stack(values).mean().item()
                 for key, values in accumulated.items()
             }
-            learning_rate = _set_adaptive_learning_rate(
-                optimizer, loss_metrics["kl_approx"]
-            )
+            scheduler.step(loss_metrics["kl_approx"])
+            learning_rate = scheduler.get_last_lr()[0]
             timings = timeit.todict(prefix="time")
-            upstream_metrics = wrapped_env.pop_metrics()
+            upstream_metrics = env.base_env.pop_logged_extras()
             _log_iteration(
                 logger=logger,
                 iteration=iteration,
@@ -616,7 +559,7 @@ def train(args: argparse.Namespace) -> None:
             )
             if eval_return is not None:
                 message += f" eval_return={eval_return:+.3f}"
-            print(message, flush=True)
+            torchrl_logger.info(message)
     finally:
         collector.shutdown()
         if not env.is_closed:
