@@ -677,10 +677,12 @@ def train_ppo(
             )
             sums: dict[str, float] = {}
             update_count = 0
+            trained_transitions = 0
             with timeit("train"):
                 for _ in range(epochs):
                     for _ in range(updates_per_epoch):
                         sample = replay_buffer.sample().to(device)
+                        trained_transitions += sample.numel()
                         with set_recurrent_mode(True):
                             losses = loss_module(sample)
                         loss = (
@@ -729,8 +731,7 @@ def train_ppo(
                     "progress/transitions": float(collected),
                     "throughput/collection_transitions_per_second": num_transitions
                     / timings["time/collect"],
-                    "throughput/training_transitions_per_second": update_count
-                    * replay_buffer._batch_size
+                    "throughput/training_transitions_per_second": trained_transitions
                     / timings["time/train"],
                 }
             )
