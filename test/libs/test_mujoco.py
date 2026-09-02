@@ -22,6 +22,7 @@ from torchrl.envs import (
     CubeBowlEnv,
     HopperEnv,
     HumanoidEnv,
+    InitTracker,
     MacroPrimitive,
     MacroPrimitiveTransform,
     MicroDuckEnv,
@@ -282,6 +283,32 @@ class TestMujoco:
             torch.testing.assert_close(
                 partial_reset["commanded_x_velocity"], torch.tensor([[0.0], [0.3]])
             )
+        env.close()
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_microduck_reset_command_survives_transformed_env(self, tmp_path, backend):
+        num_envs = 1 if backend == "mujoco" else 2
+        base_env = MicroDuckEnv(
+            self._write_microduck_fixture(tmp_path),
+            backend=backend,
+            num_envs=num_envs,
+            commanded_x_velocity=(0.0, 0.03),
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        env = TransformedEnv(base_env, InitTracker())
+        check_env_specs(env)
+        command = torch.full((num_envs, 1), 0.06)
+        reset = env.reset(
+            TensorDict({"commanded_x_velocity": command}, batch_size=(num_envs,))
+        )
+        torch.testing.assert_close(reset["commanded_x_velocity"], command)
+        torch.testing.assert_close(reset["observation"][..., 7:8], command)
+        rollout = env.rollout(3, tensordict=reset, auto_reset=False)
+        torch.testing.assert_close(
+            rollout["next", "commanded_x_velocity"],
+            command.unsqueeze(1).expand(num_envs, 3, 1),
+        )
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")

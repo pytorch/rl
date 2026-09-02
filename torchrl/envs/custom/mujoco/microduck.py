@@ -168,7 +168,9 @@ class MicroDuckEnv(MujocoEnv):
         commanded_x_velocity: fixed body-frame longitudinal velocity command in
             m/s, or a sequence sampled uniformly at every reset. A command may
             also be provided under ``commanded_x_velocity`` in the reset
-            TensorDict. Defaults to a forward-only ``0.03`` m/s command.
+            TensorDict; the key is part of the env's ``state_spec`` so it is
+            honored through :class:`~torchrl.envs.TransformedEnv` as well.
+            Defaults to a forward-only ``0.03`` m/s command.
         action_scale: position-target offset in radians for a unit normalized
             action. Defaults to ``0.35``.
         diagnostics: if ``True``, add each reward component and pose
@@ -334,6 +336,15 @@ class MicroDuckEnv(MujocoEnv):
             high=1.0,
             shape=(self.num_envs, self.NUM_JOINTS),
             dtype=self.dtype,
+            device=self.device,
+        )
+        # Declaring the command as state lets a reset TensorDict carry it
+        # through TransformedEnv, which only forwards reset and state keys.
+        self.state_spec = Composite(
+            commanded_x_velocity=Unbounded(
+                shape=(self.num_envs, 1), dtype=self.dtype, device=self.device
+            ),
+            shape=(self.num_envs,),
             device=self.device,
         )
 
