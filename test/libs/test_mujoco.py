@@ -422,17 +422,19 @@ class TestMujoco:
             MicroDuckEnv(scene, command_range=(0.3, 0.1))
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_clock_and_velocity_observation(self, tmp_path):
+    def test_microduck_clock_velocity_observation_and_reward_scales(self, tmp_path):
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(
             scene,
             gait_frequency_hz=1.0,
             gait_frequency_per_mps=5.0,
             observe_lateral_velocity=True,
+            reward_scales={"TRACKING_WEIGHT": 4.0, "PHASE_CONTACT_WEIGHT": 0.0},
             reset_noise_scale=0.0,
             seed=0,
         )
         assert env.observation_dim == MicroDuckEnv.OBSERVATION_DIM + 2
+        assert env.TRACKING_WEIGHT == 4.0 and MicroDuckEnv.TRACKING_WEIGHT == 2.0
         check_env_specs(env)
         action = torch.zeros_like(env.action_spec.rand())
         phases = {}
@@ -455,7 +457,13 @@ class TestMujoco:
         # Five steps of 0.02 s: frequency 1.5 Hz at 0.1 m/s vs 2.5 Hz at 0.3 m/s.
         expected = 2 * math.pi * (2.5 - 1.5) * 5 * 0.02
         assert phases[0.3] - phases[0.1] == pytest.approx(expected, abs=1e-4)
+        components = env._reward_components(env.get_state(), action)
+        assert (components["diagnostic_reward_phase_contact"] == 0).all()
         env.close()
+        with pytest.raises(ValueError, match="reward_scales"):
+            MicroDuckEnv(scene, reward_scales={"not_a_weight": 1.0})
+        with pytest.raises(ValueError, match="reward_scales"):
+            MicroDuckEnv(scene, reward_scales={"FRAME_SKIP": 1.0})
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_native_backend_is_default_and_batches(self, tmp_path):

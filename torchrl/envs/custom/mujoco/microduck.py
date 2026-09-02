@@ -35,7 +35,7 @@ import importlib.util
 import math
 import os
 import xml.etree.ElementTree as ET
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -215,6 +215,9 @@ class MicroDuckEnv(MujocoEnv):
         observe_lateral_velocity: if ``True``, append the body-frame lateral
             and vertical velocities to the observation, which gives the
             lateral tracking term an input. Defaults to ``False``.
+        reward_scales: optional mapping from reward attribute names such as
+            ``"TRACKING_WEIGHT"`` or ``"TRACKING_STD"`` to values that override
+            the class defaults on this instance.
         gait_phase_offset: phase of the gait clock at the first step, in
             radians. Defaults to ``-1.5237``.
         gait_ramp_duration_s: duration over which the gait ramp feature grows
@@ -342,6 +345,7 @@ class MicroDuckEnv(MujocoEnv):
         gait_phase_offset: float = -1.5237,
         gait_ramp_duration_s: float = 0.4,
         observe_lateral_velocity: bool = False,
+        reward_scales: Mapping[str, float] | None = None,
         max_episode_steps: int = 500,
         **kwargs: Any,
     ) -> None:
@@ -408,6 +412,17 @@ class MicroDuckEnv(MujocoEnv):
         self.gait_phase_offset = float(gait_phase_offset)
         self.gait_ramp_duration_s = float(gait_ramp_duration_s)
         self.observe_lateral_velocity = bool(observe_lateral_velocity)
+        for name, value in dict(reward_scales or {}).items():
+            if not name.isupper() or not isinstance(
+                getattr(type(self), name, None), float
+            ):
+                raise ValueError(
+                    f"reward_scales key {name!r} is not a float reward attribute of "
+                    f"{type(self).__name__}."
+                )
+            if not math.isfinite(value):
+                raise ValueError(f"reward_scales[{name!r}] must be finite.")
+            setattr(self, name, float(value))
         physics_scene = (
             _low_cost_collision_scene(self.scene_path)
             if self.low_cost_collisions
