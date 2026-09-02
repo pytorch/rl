@@ -8,6 +8,7 @@ satellite) across the three physics backends."""
 from __future__ import annotations
 
 import argparse
+import math
 import os
 from pathlib import Path
 
@@ -335,7 +336,10 @@ class TestMujoco:
 
         action.fill_(0.25)
         transition = env.step(reset.set("action", action))
-        torch.testing.assert_close(transition["next", "observation"][..., -14:], action)
+        start = MicroDuckEnv.GAIT_PHASE_START + 3
+        torch.testing.assert_close(
+            transition["next", "observation"][..., start : start + 14], action
+        )
         if num_envs > 1:
             env.reset(
                 TensorDict(
@@ -416,6 +420,42 @@ class TestMujoco:
             MicroDuckEnv(scene, warm_start_fraction=0.5)
         with pytest.raises(ValueError, match="command_range"):
             MicroDuckEnv(scene, command_range=(0.3, 0.1))
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_clock_and_velocity_observation(self, tmp_path):
+        scene = self._write_microduck_fixture(tmp_path)
+        env = MicroDuckEnv(
+            scene,
+            gait_frequency_hz=1.0,
+            gait_frequency_per_mps=5.0,
+            observe_lateral_velocity=True,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        assert env.observation_dim == MicroDuckEnv.OBSERVATION_DIM + 2
+        check_env_specs(env)
+        action = torch.zeros_like(env.action_spec.rand())
+        phases = {}
+        for command in (0.1, 0.3):
+            td = env.reset(
+                TensorDict(
+                    {"commanded_x_velocity": torch.full((1, 1), command)},
+                    batch_size=(1,),
+                )
+            )
+            for _ in range(5):
+                td = env.step(td.set("action", action))["next"]
+            phases[command] = env._gait_clock()[0].item()
+            start = MicroDuckEnv.GAIT_PHASE_START + 3 + 14
+            state = env.get_state()
+            body_velocity = state["qvel"][0, 1:3]
+            torch.testing.assert_close(
+                td["observation"][0, start : start + 2], body_velocity.to(env.dtype)
+            )
+        # Five steps of 0.02 s: frequency 1.5 Hz at 0.1 m/s vs 2.5 Hz at 0.3 m/s.
+        expected = 2 * math.pi * (2.5 - 1.5) * 5 * 0.02
+        assert phases[0.3] - phases[0.1] == pytest.approx(expected, abs=1e-4)
+        env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_native_backend_is_default_and_batches(self, tmp_path):

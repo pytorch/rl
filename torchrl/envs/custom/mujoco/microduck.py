@@ -208,7 +208,13 @@ class MicroDuckEnv(MujocoEnv):
             meshes with box proxies at load time. The unmodified meshes make
             the ``mjx`` and ``mujoco-torch`` backends run out of memory.
         gait_frequency_hz: frequency of the gait clock exposed in the
-            observation. Defaults to ``1.8913``.
+            observation, at zero command. Defaults to ``1.8913``.
+        gait_frequency_per_mps: increase of the gait clock frequency per m/s of
+            commanded speed, so the cadence rewarded by the single-support term
+            follows the command. Defaults to ``0.0`` (fixed clock).
+        observe_lateral_velocity: if ``True``, append the body-frame lateral
+            and vertical velocities to the observation, which gives the
+            lateral tracking term an input. Defaults to ``False``.
         gait_phase_offset: phase of the gait clock at the first step, in
             radians. Defaults to ``-1.5237``.
         gait_ramp_duration_s: duration over which the gait ramp feature grows
@@ -259,6 +265,7 @@ class MicroDuckEnv(MujocoEnv):
     FOOT_SITES: ClassVar[tuple[str, str]] = ("left_foot", "right_foot")
     GAIT_PHASE_START: ClassVar[int] = 3 + 3 + 2 + NUM_JOINTS * 2
     OBSERVATION_DIM: ClassVar[int] = GAIT_PHASE_START + 3 + NUM_JOINTS
+    """Observation size without the optional lateral and vertical velocities."""
     # Reward weights are per second and multiplied by the control period, like
     # the mjlab velocity tasks. Positive terms are Gaussians in [0, 1].
     COMMAND_THRESHOLD: ClassVar[float] = 0.01
@@ -331,8 +338,10 @@ class MicroDuckEnv(MujocoEnv):
         diagnostics: bool = False,
         low_cost_collisions: bool = True,
         gait_frequency_hz: float = 1.8913,
+        gait_frequency_per_mps: float = 0.0,
         gait_phase_offset: float = -1.5237,
         gait_ramp_duration_s: float = 0.4,
+        observe_lateral_velocity: bool = False,
         max_episode_steps: int = 500,
         **kwargs: Any,
     ) -> None:
@@ -344,6 +353,8 @@ class MicroDuckEnv(MujocoEnv):
                 )
         if not math.isfinite(gait_frequency_hz) or gait_frequency_hz <= 0:
             raise ValueError("gait_frequency_hz must be finite and positive.")
+        if not math.isfinite(gait_frequency_per_mps) or gait_frequency_per_mps < 0:
+            raise ValueError("gait_frequency_per_mps must be finite and non-negative.")
         if not math.isfinite(gait_phase_offset):
             raise ValueError("gait_phase_offset must be finite.")
         if not math.isfinite(gait_ramp_duration_s) or gait_ramp_duration_s < 0:
@@ -393,8 +404,10 @@ class MicroDuckEnv(MujocoEnv):
         self.diagnostics = bool(diagnostics)
         self.low_cost_collisions = bool(low_cost_collisions)
         self.gait_frequency_hz = float(gait_frequency_hz)
+        self.gait_frequency_per_mps = float(gait_frequency_per_mps)
         self.gait_phase_offset = float(gait_phase_offset)
         self.gait_ramp_duration_s = float(gait_ramp_duration_s)
+        self.observe_lateral_velocity = bool(observe_lateral_velocity)
         physics_scene = (
             _low_cost_collision_scene(self.scene_path)
             if self.low_cost_collisions
@@ -548,10 +561,15 @@ class MicroDuckEnv(MujocoEnv):
     # Specs and observations
     # ------------------------------------------------------------------
 
+    @property
+    def observation_dim(self) -> int:
+        """Size of the ``observation`` vector for this instance."""
+        return self.OBSERVATION_DIM + (2 if self.observe_lateral_velocity else 0)
+
     def _make_obs_spec(self) -> Composite:
         spec = Composite(
             observation=Unbounded(
-                shape=(self.num_envs, self.OBSERVATION_DIM),
+                shape=(self.num_envs, self.observation_dim),
                 dtype=self.dtype,
                 device=self.device,
             ),
@@ -590,10 +608,11 @@ class MicroDuckEnv(MujocoEnv):
         elapsed_time = self._step_count.to(self.dtype) * (
             self.frame_skip * self._backend.timestep
         )
-        phase = (
-            self.gait_phase_offset
-            + 2.0 * math.pi * self.gait_frequency_hz * elapsed_time
+        frequency = (
+            self.gait_frequency_hz
+            + self.gait_frequency_per_mps * self._commanded_x_velocity.squeeze(-1).abs()
         )
+        phase = self.gait_phase_offset + 2.0 * math.pi * frequency * elapsed_time
         if self.gait_ramp_duration_s > 0:
             ramp = (elapsed_time / self.gait_ramp_duration_s).clamp(max=1.0)
         else:
@@ -605,21 +624,21 @@ class MicroDuckEnv(MujocoEnv):
         qvel = state["qvel"].to(self.dtype)
         body_velocity = _body_frame_linear_velocity(qpos[..., 3:7], qvel[..., :3])
         phase, ramp = self._gait_clock()
-        return torch.cat(
-            (
-                _projected_gravity(qpos[..., 3:7]),
-                qvel[..., 3:6],
-                body_velocity[..., :1],
-                self._commanded_x_velocity,
-                qpos[..., 7:] - self._home_qpos[7:],
-                qvel[..., 6:],
-                phase.sin().unsqueeze(-1),
-                phase.cos().unsqueeze(-1),
-                ramp.unsqueeze(-1),
-                self._observation_action,
-            ),
-            dim=-1,
-        )
+        parts = [
+            _projected_gravity(qpos[..., 3:7]),
+            qvel[..., 3:6],
+            body_velocity[..., :1],
+            self._commanded_x_velocity,
+            qpos[..., 7:] - self._home_qpos[7:],
+            qvel[..., 6:],
+            phase.sin().unsqueeze(-1),
+            phase.cos().unsqueeze(-1),
+            ramp.unsqueeze(-1),
+            self._observation_action,
+        ]
+        if self.observe_lateral_velocity:
+            parts.append(body_velocity[..., 1:3])
+        return torch.cat(parts, dim=-1)
 
     # ------------------------------------------------------------------
     # Reset and commands
