@@ -69,3 +69,12 @@ Value Estimators
     :template: rl_template_noinherit.rst
 
     ValueEstimators
+
+Optimization utilities
+----------------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    KLAdaptiveLR

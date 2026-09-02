@@ -48,7 +48,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 from torchrl.modules.value_norm import PercentileValueNorm
-from torchrl.objectives import A2CLoss, ClipPPOLoss, KLPENPPOLoss, PPOLoss
+from torchrl.objectives import A2CLoss, ClipPPOLoss, KLAdaptiveLR, KLPENPPOLoss, PPOLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import _sum_td_features, ValueEstimators
 from torchrl.objectives.value.advantages import (
@@ -3238,6 +3238,61 @@ class TestReinforce(LossModuleTestBase):
             # Test it works with value key
             loss = loss_fn(td)
             assert "loss_value" in loss.keys()
+
+
+class TestKLAdaptiveLR:
+    def test_rescales_outside_the_kl_band_only(self):
+        optimizer = torch.optim.SGD([nn.Parameter(torch.zeros(1))], lr=1e-3)
+        scheduler = KLAdaptiveLR(optimizer, target_kl=0.01, factor=2.0)
+        scheduler.step(0.05)
+        assert optimizer.param_groups[0]["lr"] == pytest.approx(5e-4)
+        scheduler.step(0.01)
+        assert optimizer.param_groups[0]["lr"] == pytest.approx(5e-4)
+        scheduler.step(torch.tensor(0.001))
+        assert optimizer.param_groups[0]["lr"] == pytest.approx(1e-3)
+        scheduler.step(0.0)
+        assert optimizer.param_groups[0]["lr"] == pytest.approx(1e-3)
+        assert scheduler.last_kl == 0.0
+        assert scheduler.get_last_lr() == [pytest.approx(1e-3)]
+
+    def test_clamps_every_parameter_group(self):
+        optimizer = torch.optim.SGD(
+            [
+                {"params": [nn.Parameter(torch.zeros(1))], "lr": 1e-3},
+                {"params": [nn.Parameter(torch.zeros(1))], "lr": 5e-3},
+            ]
+        )
+        scheduler = KLAdaptiveLR(
+            optimizer, target_kl=0.01, factor=10.0, min_lr=2e-4, max_lr=8e-3
+        )
+        scheduler.step(1.0)
+        assert scheduler.get_last_lr() == [pytest.approx(2e-4), pytest.approx(5e-4)]
+        scheduler.step(1e-6)
+        scheduler.step(1e-6)
+        assert scheduler.get_last_lr() == [pytest.approx(8e-3), pytest.approx(8e-3)]
+
+    def test_rejects_invalid_configuration_and_kl(self):
+        optimizer = torch.optim.SGD([nn.Parameter(torch.zeros(1))], lr=1e-3)
+        with pytest.raises(ValueError, match="target_kl"):
+            KLAdaptiveLR(optimizer, target_kl=0.0)
+        with pytest.raises(ValueError, match="factor"):
+            KLAdaptiveLR(optimizer, target_kl=0.01, factor=1.0)
+        with pytest.raises(ValueError, match="min_lr"):
+            KLAdaptiveLR(optimizer, target_kl=0.01, min_lr=1e-2, max_lr=1e-3)
+        scheduler = KLAdaptiveLR(optimizer, target_kl=0.01)
+        with pytest.raises(ValueError, match="finite"):
+            scheduler.step(float("nan"))
+        assert optimizer.param_groups[0]["lr"] == pytest.approx(1e-3)
+
+    def test_state_dict_roundtrip(self):
+        optimizer = torch.optim.SGD([nn.Parameter(torch.zeros(1))], lr=1e-3)
+        scheduler = KLAdaptiveLR(optimizer, target_kl=0.02, factor=3.0)
+        scheduler.step(0.1)
+        restored = KLAdaptiveLR(optimizer, target_kl=0.01)
+        restored.load_state_dict(scheduler.state_dict())
+        assert restored.target_kl == 0.02
+        assert restored.factor == 3.0
+        assert restored.last_kl == 0.1
 
 
 if __name__ == "__main__":

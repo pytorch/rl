@@ -14,6 +14,7 @@ import importlib
 import math
 from collections.abc import Mapping
 from copy import deepcopy
+from numbers import Real
 from typing import Any
 
 import torch
@@ -265,6 +266,14 @@ class MJLabWrapper(_EnvWrapper):
             is present, it is selected automatically.
         allow_done_after_reset: Passed to :class:`~torchrl.envs.EnvBase`.
             Defaults to ``False``.
+        log_extras: If ``True``, accumulate the numeric entries of the
+            ``extras["log"]`` mapping that mjlab returns from ``reset`` and
+            ``step`` (episode reward terms, curriculum levels, termination
+            counts, ...). Call :meth:`pop_logged_extras` to retrieve their
+            running means and clear the accumulator, typically once per
+            training iteration. Entries are averaged over the calls in which
+            they appeared, so metrics that mjlab emits only when an episode
+            ends are not diluted by silent steps. Defaults to ``False``.
 
     mjlab reference: Zakka et al., "mjlab: A Lightweight Framework for
     GPU-Accelerated Robot Learning", arXiv:2601.22074.
@@ -316,6 +325,7 @@ class MJLabWrapper(_EnvWrapper):
         pixels_key: NestedKey = "pixels",
         pixels_sensor: str | None = None,
         allow_done_after_reset: bool = False,
+        log_extras: bool = False,
         **kwargs,
     ) -> None:
         if env is None:
@@ -345,11 +355,15 @@ class MJLabWrapper(_EnvWrapper):
         self._pixels_sensor_name = pixels_sensor
         self._pixels_source: str | None = None
         self._native_autoreset = bool(native_autoreset)
+        self._log_extras = bool(log_extras)
+        self._extras_log_sums: dict[str, torch.Tensor] = {}
+        self._extras_log_counts: dict[str, int] = {}
         kwargs["env"] = env
         kwargs["from_pixels"] = from_pixels
         kwargs["pixels_only"] = pixels_only
         kwargs["pixels_sensor"] = pixels_sensor
         kwargs["native_autoreset"] = native_autoreset
+        kwargs["log_extras"] = log_extras
         super().__init__(
             device=device,
             batch_size=batch_size,
@@ -377,8 +391,10 @@ class MJLabWrapper(_EnvWrapper):
         pixels_only: bool = False,
         pixels_sensor: str | None = None,
         native_autoreset: bool = False,
+        log_extras: bool = False,
         **kwargs,
     ) -> Any:
+        del log_extras
         if kwargs:
             raise ValueError(f"Unsupported kwargs: {sorted(kwargs)}")
         if pixels_only and not from_pixels:
@@ -564,13 +580,15 @@ class MJLabWrapper(_EnvWrapper):
             env_ids = None if reset.all() else reset.reshape(-1).nonzero().squeeze(-1)
         else:
             env_ids = None
-        obs, _info = self._env.reset(seed=seed, env_ids=env_ids, options=options)
+        obs, info = self._env.reset(seed=seed, env_ids=env_ids, options=options)
+        self._record_extras(info)
         return self._obs_to_tensordict(obs)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         action = _to_tensor(action, device=self.device)
-        obs, reward, terminated, truncated, _extras = self._env.step(action)
+        obs, reward, terminated, truncated, extras = self._env.step(action)
+        self._record_extras(extras)
         terminated = _format_done(
             terminated, batch_size=self.batch_size, device=self.device
         )
@@ -587,6 +605,48 @@ class MJLabWrapper(_EnvWrapper):
         td.set("truncated", truncated)
         td.set("done", done)
         return td
+
+    def _record_extras(self, extras: Any) -> None:
+        if not self._log_extras or not isinstance(extras, Mapping):
+            return
+        log = extras.get("log")
+        if not isinstance(log, Mapping):
+            return
+        for key, value in log.items():
+            if isinstance(value, torch.Tensor):
+                if not value.numel():
+                    continue
+                scalar = value.detach().to(torch.float32).mean()
+            elif isinstance(value, Real):
+                scalar = torch.tensor(float(value), device=self.device)
+            else:
+                continue
+            key = str(key)
+            previous = self._extras_log_sums.get(key)
+            self._extras_log_sums[key] = (
+                scalar if previous is None else previous + scalar
+            )
+            self._extras_log_counts[key] = self._extras_log_counts.get(key, 0) + 1
+
+    def pop_logged_extras(self) -> dict[str, float]:
+        """Return the mean of each logged mjlab extra and clear the accumulator.
+
+        Requires ``log_extras=True``; otherwise the result is always empty.
+        Non-finite means are dropped.
+
+        Returns:
+            A mapping from ``extras["log"]`` entry name to its mean value over
+            the ``reset`` and ``step`` calls that reported it since the
+            previous call to this method.
+        """
+        result: dict[str, float] = {}
+        for key, total in self._extras_log_sums.items():
+            mean = (total / self._extras_log_counts[key]).item()
+            if math.isfinite(mean):
+                result[key] = mean
+        self._extras_log_sums.clear()
+        self._extras_log_counts.clear()
+        return result
 
     def _set_seed(self, seed: int | None) -> None:
         if seed is None:
@@ -670,6 +730,7 @@ class MJLabEnv(MJLabWrapper, metaclass=_MJLabEnvMeta):
         pixels_only: See :class:`MJLabWrapper`.
         pixels_key: See :class:`MJLabWrapper`.
         pixels_sensor: See :class:`MJLabWrapper`.
+        log_extras: See :class:`MJLabWrapper`.
         num_workers: If greater than one, return a
             :class:`~torchrl.envs.ParallelEnv` with one mjlab env per worker.
             Workers report metadata directly to the parent.
@@ -703,6 +764,7 @@ class MJLabEnv(MJLabWrapper, metaclass=_MJLabEnvMeta):
         pixels_key: NestedKey = "pixels",
         pixels_sensor: str | None = None,
         allow_done_after_reset: bool = False,
+        log_extras: bool = False,
         num_workers: int | None = None,
         **kwargs,
     ) -> None:
@@ -765,6 +827,7 @@ class MJLabEnv(MJLabWrapper, metaclass=_MJLabEnvMeta):
             pixels_key=pixels_key,
             pixels_sensor=pixels_sensor,
             allow_done_after_reset=allow_done_after_reset,
+            log_extras=log_extras,
         )
 
     @property

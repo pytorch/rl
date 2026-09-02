@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 from collections.abc import Iterator
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -257,6 +258,63 @@ def test_single_env_render_pixels_fallback_with_real_mjlab_cartpole():
         assert frame.ndim == 3
         assert frame.shape[-1] == 3
         assert frame.dtype == torch.uint8
+
+
+class _FakeMjlabEnv:
+    """Minimal stand-in for ``mjlab.envs.ManagerBasedRlEnv`` step/reset returns."""
+
+    def __init__(self, num_envs: int = 2):
+        self.num_envs = num_envs
+        self.device = "cpu"
+        self.cfg = SimpleNamespace(auto_reset=True)
+        self.single_observation_space = SimpleNamespace(shape=(3,), dtype="float32")
+        self.single_action_space = SimpleNamespace(
+            shape=(2,), dtype="float32", low=-1.0, high=1.0
+        )
+        self.step_count = 0
+
+    def reset(self, seed=None, env_ids=None, options=None):
+        obs = torch.zeros(self.num_envs, 3)
+        return obs, {"log": {"reset/level": 4.0}}
+
+    def step(self, action):
+        self.step_count += 1
+        obs = torch.full((self.num_envs, 3), float(self.step_count))
+        reward = torch.ones(self.num_envs)
+        done = torch.zeros(self.num_envs, dtype=torch.bool)
+        extras = {
+            "log": {
+                "Episode_Reward/track": torch.tensor(float(self.step_count)),
+                "Curriculum/terrain": self.step_count,
+                "ignored/text": "not a number",
+                "ignored/empty": torch.zeros(0),
+            },
+            "time_outs": done,
+        }
+        return obs, reward, done, done, extras
+
+    def render(self, mode="rgb_array"):
+        return None
+
+
+def test_log_extras_reports_means_since_last_pop():
+    env = MJLabWrapper(_FakeMjlabEnv(), log_extras=True)
+    env.rollout(3)
+    metrics = env.pop_logged_extras()
+    assert metrics == {
+        "reset/level": 4.0,
+        "Episode_Reward/track": 2.0,
+        "Curriculum/terrain": 2.0,
+    }
+    assert env.pop_logged_extras() == {}
+    env.rollout(2)
+    assert env.pop_logged_extras()["Episode_Reward/track"] == 4.5
+
+
+def test_log_extras_disabled_by_default():
+    env = MJLabWrapper(_FakeMjlabEnv())
+    env.rollout(2)
+    assert env.pop_logged_extras() == {}
 
 
 if __name__ == "__main__":
