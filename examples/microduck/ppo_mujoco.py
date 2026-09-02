@@ -450,9 +450,9 @@ def train_ppo(
     total_transitions: int = 10_000_000,
     transitions_per_update: int = DEFAULT_TRANSITIONS_PER_UPDATE,
     max_episode_steps: int = 500,
-    epochs: int = 10,
+    epochs: int = 5,
     minibatch_trajectories: int = 32,
-    learning_rate: float = 3e-4,
+    learning_rate: float = 1e-4,
     target_kl: float | None = 0.01,
     entropy_coeff: float = 0.0,
     critic_coeff: float = 0.5,
@@ -742,10 +742,10 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         "--transitions-per-update", type=int, default=DEFAULT_TRANSITIONS_PER_UPDATE
     )
     parser.add_argument("--max-episode-steps", type=int, default=500)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--minibatch-trajectories", type=int, default=32)
     parser.add_argument("--hidden-size", type=int, default=128)
-    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument(
         "--target-kl",
         type=float,
