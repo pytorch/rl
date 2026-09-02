@@ -167,6 +167,7 @@ class MJLabEnvConfig(EnvLibsConfig):
     device: str | None = None
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
+    log_extras: bool = False
     num_workers: int = 1
     _target_: str = "torchrl.envs.libs.mjlab.MJLabEnv"
 
