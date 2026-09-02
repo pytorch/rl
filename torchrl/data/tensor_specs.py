@@ -6473,6 +6473,52 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
 
     """
 
+    # Composite._propagate_lock/_propagate_unlock recurse through values(),
+    # which for a lazy stack yields freshly assembled stacked entries. The
+    # authoritative state lives in the stacked children (self._specs), so the
+    # lock state must be propagated to them explicitly; otherwise a child
+    # that was locked when stacked stays locked after unlock_(recurse=True)
+    # and every write through StackedComposite.set fails.
+
+    def _propagate_lock(
+        self,
+        *,
+        recurse: bool,
+        lock_parents_weakrefs: list[weakref.ref] | None = None,
+        is_compiling: bool,
+    ) -> None:
+        super()._propagate_lock(
+            recurse=recurse,
+            lock_parents_weakrefs=lock_parents_weakrefs,
+            is_compiling=is_compiling,
+        )
+        if recurse:
+            if not is_compiling:
+                child_refs = (
+                    list(lock_parents_weakrefs)
+                    if lock_parents_weakrefs is not None
+                    else []
+                )
+                child_refs.append(weakref.ref(self))
+            else:
+                child_refs = lock_parents_weakrefs
+            for spec in self._specs:
+                if isinstance(spec, Composite):
+                    spec._propagate_lock(
+                        recurse=True,
+                        lock_parents_weakrefs=child_refs,
+                        is_compiling=is_compiling,
+                    )
+
+    def _propagate_unlock(self, recurse: bool) -> list[Composite]:
+        sub_specs = super()._propagate_unlock(recurse=recurse)
+        if recurse:
+            for spec in self._specs:
+                if isinstance(spec, Composite):
+                    sub_specs.extend(spec._propagate_unlock(recurse=recurse))
+                    sub_specs.append(spec)
+        return sub_specs
+
     def _reshape(
         self,
         *args,
