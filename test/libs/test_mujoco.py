@@ -763,6 +763,14 @@ class TestMujoco:
         assert render_env.base_env.observe_lateral_velocity
         assert render_env.base_env.action_scale == 0.5
         render_env.close()
+        # --init-from restores the trained parameters into fresh models.
+        fresh_actor, fresh_critic = ppo.make_models(env, hidden_size=16)
+        assert (
+            ppo.load_parameters(tmp_path / "latest.pt", fresh_actor, fresh_critic)
+            >= 100
+        )
+        for name, parameter in fresh_actor.state_dict().items():
+            torch.testing.assert_close(parameter, latest["actor"][name])
         assert ppo.evaluation_score(
             [dict(saved["evaluation"][0], survived=1.0, episode_length=500.0)]
         ) > ppo.evaluation_score(

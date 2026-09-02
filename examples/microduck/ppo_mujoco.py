@@ -118,6 +118,27 @@ def _checkpoint_env_kwargs(checkpoint: Any) -> dict[str, Any]:
     return {}
 
 
+def load_parameters(
+    path: str | Path, actor: ProbabilisticActor, critic: TensorDictSequential
+) -> int:
+    """Load actor and critic parameters from a training checkpoint.
+
+    Returns:
+        The number of transitions the checkpoint was trained on.
+    """
+    checkpoint = torch.load(path, weights_only=False, map_location="cpu")
+    try:
+        actor.load_state_dict(checkpoint["actor"])
+        critic.load_state_dict(checkpoint["critic"])
+    except RuntimeError as err:
+        raise RuntimeError(
+            f"The checkpoint {path} was trained with policy kwargs "
+            f"{checkpoint.get('policy_kwargs')} and env kwargs "
+            f"{checkpoint.get('env_kwargs')}; the current models must match them."
+        ) from err
+    return int(checkpoint.get("transitions", 0))
+
+
 # ----------------------------------------------------------------------
 # Environment
 # ----------------------------------------------------------------------
@@ -943,6 +964,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         help="Override a MicroDuckEnv reward attribute, e.g. TRACKING_WEIGHT=4.",
     )
     parser.add_argument(
+        "--init-from",
+        type=Path,
+        help="Load actor and critic parameters from a training checkpoint.",
+    )
+    parser.add_argument(
         "--joint-reset-noise-scale",
         type=float,
         help="Uniform joint-position noise at reset in radians; defaults to the "
@@ -1058,6 +1084,13 @@ def main(args: argparse.Namespace) -> None:
     logger = None
     try:
         actor, critic = make_models(env, device=args.device, **policy_kwargs)
+        if args.init_from is not None:
+            trained = load_parameters(args.init_from, actor, critic)
+            torchrl_logger.info(
+                "Initialized actor and critic from %s (%d transitions).",
+                args.init_from,
+                trained,
+            )
         if args.evaluation_interval is not None:
             evaluation_env = make_env(args.microduck_root, num_envs=1, **env_kwargs)
         if args.wandb_mode != "disabled":
