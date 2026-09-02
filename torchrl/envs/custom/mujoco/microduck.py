@@ -180,7 +180,17 @@ class MicroDuckEnv(MujocoEnv):
             also be provided under ``commanded_x_velocity`` in the reset
             TensorDict; the key is part of the env's ``state_spec`` so it is
             honored through :class:`~torchrl.envs.TransformedEnv` as well.
-            Defaults to a forward-only ``0.03`` m/s command.
+            Defaults to a forward-only ``0.03`` m/s command. Ignored when
+            ``command_range`` is given.
+        command_range: optional ``(low, high)`` interval in m/s from which the
+            command is sampled uniformly at every reset, for training over a
+            continuous speed range.
+        warm_start_velocity: optional ``(low, high)`` forward speed interval in
+            m/s. At reset, a ``warm_start_fraction`` of the environments start
+            already moving along their heading at a speed sampled from it, so
+            an untrained policy experiences locomotion states early.
+        warm_start_fraction: fraction of resets that receive the warm start.
+            Defaults to ``0.0``.
         action_scale: position-target offset in radians for a unit normalized
             action. Defaults to ``0.35``.
         diagnostics: if ``True``, add each reward component and pose
@@ -303,6 +313,9 @@ class MicroDuckEnv(MujocoEnv):
         *,
         backend: BackendName = "mujoco",
         commanded_x_velocity: float | Sequence[float] = (0.03,),
+        command_range: tuple[float, float] | None = None,
+        warm_start_velocity: tuple[float, float] | None = None,
+        warm_start_fraction: float = 0.0,
         action_scale: float = 0.35,
         diagnostics: bool = False,
         low_cost_collisions: bool = True,
@@ -335,7 +348,31 @@ class MicroDuckEnv(MujocoEnv):
             )
         if not torch.isfinite(command_values).all():
             raise ValueError("commanded_x_velocity values must be finite.")
+        for name, interval in (
+            ("command_range", command_range),
+            ("warm_start_velocity", warm_start_velocity),
+        ):
+            if interval is not None and (
+                len(interval) != 2
+                or not all(math.isfinite(v) for v in interval)
+                or interval[0] > interval[1]
+            ):
+                raise ValueError(f"{name} must be a finite (low, high) pair.")
+        if not 0.0 <= warm_start_fraction <= 1.0:
+            raise ValueError("warm_start_fraction must be in [0, 1].")
+        if warm_start_fraction > 0 and warm_start_velocity is None:
+            raise ValueError("warm_start_fraction requires warm_start_velocity.")
+
         self.scene_path = self.resolve_scene(microduck_root)
+        self.command_range = (
+            None if command_range is None else tuple(float(v) for v in command_range)
+        )
+        self.warm_start_velocity = (
+            None
+            if warm_start_velocity is None
+            else tuple(float(v) for v in warm_start_velocity)
+        )
+        self.warm_start_fraction = float(warm_start_fraction)
         self.action_scale = float(action_scale)
         self.diagnostics = bool(diagnostics)
         self.low_cost_collisions = bool(low_cost_collisions)
@@ -585,6 +622,19 @@ class MicroDuckEnv(MujocoEnv):
                 -noise, noise, generator=self.rng
             )
             qvel += torch.empty_like(qvel).uniform_(-noise, noise, generator=self.rng)
+        if self.warm_start_fraction > 0:
+            low, high = self.warm_start_velocity
+            speed = torch.empty(n, dtype=qvel.dtype, device=self.device).uniform_(
+                low, high, generator=self.rng
+            )
+            selected = (
+                torch.rand(n, generator=self.rng, device=self.device)
+                < self.warm_start_fraction
+            )
+            heading = _body_forward_vector(qpos[..., 3:7].to(self.dtype))
+            heading = heading / heading.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+            warm = speed.unsqueeze(-1) * heading.to(qvel.dtype)
+            qvel[..., :3] = torch.where(selected.unsqueeze(-1), warm, qvel[..., :3])
         return qpos, qvel
 
     def _sample_command(self, tensordict: TensorDictBase | None) -> torch.Tensor:
@@ -603,6 +653,11 @@ class MicroDuckEnv(MujocoEnv):
             if not torch.isfinite(command).all():
                 raise ValueError("A reset commanded_x_velocity must be finite.")
             return command
+        if self.command_range is not None:
+            low, high = self.command_range
+            return torch.empty(
+                self.num_envs, 1, dtype=self.dtype, device=self.device
+            ).uniform_(low, high, generator=self.rng)
         indices = torch.randint(
             self._command_values.numel(),
             (self.num_envs,),

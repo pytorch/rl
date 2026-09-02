@@ -332,6 +332,31 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_command_range_and_warm_start(self, tmp_path):
+        scene = self._write_microduck_fixture(tmp_path)
+        env = MicroDuckEnv(
+            scene,
+            command_range=(0.1, 0.3),
+            warm_start_velocity=(0.2, 0.2),
+            warm_start_fraction=1.0,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        commands = torch.stack([env.reset()["commanded_x_velocity"] for _ in range(20)])
+        assert (commands >= 0.1).all() and (commands <= 0.3).all()
+        assert commands.std() > 0.01
+        env.reset()
+        qvel = env.get_state()["qvel"]
+        torch.testing.assert_close(qvel[0, :3], torch.tensor([0.2, 0.0, 0.0]))
+        # The air-time bookkeeping restarts at reset and accrues while airborne.
+        assert (env._feet_air_time == 0).all()
+        env.close()
+        with pytest.raises(ValueError, match="warm_start_velocity"):
+            MicroDuckEnv(scene, warm_start_fraction=0.5)
+        with pytest.raises(ValueError, match="command_range"):
+            MicroDuckEnv(scene, command_range=(0.3, 0.1))
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_native_backend_is_default_and_batches(self, tmp_path):
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(scene, num_envs=2, parallel=False, seed=0)
