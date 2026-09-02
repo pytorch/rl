@@ -737,11 +737,18 @@ class TestMujoco:
             evaluation_seeds=(0,),
             evaluation_steps=5,
             best_checkpoint_path=checkpoint,
+            policy_kwargs={"hidden_size": 16},
         )
         assert "evaluation/survived" in history[0]
         saved = torch.load(checkpoint, weights_only=False)
         for name, parameter in actor.state_dict().items():
             torch.testing.assert_close(parameter, saved["actor"][name])
+        # rlrender rebuilds the actor from the checkpoint's recorded kwargs.
+        render_env = ppo.make_env(scene, num_envs=1, checkpoint=saved)
+        rendered = ppo.make_render_policy(render_env, checkpoint=saved)
+        rendered.load_state_dict(saved["actor"])
+        assert render_env.observation_spec["recurrent_state"].shape[-1] == 16
+        render_env.close()
         assert ppo.evaluation_score(
             [dict(saved["evaluation"][0], survived=1.0, episode_length=500.0)]
         ) > ppo.evaluation_score(

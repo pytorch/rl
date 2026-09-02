@@ -99,6 +99,15 @@ def _as_gait(
     return MicroDuckGaitConfig() if gait is None else gait
 
 
+def _checkpoint_policy_kwargs(checkpoint: Any) -> dict[str, Any]:
+    """Return the policy kwargs a training checkpoint recorded, if any."""
+    if isinstance(checkpoint, Mapping) and isinstance(
+        checkpoint.get("policy_kwargs"), Mapping
+    ):
+        return dict(checkpoint["policy_kwargs"])
+    return {}
+
+
 # ----------------------------------------------------------------------
 # Environment
 # ----------------------------------------------------------------------
@@ -117,19 +126,23 @@ def make_env(
     seed: int = 0,
     parallel: bool = False,
     compile_step: bool = False,
-    hidden_size: int = 128,
+    hidden_size: int | None = None,
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
     max_episode_steps: int = 500,
     camera_id: int = -1,
     render_width: int = 640,
     render_height: int = 480,
     reset_noise_scale: float = MicroDuckEnv.RESET_NOISE_SCALE,
+    checkpoint: Mapping[str, Any] | None = None,
 ) -> TransformedEnv:
     """Build the batched task with the transforms the recurrent policy needs.
 
     :class:`~torchrl.envs.InitTracker` marks episode starts and a
     :class:`~torchrl.envs.TensorDictPrimer` carries the GRU state between steps,
     so the same env serves the collector, evaluation rollouts and ``rlrender``.
+    ``rlrender`` passes the loaded training checkpoint as ``checkpoint``; its
+    recorded ``hidden_size`` sizes the recurrent state when ``hidden_size`` is
+    omitted, so a checkpoint renders without repeating its architecture.
     The native backend batches with :class:`~torchrl.envs.SerialEnv` unless
     ``parallel=True``; MJX and ``mujoco-torch`` batch inside their frameworks.
     ``compile_step`` is forwarded to the ``mujoco-torch`` backend only. Only
@@ -137,6 +150,8 @@ def make_env(
     with its own keyword arguments.
     """
     gait = _as_gait(gait)
+    if hidden_size is None:
+        hidden_size = _checkpoint_policy_kwargs(checkpoint).get("hidden_size", 128)
     kwargs: dict[str, Any] = {
         "backend": backend,
         "commanded_x_velocity": commanded_x_velocity,
@@ -317,22 +332,31 @@ def make_render_policy(
     env: EnvBase,
     *,
     device: torch.device | str = "cpu",
-    hidden_size: int = 128,
-    policy_head: PolicyHead = "gait-residual",
+    checkpoint: Mapping[str, Any] | None = None,
+    hidden_size: int | None = None,
+    policy_head: PolicyHead | None = None,
     gait: Mapping[str, float] | None = None,
-    residual_scale: float = 0.2,
-    initial_policy_scale: float = 0.05,
+    residual_scale: float | None = None,
+    initial_policy_scale: float | None = None,
 ) -> ProbabilisticActor:
-    """Build the actor whose weights an ``rlrender`` checkpoint provides."""
-    actor, _ = make_models(
-        env,
-        device=device,
-        hidden_size=hidden_size,
-        policy_head=policy_head,
-        gait=gait,
-        residual_scale=residual_scale,
-        initial_policy_scale=initial_policy_scale,
+    """Build the actor whose weights an ``rlrender`` checkpoint provides.
+
+    Architecture arguments default to the ``policy_kwargs`` recorded in the
+    training checkpoint, which ``rlrender`` passes as ``checkpoint``; explicit
+    ``--policy-kwargs`` override them.
+    """
+    recorded = _checkpoint_policy_kwargs(checkpoint)
+    overrides = {
+        "hidden_size": hidden_size,
+        "policy_head": policy_head,
+        "gait": gait,
+        "residual_scale": residual_scale,
+        "initial_policy_scale": initial_policy_scale,
+    }
+    recorded.update(
+        {key: value for key, value in overrides.items() if value is not None}
     )
+    actor, _ = make_models(env, device=device, **recorded)
     return actor
 
 
