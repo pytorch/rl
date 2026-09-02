@@ -4,10 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 """Recurrent PPO on :class:`~torchrl.envs.MicroDuckEnv` with whole-episode replay.
 
-The policy is a GRU backbone shared by the actor and the critic. The actor head
-adds a bounded residual to the closed-form gait from ``heuristic_gait.py``, so
-the first policy is already a validated walking controller and PPO only has to
-improve on it.
+The policy is a GRU backbone shared by the actor and the critic. With
+``--policy-head gait-residual`` the actor head adds a bounded residual to the
+closed-form gait from ``heuristic_gait.py``, so the first policy is already a
+walking controller; with ``--policy-head gaussian`` the actor is a plain
+Gaussian head trained from scratch, relying on the contact-based gait terms of
+the :class:`~torchrl.envs.MicroDuckEnv` reward, a command range, an optional
+forward warm start and a larger exploration scale.
 
 Data flows through the standard TorchRL pieces: a
 :class:`~torchrl.collectors.Collector` writes every finished episode as a
@@ -35,7 +38,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -83,6 +86,7 @@ from examples.microduck.heuristic_gait import (  # noqa: E402
 
 DEFAULT_COMMANDS = (0.03,)
 DEFAULT_EVALUATION_SEEDS = tuple(range(8))
+PolicyHead = Literal["gait-residual", "gaussian"]
 DEFAULT_TRANSITIONS_PER_UPDATE = 16_384
 RECURRENT_STATE_KEY = "recurrent_state"
 
@@ -105,6 +109,9 @@ def make_env(
     *,
     backend: BackendName = "mujoco",
     commanded_x_velocity: float | Sequence[float] = DEFAULT_COMMANDS,
+    command_range: Sequence[float] | None = None,
+    warm_start_velocity: Sequence[float] | None = None,
+    warm_start_fraction: float = 0.0,
     num_envs: int = 8,
     device: torch.device | str = "cpu",
     seed: int = 0,
@@ -133,6 +140,11 @@ def make_env(
     kwargs: dict[str, Any] = {
         "backend": backend,
         "commanded_x_velocity": commanded_x_velocity,
+        "command_range": None if command_range is None else tuple(command_range),
+        "warm_start_velocity": (
+            None if warm_start_velocity is None else tuple(warm_start_velocity)
+        ),
+        "warm_start_fraction": warm_start_fraction,
         "num_envs": num_envs,
         "device": torch.device(device),
         "seed": seed,
@@ -202,19 +214,44 @@ class GaitResidualHead(nn.Module):
         return self.param_extractor(torch.cat((pre_tanh_mean, scale), dim=-1))
 
 
+class GaussianHead(nn.Module):
+    """Plain Gaussian policy head for training from scratch.
+
+    The mean starts near zero, which is the ``STAND`` pose, and the
+    state-independent exploration scale starts at ``initial_policy_scale``.
+    """
+
+    def __init__(self, hidden_size: int, *, initial_policy_scale: float):
+        super().__init__()
+        self.loc = nn.Linear(hidden_size, MicroDuckEnv.NUM_JOINTS)
+        nn.init.orthogonal_(self.loc.weight, gain=0.01)
+        nn.init.zeros_(self.loc.bias)
+        self.scale = nn.Parameter(torch.zeros(MicroDuckEnv.NUM_JOINTS))
+        self.param_extractor = NormalParamExtractor(
+            scale_mapping=f"biased_softplus_{initial_policy_scale}"
+        )
+
+    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        loc = self.loc(features)
+        return self.param_extractor(torch.cat((loc, self.scale.expand_as(loc)), -1))
+
+
 def make_models(
     env: EnvBase,
     *,
     device: torch.device | str = "cpu",
     hidden_size: int = 128,
+    policy_head: PolicyHead = "gait-residual",
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
     residual_scale: float = 0.2,
     initial_policy_scale: float = 0.05,
 ) -> tuple[ProbabilisticActor, TensorDictSequential]:
     """Create the GRU actor and the critic that shares its backbone.
 
-    Returns the actor and the full value network (backbone plus value head)
-    expected by :class:`~torchrl.objectives.value.GAE` and
+    ``policy_head="gait-residual"`` wraps the closed-form gait with a learned
+    residual; ``policy_head="gaussian"`` is a plain Gaussian head trained from
+    scratch. Returns the actor and the full value network (backbone plus value
+    head) expected by :class:`~torchrl.objectives.value.GAE` and
     :class:`~torchrl.objectives.ClipPPOLoss`.
     """
     if not math.isfinite(initial_policy_scale) or initial_policy_scale <= 0:
@@ -237,16 +274,25 @@ def make_models(
         device=device,
     )
     backbone = TensorDictSequential(embed, gru)
-    actor_head = TensorDictModule(
-        GaitResidualHead(
-            hidden_size,
-            _as_gait(gait),
-            residual_scale=residual_scale,
-            initial_policy_scale=initial_policy_scale,
-        ),
-        in_keys=["features", "observation"],
-        out_keys=["loc", "scale"],
-    )
+    if policy_head == "gait-residual":
+        actor_head = TensorDictModule(
+            GaitResidualHead(
+                hidden_size,
+                _as_gait(gait),
+                residual_scale=residual_scale,
+                initial_policy_scale=initial_policy_scale,
+            ),
+            in_keys=["features", "observation"],
+            out_keys=["loc", "scale"],
+        )
+    elif policy_head == "gaussian":
+        actor_head = TensorDictModule(
+            GaussianHead(hidden_size, initial_policy_scale=initial_policy_scale),
+            in_keys=["features"],
+            out_keys=["loc", "scale"],
+        )
+    else:
+        raise ValueError(f"Unknown policy_head {policy_head!r}.")
     actor = ProbabilisticActor(
         module=TensorDictSequential(backbone, actor_head),
         spec=env.action_spec_unbatched,
@@ -272,6 +318,7 @@ def make_render_policy(
     *,
     device: torch.device | str = "cpu",
     hidden_size: int = 128,
+    policy_head: PolicyHead = "gait-residual",
     gait: Mapping[str, float] | None = None,
     residual_scale: float = 0.2,
     initial_policy_scale: float = 0.05,
@@ -281,6 +328,7 @@ def make_render_policy(
         env,
         device=device,
         hidden_size=hidden_size,
+        policy_head=policy_head,
         gait=gait,
         residual_scale=residual_scale,
         initial_policy_scale=initial_policy_scale,
@@ -465,6 +513,7 @@ def train_ppo(
     evaluation_seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
     evaluation_steps: int = 500,
     best_checkpoint_path: str | Path | None = None,
+    policy_kwargs: Mapping[str, Any] | None = None,
     logger: WandbLogger | None = None,
 ) -> list[dict[str, float]]:
     """Train the recurrent policy with PPO on whole episodes.
@@ -474,6 +523,9 @@ def train_ppo(
     in recurrent mode, runs ``epochs`` passes of whole-episode minibatches, then
     empties the buffer and drops the collector's in-flight episodes so the next
     collection only contains data from the updated policy.
+
+    ``policy_kwargs`` is stored in the checkpoint so ``rlrender`` can rebuild
+    the actor through :func:`make_render_policy`.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -575,6 +627,7 @@ def train_ppo(
                         "evaluation_score": list(score),
                         "actor": best_state[0],
                         "critic": best_state[1],
+                        "policy_kwargs": dict(policy_kwargs or {}),
                     },
                     checkpoint_path,
                 )
@@ -757,14 +810,49 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--gae-lambda", type=float, default=0.95)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
+    parser.add_argument(
+        "--policy-head",
+        choices=("gait-residual", "gaussian"),
+        default="gait-residual",
+        help="gait-residual learns around the closed-form gait; gaussian trains "
+        "from scratch.",
+    )
     parser.add_argument("--residual-scale", type=float, default=0.2)
-    parser.add_argument("--initial-policy-scale", type=float, default=0.05)
+    parser.add_argument(
+        "--initial-policy-scale",
+        type=float,
+        help="Initial exploration scale; defaults to 0.05 for gait-residual and "
+        "0.3 for gaussian.",
+    )
     parser.add_argument(
         "--commanded-x-velocity",
         action="append",
         type=float,
         dest="commanded_x_velocities",
         help="Velocity command sampled at reset; repeat for several commands.",
+    )
+    parser.add_argument(
+        "--command-range",
+        type=float,
+        nargs=2,
+        metavar=("LOW", "HIGH"),
+        help="Sample the command uniformly from this interval instead.",
+    )
+    parser.add_argument(
+        "--warm-start-velocity",
+        type=float,
+        nargs=2,
+        metavar=("LOW", "HIGH"),
+        help="Forward speed interval for the reset warm start.",
+    )
+    parser.add_argument("--warm-start-fraction", type=float, default=0.0)
+    parser.add_argument(
+        "--evaluation-command",
+        action="append",
+        type=float,
+        dest="evaluation_commands",
+        help="Commands for deterministic evaluation; defaults to the training "
+        "commands, or to the range bounds and midpoint.",
     )
     parser.add_argument("--evaluation-interval", type=int, default=5)
     parser.add_argument("--evaluation-steps", type=int, default=500)
@@ -804,31 +892,43 @@ def main(args: argparse.Namespace) -> None:
         )
     torch.manual_seed(args.seed)
     commands = tuple(args.commanded_x_velocities or DEFAULT_COMMANDS)
+    if args.evaluation_commands:
+        evaluation_commands = tuple(args.evaluation_commands)
+    elif args.command_range is not None:
+        low, high = args.command_range
+        evaluation_commands = (low, (low + high) / 2, high)
+    else:
+        evaluation_commands = commands
+    if args.initial_policy_scale is None:
+        args.initial_policy_scale = 0.05 if args.policy_head == "gait-residual" else 0.3
     env_kwargs = {
         "backend": args.backend,
         "commanded_x_velocity": commands,
+        "command_range": args.command_range,
         "device": args.device,
         "seed": args.seed,
         "hidden_size": args.hidden_size,
         "max_episode_steps": args.max_episode_steps,
         "compile_step": args.compile_step,
     }
+    policy_kwargs = {
+        "hidden_size": args.hidden_size,
+        "policy_head": args.policy_head,
+        "residual_scale": args.residual_scale,
+        "initial_policy_scale": args.initial_policy_scale,
+    }
     env = make_env(
         args.microduck_root,
         num_envs=args.num_envs,
         parallel=args.parallel,
+        warm_start_velocity=args.warm_start_velocity,
+        warm_start_fraction=args.warm_start_fraction,
         **env_kwargs,
     )
     evaluation_env = None
     logger = None
     try:
-        actor, critic = make_models(
-            env,
-            device=args.device,
-            hidden_size=args.hidden_size,
-            residual_scale=args.residual_scale,
-            initial_policy_scale=args.initial_policy_scale,
-        )
+        actor, critic = make_models(env, device=args.device, **policy_kwargs)
         if args.evaluation_interval is not None:
             evaluation_env = make_env(args.microduck_root, num_envs=1, **env_kwargs)
         if args.wandb_mode != "disabled":
@@ -863,9 +963,10 @@ def main(args: argparse.Namespace) -> None:
             max_grad_norm=args.max_grad_norm,
             evaluation_env=evaluation_env,
             evaluation_interval=args.evaluation_interval,
-            evaluation_commands=commands,
+            evaluation_commands=evaluation_commands,
             evaluation_steps=args.evaluation_steps,
             best_checkpoint_path=args.best_checkpoint_path,
+            policy_kwargs=policy_kwargs,
             logger=logger,
         )
     finally:
