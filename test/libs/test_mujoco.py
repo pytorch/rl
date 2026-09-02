@@ -16,44 +16,28 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import TensorDict
 
 from examples.mujoco.heuristic_microduck import (
-    MicroDuckGaitConfig,
-    microduck_heuristic_action,
-)
-from examples.mujoco.heuristic_microduck import (
+    _summary as summarize_microduck_heuristic,
+    _TrialResult as MicroDuckHeuristicTrial,
     make_render_policy as make_microduck_heuristic_render_policy,
-)
-from examples.mujoco.ppo_microduck import (
-    MicroDuckVelocityEnv,
-    _low_cost_collision_scene,
-    _prepare_recurrent_reset,
+    microduck_heuristic_action,
+    MicroDuckGaitConfig,
 )
 from examples.mujoco.ppo_microduck import (
     _evaluation_score as microduck_evaluation_score,
-)
-from examples.mujoco.ppo_microduck import (
+    _low_cost_collision_scene,
+    _prepare_recurrent_reset,
     evaluate_policy as evaluate_microduck_policy,
-)
-from examples.mujoco.ppo_microduck import (
     main as main_microduck,
-)
-from examples.mujoco.ppo_microduck import (
     make_env as make_microduck_env,
-)
-from examples.mujoco.ppo_microduck import (
     make_models as make_microduck_models,
-)
-from examples.mujoco.ppo_microduck import (
     make_render_policy as make_microduck_render_policy,
-)
-from examples.mujoco.ppo_microduck import (
+    MicroDuckVelocityEnv,
     parse_args as parse_microduck_args,
-)
-from examples.mujoco.ppo_microduck import (
     train_ppo as train_microduck_ppo,
 )
+from tensordict import TensorDict
 from torchrl.envs import (
     AntEnv,
     Compose,
@@ -68,10 +52,10 @@ from torchrl.envs import (
     RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
+    set_exploration_type,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
-    set_exploration_type,
 )
 from torchrl.envs.custom.mujoco._backends import (
     _has_jax,
@@ -89,7 +73,7 @@ from torchrl.envs.custom.mujoco._math import (
     random_unit_quat,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import RenderConfig, RenderPolicySpec, render_policy
+from torchrl.render import render_policy, RenderConfig, RenderPolicySpec
 
 if _has_mujoco:
     import mujoco
@@ -315,7 +299,7 @@ class TestMujoco:
             )
         env.close()
 
-    def test_microduck_heuristic_action_balance_and_gait_symmetry(self):
+    def test_microduck_heuristic_action_balance_and_leg_swing(self):
         config = MicroDuckGaitConfig(ramp_duration_s=0.0)
         qpos = np.zeros(21)
         qpos[3] = 1.0
@@ -335,6 +319,28 @@ class TestMujoco:
             atol=1e-12,
         )
 
+        left_swing_time = ((math.pi / 2.0 - config.phase_offset) % (2.0 * math.pi)) / (
+            2.0 * math.pi * config.frequency_hz
+        )
+        left_swing_action = microduck_heuristic_action(
+            config,
+            qpos,
+            qvel,
+            left_swing_time,
+        )
+        right_swing_action = microduck_heuristic_action(
+            config,
+            qpos,
+            qvel,
+            left_swing_time + 0.5 / config.frequency_hz,
+        )
+        assert left_swing_action[3] > 0.8
+        assert right_swing_action[12] < -0.8
+        assert abs(left_swing_action[2]) > 0.9
+        assert abs(right_swing_action[11]) > 0.9
+        assert abs(left_swing_action[1]) > 0.8
+        assert abs(right_swing_action[10]) > 0.8
+
         pitch = 0.1
         qpos[3] = math.cos(pitch / 2.0)
         qpos[5] = math.sin(pitch / 2.0)
@@ -352,6 +358,8 @@ class TestMujoco:
         )
         assert balance_action[2] > 0.0
         assert balance_action[11] < 0.0
+        assert balance_action[4] > 0.0
+        assert balance_action[13] < 0.0
 
         step = 7
         qvel[4] = 0.2
@@ -388,6 +396,35 @@ class TestMujoco:
         )
         policy(tensordict)
         np.testing.assert_allclose(tensordict["action"][0], expected, atol=1e-7)
+
+    def test_microduck_heuristic_summary_rejects_planted_forward_motion(self):
+        planted = MicroDuckHeuristicTrial(
+            seed=0,
+            episode_length=500,
+            survived=True,
+            signed_displacement=0.1,
+            average_forward_speed=0.025,
+            velocity_reward=1.125,
+            max_abs_pitch=0.05,
+            left_swing_phases=0,
+            right_swing_phases=0,
+            left_single_support_steps=0,
+            right_single_support_steps=0,
+            left_foot_height_max=0.003,
+            right_foot_height_max=0.003,
+        )
+        assert summarize_microduck_heuristic([planted])["walking_success_rate"] == 0.0
+
+        walking = replace(
+            planted,
+            left_swing_phases=4,
+            right_swing_phases=4,
+            left_single_support_steps=16,
+            right_single_support_steps=16,
+            left_foot_height_max=0.007,
+            right_foot_height_max=0.007,
+        )
+        assert summarize_microduck_heuristic([walking])["walking_success_rate"] == 1.0
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_collision_meshes_use_runtime_proxies(self, tmp_path):

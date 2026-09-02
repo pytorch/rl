@@ -35,20 +35,29 @@ blow-up. At load time, the task replaces only collision-class meshes with tight
 axis-aligned box proxies; visual meshes and the source checkout remain
 unchanged. The same patched physics scene is passed to all three backends.
 
-### Closed-form feasibility controller
+### Closed-form walking controller
 
 [`heuristic_microduck.py`](heuristic_microduck.py) provides a no-gradient
-locomotion baseline for the same model, collision proxies, position-control
+walking baseline for the same model, collision proxies, position-control
 interface, reset perturbations, and fall conditions. It combines a bilateral
-phase oscillator over hip, knee, ankle, and lateral targets with
-proportional-derivative pitch feedback. Its action remains an offset around the
-MJCF `STAND` target, exactly like the PPO policy.
+phase oscillator over hip, knee, ankle, and lateral targets with hip and ankle
+pitch feedback. Its action remains an offset around the MJCF `STAND` target,
+exactly like the PPO policy.
 
 The default parameters completed all 100 fixed 500-step evaluation rollouts
-with `0.02` reset noise. Every rollout moved forward: mean signed displacement
-was `0.0428 m` over four seconds and the minimum was `0.0253 m`. This is a slow
-forward shuffle rather than `0.03 m/s` command tracking, but it demonstrates a
-stable moving solution and establishes a concrete learning baseline.
+with `0.02` reset noise. Every rollout satisfied the walking gate: both feet
+entered at least four distinct swing phases, the opposite foot remained in
+contact for at least four consecutive control steps per phase, torso pitch
+remained below `0.056 rad`, and the robot moved forward. The worst rollout had
+seven left and six right swing phases, at least 56 and 53 left/right
+single-support steps, and foot-site heights above `0.007 m` for both feet. Mean
+signed displacement was `0.1280 m` over four seconds, the minimum was
+`0.1200 m`, and mean body-forward speed was `0.0355 m/s`.
+
+Displacement and survival alone are not accepted as locomotion metrics. A
+planted-foot controller can move forward by pitching its torso, so the script
+reports contact-derived swing phases, single-support duration, foot height, and
+maximum pitch and ranks those constraints before speed.
 
 ```bash
 uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
@@ -58,9 +67,9 @@ uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
   --render-checkpoint microduck_heuristic_policy.pt
 ```
 
-The script can also perform survival-constrained random search around the
-validated gait. Candidates are ranked by worst-case and mean episode length
-before forward speed, preventing a fast forward fall from winning the search:
+The script can also perform gait-constrained random search around the validated
+controller. Candidates are ranked by worst-case survival, repeated bilateral
+swing phases, walking success, and bounded pitch before forward speed:
 
 ```bash
 uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
@@ -70,9 +79,9 @@ uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
   --search-num-seeds 8
 ```
 
-### PPO from a safe gait prior
+### PPO from a walking gait prior
 
-The PPO actor starts at the closed-form controller and learns a bounded
+The PPO actor starts at the closed-form walking controller and learns a bounded
 residual. A six-feature basis (bias, gait sine and cosine, pitch, pitch rate,
 and longitudinal velocity) feeds one linear `6 x 14` map. Together with its
 action bias and per-joint residual scale, the actor has 112 trainable
@@ -85,29 +94,15 @@ buffer, up to 10 PPO epochs with `0.01` approximate-KL early stopping,
 trajectory minibatches, a fixed `3e-5` learning rate, and a `0.01` initial
 policy scale. `gamma=lambda=1` matches the finite-horizon objective. Evaluation
 runs after every collection over seeds 0-7 plus three historically fragile
-seeds. Checkpoint selection ranks survival count, worst episode length,
-wrong-way count, worst displacement, mean displacement, and finally return.
-Transition 0 is eligible, so a regressing run cannot replace its safe prior.
+seeds. The current checkpoint score ranks survival, displacement, and return;
+that protects against a fast fall but does not detect planted feet. Transition
+0 remains eligible so a regressing run cannot replace its gait prior.
 
-The selected checkpoint came from 1,248,177 transitions of a `1e-5`
-learning-rate fine-tune, initialized from the best checkpoint in a 5-million
-transition `3e-5` run. Including a 303,895-transition learning-rate probe, the
-experiment evaluated 9,303,895 transitions. On 100 held-out reset seeds, PPO
-matched the closed-form controller's 100% survival and zero wrong-way episodes,
-while increasing mean displacement by 8.1%:
-
-| policy | survived | wrong way | mean displacement | minimum displacement | mean return |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| closed form | 100/100 | 0 | 0.0428 m | 0.0253 m | 885.38 |
-| PPO checkpoint | 100/100 | 0 | 0.0463 m | 0.0258 m | 886.95 |
-
-The checkpoint was selected before the end of training. Later weights moved
-faster on some reset seeds but occasionally fell, which is why using final
-weights or return-only selection would give a worse locomotion policy.
-
-[Watch the selected PPO locomotion rollout](assets/microduck_locomotion_ppo.mp4).
-The four-second video uses held-out reset seed 39 and the same deterministic
-500-step evaluation path as the benchmark above.
+The bundled PPO checkpoint predates the contact-derived walking gate and must
+not be used as evidence of walking. Its earlier evaluation measured survival
+and displacement only, which cannot distinguish stepping from a controlled
+forward pitch. Retrain and select a new checkpoint with the corrected gait and
+contact metrics before making PPO locomotion claims.
 
 ```bash
 uv run --with mujoco --with wandb --with psutil \

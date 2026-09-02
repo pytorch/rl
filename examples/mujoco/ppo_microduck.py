@@ -41,11 +41,7 @@ from typing import Any, Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import (
-    NormalParamExtractor,
-    TensorDictModule,
-    TensorDictSequential,
-)
+from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictSequential
 from torch import nn
 
 from torchrl import torchrl_logger
@@ -64,9 +60,9 @@ from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
     GRUModule,
     ProbabilisticActor,
+    set_recurrent_mode,
     TanhNormal,
     ValueOperator,
-    set_recurrent_mode,
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
@@ -96,9 +92,10 @@ JOINT_NAMES = (
     "right_knee",
     "right_ankle",
 )
-GAIT_FREQUENCY_HZ = 3.445781260556958
-GAIT_PHASE_OFFSET = 2.855541500587108
-GAIT_RAMP_DURATION_S = 0.4901050146047573
+GAIT_FREQUENCY_HZ = 1.8913
+GAIT_PHASE_OFFSET = -1.5237
+GAIT_RAMP_DURATION_S = 0.4
+GAIT_LATERAL_PHASE_OFFSET = -0.1624
 GAIT_PHASE_START = 3 + 3 + 2 + NUM_JOINTS * 2
 GAIT_FEATURES = 3
 OBSERVATION_DIM = 3 + 3 + 2 + NUM_JOINTS * 3 + GAIT_FEATURES
@@ -976,20 +973,31 @@ class _GaitResidualParams(nn.Module):
             dim=-1,
         )
         residual = self.residual(residual_features)
-        pitch_correction = (
-            -6.77200816215626 * pitch - 0.6609051751875947 * pitch_rate
-        ).clamp(-0.9, 0.9)
+        pitch_correction = (-9.9495 * pitch - 0.6119 * pitch_rate).clamp(-0.95, 0.95)
+        ankle_pitch_correction = (10.9934 * pitch + 0.6033 * pitch_rate).clamp(
+            -1.0, 1.0
+        )
         pitch_correction = pitch_correction * direction.abs()
+        ankle_pitch_correction = ankle_pitch_correction * direction.abs()
+        directed_sin = direction * gait_sin
+        directed_cos = direction * gait_cos
+        gait_wave = gait_ramp * directed_sin
+        left_swing = gait_ramp * directed_sin.clamp_min(0.0)
+        right_swing = gait_ramp * (-directed_sin).clamp_min(0.0)
+        lateral_wave = gait_ramp * (
+            directed_sin * math.cos(GAIT_LATERAL_PHASE_OFFSET)
+            + directed_cos * math.sin(GAIT_LATERAL_PHASE_OFFSET)
+        )
 
         nominal = observation.new_zeros(*observation.shape[:-1], NUM_JOINTS)
-        nominal[..., 2:3] = -pitch_correction + 0.1517860344272367 * gait_wave
-        nominal[..., 11:12] = pitch_correction + 0.1517860344272367 * gait_wave
-        nominal[..., 3:4] = 0.015149442212286304 * gait_ramp * gait_sin.clamp_min(0.0)
-        nominal[..., 12:13] = 0.015149442212286304 * gait_ramp * gait_sin.clamp_max(0.0)
-        nominal[..., 4:5] = -0.06058094530934424 * gait_wave
-        nominal[..., 13:14] = -0.06058094530934424 * gait_wave
-        nominal[..., 1:2] = 0.05281012757865912 * gait_wave
-        nominal[..., 10:11] = 0.05281012757865912 * gait_wave
+        nominal[..., 2:3] = -pitch_correction - 0.999 * gait_wave
+        nominal[..., 11:12] = pitch_correction - 0.999 * gait_wave
+        nominal[..., 3:4] = 0.9097 * left_swing
+        nominal[..., 12:13] = -0.9097 * right_swing
+        nominal[..., 4:5] = ankle_pitch_correction - 0.0317 * left_swing
+        nominal[..., 13:14] = -ankle_pitch_correction + 0.0317 * right_swing
+        nominal[..., 1:2] = 0.9584 * lateral_wave
+        nominal[..., 10:11] = 0.9584 * lateral_wave
 
         action_mean = nominal + self.residual_action_scale * residual.tanh()
         pre_tanh_mean = torch.atanh(action_mean.clamp(-0.999, 0.999))

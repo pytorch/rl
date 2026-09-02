@@ -9,9 +9,9 @@ pitch feedback. It has no neural network and uses no gradients. Its small
 parameter vector can be searched directly from simulator feedback while fixed
 reset seeds make regressions reproducible.
 
-The search is survival constrained: candidates are ranked by worst-case and
-mean episode length before forward speed. This prevents a forward fall from
-winning merely because it briefly produces positive velocity.
+The search is gait constrained: candidates are ranked by survival and repeated
+left/right single-support phases before forward speed. This prevents planted
+feet or a forward fall from being mistaken for locomotion.
 
 Run the validated controller from a TorchRL checkout::
 
@@ -45,16 +45,16 @@ from torchrl.render import RenderPolicySpec
 
 if __package__:
     from examples.mujoco.ppo_microduck import (
+        _low_cost_collision_scene,
         MAX_EPISODE_STEPS,
         MicroDuckVelocityEnv,
-        _low_cost_collision_scene,
         resolve_microduck_scene,
     )
 else:
     from ppo_microduck import (
+        _low_cost_collision_scene,
         MAX_EPISODE_STEPS,
         MicroDuckVelocityEnv,
-        _low_cost_collision_scene,
         resolve_microduck_scene,
     )
 
@@ -64,6 +64,9 @@ ACTION_SCALE = 0.35
 MIN_HEIGHT_RATIO = 0.55
 MIN_UPRIGHT = 0.35
 CONTROL_DT = MicroDuckVelocityEnv.FRAME_SKIP * 0.002
+MIN_SINGLE_SUPPORT_STEPS = 4
+MIN_SWING_PHASES = 4
+MAX_WALKING_PITCH = 0.2
 
 
 @dataclass(frozen=True)
@@ -73,23 +76,27 @@ class MicroDuckGaitConfig:
     The four amplitudes are normalized actions, so an amplitude of one is an
     ``ACTION_SCALE``-radian offset around the MJCF ``STAND`` actuator target.
     The oscillator drives mirrored leg joints half a cycle apart. Pitch
-    feedback is applied symmetrically to the two hip-pitch targets.
+    feedback is applied through the hip and ankle targets; ankle feedback is
+    what keeps the torso bounded while each foot enters a swing phase.
 
     Examples:
         >>> config = MicroDuckGaitConfig()
         >>> config.frequency_hz
-        3.445781260556958
+        1.8913
     """
 
-    frequency_hz: float = 3.445781260556958
-    hip_amplitude: float = -0.1517860344272367
-    knee_amplitude: float = 0.015149442212286304
-    ankle_amplitude: float = -0.06058094530934424
-    lateral_amplitude: float = 0.05281012757865912
-    phase_offset: float = 2.855541500587108
-    pitch_kp: float = -6.77200816215626
-    pitch_kd: float = -0.6609051751875947
-    ramp_duration_s: float = 0.4901050146047573
+    frequency_hz: float = 1.8913
+    hip_amplitude: float = 0.999
+    knee_amplitude: float = 0.9097
+    ankle_amplitude: float = 0.0317
+    lateral_amplitude: float = 0.9584
+    lateral_phase_offset: float = -0.1624
+    phase_offset: float = -1.5237
+    pitch_kp: float = -9.9495
+    pitch_kd: float = -0.6119
+    ankle_pitch_kp: float = 10.9934
+    ankle_pitch_kd: float = 0.6033
+    ramp_duration_s: float = 0.4
 
 
 @dataclass(frozen=True)
@@ -99,7 +106,14 @@ class _TrialResult:
     survived: bool
     signed_displacement: float
     average_forward_speed: float
-    tracking_reward: float
+    velocity_reward: float
+    max_abs_pitch: float
+    left_swing_phases: int
+    right_swing_phases: int
+    left_single_support_steps: int
+    right_single_support_steps: int
+    left_foot_height_max: float
+    right_foot_height_max: float
 
 
 def _quaternion_pitch(quaternion: np.ndarray) -> float:
@@ -163,8 +177,13 @@ def microduck_heuristic_action(
     pitch = _quaternion_pitch(qpos[3:7])
     pitch_correction = np.clip(
         config.pitch_kp * pitch + config.pitch_kd * qvel[4],
-        -0.9,
-        0.9,
+        -0.95,
+        0.95,
+    )
+    ankle_pitch_correction = np.clip(
+        config.ankle_pitch_kp * pitch + config.ankle_pitch_kd * qvel[4],
+        -1.0,
+        1.0,
     )
     phase = config.phase_offset + 2.0 * math.pi * config.frequency_hz * elapsed_time_s
     wave = math.sin(phase)
@@ -173,18 +192,21 @@ def microduck_heuristic_action(
     else:
         ramp = min(elapsed_time_s / config.ramp_duration_s, 1.0)
     gait_wave = ramp * wave
+    left_swing = ramp * max(wave, 0.0)
+    right_swing = ramp * max(-wave, 0.0)
+    lateral_wave = ramp * math.sin(phase + config.lateral_phase_offset)
 
     action = np.zeros(14, dtype=np.float64)
     # A common hip-pitch oscillation produces opposite physical leg motion
     # because the left and right joints use opposite sign conventions.
     action[2] = -pitch_correction - config.hip_amplitude * gait_wave
     action[11] = pitch_correction - config.hip_amplitude * gait_wave
-    action[3] = config.knee_amplitude * ramp * max(wave, 0.0)
-    action[12] = config.knee_amplitude * ramp * min(wave, 0.0)
-    action[4] = config.ankle_amplitude * gait_wave
-    action[13] = config.ankle_amplitude * gait_wave
-    action[1] = config.lateral_amplitude * gait_wave
-    action[10] = config.lateral_amplitude * gait_wave
+    action[3] = config.knee_amplitude * left_swing
+    action[12] = -config.knee_amplitude * right_swing
+    action[4] = ankle_pitch_correction - config.ankle_amplitude * left_swing
+    action[13] = -ankle_pitch_correction + config.ankle_amplitude * right_swing
+    action[1] = config.lateral_amplitude * lateral_wave
+    action[10] = config.lateral_amplitude * lateral_wave
     return np.clip(action, -1.0, 1.0)
 
 
@@ -208,7 +230,10 @@ class _MicroDuckHeuristicRenderPolicy:
         pitch_rate = observation[..., 4:5]
         pitch_correction = (
             self.config.pitch_kp * pitch + self.config.pitch_kd * pitch_rate
-        ).clamp(-0.9, 0.9)
+        ).clamp(-0.95, 0.95)
+        ankle_pitch_correction = (
+            self.config.ankle_pitch_kp * pitch + self.config.ankle_pitch_kd * pitch_rate
+        ).clamp(-1.0, 1.0)
         elapsed_time = step_count.to(observation.dtype) * self.control_dt
         phase = (
             self.config.phase_offset
@@ -220,16 +245,23 @@ class _MicroDuckHeuristicRenderPolicy:
         else:
             ramp = (elapsed_time / self.config.ramp_duration_s).clamp(max=1.0)
         gait_wave = ramp * wave
+        left_swing = ramp * wave.clamp_min(0.0)
+        right_swing = ramp * (-wave).clamp_min(0.0)
+        lateral_wave = ramp * (phase + self.config.lateral_phase_offset).sin()
 
         action = observation.new_zeros(*observation.shape[:-1], 14)
         action[..., 2:3] = -pitch_correction - self.config.hip_amplitude * gait_wave
         action[..., 11:12] = pitch_correction - self.config.hip_amplitude * gait_wave
-        action[..., 3:4] = self.config.knee_amplitude * ramp * wave.clamp_min(0.0)
-        action[..., 12:13] = self.config.knee_amplitude * ramp * wave.clamp_max(0.0)
-        action[..., 4:5] = self.config.ankle_amplitude * gait_wave
-        action[..., 13:14] = self.config.ankle_amplitude * gait_wave
-        action[..., 1:2] = self.config.lateral_amplitude * gait_wave
-        action[..., 10:11] = self.config.lateral_amplitude * gait_wave
+        action[..., 3:4] = self.config.knee_amplitude * left_swing
+        action[..., 12:13] = -self.config.knee_amplitude * right_swing
+        action[..., 4:5] = (
+            ankle_pitch_correction - self.config.ankle_amplitude * left_swing
+        )
+        action[..., 13:14] = (
+            -ankle_pitch_correction + self.config.ankle_amplitude * right_swing
+        )
+        action[..., 1:2] = self.config.lateral_amplitude * lateral_wave
+        action[..., 10:11] = self.config.lateral_amplitude * lateral_wave
         tensordict.set("action", action.clamp(-1.0, 1.0))
         return tensordict
 
@@ -252,7 +284,7 @@ def make_render_policy(spec: RenderPolicySpec) -> _MicroDuckHeuristicRenderPolic
         >>> spec = SimpleNamespace(checkpoint={}, policy_kwargs={})
         >>> policy = make_render_policy(spec)
         >>> policy.config.frequency_hz
-        3.445781260556958
+        1.8913
     """
     gait: dict[str, Any] = {}
     checkpoint = spec.checkpoint
@@ -299,6 +331,14 @@ def _stand_metadata(model: Any) -> tuple[int, np.ndarray, np.ndarray, np.ndarray
     )
 
 
+def _geom_has_contact(data: Any, geom_id: int) -> bool:
+    for contact_index in range(data.ncon):
+        contact = data.contact[contact_index]
+        if geom_id == contact.geom1 or geom_id == contact.geom2:
+            return True
+    return False
+
+
 def _run_trial(
     model: Any,
     config: MicroDuckGaitConfig,
@@ -319,18 +359,59 @@ def _run_trial(
     data.qvel[:] += rng.uniform(-reset_noise_scale, reset_noise_scale, 20)
     mujoco.mj_forward(model, data)
 
+    left_foot_site = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "left_foot")
+    right_foot_site = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "right_foot")
+    left_foot_geom = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_GEOM, "left_foot_collision"
+    )
+    right_foot_geom = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_GEOM, "right_foot_collision"
+    )
+    if min(left_foot_site, right_foot_site, left_foot_geom, right_foot_geom) < 0:
+        raise ValueError(
+            "MicroDuck gait evaluation requires left/right foot sites and "
+            "left/right foot collision geoms."
+        )
+
     control_dt = MicroDuckVelocityEnv.FRAME_SKIP * model.opt.timestep
     initial_position = data.qpos[:3].copy()
     initial_forward = _body_forward_vector(data.qpos[3:7])
-    tracking_reward = 0.0
+    velocity_reward = 0.0
     forward_distance = 0.0
+    max_abs_pitch = abs(_quaternion_pitch(data.qpos[3:7]))
+    left_foot_height_max = float(data.site_xpos[left_foot_site, 2])
+    right_foot_height_max = float(data.site_xpos[right_foot_site, 2])
+    left_swing_phases = 0
+    right_swing_phases = 0
+    left_single_support_steps = 0
+    right_single_support_steps = 0
+    current_swing_is_left: bool | None = None
+    current_support_run = 0
+    current_support_run_max = 0
     survived = True
     for step in range(steps):
+        elapsed_time_s = step * control_dt
+        phase = (
+            config.phase_offset + 2.0 * math.pi * config.frequency_hz * elapsed_time_s
+        )
+        swing_is_left = math.sin(phase) >= 0.0
+        if current_swing_is_left is None:
+            current_swing_is_left = swing_is_left
+        elif swing_is_left != current_swing_is_left:
+            if current_support_run_max >= MIN_SINGLE_SUPPORT_STEPS:
+                if current_swing_is_left:
+                    left_swing_phases += 1
+                else:
+                    right_swing_phases += 1
+            current_swing_is_left = swing_is_left
+            current_support_run = 0
+            current_support_run_max = 0
+
         action = microduck_heuristic_action(
             config,
             data.qpos,
             data.qvel,
-            step * control_dt,
+            elapsed_time_s,
         )
         data.ctrl[:] = np.clip(
             home_ctrl + ACTION_SCALE * action,
@@ -340,12 +421,44 @@ def _run_trial(
         for _ in range(MicroDuckVelocityEnv.FRAME_SKIP):
             mujoco.mj_step(model, data)
 
+        left_contact = _geom_has_contact(data, left_foot_geom)
+        right_contact = _geom_has_contact(data, right_foot_geom)
+        single_support = (
+            not left_contact and right_contact
+            if swing_is_left
+            else not right_contact and left_contact
+        )
+        if single_support:
+            current_support_run += 1
+            current_support_run_max = max(current_support_run_max, current_support_run)
+            if swing_is_left:
+                left_single_support_steps += 1
+            else:
+                right_single_support_steps += 1
+        else:
+            current_support_run = 0
+
+        left_foot_height_max = max(
+            left_foot_height_max, float(data.site_xpos[left_foot_site, 2])
+        )
+        right_foot_height_max = max(
+            right_foot_height_max, float(data.site_xpos[right_foot_site, 2])
+        )
+        pitch = _quaternion_pitch(data.qpos[3:7])
+        max_abs_pitch = max(max_abs_pitch, abs(pitch))
         body_forward = _body_forward_vector(data.qpos[3:7])
         forward_speed = float(np.dot(data.qvel[:3], body_forward))
         forward_distance += control_dt * forward_speed
-        tracking_reward += math.exp(
-            -(((forward_speed - commanded_x_velocity) / 0.25) ** 2)
-        )
+        if abs(commanded_x_velocity) > 1e-6:
+            velocity_reward += 1.0 + 5.0 * float(
+                np.clip(
+                    math.copysign(1.0, commanded_x_velocity) * forward_speed,
+                    -0.2,
+                    0.2,
+                )
+            )
+        else:
+            velocity_reward += 2.0 * math.exp(-((forward_speed / 0.25) ** 2))
         upright = _quaternion_upright(data.qpos[3:7])
         finite = np.isfinite(data.qpos).all() and np.isfinite(data.qvel).all()
         if (
@@ -355,6 +468,12 @@ def _run_trial(
         ):
             survived = False
             break
+
+    if current_support_run_max >= MIN_SINGLE_SUPPORT_STEPS:
+        if current_swing_is_left:
+            left_swing_phases += 1
+        else:
+            right_swing_phases += 1
 
     episode_length = step + 1
     signed_displacement = float(
@@ -366,7 +485,14 @@ def _run_trial(
         survived=survived,
         signed_displacement=signed_displacement,
         average_forward_speed=forward_distance / (episode_length * control_dt),
-        tracking_reward=tracking_reward / episode_length,
+        velocity_reward=velocity_reward / episode_length,
+        max_abs_pitch=max_abs_pitch,
+        left_swing_phases=left_swing_phases,
+        right_swing_phases=right_swing_phases,
+        left_single_support_steps=left_single_support_steps,
+        right_single_support_steps=right_single_support_steps,
+        left_foot_height_max=left_foot_height_max,
+        right_foot_height_max=right_foot_height_max,
     )
 
 
@@ -396,17 +522,45 @@ def _summary(trials: Sequence[_TrialResult]) -> dict[str, float]:
     lengths = np.asarray([trial.episode_length for trial in trials])
     displacements = np.asarray([trial.signed_displacement for trial in trials])
     speeds = np.asarray([trial.average_forward_speed for trial in trials])
+    left_swing_phases = np.asarray([trial.left_swing_phases for trial in trials])
+    right_swing_phases = np.asarray([trial.right_swing_phases for trial in trials])
+    walking = [
+        trial.survived
+        and trial.signed_displacement > 0.0
+        and trial.max_abs_pitch < MAX_WALKING_PITCH
+        and trial.left_swing_phases >= MIN_SWING_PHASES
+        and trial.right_swing_phases >= MIN_SWING_PHASES
+        for trial in trials
+    ]
     return {
         "survival_rate": float(np.mean([trial.survived for trial in trials])),
+        "walking_success_rate": float(np.mean(walking)),
         "episode_length_mean": float(lengths.mean()),
         "episode_length_min": float(lengths.min()),
         "signed_displacement_mean": float(displacements.mean()),
         "signed_displacement_min": float(displacements.min()),
         "forward_speed_mean": float(speeds.mean()),
         "forward_speed_min": float(speeds.min()),
+        "max_abs_pitch_max": float(max(trial.max_abs_pitch for trial in trials)),
+        "left_swing_phases_mean": float(left_swing_phases.mean()),
+        "left_swing_phases_min": float(left_swing_phases.min()),
+        "right_swing_phases_mean": float(right_swing_phases.mean()),
+        "right_swing_phases_min": float(right_swing_phases.min()),
+        "left_single_support_steps_min": float(
+            min(trial.left_single_support_steps for trial in trials)
+        ),
+        "right_single_support_steps_min": float(
+            min(trial.right_single_support_steps for trial in trials)
+        ),
+        "left_foot_height_max_min": float(
+            min(trial.left_foot_height_max for trial in trials)
+        ),
+        "right_foot_height_max_min": float(
+            min(trial.right_foot_height_max for trial in trials)
+        ),
         "wrong_way_rollouts": float(np.count_nonzero(displacements <= 0.0)),
-        "tracking_reward_mean": float(
-            np.mean([trial.tracking_reward for trial in trials])
+        "velocity_reward_mean": float(
+            np.mean([trial.velocity_reward for trial in trials])
         ),
     }
 
@@ -417,6 +571,12 @@ def _search_key(trials: Sequence[_TrialResult]) -> tuple[float, ...]:
         summary["episode_length_min"],
         summary["survival_rate"],
         summary["episode_length_mean"],
+        min(
+            summary["left_swing_phases_min"],
+            summary["right_swing_phases_min"],
+        ),
+        summary["walking_success_rate"],
+        -summary["max_abs_pitch_max"],
         summary["forward_speed_mean"],
     )
 
@@ -428,23 +588,38 @@ def _search_configs(
 ) -> list[MicroDuckGaitConfig]:
     configs = [initial]
     for _ in range(num_candidates - 1):
-        values = rng.normal(size=6)
+        values = rng.normal(size=11)
         configs.append(
             replace(
                 initial,
                 frequency_hz=float(
-                    np.clip(initial.frequency_hz + 0.35 * values[0], 2.5, 4.5)
+                    np.clip(initial.frequency_hz + 0.2 * values[0], 0.5, 3.0)
                 ),
-                hip_amplitude=float(initial.hip_amplitude + 0.05 * values[1]),
+                hip_amplitude=float(
+                    np.clip(initial.hip_amplitude + 0.08 * values[1], 0.4, 1.0)
+                ),
                 knee_amplitude=float(
-                    np.clip(initial.knee_amplitude + 0.025 * values[2], 0.0, 0.12)
+                    np.clip(initial.knee_amplitude + 0.08 * values[2], 0.4, 1.0)
                 ),
-                ankle_amplitude=float(initial.ankle_amplitude + 0.035 * values[3]),
-                lateral_amplitude=float(initial.lateral_amplitude + 0.06 * values[4]),
-                phase_offset=float(
-                    (initial.phase_offset + 0.4 * values[5] + math.pi) % (2.0 * math.pi)
+                ankle_amplitude=float(
+                    np.clip(initial.ankle_amplitude + 0.03 * values[3], 0.0, 0.5)
+                ),
+                lateral_amplitude=float(
+                    np.clip(initial.lateral_amplitude + 0.08 * values[4], 0.4, 1.0)
+                ),
+                lateral_phase_offset=float(
+                    (initial.lateral_phase_offset + 0.2 * values[5] + math.pi)
+                    % (2.0 * math.pi)
                     - math.pi
                 ),
+                phase_offset=float(
+                    (initial.phase_offset + 0.3 * values[6] + math.pi) % (2.0 * math.pi)
+                    - math.pi
+                ),
+                pitch_kp=float(initial.pitch_kp + values[7]),
+                pitch_kd=float(initial.pitch_kd + 0.15 * values[8]),
+                ankle_pitch_kp=float(initial.ankle_pitch_kp + 2.0 * values[9]),
+                ankle_pitch_kd=float(initial.ankle_pitch_kd + 0.25 * values[10]),
             )
         )
     return configs
@@ -456,7 +631,7 @@ def _parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--num-seeds", type=int, default=20)
     parser.add_argument("--steps", type=int, default=MAX_EPISODE_STEPS)
     parser.add_argument("--reset-noise-scale", type=float, default=0.02)
-    parser.add_argument("--commanded-x-velocity", type=float, default=0.3)
+    parser.add_argument("--commanded-x-velocity", type=float, default=0.03)
     parser.add_argument("--search-candidates", type=int, default=0)
     parser.add_argument("--search-num-seeds", type=int, default=8)
     parser.add_argument("--search-seed", type=int, default=0)
