@@ -121,6 +121,7 @@ def make_env(
     command_range: Sequence[float] | None = None,
     warm_start_velocity: Sequence[float] | None = None,
     warm_start_fraction: float = 0.0,
+    joint_reset_noise_scale: float | None = None,
     num_envs: int = 8,
     device: torch.device | str = "cpu",
     seed: int = 0,
@@ -160,6 +161,7 @@ def make_env(
             None if warm_start_velocity is None else tuple(warm_start_velocity)
         ),
         "warm_start_fraction": warm_start_fraction,
+        "joint_reset_noise_scale": joint_reset_noise_scale,
         "num_envs": num_envs,
         "device": torch.device(device),
         "seed": seed,
@@ -872,6 +874,12 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--warm-start-fraction", type=float, default=0.0)
     parser.add_argument(
+        "--joint-reset-noise-scale",
+        type=float,
+        help="Uniform joint-position noise at reset in radians; defaults to the "
+        "env's reset noise.",
+    )
+    parser.add_argument(
         "--evaluation-command",
         action="append",
         type=float,
@@ -948,6 +956,7 @@ def main(args: argparse.Namespace) -> None:
         parallel=args.parallel,
         warm_start_velocity=args.warm_start_velocity,
         warm_start_fraction=args.warm_start_fraction,
+        joint_reset_noise_scale=args.joint_reset_noise_scale,
         **env_kwargs,
     )
     evaluation_env = None
