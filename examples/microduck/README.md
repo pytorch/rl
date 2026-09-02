@@ -99,6 +99,48 @@ about 45 transitions/s in eager mode. Native MuJoCo with eight serial envs
 collects around 1,000 transitions/s on the same machine and remains the
 default for laptop training; `--parallel` switches it to `ParallelEnv`.
 
+## Results of the validation runs
+
+Three CPU runs (8 parallel native envs, Apple silicon) validated the pipeline
+on the personal W&B project
+[`vmoens/torchrl-microduck-ppo`](https://wandb.ai/vmoens/torchrl-microduck-ppo):
+
+| Run | Settings | Transitions | Collect / train throughput |
+| --- | --- | ---: | ---: |
+| [`microduck-gru-ppo-2m`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/pwoj4cy8) | lr 3e-4, 10 epochs, command 0.03 | 2M | ~1,700 / ~14,000 transitions/s |
+| [`microduck-gru-ppo-lr1e-4-ep5`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/7uxqg9d7) | lr 1e-4, 5 epochs, command 0.03 (current defaults) | 1M | ~1,600 / ~13,000 transitions/s |
+| [`microduck-gru-ppo-cmd-0-3-6`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/04w5so9d) | lr 1e-4, 5 epochs, commands 0, 0.03, 0.06 | 1M | ~1,650 / ~13,000 transitions/s |
+
+Deterministic evaluation of the best checkpoints over seeds 0-7 and 500
+steps, with the requested command passed at reset:
+
+| Policy | 0.00 m/s: displacement, tracking error | 0.03 m/s: displacement, tracking error | 0.06 m/s: displacement, tracking error |
+| --- | --- | --- | --- |
+| gait prior (transition 0) | +0.001 m, 0.0005 | +0.128 m, 0.020 | +0.128 m, 0.028 |
+| `lr1e-4-ep5` best | +0.002 m, 0.0006 | +0.132 m, 0.021 | +0.132 m, 0.028 |
+| `cmd-0-3-6` best | +0.001 m, 0.0005 | +0.126 m, 0.020 | +0.126 m, 0.028 |
+| `2m` best | +0.001 m, 0.0005 | +0.130 m, 0.021 | +0.130 m, 0.028 |
+
+Every policy survives all 500 steps for every command. What the runs show:
+
+- The collector-to-buffer pipeline behaves as designed: every iteration holds
+  40 complete 500-step episodes, GAE runs once over them, and the buffer is
+  emptied before the next collection.
+- The closed-form prior is already close to this reward's ceiling for a
+  0.03 m/s command (about 944 of a possible 950 per episode), so PPO has little
+  to gain and mostly preserves the prior; displacement moved from 0.128 to
+  0.132 m at best.
+- With the 0.05 exploration scale, a 3e-4 learning rate over ten epochs
+  produced per-update KL divergences between 1 and 4 in the first iterations,
+  and `KLAdaptiveLR` drove the learning rate to its floor. A 1e-4 learning rate
+  with five epochs kept the KL inside the target band from the first update,
+  which is why those are now the defaults.
+- For nonzero commands the reward pays for velocity along the commanded
+  direction, not for matching its magnitude, and the gait prior only reads the
+  command's sign. Every policy therefore behaves identically at 0.03 and
+  0.06 m/s. Teaching the policy to track a speed needs a magnitude-aware
+  tracking term in `MicroDuckEnv`, which is left to a follow-up task change.
+
 ## Rendering
 
 `rlrender` reconstructs the env and policy from factories in these files.
