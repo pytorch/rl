@@ -672,6 +672,78 @@ class TestMujoco:
         assert all(trial.left_single_support_steps == 0 for trial in trials)
         env.close()
 
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_example_recurrent_ppo_trains_on_whole_episodes(self, tmp_path):
+        ppo = self._load_example("ppo_mujoco")
+        scene = self._write_microduck_fixture(tmp_path)
+        env = ppo.make_env(
+            scene, num_envs=2, seed=0, hidden_size=16, max_episode_steps=20
+        )
+        evaluation_env = ppo.make_env(scene, num_envs=1, seed=1, hidden_size=16)
+        actor, critic = ppo.make_models(env, hidden_size=16)
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            reset = env.reset()
+            actor(reset)
+        # The zero-initialized residual makes the first policy the closed-form gait.
+        torch.testing.assert_close(
+            reset["action"],
+            ppo.gait_action(ppo.MicroDuckGaitConfig(), reset["observation"]),
+            atol=1e-5,
+            rtol=0,
+        )
+        parameters_before = [p.detach().clone() for p in actor.parameters()]
+        checkpoint = tmp_path / "best.pt"
+        history = ppo.train_ppo(
+            env,
+            actor,
+            critic,
+            total_transitions=150,
+            transitions_per_update=100,
+            max_episode_steps=20,
+            epochs=2,
+            minibatch_trajectories=2,
+            evaluation_env=evaluation_env,
+            evaluation_interval=1,
+            evaluation_commands=(0.03,),
+            evaluation_seeds=(0,),
+            evaluation_steps=5,
+            best_checkpoint_path=checkpoint,
+        )
+        assert len(history) == 2
+        for metrics in history:
+            # Only complete 20-step episodes reach the buffer.
+            assert metrics["collection/transitions"] % 20 == 0
+            assert metrics["collection/transitions"] >= 100
+            assert (
+                metrics["collection/trajectories"]
+                == metrics["collection/transitions"] / 20
+            )
+            assert metrics["episode/length_min"] == 20.0
+            assert math.isfinite(metrics["ppo/loss_objective"])
+            assert math.isfinite(metrics["ppo/kl_approx"])
+            assert "evaluation/survived" in metrics
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(parameters_before, actor.parameters())
+        )
+        saved = torch.load(checkpoint, weights_only=False)
+        for name, parameter in actor.state_dict().items():
+            torch.testing.assert_close(parameter, saved["actor"][name])
+        assert ppo.evaluation_score(
+            [dict(saved["evaluation"][0], survived=1.0, episode_length=500.0)]
+        ) > ppo.evaluation_score(
+            [
+                dict(
+                    saved["evaluation"][0],
+                    survived=0.0,
+                    episode_length=100.0,
+                    episode_return=1e6,
+                )
+            ]
+        )
+        evaluation_env.close()
+        env.close()
+
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_geom_contacts_and_site_positions(self, tmp_path, backend):
         xml = tmp_path / "ball.xml"

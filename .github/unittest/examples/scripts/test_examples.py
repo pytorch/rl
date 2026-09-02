@@ -339,6 +339,7 @@ EXCLUDED_EXAMPLES = {
     "examples/memmap/memmap_td_distributed.py": "manual multi-rank benchmark",
     "examples/microduck/ppo_mjlab.py": "requires MicroDuck, MJLab, and CUDA",
     "examples/microduck/heuristic_gait.py": "requires the external MicroDuck MJCF assets",
+    "examples/microduck/ppo_mujoco.py": "requires the external MicroDuck MJCF assets",
     "examples/mujoco_macros/_viewer.py": "viewer helper module",
     "examples/replay-buffers/compressed_replay_buffer.py": "requires nvCOMP and Atari assets",
     "examples/replay-buffers/compressed_replay_buffer_checkpoint.py": "requires nvCOMP",
