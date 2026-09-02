@@ -150,7 +150,7 @@ TensorDictSequential(
  in_keys=['features'],
  out_keys=['logits'])
  (2): TensorDictModule(
- module=<function make_policy.<locals>.<lambda> at 0x7fdb8c7f3d80>,
+ module=<function make_policy.<locals>.<lambda> at 0x7febf9b57d80>,
  in_keys=['logits'],
  out_keys=['action'])
  ),
@@ -479,7 +479,7 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 ```
 
 ```
-Training loss trajectory: [0.4125, 0.4092, 0.4045, 0.4065]
+Training loss trajectory: [0.4141, 0.4093, 0.4063, 0.4073]
 ```
 
 ## Conclusion
