@@ -76,6 +76,36 @@ class _DelayedCountingEnv(CountingEnv):
         return super()._step(tensordict)
 
 
+class _ManyKeysCountingEnv(CountingEnv):
+    """A CountingEnv with many observation keys.
+
+    A single pickled result of this env comfortably exceeds the OS pipe
+    capacity (16KB on macOS, 64KB on Linux) even though every tensor is
+    reduced to a small shared-memory handle: with 256 keys, one result pair
+    of ``step_and_maybe_reset`` pickles to roughly 90KB.
+    """
+
+    _NUM_EXTRA_KEYS = 256
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for index in range(self._NUM_EXTRA_KEYS):
+            self.observation_spec[f"obs{index}"] = Unbounded(
+                (*self.batch_size, 1), dtype=torch.float32
+            )
+
+    def _fill_extra_keys(self, tensordict):
+        for index in range(self._NUM_EXTRA_KEYS):
+            tensordict.set(f"obs{index}", torch.zeros(*self.batch_size, 1))
+        return tensordict
+
+    def _reset(self, tensordict, **kwargs):
+        return self._fill_extra_keys(super()._reset(tensordict, **kwargs))
+
+    def _step(self, tensordict):
+        return self._fill_extra_keys(super()._step(tensordict))
+
+
 def test_callable_metadata_env_closes_when_extraction_fails(monkeypatch):
     env = ContinuousActionVecMockEnv()
     closed = False
@@ -1010,6 +1040,41 @@ class TestAsyncEnvPool:
             assert result.shape[0] == 2
         finally:
             env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_queue_shutdown_with_unread_results(self):
+        """Shutdown must not deadlock when unread results are still buffered.
+
+        Each worker publishes one large result (~90KB pickled) that the
+        consumer never reads. Process teardown joins the queue feeder
+        threads, which block on the full pipe unless shutdown drains the
+        result queues while joining; a blocked worker in turn used to hang
+        ``AsyncEnvPool.shutdown()`` forever. Graceful exits (exitcode 0)
+        prove the workers did not need the terminate fallback either.
+        """
+        env = AsyncEnvPool(
+            [partial(_ManyKeysCountingEnv, max_steps=1000)] * 4,
+            backend="multiprocessing",
+            exchange="queue",
+        )
+        reset = env.reset()
+        reset.set("action", torch.ones(reset.shape + (1,)))
+        env.async_step_and_maybe_reset_send(reset)
+        # Each worker processes its step command and then the shutdown
+        # command in order, so the large results are buffered and unread
+        # when the workers exit.
+        shutdown_thread = threading.Thread(target=env.shutdown, daemon=True)
+        shutdown_thread.start()
+        shutdown_thread.join(timeout=120)
+        try:
+            assert not shutdown_thread.is_alive(), "shutdown deadlocked"
+            assert all(proc.exitcode == 0 for proc in env.threads)
+        finally:
+            # Do not leave live workers behind on failure: pytest joins all
+            # multiprocessing children at exit and would hang forever.
+            for proc in env.threads:
+                if proc.is_alive():
+                    proc.terminate()
 
     @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
     def test_deadline_batch_validation(self, make_envs, backend):

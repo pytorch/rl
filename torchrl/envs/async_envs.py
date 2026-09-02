@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import abc
 import multiprocessing
+import queue
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import as_completed, FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -23,7 +24,7 @@ from tensordict import (
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict, expand_as_right
 
-from torchrl._utils import timeit
+from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs._async_exchange import _receive_batch, _SharedSlotExchange
 from torchrl.envs.common import _EnvPostInit, EnvBase
@@ -947,12 +948,54 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
 
     _async_private_reset_recv = async_reset_recv
 
+    _SHUTDOWN_TIMEOUT = 60.0
+
+    def _drain_result_queues(self) -> None:
+        for result_queue in (
+            self.step_queue,
+            self.reset_queue,
+            self.step_reset_queue,
+            *self._per_env_step_queues,
+            *self._per_env_reset_queues,
+            *self._per_env_step_reset_queues,
+        ):
+            while True:
+                try:
+                    result_queue.get_nowait()
+                except queue.Empty:
+                    break
+                except (EOFError, OSError):
+                    # The item has already been removed from the queue, but
+                    # rebuilding a discarded tensor can fail once its worker's
+                    # resource sharer has exited. Keep draining the remaining
+                    # items so other workers can finish flushing their queues.
+                    continue
+
     def shutdown(self):
         for env_id in range(self.num_envs):
             self.input_queue[env_id].put(("shutdown", None))
 
+        # A worker whose unread results still sit in a result queue cannot
+        # exit: its process teardown joins the queue's feeder thread, which
+        # blocks writing into the full pipe that nothing reads any more.
+        # Draining the result queues while joining unblocks those feeders so
+        # the workers exit through the normal teardown path.
+        deadline = timeit("async_env_shutdown_deadline").start()
         for thread in self.threads:
-            thread.join()
+            while thread.is_alive() and deadline.elapsed() < self._SHUTDOWN_TIMEOUT:
+                self._drain_result_queues()
+                thread.join(timeout=0.1)
+        stragglers = [thread for thread in self.threads if thread.is_alive()]
+        if stragglers:
+            torchrl_logger.warning(
+                f"AsyncEnvPool.shutdown: terminating {len(stragglers)} worker "
+                f"process(es) that did not exit within "
+                f"{self._SHUTDOWN_TIMEOUT}s."
+            )
+            for thread in stragglers:
+                thread.terminate()
+            for thread in stragglers:
+                thread.join()
 
     @classmethod
     def _env_exec(
