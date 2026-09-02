@@ -28,12 +28,20 @@ The reward follows the mjlab velocity-task recipe, with every term weighted
 per second and multiplied by the control period: Gaussian tracking of the
 commanded velocity (lateral velocity tracked to zero) and of a zero yaw rate,
 a Gaussian uprightness term, a nominal-pose term that is tight when standing
-and loose when walking, and three contact-based gait terms that are active
-under a nonzero command: foot air time inside a 0.125 to 0.3 s swing window,
-swing-foot height toward a 2 cm clearance target, and agreement between foot
-contacts and the gait clock. Small costs act on vertical and roll/pitch base
-motion, joint velocity and action rate; a fall costs a fixed penalty and
-terminates the episode. Weights are class attributes on `MicroDuckEnv`.
+and loose when walking, and contact-based gait terms that are active under a
+nonzero command: foot air time inside a 0.125 to 0.3 s swing window,
+swing-foot height toward a 2 cm clearance target, agreement between foot
+contacts and the gait clock, and a penalty for keeping both feet planted.
+Small costs act on vertical and roll/pitch base motion, joint velocity and
+action rate; a fall costs a fixed penalty and terminates the episode. Weights
+are class attributes on `MicroDuckEnv`.
+
+The gait terms and the 0.1 m/s tracking std exist because of a failure mode
+seen in training: with a looser tracking term and no double-support penalty,
+a from-scratch policy learned to stand perfectly still under every command
+within 600k transitions (full survival, 3 mm displacement, tracking error
+equal to the command) and never left that optimum. Standing under a nonzero
+command must earn clearly less than stepping.
 `command_range` samples the command from an interval and
 `warm_start_velocity` launches a fraction of resets already moving forward,
 so an untrained policy sees locomotion states early.
