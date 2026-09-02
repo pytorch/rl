@@ -18,15 +18,25 @@ vendored in TorchRL: point the scripts at a checkout with
 `MicroDuckEnv` is a commanded longitudinal-velocity task written once against
 `MujocoEnv`, so `backend="mujoco"`, `"mjx"` and `"mujoco-torch"` share the
 observation, action, reward and termination definitions. The 14 actions are
-normalized offsets around the `STAND` keyframe targets. The 53-value
-observation holds projected gravity, body angular velocity, measured and
-commanded body-frame forward velocity, joint errors and velocities, a
+normalized offsets around the `STAND` keyframe targets, applied at 50 Hz. The
+53-value observation holds projected gravity, body angular velocity, measured
+and commanded body-frame forward velocity, joint errors and velocities, a
 fixed-frequency gait clock and the previous action; the command is also
-exposed under `commanded_x_velocity`. Nonzero commands are rewarded for
-velocity along the commanded direction plus an alive bonus, a zero command
-for Gaussian velocity tracking and a nominal pose; uprightness and height
-stabilize, small costs discourage lateral drift, roll/yaw rate, joint velocity
-and action rate, and a fall costs a fixed penalty and terminates the episode.
+exposed under `commanded_x_velocity`.
+
+The reward follows the mjlab velocity-task recipe, with every term weighted
+per second and multiplied by the control period: Gaussian tracking of the
+commanded velocity (lateral velocity tracked to zero) and of a zero yaw rate,
+a Gaussian uprightness term, a nominal-pose term that is tight when standing
+and loose when walking, and three contact-based gait terms that are active
+under a nonzero command: foot air time inside a 0.125 to 0.3 s swing window,
+swing-foot height toward a 2 cm clearance target, and agreement between foot
+contacts and the gait clock. Small costs act on vertical and roll/pitch base
+motion, joint velocity and action rate; a fall costs a fixed penalty and
+terminates the episode. Weights are class attributes on `MicroDuckEnv`.
+`command_range` samples the command from an interval and
+`warm_start_velocity` launches a fraction of resets already moving forward,
+so an untrained policy sees locomotion states early.
 
 The upstream walking MJCF reuses detailed render meshes as collision geoms.
 Their convex-hull edge pairs make the accelerated backends run out of memory,
@@ -57,10 +67,11 @@ survival and bilateral stepping before speed.
 
 ## Recurrent PPO
 
-The policy is a GRU backbone shared by the actor and the critic. The actor head
-adds a bounded, zero-initialized residual to the closed-form gait, so training
-starts from a validated walking controller. Data flows through standard TorchRL
-components:
+The policy is a GRU backbone shared by the actor and the critic. With
+`--policy-head gaussian` the actor is a plain Gaussian head trained from
+scratch; with `--policy-head gait-residual` it adds a bounded, zero-initialized
+residual to the closed-form gait, so training starts from a walking
+controller. Data flows through standard TorchRL components:
 
 1. a `Collector` with `trajs_per_batch=1` writes every finished episode as a
    whole, unpadded sequence into a `TensorDictReplayBuffer`;
@@ -87,6 +98,21 @@ uv run --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
 `--wandb-mode disabled` for a local run. Repeat `--commanded-x-velocity` to
 train a command distribution, and `--smoke` for a pipeline check.
 
+Training from scratch over a speed range, with 16 native workers:
+
+```bash
+WANDB_BASE_URL=https://api.wandb.ai \
+uv run --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
+  --microduck-root "$MICRODUCK_RL_ROOT" --num-envs 16 --parallel \
+  --policy-head gaussian --command-range 0.0 0.3 \
+  --warm-start-velocity 0.05 0.25 --warm-start-fraction 0.3 \
+  --learning-rate 3e-4 --entropy-coeff 0.005 \
+  --transitions-per-update 32768 --minibatch-trajectories 64 \
+  --total-transitions 30000000 --evaluation-interval 10 \
+  --evaluation-command 0.0 --evaluation-command 0.15 --evaluation-command 0.3 \
+  --wandb-entity YOUR_ENTITY
+```
+
 ### Backends
 
 Pass `--backend mjx` or `--backend mujoco-torch` to change only the physics.
@@ -95,14 +121,29 @@ Pass `--backend mjx` or `--backend mujoco-torch` to change only the physics.
 [vmoens/mujoco-torch#85](https://github.com/vmoens/mujoco-torch/pull/85) the
 compiled eight-environment MicroDuck step runs at roughly 180-190 transitions/s
 on an Apple-silicon CPU after a one-off compile of about a minute, against
-about 45 transitions/s in eager mode. Native MuJoCo with eight serial envs
-collects around 1,000 transitions/s on the same machine and remains the
-default for laptop training; `--parallel` switches it to `ParallelEnv`.
+about 45 transitions/s in eager mode.
+
+Measured on an Apple-silicon CPU with random actions at 50 Hz control:
+
+| Backend | Batch | Transitions/s |
+| --- | ---: | ---: |
+| native MuJoCo, `ParallelEnv` | 16 workers | ~3,500 |
+| MJX, jit + vmap | 1,024 envs | ~700 |
+| MJX, jit + vmap | 2,048 envs | ~500 |
+
+MJX slows down as envs fall, because its contact solver cost grows with the
+number of active contacts, and it does not scale past about a thousand envs on
+this CPU. Native MuJoCo in processes is the right choice for a laptop; MJX and
+compiled `mujoco-torch` are the right choice on a GPU host.
 
 ## Results of the validation runs
 
-Three CPU runs (8 parallel native envs, Apple silicon) validated the pipeline
-on the personal W&B project
+The following runs used the gait-residual head with the earlier directional
+reward at 125 Hz control, before the reward redesign described above. They
+validated the pipeline rather than the task.
+
+Three CPU runs (8 parallel native envs, Apple silicon) on the personal W&B
+project
 [`vmoens/torchrl-microduck-ppo`](https://wandb.ai/vmoens/torchrl-microduck-ppo):
 
 | Run | Settings | Transitions | Collect / train throughput |
@@ -135,11 +176,10 @@ Every policy survives all 500 steps for every command. What the runs show:
   and `KLAdaptiveLR` drove the learning rate to its floor. A 1e-4 learning rate
   with five epochs kept the KL inside the target band from the first update,
   which is why those are now the defaults.
-- For nonzero commands the reward pays for velocity along the commanded
-  direction, not for matching its magnitude, and the gait prior only reads the
-  command's sign. Every policy therefore behaves identically at 0.03 and
-  0.06 m/s. Teaching the policy to track a speed needs a magnitude-aware
-  tracking term in `MicroDuckEnv`, which is left to a follow-up task change.
+- That reward paid for velocity along the commanded direction, not for
+  matching its magnitude, and the gait prior only reads the command's sign, so
+  every policy behaved identically at 0.03 and 0.06 m/s. The current reward
+  tracks the command magnitude and rewards stepping through foot contacts.
 
 ## Rendering
 
