@@ -122,6 +122,7 @@ def make_env(
     warm_start_velocity: Sequence[float] | None = None,
     warm_start_fraction: float = 0.0,
     joint_reset_noise_scale: float | None = None,
+    action_scale: float = 0.35,
     num_envs: int = 8,
     device: torch.device | str = "cpu",
     seed: int = 0,
@@ -162,6 +163,7 @@ def make_env(
         ),
         "warm_start_fraction": warm_start_fraction,
         "joint_reset_noise_scale": joint_reset_noise_scale,
+        "action_scale": action_scale,
         "num_envs": num_envs,
         "device": torch.device(device),
         "seed": seed,
@@ -874,6 +876,12 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--warm-start-fraction", type=float, default=0.0)
     parser.add_argument(
+        "--action-scale",
+        type=float,
+        default=0.35,
+        help="Position-target offset in radians for a unit normalized action.",
+    )
+    parser.add_argument(
         "--joint-reset-noise-scale",
         type=float,
         help="Uniform joint-position noise at reset in radians; defaults to the "
@@ -943,6 +951,7 @@ def main(args: argparse.Namespace) -> None:
         "hidden_size": args.hidden_size,
         "max_episode_steps": args.max_episode_steps,
         "compile_step": args.compile_step,
+        "action_scale": args.action_scale,
     }
     policy_kwargs = {
         "hidden_size": args.hidden_size,
