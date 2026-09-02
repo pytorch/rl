@@ -16,7 +16,7 @@ MicroDuck lockfile supplies its pinned simulator dependencies::
     uv run --with-editable /path/to/rl --with cmake \
         --with 'torchcodec>=0.10.0' \
         --no-build-isolation-package tensordict \
-        python /path/to/rl/examples/mjlab/ppo_microduck.py --smoke
+        python /path/to/rl/examples/microduck/ppo_mjlab.py --smoke
 
 The smoke preset runs 64 environments for five PPO iterations. Remove
 ``--smoke`` for the default 4096-environment, 5000-iteration run. Metrics,

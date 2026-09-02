@@ -337,7 +337,7 @@ EXCLUDED_EXAMPLES = {
     "examples/llm/web_search_tool.py": "requires live external web services",
     "examples/memmap/memmap_speed_distributed.py": "manual multi-rank benchmark",
     "examples/memmap/memmap_td_distributed.py": "manual multi-rank benchmark",
-    "examples/mjlab/ppo_microduck.py": "requires MicroDuck, MJLab, and CUDA",
+    "examples/microduck/ppo_mjlab.py": "requires MicroDuck, MJLab, and CUDA",
     "examples/mujoco_macros/_viewer.py": "viewer helper module",
     "examples/replay-buffers/compressed_replay_buffer.py": "requires nvCOMP and Atari assets",
     "examples/replay-buffers/compressed_replay_buffer_checkpoint.py": "requires nvCOMP",
