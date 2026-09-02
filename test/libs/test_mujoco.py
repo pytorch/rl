@@ -246,16 +246,10 @@ class TestMujoco:
             )
             if command:
                 # The pose term is loose while walking and the gait terms are
-                # active: both feet are planted, so exactly one foot agrees
-                # with the gait clock and the double-support penalty applies.
+                # active, but with both feet off the ground there is no
+                # correct single support to credit.
                 assert (pose_cost < 0.01).all()
-                torch.testing.assert_close(
-                    components["diagnostic_reward_phase_contact"],
-                    torch.full(
-                        (num_envs, 1),
-                        0.5 * MicroDuckEnv.PHASE_CONTACT_WEIGHT * 0.02,
-                    ),
-                )
+                assert (components["diagnostic_reward_phase_contact"] == 0).all()
                 stationary_reward = env._compute_reward(state, action, state)
                 assert (matching_reward > stationary_reward).all()
                 standing_pose_cost = pose_cost
@@ -275,6 +269,19 @@ class TestMujoco:
             planted["diagnostic_reward_double_support"],
             torch.full((num_envs, 1), MicroDuckEnv.DOUBLE_SUPPORT_WEIGHT * 0.02),
         )
+        # Standing on both feet earns no phase credit; only correct single
+        # support does.
+        assert (planted["diagnostic_reward_phase_contact"] == 0).all()
+        env._contacts = torch.tensor([[False, True]]).expand(num_envs, -1).clone()
+        phase, _ = env._gait_clock()
+        left_swing = (phase.sin() > 0).to(env.dtype).unsqueeze(-1)
+        torch.testing.assert_close(
+            env._reward_components(settled_state, action)[
+                "diagnostic_reward_phase_contact"
+            ],
+            MicroDuckEnv.PHASE_CONTACT_WEIGHT * 0.02 * left_swing,
+        )
+        env._refresh_contacts()
         env.reset(
             TensorDict(
                 {"commanded_x_velocity": torch.zeros(num_envs, 1)},

@@ -18,8 +18,8 @@ Reward
     term that is tight when standing and loose when walking, and three
     contact-based gait terms that are active only under a nonzero command:
     rewarded foot air time inside a swing-duration window, swing-foot height
-    toward a clearance target, agreement between foot contacts and the gait
-    clock, and a penalty for keeping both feet planted. Standing still under a
+    toward a clearance target, correct single support with
+    respect to the gait clock, and a penalty for keeping both feet planted. Standing still under a
     nonzero command therefore earns clearly less than stepping, which a
     from-scratch policy otherwise settles into. Small costs discourage vertical
     and roll/pitch base motion, joint velocity and action rate. A fall costs a
@@ -781,8 +781,11 @@ class MicroDuckEnv(MujocoEnv):
         ).sum(dim=-1)
         phase, _ = self._gait_clock()
         directed_sin = command.sign() * phase.sin()
+        # Left foot swings while the directed clock is positive. Credit is
+        # given only for correct single support, so standing on both feet
+        # earns nothing here.
         expected_contact = torch.stack((directed_sin <= 0, directed_sin > 0), dim=-1)
-        phase_contact = (self._contacts == expected_contact).to(self.dtype).mean(-1)
+        phase_contact = (self._contacts == expected_contact).all(dim=-1).to(self.dtype)
         double_support = self._contacts.all(dim=-1).to(self.dtype)
         gait_gate = (moving & (upright >= self.MIN_UPRIGHT)).to(self.dtype)
 
