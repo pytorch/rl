@@ -341,8 +341,9 @@ manipulation task for scripted MuJoCo macro-control examples. It composes a
 local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
 :class:`~torchrl.envs.MicroDuckEnv` is a commanded-velocity locomotion task
 for Pollen Robotics' MicroDuck biped. It loads the walking MJCF from a local
-``microduck_rl`` checkout (``MICRODUCK_RL_ROOT``) or an installed
-``mjlab_microduck`` package, replaces the heavy collision meshes with box
+``microduck_rl`` checkout (``MICRODUCK_RL_ROOT``), an installed
+``mjlab_microduck`` package, or a pinned upstream commit downloaded on demand
+with ``download=True``, replaces the heavy collision meshes with box
 proxies so the accelerated backends fit in memory, and exposes foot contacts
 and foot heights for gait metrics through
 :meth:`~torchrl.envs.MujocoEnv.geom_contacts` and

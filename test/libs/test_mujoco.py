@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -466,6 +467,53 @@ class TestMujoco:
             MicroDuckEnv(scene, reward_scales={"FRAME_SKIP": 1.0})
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_download_resolves_and_runs_once_per_batch(
+        self, tmp_path, monkeypatch
+    ):
+        from torchrl.envs.custom.mujoco import microduck as microduck_module
+
+        (tmp_path / "fixture").mkdir()
+        fixture = self._write_microduck_fixture(tmp_path / "fixture")
+        cache = tmp_path / "cache"
+        calls = []
+
+        def fake_download(root, commit, *, force):
+            calls.append(force)
+            target = root / f"microduck_rl-{commit}"
+            if force and target.exists():
+                shutil.rmtree(target)
+            if not target.exists():
+                scene_dir = target / "src" / "mjlab_microduck" / "robot" / "microduck"
+                scene_dir.mkdir(parents=True)
+                shutil.copy(fixture, scene_dir / "scene_walk.xml")
+            return target
+
+        monkeypatch.setattr(microduck_module, "_download_microduck_rl", fake_download)
+        monkeypatch.delenv(MicroDuckEnv.ROOT_ENV_VAR, raising=False)
+        monkeypatch.setattr(
+            "torchrl.envs.custom.mujoco.microduck.importlib.util.find_spec",
+            lambda name: None,
+        )
+        with pytest.raises(FileNotFoundError, match="download=True"):
+            MicroDuckEnv(root=cache)
+        assert calls == []
+        # A batched native env resolves once in the parent, not once per worker.
+        env = MicroDuckEnv(
+            root=cache, download=True, num_envs=2, parallel=False, seed=0
+        )
+        assert calls == [False]
+        env.rollout(2)
+        env.close()
+        # The cached checkout is found without downloading again ...
+        env = MicroDuckEnv(root=cache, seed=0)
+        assert calls == [False]
+        assert env.scene_path.is_relative_to(cache)
+        env.close()
+        # ... unless a re-download is forced.
+        MicroDuckEnv.resolve_scene(root=cache, download="force")
+        assert calls == [False, True]
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_native_backend_is_default_and_batches(self, tmp_path):
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(scene, num_envs=2, parallel=False, seed=0)
@@ -487,8 +535,9 @@ class TestMujoco:
             "torchrl.envs.custom.mujoco.microduck.importlib.util.find_spec",
             lambda name: None,
         )
-        with pytest.raises(FileNotFoundError, match=MicroDuckEnv.ROOT_ENV_VAR):
-            MicroDuckEnv.resolve_scene()
+        with pytest.raises(FileNotFoundError, match="download=True") as excinfo:
+            MicroDuckEnv.resolve_scene(root=tmp_path / "cache")
+        assert MicroDuckEnv.ROOT_ENV_VAR in str(excinfo.value)
         monkeypatch.setenv(MicroDuckEnv.ROOT_ENV_VAR, str(tmp_path / "microduck_rl"))
         assert MicroDuckEnv.resolve_scene() == scene.resolve()
         assert MicroDuckEnv.resolve_scene(checkout) == scene.resolve()

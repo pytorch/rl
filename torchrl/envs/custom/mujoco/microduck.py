@@ -34,7 +34,10 @@ from __future__ import annotations
 import importlib.util
 import math
 import os
+import shutil
+import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
@@ -43,9 +46,64 @@ from typing import Any, ClassVar
 
 import torch
 from tensordict import TensorDictBase
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Binary, Bounded, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
-from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
+
+MICRODUCK_RL_COMMIT = "d424a0c899f6b33cbd3daeb279913134349c0b63"
+MICRODUCK_RL_ARCHIVE_URL = (
+    "https://github.com/pollen-robotics/microduck_rl/archive/{commit}.zip"
+)
+
+
+def _download_microduck_rl(root: Path, commit: str, *, force: bool) -> Path:
+    """Fetch the pinned ``microduck_rl`` archive into ``root/microduck_rl-<commit>``.
+
+    The archive is extracted into a temporary directory next to the target and
+    moved into place atomically, so a concurrent caller either finds the
+    complete checkout or performs the download itself.
+    """
+    target = root / f"microduck_rl-{commit}"
+    if target.exists() and force:
+        shutil.rmtree(target)
+    if target.exists():
+        return target
+    root.mkdir(parents=True, exist_ok=True)
+    url = MICRODUCK_RL_ARCHIVE_URL.format(commit=commit)
+    torchrl_logger.info("Downloading the MicroDuck assets from %s to %s", url, target)
+    with TemporaryDirectory(prefix="microduck_rl-", dir=root) as tmp:
+        archive = Path(tmp) / "microduck_rl.zip"
+        urllib.request.urlretrieve(url, archive)
+        with zipfile.ZipFile(archive) as zf:
+            zf.extractall(tmp)
+        extracted = Path(tmp) / f"microduck_rl-{commit}"
+        try:
+            extracted.replace(target)
+        except OSError:
+            if not target.exists():
+                raise
+    return target
+
+
+class _MicroDuckMeta(_MujocoMeta):
+    """Resolve (and if requested download) the assets once, before batching.
+
+    :class:`~torchrl.envs.custom.mujoco.base._MujocoMeta` builds one env per
+    worker for the native backend; resolving the scene here means the workers
+    receive a local path and never download concurrently.
+    """
+
+    def __call__(
+        cls,
+        microduck_root: str | Path | None = None,
+        *args: Any,
+        root: str | Path | None = None,
+        download: bool | str = False,
+        **kwargs: Any,
+    ):
+        scene = cls.resolve_scene(microduck_root, root=root, download=download)
+        return super().__call__(scene, *args, **kwargs)
 
 
 def _projected_gravity(quaternion: torch.Tensor) -> torch.Tensor:
@@ -147,7 +205,7 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
         yield patched_scene
 
 
-class MicroDuckEnv(MujocoEnv):
+class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     r"""Commanded longitudinal-velocity locomotion task for the MicroDuck biped.
 
     The action is a normalized offset around the actuator targets of the MJCF
@@ -169,13 +227,22 @@ class MicroDuckEnv(MujocoEnv):
 
     The MJCF is resolved from ``microduck_root``, then from the
     ``MICRODUCK_RL_ROOT`` environment variable, then from an installed
-    ``mjlab_microduck`` package. A ``microduck_rl`` checkout, its package
-    directory, or the ``scene_walk.xml`` file itself are all accepted.
+    ``mjlab_microduck`` package, then from a checkout of the pinned upstream
+    commit under ``root``, which ``download=True`` fetches when absent. A
+    ``microduck_rl`` checkout, its package directory, or the ``scene_walk.xml``
+    file itself are all accepted.
 
     Args:
         microduck_root: ``microduck_rl`` checkout, ``mjlab_microduck`` package
             directory, or path to ``scene_walk.xml``. Defaults to the
-            :attr:`ROOT_ENV_VAR` environment variable or the installed package.
+            :attr:`ROOT_ENV_VAR` environment variable, the installed package,
+            or a download under ``root``.
+        root: directory holding downloaded ``microduck_rl`` checkouts. Defaults
+            to ``~/.cache/torchrl/microduck``.
+        download: whether to download the pinned ``microduck_rl`` commit into
+            ``root`` when no other source resolves. Defaults to ``False``, in
+            which case a missing asset raises an error describing every option.
+            ``"force"`` re-downloads even when the checkout is present.
         backend: MuJoCo physics backend. Defaults to ``"mujoco"``, which was
             the fastest backend for this model on CPU in eager mode.
         commanded_x_velocity: fixed body-frame longitudinal velocity command in
@@ -331,6 +398,8 @@ class MicroDuckEnv(MujocoEnv):
         self,
         microduck_root: str | Path | None = None,
         *,
+        root: str | Path | None = None,
+        download: bool | str = False,
         backend: BackendName = "mujoco",
         commanded_x_velocity: float | Sequence[float] = (0.03,),
         command_range: tuple[float, float] | None = None,
@@ -393,7 +462,9 @@ class MicroDuckEnv(MujocoEnv):
         ):
             raise ValueError("joint_reset_noise_scale must be finite and non-negative.")
 
-        self.scene_path = self.resolve_scene(microduck_root)
+        self.scene_path = self.resolve_scene(
+            microduck_root, root=root, download=download
+        )
         self.command_range = (
             None if command_range is None else tuple(float(v) for v in command_range)
         )
@@ -482,31 +553,54 @@ class MicroDuckEnv(MujocoEnv):
     # ------------------------------------------------------------------
 
     @classmethod
-    def resolve_scene(cls, microduck_root: str | Path | None = None) -> Path:
+    def resolve_scene(
+        cls,
+        microduck_root: str | Path | None = None,
+        *,
+        root: str | Path | None = None,
+        download: bool | str = False,
+    ) -> Path:
         """Locate MicroDuck's ``scene_walk.xml``.
 
         Args:
             microduck_root: ``microduck_rl`` checkout, ``mjlab_microduck``
                 package directory, or the scene XML itself. When omitted, the
-                :attr:`ROOT_ENV_VAR` environment variable and an installed
-                ``mjlab_microduck`` package are tried in that order.
+                :attr:`ROOT_ENV_VAR` environment variable, an installed
+                ``mjlab_microduck`` package and a checkout of
+                :data:`MICRODUCK_RL_COMMIT` under ``root`` are tried in that
+                order.
+            root: directory holding downloaded checkouts. Defaults to
+                ``~/.cache/torchrl/microduck``.
+            download: download the pinned commit into ``root`` when nothing
+                else resolves; ``"force"`` re-downloads it.
 
         Returns:
             The absolute path to the scene XML.
 
         Raises:
-            FileNotFoundError: if the scene cannot be located.
+            FileNotFoundError: if the scene cannot be located and ``download``
+                is ``False``.
         """
-        candidates: list[Path] = []
-        if microduck_root is not None:
-            candidates.append(Path(microduck_root).expanduser())
+        cache_root = (
+            Path("~/.cache/torchrl/microduck").expanduser()
+            if root is None
+            else Path(root).expanduser()
+        )
+        if download == "force":
+            candidates = [
+                _download_microduck_rl(cache_root, MICRODUCK_RL_COMMIT, force=True)
+            ]
+        elif microduck_root is not None:
+            candidates = [Path(microduck_root).expanduser()]
         else:
+            candidates = []
             env_root = os.environ.get(cls.ROOT_ENV_VAR)
             if env_root:
                 candidates.append(Path(env_root).expanduser())
             spec = importlib.util.find_spec("mjlab_microduck")
             if spec is not None and spec.origin is not None:
                 candidates.append(Path(spec.origin).resolve().parent)
+            candidates.append(cache_root / f"microduck_rl-{MICRODUCK_RL_COMMIT}")
         suffixes = (
             Path(cls.SCENE_FILE),
             Path("robot", "microduck", cls.SCENE_FILE),
@@ -524,10 +618,19 @@ class MicroDuckEnv(MujocoEnv):
                 attempted.append(path)
                 if path.is_file():
                     return path.resolve()
+        if download and microduck_root is None:
+            checkout = _download_microduck_rl(
+                cache_root, MICRODUCK_RL_COMMIT, force=False
+            )
+            return cls.resolve_scene(checkout)
         detail = "\n".join(f"  - {path}" for path in attempted) or "  (nothing)"
         raise FileNotFoundError(
-            f"Could not find MicroDuck's {cls.SCENE_FILE}. Pass microduck_root=..., "
-            f"set {cls.ROOT_ENV_VAR}, or install mjlab_microduck. Tried:\n{detail}"
+            f"Could not find MicroDuck's {cls.SCENE_FILE}. Either pass "
+            "microduck_root=<microduck_rl checkout>, set the "
+            f"{cls.ROOT_ENV_VAR} environment variable, install the "
+            "mjlab_microduck package, or pass download=True to fetch commit "
+            f"{MICRODUCK_RL_COMMIT[:9]} of pollen-robotics/microduck_rl into "
+            f"{cache_root}. Tried:\n{detail}"
         )
 
     def _configure_from_model(self) -> None:
