@@ -99,6 +99,8 @@ notebook = ["jupyterlab"]
 # recent torch), so the extra is empty on older interpreters
 vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
 rendering = ["moviepy", "pygame", "pyyaml", "torchcodec>=0.10.0"]
+# Node.js runtime for the MuJoCo WASM viewer on machines without a system Node.
+mujoco_wasm = ["nodejs-wheel"]
 tests = [
     "pytest",
     "pyyaml",

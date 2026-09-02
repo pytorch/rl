@@ -435,8 +435,10 @@ def _find_package_manager() -> str:
         if shutil.which(candidate) is not None:
             return candidate
     raise RuntimeError(
-        "MuJoCo WASM viewer startup requires pnpm or npm on PATH. "
-        "Call write_mujoco_wasm_viewer() and serve the viewer manually if needed."
+        "MuJoCo WASM viewer startup requires Node.js and pnpm or npm on PATH. "
+        "Install Node.js, or install the `mujoco_wasm` extra "
+        "(`pip install torchrl[mujoco_wasm]`, or `uv run --extra mujoco_wasm`) "
+        "to get a bundled runtime."
     )
 
 
