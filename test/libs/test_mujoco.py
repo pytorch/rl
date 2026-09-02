@@ -8,9 +8,11 @@ satellite) across the three physics backends."""
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import math
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +24,7 @@ from torchrl.envs import (
     AntEnv,
     Compose,
     CubeBowlEnv,
+    ExplorationType,
     HopperEnv,
     HumanoidEnv,
     InitTracker,
@@ -34,6 +37,7 @@ from torchrl.envs import (
     RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
+    set_exploration_type,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
@@ -633,6 +637,40 @@ class TestMujoco:
         np.testing.assert_allclose(
             model.geom_quat[collision_id], original_model.geom_quat[collision_id]
         )
+
+    @staticmethod
+    def _load_example(name: str):
+        """Import an example module from its file without touching sys.path."""
+        path = Path(__file__).parents[2] / "examples" / "microduck" / f"{name}.py"
+        module_name = f"microduck_example_{name}"
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_example_gait_metrics_from_contacts(self, tmp_path):
+        gait = self._load_example("heuristic_gait")
+        scene = self._write_microduck_fixture(tmp_path)
+        env = gait.make_env(scene, seed=0, max_episode_steps=30)
+        config = gait.MicroDuckGaitConfig()
+        observation = env.reset()["observation"]
+        action = gait.gait_action(config, observation)
+        assert action.shape == (1, 14)
+        assert (action.abs() <= 1.0).all()
+        trials = gait.evaluate_gait(
+            env, config, seeds=(0, 1), steps=30, commanded_x_velocity=0.03
+        )
+        summary = gait.summarize(trials)
+        # The fixture's feet never leave the ground, so displacement alone must
+        # not be mistaken for walking.
+        assert summary["survival_rate"] == 1.0
+        assert summary["episode_length_min"] == 30.0
+        assert summary["walking_success_rate"] == 0.0
+        assert summary["left_swing_phases_min"] == 0.0
+        assert all(trial.left_single_support_steps == 0 for trial in trials)
+        env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_geom_contacts_and_site_positions(self, tmp_path, backend):
