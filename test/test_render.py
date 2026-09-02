@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import socket
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,7 +20,6 @@ import torchrl.render as render_module
 import torchrl.render.artifacts as artifacts_module
 import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
-
 from torchrl.checkpoint import Checkpoint
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase, ObservationNorm, set_gym_backend, StepCounter, VecNorm
@@ -699,7 +699,7 @@ class TestRenderNotebook:
         notebook = json.loads(result.artifact_path.read_text(encoding="utf-8"))
         source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
         assert "collect_rollouts_in_notebook" in source
-        assert "live_result = collect_rollouts_in_notebook()" in source
+        assert "env_kwargs=live_env_kwargs" in source
         assert not (tmp_path / "live_report" / "rollouts").exists()
         metadata = json.loads((tmp_path / "live_report" / "metadata.json").read_text())
         assert metadata["num_trajs"] == 0
@@ -722,6 +722,7 @@ class TestRenderNotebook:
 
         def fake_make_env(config, *, checkpoint=None):
             calls["env_checkpoint"] = checkpoint
+            calls["env_kwargs"] = dict(config.env_kwargs)
             return fake_env
 
         def fake_make_policy(
@@ -749,9 +750,15 @@ class TestRenderNotebook:
             if "collect_rollouts_in_notebook" in "".join(cell["source"])
             and cell["cell_type"] == "code"
         )
-        exec("".join(live_cell["source"]), {"cfg": config})
+        namespace = {"cfg": config}
+        exec("".join(live_cell["source"]), namespace)
+        namespace["collect_rollouts_in_notebook"](
+            env_kwargs={"commanded_x_velocity": -0.3}
+        )
+        assert config.env_kwargs == {}
         assert calls == {
             "env_checkpoint": checkpoint,
+            "env_kwargs": {"commanded_x_velocity": -0.3},
             "policy_checkpoint": checkpoint,
             "checkpoint_digest": "digest",
             "closed": True,
@@ -900,6 +907,42 @@ class TestMujocoWasm:
             )
         assert process.terminated is True
         assert display_module.objects == []
+
+    def test_vite_finds_node_bundled_with_package_manager(self, monkeypatch, tmp_path):
+        dependencies = tmp_path / "dependencies"
+        manager = dependencies / "bin" / "fallback" / "pnpm"
+        node = (
+            dependencies / "node" / "bin" / ("node.exe" if os.name == "nt" else "node")
+        )
+        manager.parent.mkdir(parents=True)
+        node.parent.mkdir(parents=True)
+        manager.write_text("#!/bin/sh\n")
+        node.write_text("#!/bin/sh\n")
+        manager.chmod(0o755)
+        node.chmod(0o755)
+
+        def which(command, path=None):
+            if command == "node":
+                return None
+            if command == "pnpm":
+                return str(manager)
+            raise AssertionError(f"Unexpected executable lookup: {command}")
+
+        calls = []
+        monkeypatch.setattr(mujoco_wasm_module.shutil, "which", which)
+        monkeypatch.setattr(
+            mujoco_wasm_module.subprocess,
+            "Popen",
+            lambda command, cwd, env: calls.append((command, cwd, env))
+            or FakeProcess(),
+        )
+
+        mujoco_wasm_module._start_vite("pnpm", tmp_path, "127.0.0.1", 5178)
+
+        command, cwd, env = calls[0]
+        assert command[:3] == ["pnpm", "exec", "vite"]
+        assert cwd == tmp_path
+        assert env["PATH"].split(os.pathsep)[0] == str(node.parent)
 
     def test_play_mujoco_wasm_trajectory_autoplay_writes_public_asset(
         self, monkeypatch, tmp_path

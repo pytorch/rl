@@ -9,6 +9,7 @@ import importlib
 import importlib.util
 import json
 import math
+import os
 import shutil
 import socket
 import subprocess
@@ -21,7 +22,6 @@ from typing import Any
 
 import torch
 from tensordict import NestedKey, TensorDictBase
-
 from torchrl.render.config import parse_nested_key
 
 _has_ipython = importlib.util.find_spec("IPython") is not None
@@ -435,8 +435,10 @@ def _find_package_manager() -> str:
         if shutil.which(candidate) is not None:
             return candidate
     raise RuntimeError(
-        "MuJoCo WASM viewer startup requires pnpm or npm on PATH. "
-        "Call write_mujoco_wasm_viewer() and serve the viewer manually if needed."
+        "MuJoCo WASM viewer startup requires Node.js and pnpm or npm on PATH. "
+        "Install Node.js, or install the `mujoco_wasm` extra "
+        "(`pip install torchrl[mujoco_wasm]`, or `uv run --extra mujoco_wasm`) "
+        "to get a bundled runtime."
     )
 
 
@@ -470,7 +472,35 @@ def _start_vite(
             str(port),
             "--strictPort",
         ]
-    return subprocess.Popen(command, cwd=viewer_dir)
+    return subprocess.Popen(
+        command,
+        cwd=viewer_dir,
+        env=_package_manager_runtime_env(manager),
+    )
+
+
+def _package_manager_runtime_env(manager: str) -> dict[str, str] | None:
+    """Expose a Node runtime bundled next to a standalone package manager."""
+    if shutil.which("node") is not None:
+        return None
+    manager_path = shutil.which(manager)
+    if manager_path is None:
+        return None
+    manager_path = Path(manager_path).resolve()
+    for parent in list(manager_path.parents)[:4]:
+        for executable in ("node", "node.exe"):
+            for candidate in (
+                parent / executable,
+                parent / "bin" / executable,
+                parent / "node" / "bin" / executable,
+            ):
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    env = os.environ.copy()
+                    env["PATH"] = os.pathsep.join(
+                        (str(candidate.parent), env.get("PATH", ""))
+                    )
+                    return env
+    return None
 
 
 def _wait_for_viewer_server(

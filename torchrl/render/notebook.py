@@ -203,9 +203,11 @@ def _live_rollout_cells() -> list[dict[str, Any]]:
             "Run this cell to generate trajectories from the checkpoint. "
             "It constructs the configured environment and policy inside the kernel, "
             "collects rollouts, and replaces the `rollouts` variable used by the "
-            "playback cells below."
+            "playback cells below. Edit `live_env_kwargs` before collecting to "
+            "change environment inputs without regenerating the notebook."
         ),
         _code_cell(
+            "from dataclasses import replace\n\n"
             "from torchrl.render import (\n"
             "    checkpoint_hash,\n"
             "    collect_render_rollouts,\n"
@@ -213,8 +215,12 @@ def _live_rollout_cells() -> list[dict[str, Any]]:
             "    load_render_policy,\n"
             "    make_render_env,\n"
             ")\n\n"
-            "def collect_rollouts_in_notebook(config=None):\n"
+            "def collect_rollouts_in_notebook(config=None, *, env_kwargs=None):\n"
             "    config = cfg if config is None else config\n"
+            "    if env_kwargs is not None:\n"
+            "        config = replace(\n"
+            "            config, env_kwargs={**config.env_kwargs, **env_kwargs}\n"
+            "        )\n"
             "    checkpoint = load_checkpoint(\n"
             "        config.ckpt, map_location=config.policy_device or config.device\n"
             "    )\n"
@@ -228,8 +234,17 @@ def _live_rollout_cells() -> list[dict[str, Any]]:
             "    finally:\n"
             "        close = getattr(env, 'close', None)\n"
             "        if callable(close):\n"
-            "            close()\n\n"
-            "live_result = collect_rollouts_in_notebook()\n"
+            "            close()"
+        ),
+        _code_cell(
+            "# Edit these values before collecting another rollout.\n"
+            "live_env_kwargs = dict(cfg.env_kwargs)\n"
+            "live_env_kwargs"
+        ),
+        _code_cell(
+            "live_result = collect_rollouts_in_notebook(\n"
+            "    env_kwargs=live_env_kwargs\n"
+            ")\n"
             "rollouts = live_result.trajectories\n"
             "live_result.metadata"
         ),
