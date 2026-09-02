@@ -23,11 +23,13 @@ updated policy. The same task runs on the native MuJoCo, MJX and
 
 Run a short CPU job from a TorchRL checkout::
 
-    python examples/microduck/ppo_mujoco.py --microduck-root /path/to/microduck_rl --smoke
+    python examples/microduck/ppo_mujoco.py --download --smoke
 
-Pass ``--backend mjx`` or ``--backend mujoco-torch --compile-step`` to change
-only the simulator. Set ``MICRODUCK_RL_ROOT`` instead of ``--microduck-root`` to
-point every script at the same checkout.
+``--download`` fetches the pinned ``microduck_rl`` assets into
+``~/.cache/torchrl/microduck``; pass ``--microduck-root`` or set
+``MICRODUCK_RL_ROOT`` to use an existing checkout instead. Pass
+``--backend mjx`` or ``--backend mujoco-torch --compile-step`` to change only
+the simulator.
 """
 
 from __future__ import annotations
@@ -147,6 +149,8 @@ def load_parameters(
 def make_env(
     microduck_root: str | Path | None = None,
     *,
+    root: str | Path | None = None,
+    download: bool | str = False,
     backend: BackendName = "mujoco",
     commanded_x_velocity: float | Sequence[float] = DEFAULT_COMMANDS,
     command_range: Sequence[float] | None = None,
@@ -200,6 +204,8 @@ def make_env(
     if observe_lateral_velocity is None:
         observe_lateral_velocity = recorded_env.get("observe_lateral_velocity", False)
     kwargs: dict[str, Any] = {
+        "root": root,
+        "download": download,
         "backend": backend,
         "commanded_x_velocity": commanded_x_velocity,
         "command_range": None if command_range is None else tuple(command_range),
@@ -866,6 +872,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--microduck-root", type=Path)
     parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Download the pinned microduck_rl assets when no checkout is found.",
+    )
+    parser.add_argument(
         "--backend", choices=("mujoco", "mjx", "mujoco-torch"), default="mujoco"
     )
     parser.add_argument("--device", default="cpu")
@@ -1043,6 +1054,7 @@ def main(args: argparse.Namespace) -> None:
         reward_scales[name.strip()] = float(value)
     gait = replace(MicroDuckGaitConfig(), frequency_hz=args.gait_frequency_hz)
     env_kwargs = {
+        "download": args.download,
         "backend": args.backend,
         "commanded_x_velocity": commands,
         "command_range": args.command_range,

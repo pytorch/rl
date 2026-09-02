@@ -18,12 +18,11 @@ moves in the commanded direction.
 
 Validate the default gait from a TorchRL checkout::
 
-    python examples/microduck/heuristic_gait.py --microduck-root /path/to/microduck_rl
+    python examples/microduck/heuristic_gait.py --download
 
 Search around it::
 
-    python examples/microduck/heuristic_gait.py --microduck-root /path/to/microduck_rl \\
-        --search-candidates 128
+    python examples/microduck/heuristic_gait.py --download --search-candidates 128
 """
 
 from __future__ import annotations
@@ -174,6 +173,7 @@ def make_render_policy(spec: RenderPolicySpec) -> MicroDuckGaitPolicy:
 def make_env(
     microduck_root: str | Path | None = None,
     *,
+    download: bool | str = False,
     backend: BackendName = "mujoco",
     commanded_x_velocity: float | Sequence[float] = 0.03,
     seed: int = 0,
@@ -195,6 +195,7 @@ def make_env(
         gait = MicroDuckGaitConfig()
     return MicroDuckEnv(
         microduck_root,
+        download=download,
         backend=backend,
         commanded_x_velocity=commanded_x_velocity,
         num_envs=1,
@@ -462,6 +463,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--microduck-root", type=Path)
     parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Download the pinned microduck_rl assets when no checkout is found.",
+    )
+    parser.add_argument(
         "--backend", choices=("mujoco", "mjx", "mujoco-torch"), default="mujoco"
     )
     parser.add_argument("--num-seeds", type=int, default=20)
@@ -494,6 +500,7 @@ def main(args: argparse.Namespace) -> None:
     def evaluate(config: MicroDuckGaitConfig, seeds: Sequence[int]) -> list[GaitTrial]:
         env = make_env(
             args.microduck_root,
+            download=args.download,
             backend=args.backend,
             commanded_x_velocity=args.commanded_x_velocity,
             reset_noise_scale=args.reset_noise_scale,

@@ -3,8 +3,11 @@
 [MicroDuck](https://github.com/pollen-robotics/microduck) is a small
 open-hardware biped from Pollen Robotics. Its walking model and meshes live in
 [`microduck_rl`](https://github.com/pollen-robotics/microduck_rl) and are not
-vendored in TorchRL: point the scripts at a checkout with
-`--microduck-root /path/to/microduck_rl` or `export MICRODUCK_RL_ROOT=...`.
+vendored in TorchRL. Pass `--download` (or `MicroDuckEnv(download=True)`) to
+fetch a pinned commit into `~/.cache/torchrl/microduck`, or point the scripts
+at an existing checkout with `--microduck-root /path/to/microduck_rl` or
+`export MICRODUCK_RL_ROOT=...`. Without any of these the env raises an error
+listing the options.
 
 | File | What it does | Needs |
 | --- | --- | --- |
