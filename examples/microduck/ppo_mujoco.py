@@ -541,6 +541,7 @@ def train_ppo(
     evaluation_seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
     evaluation_steps: int = 500,
     best_checkpoint_path: str | Path | None = None,
+    latest_checkpoint_path: str | Path | None = None,
     policy_kwargs: Mapping[str, Any] | None = None,
     logger: WandbLogger | None = None,
 ) -> list[dict[str, float]]:
@@ -552,8 +553,11 @@ def train_ppo(
     empties the buffer and drops the collector's in-flight episodes so the next
     collection only contains data from the updated policy.
 
-    ``policy_kwargs`` is stored in the checkpoint so ``rlrender`` can rebuild
-    the actor through :func:`make_render_policy`.
+    ``best_checkpoint_path`` receives the best-scoring parameters and
+    ``latest_checkpoint_path`` the current ones at every evaluation, so
+    training progress can be rendered while the best checkpoint protects
+    against regressions. ``policy_kwargs`` is stored in both so ``rlrender``
+    can rebuild the actor through :func:`make_render_policy`.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -573,8 +577,10 @@ def train_ppo(
         raise ValueError("evaluation_interval must be positive when provided.")
     if evaluation_interval is not None and evaluation_env is None:
         raise ValueError("evaluation_interval requires an evaluation_env.")
-    if best_checkpoint_path is not None and evaluation_interval is None:
-        raise ValueError("best_checkpoint_path requires periodic evaluation.")
+    if (
+        best_checkpoint_path is not None or latest_checkpoint_path is not None
+    ) and evaluation_interval is None:
+        raise ValueError("Checkpoint paths require periodic evaluation.")
 
     device = next(actor.parameters()).device
     num_envs = env.batch_size.numel()
@@ -631,6 +637,21 @@ def train_ppo(
     best_score: tuple[float, ...] | None = None
     best_state: tuple[dict, dict] | None = None
     checkpoint_path = Path(best_checkpoint_path) if best_checkpoint_path else None
+    latest_path = Path(latest_checkpoint_path) if latest_checkpoint_path else None
+
+    def save_checkpoint(path: Path, step: int, evaluation, score) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "transitions": step,
+                "evaluation": evaluation,
+                "evaluation_score": list(score),
+                "actor": actor.state_dict(),
+                "critic": critic.state_dict(),
+                "policy_kwargs": dict(policy_kwargs or {}),
+            },
+            path,
+        )
 
     def evaluate(step: int) -> dict[str, float]:
         nonlocal best_score, best_state
@@ -643,22 +664,13 @@ def train_ppo(
         )
         metrics = evaluation_metrics(evaluation)
         score = evaluation_score(evaluation)
+        if latest_path is not None:
+            save_checkpoint(latest_path, step, evaluation, score)
         if best_score is None or score > best_score:
             best_score = score
             best_state = (deepcopy(actor.state_dict()), deepcopy(critic.state_dict()))
             if checkpoint_path is not None:
-                checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-                torch.save(
-                    {
-                        "transitions": step,
-                        "evaluation": evaluation,
-                        "evaluation_score": list(score),
-                        "actor": best_state[0],
-                        "critic": best_state[1],
-                        "policy_kwargs": dict(policy_kwargs or {}),
-                    },
-                    checkpoint_path,
-                )
+                save_checkpoint(checkpoint_path, step, evaluation, score)
         metrics["evaluation/is_best"] = float(score == best_score)
         torchrl_logger.info(
             "MicroDuck evaluation transitions=%d survival=%.2f length=%.1f "
@@ -900,6 +912,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--best-checkpoint-path", type=Path, default=Path("microduck_ppo_best.pt")
     )
+    parser.add_argument(
+        "--latest-checkpoint-path",
+        type=Path,
+        help="Also save the current parameters at every evaluation.",
+    )
     parser.add_argument("--wandb-project", default="torchrl-microduck-ppo")
     parser.add_argument(
         "--wandb-entity",
@@ -925,6 +942,7 @@ def main(args: argparse.Namespace) -> None:
         args.evaluation_interval = 1
         args.evaluation_steps = 20
         args.best_checkpoint_path = None
+        args.latest_checkpoint_path = None
         args.wandb_mode = "disabled"
     if args.wandb_mode != "disabled" and not args.wandb_entity:
         raise ValueError(
@@ -1009,6 +1027,7 @@ def main(args: argparse.Namespace) -> None:
             evaluation_commands=evaluation_commands,
             evaluation_steps=args.evaluation_steps,
             best_checkpoint_path=args.best_checkpoint_path,
+            latest_checkpoint_path=args.latest_checkpoint_path,
             policy_kwargs=policy_kwargs,
             logger=logger,
         )

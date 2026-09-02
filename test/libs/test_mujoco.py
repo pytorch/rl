@@ -737,9 +737,12 @@ class TestMujoco:
             evaluation_seeds=(0,),
             evaluation_steps=5,
             best_checkpoint_path=checkpoint,
+            latest_checkpoint_path=tmp_path / "latest.pt",
             policy_kwargs={"hidden_size": 16},
         )
         assert "evaluation/survived" in history[0]
+        latest = torch.load(tmp_path / "latest.pt", weights_only=False)
+        assert latest["transitions"] >= 100
         saved = torch.load(checkpoint, weights_only=False)
         for name, parameter in actor.state_dict().items():
             torch.testing.assert_close(parameter, saved["actor"][name])
