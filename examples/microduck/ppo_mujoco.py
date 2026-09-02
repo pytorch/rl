@@ -116,7 +116,7 @@ def make_env(
     camera_id: int = -1,
     render_width: int = 640,
     render_height: int = 480,
-    **env_kwargs: Any,
+    reset_noise_scale: float = MicroDuckEnv.RESET_NOISE_SCALE,
 ) -> TransformedEnv:
     """Build the batched task with the transforms the recurrent policy needs.
 
@@ -125,7 +125,9 @@ def make_env(
     so the same env serves the collector, evaluation rollouts and ``rlrender``.
     The native backend batches with :class:`~torchrl.envs.SerialEnv` unless
     ``parallel=True``; MJX and ``mujoco-torch`` batch inside their frameworks.
-    ``compile_step`` is forwarded to the ``mujoco-torch`` backend only.
+    ``compile_step`` is forwarded to the ``mujoco-torch`` backend only. Only
+    environment arguments are accepted so ``rlrender`` can call this factory
+    with its own keyword arguments.
     """
     gait = _as_gait(gait)
     kwargs: dict[str, Any] = {
@@ -138,8 +140,8 @@ def make_env(
         "camera_id": camera_id,
         "render_width": render_width,
         "render_height": render_height,
+        "reset_noise_scale": reset_noise_scale,
         **gait.env_kwargs(),
-        **env_kwargs,
     }
     if backend == "mujoco":
         kwargs["parallel"] = parallel

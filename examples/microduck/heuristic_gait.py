@@ -179,9 +179,16 @@ def make_env(
     seed: int = 0,
     reset_noise_scale: float = MicroDuckEnv.RESET_NOISE_SCALE,
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
-    **kwargs: Any,
+    max_episode_steps: int = 500,
+    camera_id: int = -1,
+    render_width: int = 640,
+    render_height: int = 480,
 ) -> MicroDuckEnv:
-    """Build a single MicroDuck env whose gait clock matches ``gait``."""
+    """Build a single MicroDuck env whose gait clock matches ``gait``.
+
+    Only environment arguments are accepted so ``rlrender`` can call this
+    factory with its own keyword arguments without them leaking into the env.
+    """
     if isinstance(gait, Mapping):
         gait = MicroDuckGaitConfig(**gait)
     elif gait is None:
@@ -193,8 +200,11 @@ def make_env(
         num_envs=1,
         seed=seed,
         reset_noise_scale=reset_noise_scale,
+        max_episode_steps=max_episode_steps,
+        camera_id=camera_id,
+        render_width=render_width,
+        render_height=render_height,
         **gait.env_kwargs(),
-        **kwargs,
     )
 
 
