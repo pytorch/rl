@@ -1134,11 +1134,6 @@ class TestAsyncEnvPool:
         env._maybe_shutdown()
         assert not any("default exchange" in str(w.message) for w in caught)
 
-    def test_env_index_type_future_warning(self, make_envs):
-        with pytest.warns(FutureWarning, match="env_index"):
-            env = AsyncEnvPool(make_envs, backend="threading")
-        env._maybe_shutdown()
-
     @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
     def test_deadline_batch_validation(self, make_envs, backend):
         env = AsyncEnvPool(make_envs, backend=backend)

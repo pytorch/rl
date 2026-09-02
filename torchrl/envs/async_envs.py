@@ -244,11 +244,6 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                 "exchange='shm' is only supported with backend='multiprocessing'."
             )
         self.exchange = exchange
-        warnings.warn(
-            "The 'env_index' entries returned by AsyncEnvPool will change "
-            "from NonTensorData/NonTensorStack to torch.Tensor in v0.15.",
-            FutureWarning,
-        )
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if isinstance(create_env_kwargs, Mapping):
