@@ -129,6 +129,61 @@ class TestMujoco:
         assert torch.equal(state["qpos"], qpos)
         env.close()
 
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_geom_contacts_and_site_positions(self, tmp_path, backend):
+        xml = tmp_path / "ball.xml"
+        xml.write_text(
+            """<mujoco><option timestep="0.002"/><worldbody>
+            <geom name="ground" type="plane" size="1 1 0.1"/>
+            <body name="ball" pos="0 0 0.3"><freejoint/>
+            <geom name="ball" type="sphere" size="0.05" mass="1"/>
+            <site name="top" pos="0 0 0.05"/></body>
+            <body name="marker" pos="0.5 0 0.5">
+            <geom name="marker" type="sphere" size="0.02" contype="0" conaffinity="0"/>
+            </body>
+            <body name="arm" pos="-0.5 0 0.5"><joint name="hinge" axis="0 1 0"/>
+            <geom type="capsule" fromto="0 0 0 0.1 0 0" size="0.01"
+            contype="0" conaffinity="0"/></body>
+            </worldbody><actuator><motor joint="hinge" ctrlrange="-1 1"/>
+            </actuator></mujoco>"""
+        )
+
+        class _BallEnv(MujocoEnv):
+            def _compute_reward(self, state, action, next_state):
+                return torch.zeros(self.num_envs, 1, device=self.device)
+
+            def _compute_done(self, state, next_state):
+                return torch.zeros(
+                    self.num_envs, 1, dtype=torch.bool, device=self.device
+                )
+
+        num_envs = 1 if backend == "mujoco" else 2
+        env = _BallEnv(
+            xml_path=xml, backend=backend, num_envs=num_envs, reset_noise_scale=0.0
+        )
+        td = env.reset()
+        contacts = env.geom_contacts(["ball", "marker"])
+        assert contacts.shape == (num_envs, 2)
+        assert not contacts.any()
+        top = env.site_positions(["top"])
+        assert top.shape == (num_envs, 1, 3)
+        torch.testing.assert_close(
+            top[..., 2], torch.full((num_envs, 1), 0.35), atol=1e-3, rtol=0
+        )
+        for _ in range(60):
+            td["action"] = torch.zeros_like(env.action_spec.rand())
+            td = env.step(td)["next"]
+        contacts = env.geom_contacts(["ball", "marker"])
+        assert contacts[:, 0].all()
+        assert not contacts[:, 1].any()
+        top = env.site_positions(["top"])
+        torch.testing.assert_close(
+            top[..., 2], torch.full((num_envs, 1), 0.10), atol=1e-2, rtol=0
+        )
+        with pytest.raises(KeyError, match="no geom named"):
+            env.geom_contacts(["nope"])
+        env.close()
+
     @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
     def test_torch_backend_rollout_partial_reset(self):
         env = HopperEnv(
