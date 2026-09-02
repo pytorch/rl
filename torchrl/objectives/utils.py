@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import functools
 import importlib
+
+import math
 import re
 import warnings
 from collections.abc import Callable, Iterable, Mapping
@@ -624,6 +626,122 @@ class HardUpdate(TargetNetUpdater):
             self.counter = 0
         else:
             self.counter += 1
+
+
+class KLAdaptiveLR:
+    """Adapt an optimizer's learning rate to a target policy KL divergence.
+
+    After each policy update, compare the measured mean KL divergence between
+    the old and the new policy with ``target_kl``: when it exceeds
+    ``2 * target_kl`` the learning rate is divided by ``factor``, when it is
+    positive but below ``target_kl / 2`` it is multiplied by ``factor``, and it
+    is left unchanged in between. The learning rate of every parameter group is
+    clamped to ``[min_lr, max_lr]``. A KL of exactly zero leaves the learning
+    rate unchanged, so a policy that did not move does not trigger runaway
+    growth.
+
+    This is the schedule used by the ``rsl_rl`` PPO implementation (Rudin et
+    al., "Learning to Walk in Minutes Using Massively Parallel Deep
+    Reinforcement Learning", https://arxiv.org/abs/2109.11978). The
+    ``kl_approx`` output of :class:`~torchrl.objectives.ClipPPOLoss` can be
+    passed directly to :meth:`step`.
+
+    Args:
+        optimizer (torch.optim.Optimizer): optimizer whose parameter groups are
+            rescaled in place.
+        target_kl (float): desired mean KL divergence per update.
+
+    Keyword Args:
+        factor (float, optional): multiplicative change applied when the KL
+            leaves the ``[target_kl / 2, 2 * target_kl]`` band. Must be greater
+            than one. Defaults to ``1.5``.
+        min_lr (float, optional): lower bound of the learning rate. Defaults to
+            ``1e-5``.
+        max_lr (float, optional): upper bound of the learning rate. Defaults to
+            ``1e-2``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import KLAdaptiveLR
+        >>> params = [torch.nn.Parameter(torch.zeros(1))]
+        >>> optimizer = torch.optim.Adam(params, lr=1e-3)
+        >>> scheduler = KLAdaptiveLR(optimizer, target_kl=0.01, factor=2.0)
+        >>> scheduler.step(kl=0.05)  # the update was too large: halve the lr
+        >>> optimizer.param_groups[0]["lr"]
+        0.0005
+        >>> scheduler.step(kl=0.001)  # the update was too small: double it
+        >>> optimizer.param_groups[0]["lr"]
+        0.001
+    """
+
+    def __init__(
+        self,
+        optimizer: torch.optim.Optimizer,
+        target_kl: float,
+        *,
+        factor: float = 1.5,
+        min_lr: float = 1e-5,
+        max_lr: float = 1e-2,
+    ):
+        if not math.isfinite(target_kl) or target_kl <= 0:
+            raise ValueError(f"target_kl must be finite and positive, got {target_kl}.")
+        if not math.isfinite(factor) or factor <= 1.0:
+            raise ValueError(
+                f"factor must be finite and greater than one, got {factor}."
+            )
+        if not (0 < min_lr <= max_lr) or not math.isfinite(max_lr):
+            raise ValueError(
+                f"Expected 0 < min_lr <= max_lr < inf, got min_lr={min_lr} and "
+                f"max_lr={max_lr}."
+            )
+        self.optimizer = optimizer
+        self.target_kl = float(target_kl)
+        self.factor = float(factor)
+        self.min_lr = float(min_lr)
+        self.max_lr = float(max_lr)
+        self.last_kl: float | None = None
+
+    def step(self, kl: float | Tensor) -> None:
+        """Rescale the learning rate from the KL divergence of the last update.
+
+        Args:
+            kl (float or Tensor): mean KL divergence between the policy before
+                and after the update. A zero-dimensional tensor is accepted.
+        """
+        kl = float(kl)
+        if not math.isfinite(kl):
+            raise ValueError(f"The KL divergence must be finite, got {kl}.")
+        if kl > 2.0 * self.target_kl:
+            scale = 1.0 / self.factor
+        elif 0.0 < kl < 0.5 * self.target_kl:
+            scale = self.factor
+        else:
+            scale = 1.0
+        for group in self.optimizer.param_groups:
+            group["lr"] = min(self.max_lr, max(self.min_lr, group["lr"] * scale))
+        self.last_kl = kl
+
+    def get_last_lr(self) -> list[float]:
+        """Return the current learning rate of each parameter group."""
+        return [float(group["lr"]) for group in self.optimizer.param_groups]
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the scheduler state, excluding the optimizer."""
+        return {
+            "target_kl": self.target_kl,
+            "factor": self.factor,
+            "min_lr": self.min_lr,
+            "max_lr": self.max_lr,
+            "last_kl": self.last_kl,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Load a state produced by :meth:`state_dict`."""
+        self.target_kl = float(state_dict["target_kl"])
+        self.factor = float(state_dict["factor"])
+        self.min_lr = float(state_dict["min_lr"])
+        self.max_lr = float(state_dict["max_lr"])
+        self.last_kl = state_dict.get("last_kl")
 
 
 class hold_out_net(_context_manager):
