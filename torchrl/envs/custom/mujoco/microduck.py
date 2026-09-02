@@ -17,8 +17,8 @@ Reward
     zero) and of a zero yaw rate, a Gaussian uprightness term, a nominal-pose
     term that is tight when standing and loose when walking, and three
     contact-based gait terms that are active only under a nonzero command:
-    rewarded foot air time inside a swing-duration window, swing-foot height
-    toward a clearance target, correct single support with
+    rewarded foot air time inside a swing-duration window, the height of the
+    clock's swing foot toward a clearance target, correct single support with
     respect to the gait clock, and a penalty for keeping both feet planted. Standing still under a
     nonzero command therefore earns clearly less than stepping, which a
     from-scratch policy otherwise settles into. Small costs discourage vertical
@@ -268,7 +268,7 @@ class MicroDuckEnv(MujocoEnv):
     POSE_STD_WALKING: ClassVar[float] = 0.5
     AIR_TIME_WEIGHT: ClassVar[float] = 3.0
     AIR_TIME_WINDOW: ClassVar[tuple[float, float]] = (0.125, 0.3)
-    SWING_HEIGHT_WEIGHT: ClassVar[float] = 1.0
+    SWING_HEIGHT_WEIGHT: ClassVar[float] = 2.0
     SWING_TARGET_HEIGHT: ClassVar[float] = 0.02
     PHASE_CONTACT_WEIGHT: ClassVar[float] = 3.0
     DOUBLE_SUPPORT_WEIGHT: ClassVar[float] = -1.0
@@ -623,10 +623,12 @@ class MicroDuckEnv(MujocoEnv):
             qpos[..., :2] += torch.empty_like(qpos[..., :2]).uniform_(
                 -noise, noise, generator=self.rng
             )
-            qpos[..., 7:] += torch.empty_like(qpos[..., 7:]).uniform_(
-                -noise, noise, generator=self.rng
-            )
             qvel += torch.empty_like(qvel).uniform_(-noise, noise, generator=self.rng)
+        joint_noise = self.reset_noise_scale
+        if joint_noise > 0:
+            qpos[..., 7:] += torch.empty_like(qpos[..., 7:]).uniform_(
+                -joint_noise, joint_noise, generator=self.rng
+            )
         if self.warm_start_fraction > 0:
             low, high = self.warm_start_velocity
             speed = torch.empty(n, dtype=qvel.dtype, device=self.device).uniform_(
@@ -775,12 +777,14 @@ class MicroDuckEnv(MujocoEnv):
             .clamp(0.0, window_high - window_low)
             .sum(dim=-1)
         )
-        airborne = ~self._contacts
-        swing_height = (
-            (self._foot_heights / self.SWING_TARGET_HEIGHT).clamp(0.0, 1.0) * airborne
-        ).sum(dim=-1)
         phase, _ = self._gait_clock()
         directed_sin = command.sign() * phase.sin()
+        # The clock's swing foot is rewarded for any lift toward the clearance
+        # target, contact or not, so the incentive to step is dense.
+        swing_foot = torch.stack((directed_sin > 0, directed_sin <= 0), dim=-1)
+        swing_height = (
+            (self._foot_heights / self.SWING_TARGET_HEIGHT).clamp(0.0, 1.0) * swing_foot
+        ).sum(dim=-1)
         # Left foot swings while the directed clock is positive. Credit is
         # given only for correct single support, so standing on both feet
         # earns nothing here.

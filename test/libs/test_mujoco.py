@@ -250,6 +250,15 @@ class TestMujoco:
                 # correct single support to credit.
                 assert (pose_cost < 0.01).all()
                 assert (components["diagnostic_reward_phase_contact"] == 0).all()
+                torch.testing.assert_close(
+                    components["diagnostic_reward_swing_height"],
+                    torch.full(
+                        (num_envs, 1),
+                        MicroDuckEnv.SWING_HEIGHT_WEIGHT * 0.25 * 0.02,
+                    ),
+                    atol=2e-4,
+                    rtol=0,
+                )
                 stationary_reward = env._compute_reward(state, action, state)
                 assert (matching_reward > stationary_reward).all()
                 standing_pose_cost = pose_cost
