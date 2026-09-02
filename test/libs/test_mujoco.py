@@ -692,7 +692,6 @@ class TestMujoco:
             rtol=0,
         )
         parameters_before = [p.detach().clone() for p in actor.parameters()]
-        checkpoint = tmp_path / "best.pt"
         history = ppo.train_ppo(
             env,
             actor,
@@ -702,12 +701,6 @@ class TestMujoco:
             max_episode_steps=20,
             epochs=2,
             minibatch_trajectories=2,
-            evaluation_env=evaluation_env,
-            evaluation_interval=1,
-            evaluation_commands=(0.03,),
-            evaluation_seeds=(0,),
-            evaluation_steps=5,
-            best_checkpoint_path=checkpoint,
         )
         assert len(history) == 2
         for metrics in history:
@@ -721,11 +714,31 @@ class TestMujoco:
             assert metrics["episode/length_min"] == 20.0
             assert math.isfinite(metrics["ppo/loss_objective"])
             assert math.isfinite(metrics["ppo/kl_approx"])
-            assert "evaluation/survived" in metrics
         assert any(
             not torch.equal(before, after)
             for before, after in zip(parameters_before, actor.parameters())
         )
+
+        # With evaluation enabled, the best-scoring parameters are checkpointed
+        # and restored into the actor at the end of training.
+        checkpoint = tmp_path / "best.pt"
+        history = ppo.train_ppo(
+            env,
+            actor,
+            critic,
+            total_transitions=100,
+            transitions_per_update=100,
+            max_episode_steps=20,
+            epochs=1,
+            minibatch_trajectories=2,
+            evaluation_env=evaluation_env,
+            evaluation_interval=1,
+            evaluation_commands=(0.03,),
+            evaluation_seeds=(0,),
+            evaluation_steps=5,
+            best_checkpoint_path=checkpoint,
+        )
+        assert "evaluation/survived" in history[0]
         saved = torch.load(checkpoint, weights_only=False)
         for name, parameter in actor.state_dict().items():
             torch.testing.assert_close(parameter, saved["actor"][name])
