@@ -403,6 +403,15 @@ class TestMujoco:
         # The air-time bookkeeping restarts at reset and accrues while airborne.
         assert (env._feet_air_time == 0).all()
         env.close()
+        env = MicroDuckEnv(
+            scene, joint_reset_noise_scale=0.3, reset_noise_scale=0.0, seed=0
+        )
+        env.reset()
+        qpos = env.get_state()["qpos"]
+        assert (qpos[0, :2] == 0).all()
+        assert (qpos[0, 7:].abs() > 0.05).any()
+        assert (qpos[0, 7:].abs() <= 0.3).all()
+        env.close()
         with pytest.raises(ValueError, match="warm_start_velocity"):
             MicroDuckEnv(scene, warm_start_fraction=0.5)
         with pytest.raises(ValueError, match="command_range"):

@@ -194,6 +194,11 @@ class MicroDuckEnv(MujocoEnv):
             an untrained policy experiences locomotion states early.
         warm_start_fraction: fraction of resets that receive the warm start.
             Defaults to ``0.0``.
+        joint_reset_noise_scale: uniform noise added to the joint positions at
+            reset, in radians. Defaults to ``reset_noise_scale``. Larger values
+            start episodes in diverse, off-balance poses, including
+            single-support ones, which a from-scratch policy otherwise rarely
+            visits.
         action_scale: position-target offset in radians for a unit normalized
             action. Defaults to ``0.35``.
         diagnostics: if ``True``, add each reward component and pose
@@ -321,6 +326,7 @@ class MicroDuckEnv(MujocoEnv):
         command_range: tuple[float, float] | None = None,
         warm_start_velocity: tuple[float, float] | None = None,
         warm_start_fraction: float = 0.0,
+        joint_reset_noise_scale: float | None = None,
         action_scale: float = 0.35,
         diagnostics: bool = False,
         low_cost_collisions: bool = True,
@@ -367,6 +373,10 @@ class MicroDuckEnv(MujocoEnv):
             raise ValueError("warm_start_fraction must be in [0, 1].")
         if warm_start_fraction > 0 and warm_start_velocity is None:
             raise ValueError("warm_start_fraction requires warm_start_velocity.")
+        if joint_reset_noise_scale is not None and (
+            not math.isfinite(joint_reset_noise_scale) or joint_reset_noise_scale < 0
+        ):
+            raise ValueError("joint_reset_noise_scale must be finite and non-negative.")
 
         self.scene_path = self.resolve_scene(microduck_root)
         self.command_range = (
@@ -378,6 +388,7 @@ class MicroDuckEnv(MujocoEnv):
             else tuple(float(v) for v in warm_start_velocity)
         )
         self.warm_start_fraction = float(warm_start_fraction)
+        self._joint_reset_noise_scale = joint_reset_noise_scale
         self.action_scale = float(action_scale)
         self.diagnostics = bool(diagnostics)
         self.low_cost_collisions = bool(low_cost_collisions)
@@ -430,6 +441,13 @@ class MicroDuckEnv(MujocoEnv):
             shape=(self.num_envs,),
             device=self.device,
         )
+
+    @property
+    def joint_reset_noise_scale(self) -> float:
+        """Uniform joint-position noise applied at reset, in radians."""
+        if self._joint_reset_noise_scale is None:
+            return self.reset_noise_scale
+        return float(self._joint_reset_noise_scale)
 
     # ------------------------------------------------------------------
     # Asset resolution and model metadata
@@ -624,7 +642,7 @@ class MicroDuckEnv(MujocoEnv):
                 -noise, noise, generator=self.rng
             )
             qvel += torch.empty_like(qvel).uniform_(-noise, noise, generator=self.rng)
-        joint_noise = self.reset_noise_scale
+        joint_noise = self.joint_reset_noise_scale
         if joint_noise > 0:
             qpos[..., 7:] += torch.empty_like(qpos[..., 7:]).uniform_(
                 -joint_noise, joint_noise, generator=self.rng
