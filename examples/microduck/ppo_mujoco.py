@@ -37,6 +37,7 @@ import math
 import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -108,6 +109,15 @@ def _checkpoint_policy_kwargs(checkpoint: Any) -> dict[str, Any]:
     return {}
 
 
+def _checkpoint_env_kwargs(checkpoint: Any) -> dict[str, Any]:
+    """Return the env kwargs a training checkpoint recorded, if any."""
+    if isinstance(checkpoint, Mapping) and isinstance(
+        checkpoint.get("env_kwargs"), Mapping
+    ):
+        return dict(checkpoint["env_kwargs"])
+    return {}
+
+
 # ----------------------------------------------------------------------
 # Environment
 # ----------------------------------------------------------------------
@@ -122,7 +132,10 @@ def make_env(
     warm_start_velocity: Sequence[float] | None = None,
     warm_start_fraction: float = 0.0,
     joint_reset_noise_scale: float | None = None,
-    action_scale: float = 0.35,
+    action_scale: float | None = None,
+    gait_frequency_per_mps: float | None = None,
+    observe_lateral_velocity: bool | None = None,
+    reward_scales: Mapping[str, float] | None = None,
     num_envs: int = 8,
     device: torch.device | str = "cpu",
     seed: int = 0,
@@ -143,17 +156,28 @@ def make_env(
     :class:`~torchrl.envs.TensorDictPrimer` carries the GRU state between steps,
     so the same env serves the collector, evaluation rollouts and ``rlrender``.
     ``rlrender`` passes the loaded training checkpoint as ``checkpoint``; its
-    recorded ``hidden_size`` sizes the recurrent state when ``hidden_size`` is
-    omitted, so a checkpoint renders without repeating its architecture.
+    recorded ``hidden_size`` sizes the recurrent state and its recorded env
+    options (action scale, gait clock, velocity observation) apply when the
+    matching arguments are omitted, so a checkpoint renders without repeating
+    how it was trained.
     The native backend batches with :class:`~torchrl.envs.SerialEnv` unless
     ``parallel=True``; MJX and ``mujoco-torch`` batch inside their frameworks.
     ``compile_step`` is forwarded to the ``mujoco-torch`` backend only. Only
     environment arguments are accepted so ``rlrender`` can call this factory
     with its own keyword arguments.
     """
+    recorded_env = _checkpoint_env_kwargs(checkpoint)
+    if gait is None and recorded_env.get("gait") is not None:
+        gait = MicroDuckGaitConfig(**recorded_env["gait"])
     gait = _as_gait(gait)
     if hidden_size is None:
         hidden_size = _checkpoint_policy_kwargs(checkpoint).get("hidden_size", 128)
+    if action_scale is None:
+        action_scale = recorded_env.get("action_scale", 0.35)
+    if gait_frequency_per_mps is None:
+        gait_frequency_per_mps = recorded_env.get("gait_frequency_per_mps", 0.0)
+    if observe_lateral_velocity is None:
+        observe_lateral_velocity = recorded_env.get("observe_lateral_velocity", False)
     kwargs: dict[str, Any] = {
         "backend": backend,
         "commanded_x_velocity": commanded_x_velocity,
@@ -164,6 +188,9 @@ def make_env(
         "warm_start_fraction": warm_start_fraction,
         "joint_reset_noise_scale": joint_reset_noise_scale,
         "action_scale": action_scale,
+        "gait_frequency_per_mps": gait_frequency_per_mps,
+        "observe_lateral_velocity": observe_lateral_velocity,
+        "reward_scales": None if reward_scales is None else dict(reward_scales),
         "num_envs": num_envs,
         "device": torch.device(device),
         "seed": seed,
@@ -543,6 +570,7 @@ def train_ppo(
     best_checkpoint_path: str | Path | None = None,
     latest_checkpoint_path: str | Path | None = None,
     policy_kwargs: Mapping[str, Any] | None = None,
+    env_kwargs: Mapping[str, Any] | None = None,
     logger: WandbLogger | None = None,
 ) -> list[dict[str, float]]:
     """Train the recurrent policy with PPO on whole episodes.
@@ -556,8 +584,9 @@ def train_ppo(
     ``best_checkpoint_path`` receives the best-scoring parameters and
     ``latest_checkpoint_path`` the current ones at every evaluation, so
     training progress can be rendered while the best checkpoint protects
-    against regressions. ``policy_kwargs`` is stored in both so ``rlrender``
-    can rebuild the actor through :func:`make_render_policy`.
+    against regressions. ``policy_kwargs`` and ``env_kwargs`` are stored in
+    both so ``rlrender`` can rebuild the actor and the env through
+    :func:`make_render_policy` and :func:`make_env`.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -649,6 +678,7 @@ def train_ppo(
                 "actor": actor.state_dict(),
                 "critic": critic.state_dict(),
                 "policy_kwargs": dict(policy_kwargs or {}),
+                "env_kwargs": dict(env_kwargs or {}),
             },
             path,
         )
@@ -893,6 +923,25 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         default=0.35,
         help="Position-target offset in radians for a unit normalized action.",
     )
+    parser.add_argument("--gait-frequency-hz", type=float, default=1.8913)
+    parser.add_argument(
+        "--gait-frequency-per-mps",
+        type=float,
+        default=0.0,
+        help="Gait clock frequency increase per m/s of commanded speed.",
+    )
+    parser.add_argument(
+        "--observe-lateral-velocity",
+        action="store_true",
+        help="Add body-frame lateral and vertical velocity to the observation.",
+    )
+    parser.add_argument(
+        "--reward-scale",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="Override a MicroDuckEnv reward attribute, e.g. TRACKING_WEIGHT=4.",
+    )
     parser.add_argument(
         "--joint-reset-noise-scale",
         type=float,
@@ -960,6 +1009,13 @@ def main(args: argparse.Namespace) -> None:
         evaluation_commands = commands
     if args.initial_policy_scale is None:
         args.initial_policy_scale = 0.05 if args.policy_head == "gait-residual" else 0.3
+    reward_scales = {}
+    for item in args.reward_scale:
+        name, sep, value = item.partition("=")
+        if not sep:
+            raise ValueError(f"--reward-scale expects NAME=VALUE, got {item!r}.")
+        reward_scales[name.strip()] = float(value)
+    gait = replace(MicroDuckGaitConfig(), frequency_hz=args.gait_frequency_hz)
     env_kwargs = {
         "backend": args.backend,
         "commanded_x_velocity": commands,
@@ -970,6 +1026,18 @@ def main(args: argparse.Namespace) -> None:
         "max_episode_steps": args.max_episode_steps,
         "compile_step": args.compile_step,
         "action_scale": args.action_scale,
+        "gait": gait,
+        "gait_frequency_per_mps": args.gait_frequency_per_mps,
+        "observe_lateral_velocity": args.observe_lateral_velocity,
+        "reward_scales": reward_scales or None,
+    }
+    recorded_env_kwargs = {
+        "action_scale": args.action_scale,
+        "gait": asdict(gait),
+        "gait_frequency_per_mps": args.gait_frequency_per_mps,
+        "observe_lateral_velocity": args.observe_lateral_velocity,
+        "reward_scales": reward_scales,
+        "command_range": args.command_range,
     }
     policy_kwargs = {
         "hidden_size": args.hidden_size,
@@ -1029,6 +1097,7 @@ def main(args: argparse.Namespace) -> None:
             best_checkpoint_path=args.best_checkpoint_path,
             latest_checkpoint_path=args.latest_checkpoint_path,
             policy_kwargs=policy_kwargs,
+            env_kwargs=recorded_env_kwargs,
             logger=logger,
         )
     finally:

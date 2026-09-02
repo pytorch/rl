@@ -676,10 +676,18 @@ class TestMujoco:
     def test_microduck_example_recurrent_ppo_trains_on_whole_episodes(self, tmp_path):
         ppo = self._load_example("ppo_mujoco")
         scene = self._write_microduck_fixture(tmp_path)
+        env_options = {"observe_lateral_velocity": True, "action_scale": 0.5}
         env = ppo.make_env(
-            scene, num_envs=2, seed=0, hidden_size=16, max_episode_steps=20
+            scene,
+            num_envs=2,
+            seed=0,
+            hidden_size=16,
+            max_episode_steps=20,
+            **env_options,
         )
-        evaluation_env = ppo.make_env(scene, num_envs=1, seed=1, hidden_size=16)
+        evaluation_env = ppo.make_env(
+            scene, num_envs=1, seed=1, hidden_size=16, **env_options
+        )
         actor, critic = ppo.make_models(env, hidden_size=16)
         with set_exploration_type(ExplorationType.DETERMINISTIC):
             reset = env.reset()
@@ -739,6 +747,7 @@ class TestMujoco:
             best_checkpoint_path=checkpoint,
             latest_checkpoint_path=tmp_path / "latest.pt",
             policy_kwargs={"hidden_size": 16},
+            env_kwargs=env_options,
         )
         assert "evaluation/survived" in history[0]
         latest = torch.load(tmp_path / "latest.pt", weights_only=False)
@@ -746,11 +755,13 @@ class TestMujoco:
         saved = torch.load(checkpoint, weights_only=False)
         for name, parameter in actor.state_dict().items():
             torch.testing.assert_close(parameter, saved["actor"][name])
-        # rlrender rebuilds the actor from the checkpoint's recorded kwargs.
+        # rlrender rebuilds the actor and the env from the checkpoint's kwargs.
         render_env = ppo.make_env(scene, num_envs=1, checkpoint=saved)
         rendered = ppo.make_render_policy(render_env, checkpoint=saved)
         rendered.load_state_dict(saved["actor"])
         assert render_env.observation_spec["recurrent_state"].shape[-1] == 16
+        assert render_env.base_env.observe_lateral_velocity
+        assert render_env.base_env.action_scale == 0.5
         render_env.close()
         assert ppo.evaluation_score(
             [dict(saved["evaluation"][0], survived=1.0, episode_length=500.0)]
