@@ -1026,10 +1026,26 @@ class TestMujoco:
 
     @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
     def test_torch_backend_compile_smoke(self):
-        """``compile_step=True`` must not raise on the default backend."""
+        """``compile_step=True`` compiles the batched step as a single graph.
+
+        The backend compiles with ``fullgraph=True`` by default, so a graph
+        break raises here instead of silently splitting the step into eager
+        fragments.  The graph counter guards against recompiles across steps,
+        which would otherwise degrade into an eager fallback once Dynamo's
+        recompile limit is hit.
+        """
+        import torch._dynamo
+        import torch._dynamo.utils
+
+        torch._dynamo.reset()
+        torch._dynamo.utils.counters.clear()
         env = HopperEnv(num_envs=2, seed=0, compile_step=True)
         td = env.rollout(3)
         assert torch.isfinite(td.get(("next", "reward"))).all()
+        unique_graphs = torch._dynamo.utils.counters["stats"].get("unique_graphs")
+        assert (
+            unique_graphs == 1
+        ), f"expected a single compiled graph, got {unique_graphs}"
 
     def test_unknown_backend_raises(self):
         with pytest.raises(ValueError, match="unknown backend"):
