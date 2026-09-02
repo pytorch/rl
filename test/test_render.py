@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import socket
 from pathlib import Path
 from types import SimpleNamespace
@@ -906,6 +907,42 @@ class TestMujocoWasm:
             )
         assert process.terminated is True
         assert display_module.objects == []
+
+    def test_vite_finds_node_bundled_with_package_manager(self, monkeypatch, tmp_path):
+        dependencies = tmp_path / "dependencies"
+        manager = dependencies / "bin" / "fallback" / "pnpm"
+        node = (
+            dependencies / "node" / "bin" / ("node.exe" if os.name == "nt" else "node")
+        )
+        manager.parent.mkdir(parents=True)
+        node.parent.mkdir(parents=True)
+        manager.write_text("#!/bin/sh\n")
+        node.write_text("#!/bin/sh\n")
+        manager.chmod(0o755)
+        node.chmod(0o755)
+
+        def which(command, path=None):
+            if command == "node":
+                return None
+            if command == "pnpm":
+                return str(manager)
+            raise AssertionError(f"Unexpected executable lookup: {command}")
+
+        calls = []
+        monkeypatch.setattr(mujoco_wasm_module.shutil, "which", which)
+        monkeypatch.setattr(
+            mujoco_wasm_module.subprocess,
+            "Popen",
+            lambda command, cwd, env: calls.append((command, cwd, env))
+            or FakeProcess(),
+        )
+
+        mujoco_wasm_module._start_vite("pnpm", tmp_path, "127.0.0.1", 5178)
+
+        command, cwd, env = calls[0]
+        assert command[:3] == ["pnpm", "exec", "vite"]
+        assert cwd == tmp_path
+        assert env["PATH"].split(os.pathsep)[0] == str(node.parent)
 
     def test_play_mujoco_wasm_trajectory_autoplay_writes_public_asset(
         self, monkeypatch, tmp_path
