@@ -964,6 +964,12 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     result_queue.get_nowait()
                 except queue.Empty:
                     break
+                except (EOFError, OSError):
+                    # The item has already been removed from the queue, but
+                    # rebuilding a discarded tensor can fail once its worker's
+                    # resource sharer has exited. Keep draining the remaining
+                    # items so other workers can finish flushing their queues.
+                    continue
 
     def shutdown(self):
         for env_id in range(self.num_envs):
