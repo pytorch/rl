@@ -46,7 +46,7 @@
     <script src="../../_static/doctools.js?v=888ff710"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../_static/js/search-tuning.js?v=28c62e49"></script>
+    <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.modules.CrossGroupCritic';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
@@ -2579,7 +2579,7 @@ project to this size. Defaults to <code class="docutils literal notranslate"><sp
 Defaults to <code class="docutils literal notranslate"><span class="pre">2</span></code>.</p></li>
 <li><p><strong>trunk_cells</strong> (<em>int</em>) – width of each trunk hidden layer. Defaults to <code class="docutils literal notranslate"><span class="pre">256</span></code>.</p></li>
 <li><p><strong>activation_class</strong> (<a class="reference internal" href="torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.type" title="torchrl.data.llm.TopKRewardSelector.type"><em>type</em></a><em>[</em><em>nn.Module</em><em>]</em>) – activation used in encoders and
-trunk. Defaults to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tanh</span></code></a>.</p></li>
+trunk. Defaults to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tanh</span></code></a>.</p></li>
 <li><p><strong>share_params</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> a single value head is shared across
 all groups (useful when groups are homogeneous or have the same
 role). If <code class="docutils literal notranslate"><span class="pre">False</span></code> each group gets its own head. Encoders are

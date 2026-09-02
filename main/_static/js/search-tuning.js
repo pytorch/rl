@@ -5,7 +5,7 @@
  * defining it from a script that loads earlier replaces the stock scorer
  * wholesale. Nothing else in Sphinx is patched.
  *
- * Two things go wrong on a large API reference:
+ * Three things go wrong on a large API reference:
  *
  *  1. The Python domain gives every module search priority 0, worth +15, while
  *     classes and functions get priority 1 for +5. On projects where module
@@ -15,6 +15,11 @@
  *     score, but the passes are not on a common scale: the title/index pass is
  *     a 0-100 percentage while object and fulltext hits are small additive
  *     scores. Any title match therefore beats any object match.
+ *
+ *  3. Those same three passes each emit their own row for one page, and the
+ *     built-in dedup keys on [docname, title, anchor, descr, filename], which
+ *     differs per pass. So a single symbol page is listed repeatedly, each row
+ *     labelled with whatever heading matched -- eight rows reading "Linear".
  */
 (function () {
   "use strict";
@@ -80,6 +85,24 @@
 
       tuned -= 3 * Math.max(0, parts.length - 3);
       if (descr != null && /Python module/.test(descr)) tuned -= 10;
+
+      // Collapse the per-pass rows for one symbol page into a single entry.
+      // searchtools.js applies Scorer.score to each result *before* it dedupes,
+      // and hands score() the live result array, so rewriting the fields the
+      // dedup keys on makes its existing dedup do the work. Relabelling to the
+      // page's own symbol also replaces the bare matched heading ("Linear")
+      // with something that distinguishes the row from its siblings.
+      //
+      // This depends on score() running ahead of the dedup in Search.query. If
+      // a future Sphinx reorders that, results would duplicate again as they do
+      // today -- it degrades to the current behaviour rather than breaking.
+      var generated = /(?:^|\/)generated\/(.+)$/.exec(String(docname));
+      if (generated) {
+        result[1] = generated[1];
+        result[2] = "";
+        result[3] = null;
+      }
+
       return tuned;
     },
   };

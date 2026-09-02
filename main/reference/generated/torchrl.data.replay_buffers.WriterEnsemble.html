@@ -46,7 +46,7 @@
     <script src="../../_static/doctools.js?v=888ff710"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../_static/js/search-tuning.js?v=28c62e49"></script>
+    <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.data.replay_buffers.WriterEnsemble';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
@@ -2569,7 +2569,7 @@ To extend one of the replay buffers, simply index the parent
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.generations_of">
-<span class="sig-name descname"><span class="pre">generations_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.generations_of" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">generations_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.generations_of" title="Link to this definition">#</a></dt>
 <dd><p>Returns the generation stamp for each physical slot in <code class="docutils literal notranslate"><span class="pre">index</span></code>.</p>
 <p>A slot’s stamp advances once per write it receives, so a single
 <code class="docutils literal notranslate"><span class="pre">extend</span></code> that wraps the storage advances a reused slot once per write.
@@ -2581,7 +2581,7 @@ everywhere. Never-written slots also report <code class="docutils literal notran
 “no usable stamp” rather than “generation zero”.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>index</strong> (<em>int</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – dim-0 slot indices. A 1-D tensor is
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>torch.Tensor</em></a>) – dim-0 slot indices. A 1-D tensor is
 always read as a batch of slot indices; for a storage with
 <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, pass a <code class="docutils literal notranslate"><span class="pre">tuple</span></code> of per-dimension indices (as
 <a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend" title="torchrl.data.ReplayBuffer.extend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code></a> returns) to identify
@@ -2593,7 +2593,7 @@ generation stamps a whole dim-0 slot.</p>
 <code class="docutils literal notranslate"><span class="pre">index</span></code>, on <code class="docutils literal notranslate"><span class="pre">index</span></code>’s device.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)">torch.Tensor</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)">torch.Tensor</a></p>
 </dd>
 </dl>
 </dd></dl>

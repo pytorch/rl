@@ -46,7 +46,7 @@
     <script src="../../_static/doctools.js?v=888ff710"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../_static/js/search-tuning.js?v=28c62e49"></script>
+    <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.envs.transforms.CartesianSolver';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
@@ -2556,12 +2556,12 @@ environment’s <code class="docutils literal notranslate"><span class="pre">_ca
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>target_pose</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – target end-effector pose of shape
+<li><p><strong>target_pose</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>torch.Tensor</em></a>) – target end-effector pose of shape
 <code class="docutils literal notranslate"><span class="pre">(*batch,</span> <span class="pre">7)</span></code>: three position coordinates followed by a
 <code class="docutils literal notranslate"><span class="pre">(w,</span> <span class="pre">x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code> unit quaternion, all in the world frame. A zero
 (or otherwise invalid) quaternion means “position only”: all three
 rotational degrees of freedom are free.</p></li>
-<li><p><strong>start_action</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – current low-level action of shape
+<li><p><strong>start_action</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>torch.Tensor</em></a>) – current low-level action of shape
 <code class="docutils literal notranslate"><span class="pre">(*batch,</span> <span class="pre">action_dim)</span></code>. The leading <code class="docutils literal notranslate"><span class="pre">action_dim</span> <span class="pre">-</span> <span class="pre">1</span></code> entries
 are joint positions used to seed the solve; the trailing entry is
 the gripper command and must be copied through unchanged.</p></li>
@@ -2569,7 +2569,7 @@ the gripper command and must be copied through unchanged.</p></li>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>orientation_mask</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – per-axis weights of shape
+<li><p><strong>orientation_mask</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – per-axis weights of shape
 <code class="docutils literal notranslate"><span class="pre">(*batch,</span> <span class="pre">3)</span></code> applied to the world-frame rotation error. A zero
 entry leaves rotation about that world axis unconstrained; e.g.
 <code class="docutils literal notranslate"><span class="pre">(1.0,</span> <span class="pre">1.0,</span> <span class="pre">0.0)</span></code> constrains rotations about the world x and y
@@ -2596,7 +2596,7 @@ requests <code class="docutils literal notranslate"><span class="pre">path=&quot
 <code class="docutils literal notranslate"><span class="pre">(*batch,</span> <span class="pre">waypoints,</span> <span class="pre">action_dim)</span></code> with it.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)">torch.Tensor</a></p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)">torch.Tensor</a></p>
 </dd>
 </dl>
 <p>A plain two-argument callable <code class="docutils literal notranslate"><span class="pre">(target_pose,</span> <span class="pre">start_action)</span> <span class="pre">-&gt;</span> <span class="pre">action</span></code> is

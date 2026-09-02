@@ -46,7 +46,7 @@
     <script src="../../_static/doctools.js?v=888ff710"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../_static/js/search-tuning.js?v=28c62e49"></script>
+    <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.envs.transforms.DecodeVideoTransform';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
@@ -2560,10 +2560,10 @@ single ranged read per source.</p>
 <a class="reference internal" href="torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef" title="torchrl.data.VideoClipRef"><code class="xref py py-class docutils literal notranslate"><span class="pre">VideoClipRef</span></code></a> leaves to decode.</p></li>
 <li><p><strong>out_keys</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – destination keys for the decoded
 frames. Defaults to <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> (in-place replacement).</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><em>torch.device</em></a><em> or </em><em>str</em><em>, </em><em>optional</em>) – device for the decoded frames. A
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>torch.device</em></a><em> or </em><em>str</em><em>, </em><em>optional</em>) – device for the decoded frames. A
 CUDA device enables GPU (NVDEC) decoding. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (uses the
 reference’s <code class="docutils literal notranslate"><span class="pre">out_device</span></code>, else CPU).</p></li>
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – dtype for the decoded frames. Defaults to
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – dtype for the decoded frames. Defaults to
 <code class="docutils literal notranslate"><span class="pre">None</span></code> (uses the reference’s <code class="docutils literal notranslate"><span class="pre">out_dtype</span></code>, else <code class="docutils literal notranslate"><span class="pre">uint8</span></code>).</p></li>
 </ul>
 </dd>

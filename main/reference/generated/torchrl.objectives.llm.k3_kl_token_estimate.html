@@ -46,7 +46,7 @@
     <script src="../../_static/doctools.js?v=888ff710"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../_static/js/search-tuning.js?v=28c62e49"></script>
+    <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.objectives.llm.k3_kl_token_estimate';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
@@ -1561,7 +1561,7 @@ document.write(`
 <h1>k3_kl_token_estimate<a class="headerlink" href="#k3-kl-token-estimate" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.objectives.llm.k3_kl_token_estimate">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.llm.</span></span><span class="sig-name descname"><span class="pre">k3_kl_token_estimate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_log_prob</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/llm/distillation.html#k3_kl_token_estimate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.llm.k3_kl_token_estimate" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.llm.</span></span><span class="sig-name descname"><span class="pre">k3_kl_token_estimate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_log_prob</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/llm/distillation.html#k3_kl_token_estimate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.llm.k3_kl_token_estimate" title="Link to this definition">#</a></dt>
 <dd><p>Per-token k3 estimate of the KL divergence to a target distribution.</p>
 <p>Uses the k3 estimator <code class="docutils literal notranslate"><span class="pre">exp(d)</span> <span class="pre">-</span> <span class="pre">1</span> <span class="pre">-</span> <span class="pre">d</span></code> with
 <code class="docutils literal notranslate"><span class="pre">d</span> <span class="pre">=</span> <span class="pre">target_log_prob</span> <span class="pre">-</span> <span class="pre">log_prob</span></code>, the same approximation used by
@@ -1580,10 +1580,10 @@ two distributions, but it no longer estimates either KL divergence.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>target_log_prob</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – per-token log-probabilities of the
+<li><p><strong>target_log_prob</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>torch.Tensor</em></a>) – per-token log-probabilities of the
 target (non-sampling) distribution, evaluated on the same tokens
 as <code class="docutils literal notranslate"><span class="pre">log_prob</span></code>.</p></li>
-<li><p><strong>log_prob</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – per-token log-probabilities of the
+<li><p><strong>log_prob</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>torch.Tensor</em></a>) – per-token log-probabilities of the
 distribution the tokens were sampled from.</p></li>
 </ul>
 </dd>

@@ -46,7 +46,7 @@
     <script src="../../_static/doctools.js?v=888ff710"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../_static/js/search-tuning.js?v=28c62e49"></script>
+    <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.modules.set_recurrent_matmul_precision';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
@@ -2547,7 +2547,7 @@ document.write(`
 <dd class="field-odd"><p><strong>mode</strong> – One of <code class="docutils literal notranslate"><span class="pre">&quot;ieee&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;tf32&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;tf32x3&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;fast&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">&quot;high-prec&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">None</span></code>. <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">None</span></code>
 clear the override and fall back to
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.get_float32_matmul_precision.html#torch.get_float32_matmul_precision" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.get_float32_matmul_precision()</span></code></a> (modulated by the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.get_float32_matmul_precision.html#torch.get_float32_matmul_precision" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.get_float32_matmul_precision()</span></code></a> (modulated by the
 <code class="docutils literal notranslate"><span class="pre">TORCHRL_RNN_PRECISION</span></code> env var if set). <code class="docutils literal notranslate"><span class="pre">&quot;fast&quot;</span></code> and
 <code class="docutils literal notranslate"><span class="pre">&quot;high-prec&quot;</span></code> are stored symbolically and resolve to a concrete
 mode at every kernel call based on the active CUDA device.</p>

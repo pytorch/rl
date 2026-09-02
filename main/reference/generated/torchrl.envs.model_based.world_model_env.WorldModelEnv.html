@@ -46,7 +46,7 @@
     <script src="../../_static/doctools.js?v=888ff710"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../_static/js/search-tuning.js?v=28c62e49"></script>
+    <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.envs.model_based.world_model_env.WorldModelEnv';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
@@ -2581,9 +2581,9 @@ stepped — only its specs are read.</p></li>
 <li><p><strong>observation_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a><em>, </em><em>optional</em>) – override for the observation
 spec. When <code class="docutils literal notranslate"><span class="pre">None</span></code>, the env exposes the latent state under
 <code class="docutils literal notranslate"><span class="pre">latent_key</span></code> with shape inferred from <code class="docutils literal notranslate"><span class="pre">base_env</span></code>.</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.13)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – batch size for the env. Defaults
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – batch size for the env. Defaults
 to <code class="docutils literal notranslate"><span class="pre">base_env.batch_size</span></code>.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><em>torch.device</em></a><em>, </em><em>optional</em>) – device for the env. Defaults to
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>torch.device</em></a><em>, </em><em>optional</em>) – device for the env. Defaults to
 <code class="docutils literal notranslate"><span class="pre">base_env.device</span></code>.</p></li>
 <li><p><strong>latent_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – the key under which the latent
 state is stored. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;latent&quot;</span></code>.</p></li>
