@@ -236,13 +236,18 @@ class TestMujoco:
             gait_terms = torch.stack(
                 [
                     components[f"diagnostic_reward_{name}"]
-                    for name in ("air_time", "swing_height", "phase_contact")
+                    for name in (
+                        "air_time",
+                        "swing_height",
+                        "phase_contact",
+                        "double_support",
+                    )
                 ]
             )
             if command:
                 # The pose term is loose while walking and the gait terms are
                 # active: both feet are planted, so exactly one foot agrees
-                # with the gait clock.
+                # with the gait clock and the double-support penalty applies.
                 assert (pose_cost < 0.01).all()
                 torch.testing.assert_close(
                     components["diagnostic_reward_phase_contact"],
@@ -258,6 +263,37 @@ class TestMujoco:
                 assert (pose_cost > 0.015).all()
                 assert (gait_terms == 0).all()
             assert not env._compute_done(state, mismatched).any()
+
+        # Once the robot rests on both feet, keeping them planted under a
+        # nonzero command is penalized while standing under a zero command is not.
+        for _ in range(10):
+            settled = env.step(reset.set("action", action))["next"]
+        assert env._contacts.all()
+        settled_state = env.get_state()
+        planted = env._reward_components(settled_state, action)
+        torch.testing.assert_close(
+            planted["diagnostic_reward_double_support"],
+            torch.full((num_envs, 1), MicroDuckEnv.DOUBLE_SUPPORT_WEIGHT * 0.02),
+        )
+        env.reset(
+            TensorDict(
+                {"commanded_x_velocity": torch.zeros(num_envs, 1)},
+                batch_size=(num_envs,),
+            )
+        )
+        for _ in range(10):
+            env.step(reset.set("action", action))
+        standing = env._reward_components(env.get_state(), action)
+        assert (standing["diagnostic_reward_double_support"] == 0).all()
+        del settled
+        # Back to a nonzero command for the checks below.
+        reset = env.reset(
+            TensorDict(
+                {"commanded_x_velocity": torch.full((num_envs, 1), 0.3)},
+                batch_size=(num_envs,),
+            )
+        )
+        state = env.get_state()
 
         # Linear velocity is rotated into the body frame before rewarding it.
         yawed = state.clone()

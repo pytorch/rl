@@ -18,9 +18,12 @@ Reward
     term that is tight when standing and loose when walking, and three
     contact-based gait terms that are active only under a nonzero command:
     rewarded foot air time inside a swing-duration window, swing-foot height
-    toward a clearance target, and agreement between foot contacts and the
-    gait clock. Small costs discourage vertical and roll/pitch base motion,
-    joint velocity and action rate. A fall costs a fixed penalty.
+    toward a clearance target, agreement between foot contacts and the gait
+    clock, and a penalty for keeping both feet planted. Standing still under a
+    nonzero command therefore earns clearly less than stepping, which a
+    from-scratch policy otherwise settles into. Small costs discourage vertical
+    and roll/pitch base motion, joint velocity and action rate. A fall costs a
+    fixed penalty.
 
 Termination
     A physical fall (low base height or tilted torso) or a non-finite state.
@@ -255,7 +258,7 @@ class MicroDuckEnv(MujocoEnv):
     # the mjlab velocity tasks. Positive terms are Gaussians in [0, 1].
     COMMAND_THRESHOLD: ClassVar[float] = 0.01
     TRACKING_WEIGHT: ClassVar[float] = 2.0
-    TRACKING_STD: ClassVar[float] = 0.2
+    TRACKING_STD: ClassVar[float] = 0.1
     YAW_RATE_WEIGHT: ClassVar[float] = 1.0
     YAW_RATE_STD: ClassVar[float] = 0.5**0.5
     UPRIGHT_WEIGHT: ClassVar[float] = 2.0
@@ -267,7 +270,8 @@ class MicroDuckEnv(MujocoEnv):
     AIR_TIME_WINDOW: ClassVar[tuple[float, float]] = (0.125, 0.3)
     SWING_HEIGHT_WEIGHT: ClassVar[float] = 1.0
     SWING_TARGET_HEIGHT: ClassVar[float] = 0.02
-    PHASE_CONTACT_WEIGHT: ClassVar[float] = 1.0
+    PHASE_CONTACT_WEIGHT: ClassVar[float] = 3.0
+    DOUBLE_SUPPORT_WEIGHT: ClassVar[float] = -1.0
     ANG_VEL_XY_WEIGHT: ClassVar[float] = -0.05
     LIN_VEL_Z_WEIGHT: ClassVar[float] = -2.0
     ACTION_RATE_WEIGHT: ClassVar[float] = -0.1
@@ -283,6 +287,7 @@ class MicroDuckEnv(MujocoEnv):
         "air_time",
         "swing_height",
         "phase_contact",
+        "double_support",
         "ang_vel_xy",
         "lin_vel_z",
         "action_rate",
@@ -778,6 +783,7 @@ class MicroDuckEnv(MujocoEnv):
         directed_sin = command.sign() * phase.sin()
         expected_contact = torch.stack((directed_sin <= 0, directed_sin > 0), dim=-1)
         phase_contact = (self._contacts == expected_contact).to(self.dtype).mean(-1)
+        double_support = self._contacts.all(dim=-1).to(self.dtype)
         gait_gate = (moving & (upright >= self.MIN_UPRIGHT)).to(self.dtype)
 
         fallen = self._fallen(qpos, qvel)
@@ -789,6 +795,7 @@ class MicroDuckEnv(MujocoEnv):
             "air_time": self.AIR_TIME_WEIGHT * air_time * gait_gate,
             "swing_height": self.SWING_HEIGHT_WEIGHT * swing_height * gait_gate,
             "phase_contact": self.PHASE_CONTACT_WEIGHT * phase_contact * gait_gate,
+            "double_support": self.DOUBLE_SUPPORT_WEIGHT * double_support * gait_gate,
             "ang_vel_xy": self.ANG_VEL_XY_WEIGHT * qvel[..., 3:5].square().sum(-1),
             "lin_vel_z": self.LIN_VEL_Z_WEIGHT * body_velocity[..., 2].square(),
             "action_rate": self.ACTION_RATE_WEIGHT
