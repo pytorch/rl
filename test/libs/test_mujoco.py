@@ -232,12 +232,31 @@ class TestMujoco:
             pose_cost = matching_reward - env._compute_reward(
                 state, action, pose_offset
             )
+            components = env._reward_components(matching, action)
+            gait_terms = torch.stack(
+                [
+                    components[f"diagnostic_reward_{name}"]
+                    for name in ("air_time", "swing_height", "phase_contact")
+                ]
+            )
             if command:
-                assert (pose_cost < 1e-3).all()
+                # The pose term is loose while walking and the gait terms are
+                # active: both feet are planted, so exactly one foot agrees
+                # with the gait clock.
+                assert (pose_cost < 0.01).all()
+                torch.testing.assert_close(
+                    components["diagnostic_reward_phase_contact"],
+                    torch.full(
+                        (num_envs, 1),
+                        0.5 * MicroDuckEnv.PHASE_CONTACT_WEIGHT * 0.02,
+                    ),
+                )
                 stationary_reward = env._compute_reward(state, action, state)
                 assert (matching_reward > stationary_reward).all()
+                standing_pose_cost = pose_cost
             else:
-                assert (pose_cost > 0.1).all()
+                assert (pose_cost > 0.015).all()
+                assert (gait_terms == 0).all()
             assert not env._compute_done(state, mismatched).any()
 
         # Linear velocity is rotated into the body frame before rewarding it.
@@ -260,6 +279,7 @@ class TestMujoco:
             env._reward_components(fallen, action)["diagnostic_reward_termination"],
             torch.full((num_envs, 1), -MicroDuckEnv.FALL_PENALTY),
         )
+        del standing_pose_cost
 
         action.fill_(0.25)
         transition = env.step(reset.set("action", action))
@@ -359,7 +379,7 @@ class TestMujoco:
         torch.testing.assert_close(
             heights, torch.full((num_envs, 2), 0.005), atol=1e-4, rtol=0
         )
-        for _ in range(25):
+        for _ in range(10):
             td["action"] = torch.zeros_like(env.action_spec.rand())
             td = env.step(td)["next"]
         assert env.foot_contacts().all()

@@ -11,11 +11,16 @@ installed ``mjlab_microduck`` package and loads the same model on any of the
 three :class:`~torchrl.envs.MujocoEnv` physics backends.
 
 Reward
-    Nonzero commands receive an alive bonus plus the body-frame velocity along
-    the commanded direction; a zero command receives a Gaussian
-    velocity-tracking reward and a nominal-pose term. Uprightness and height
-    terms stabilize the gait, small costs discourage lateral drift, roll/yaw
-    rate, joint velocity and action rate, and a fall costs a fixed penalty.
+    A locomotion reward in the style of the mjlab velocity tasks, with every
+    term weighted per second and multiplied by the control period: Gaussian
+    tracking of the commanded body-frame velocity (lateral velocity tracked to
+    zero) and of a zero yaw rate, a Gaussian uprightness term, a nominal-pose
+    term that is tight when standing and loose when walking, and three
+    contact-based gait terms that are active only under a nonzero command:
+    rewarded foot air time inside a swing-duration window, swing-foot height
+    toward a clearance target, and agreement between foot contacts and the
+    gait clock. Small costs discourage vertical and roll/pitch base motion,
+    joint velocity and action rate. A fall costs a fixed penalty.
 
 Termination
     A physical fall (low base height or tilted torso) or a non-finite state.
@@ -143,12 +148,17 @@ class MicroDuckEnv(MujocoEnv):
     r"""Commanded longitudinal-velocity locomotion task for the MicroDuck biped.
 
     The action is a normalized offset around the actuator targets of the MJCF
-    ``STAND`` keyframe. The observation concatenates projected gravity (3),
-    base angular velocity (3), measured and commanded body-frame longitudinal
-    velocity (2), joint-position error (14), joint velocity (14), the sine,
-    cosine and ramp of a fixed-frequency gait clock (3), and the previous
-    action (14). The command is also exposed under the
+    ``STAND`` keyframe, applied at 50 Hz. The observation concatenates
+    projected gravity (3), base angular velocity (3), measured and commanded
+    body-frame longitudinal velocity (2), joint-position error (14), joint
+    velocity (14), the sine, cosine and ramp of a fixed-frequency gait clock
+    (3), and the previous action (14). The command is also exposed under the
     ``commanded_x_velocity`` key so evaluation can read it directly.
+
+    The reward follows the mjlab velocity-task recipe (see the module
+    docstring); its weights are class attributes so a subclass can retune
+    them. Foot contacts and heights come from :meth:`foot_contacts` and
+    :meth:`foot_heights`, so the gait terms work on every backend.
 
     MuJoCo stores free-joint linear velocity in the world frame and angular
     velocity in the body frame; the task rotates the linear velocity into the
@@ -203,7 +213,7 @@ class MicroDuckEnv(MujocoEnv):
     """
 
     DEFAULT_BACKEND: ClassVar[BackendName] = "mujoco"
-    FRAME_SKIP = 4
+    FRAME_SKIP = 10
     RESET_NOISE_SCALE = 0.02
     ROOT_ENV_VAR: ClassVar[str] = "MICRODUCK_RL_ROOT"
     SCENE_FILE: ClassVar[str] = "scene_walk.xml"
@@ -231,22 +241,42 @@ class MicroDuckEnv(MujocoEnv):
     FOOT_SITES: ClassVar[tuple[str, str]] = ("left_foot", "right_foot")
     GAIT_PHASE_START: ClassVar[int] = 3 + 3 + 2 + NUM_JOINTS * 2
     OBSERVATION_DIM: ClassVar[int] = GAIT_PHASE_START + 3 + NUM_JOINTS
-    VELOCITY_TRACKING_STD: ClassVar[float] = 0.25
-    STAND_POSE_COMMAND_STD: ClassVar[float] = 0.01
-    FORWARD_VELOCITY_REWARD_SCALE: ClassVar[float] = 5.0
-    FORWARD_VELOCITY_CLAMP: ClassVar[float] = 0.2
-    FALL_PENALTY: ClassVar[float] = 10.0
+    # Reward weights are per second and multiplied by the control period, like
+    # the mjlab velocity tasks. Positive terms are Gaussians in [0, 1].
+    COMMAND_THRESHOLD: ClassVar[float] = 0.01
+    TRACKING_WEIGHT: ClassVar[float] = 2.0
+    TRACKING_STD: ClassVar[float] = 0.2
+    YAW_RATE_WEIGHT: ClassVar[float] = 1.0
+    YAW_RATE_STD: ClassVar[float] = 0.5**0.5
+    UPRIGHT_WEIGHT: ClassVar[float] = 2.0
+    UPRIGHT_STD: ClassVar[float] = 0.05**0.5
+    POSE_WEIGHT: ClassVar[float] = 1.0
+    POSE_STD_STANDING: ClassVar[float] = 0.1
+    POSE_STD_WALKING: ClassVar[float] = 0.5
+    AIR_TIME_WEIGHT: ClassVar[float] = 3.0
+    AIR_TIME_WINDOW: ClassVar[tuple[float, float]] = (0.125, 0.3)
+    SWING_HEIGHT_WEIGHT: ClassVar[float] = 1.0
+    SWING_TARGET_HEIGHT: ClassVar[float] = 0.02
+    PHASE_CONTACT_WEIGHT: ClassVar[float] = 1.0
+    ANG_VEL_XY_WEIGHT: ClassVar[float] = -0.05
+    LIN_VEL_Z_WEIGHT: ClassVar[float] = -2.0
+    ACTION_RATE_WEIGHT: ClassVar[float] = -0.1
+    JOINT_VELOCITY_WEIGHT: ClassVar[float] = -0.001
+    FALL_PENALTY: ClassVar[float] = 4.0
     MIN_HEIGHT_RATIO: ClassVar[float] = 0.55
     MIN_UPRIGHT: ClassVar[float] = 0.35
     REWARD_COMPONENTS: ClassVar[tuple[str, ...]] = (
-        "velocity_tracking",
+        "tracking",
+        "yaw_rate",
         "upright",
-        "height",
         "pose",
-        "lateral_velocity",
-        "roll_yaw_rate",
-        "joint_velocity",
+        "air_time",
+        "swing_height",
+        "phase_contact",
+        "ang_vel_xy",
+        "lin_vel_z",
         "action_rate",
+        "joint_velocity",
         "termination",
     )
     POSE_DIAGNOSTICS: ClassVar[tuple[str, ...]] = (
@@ -260,6 +290,10 @@ class MicroDuckEnv(MujocoEnv):
         "action_saturation_fraction",
         "target_clamp_fraction",
         "action_rate_rms",
+        "left_foot_contact",
+        "right_foot_contact",
+        "left_foot_height",
+        "right_foot_height",
     )
     FAILURE_DIAGNOSTICS: ClassVar[tuple[str, ...]] = ("height", "upright", "nonfinite")
 
@@ -301,7 +335,6 @@ class MicroDuckEnv(MujocoEnv):
             )
         if not torch.isfinite(command_values).all():
             raise ValueError("commanded_x_velocity values must be finite.")
-
         self.scene_path = self.resolve_scene(microduck_root)
         self.action_scale = float(action_scale)
         self.diagnostics = bool(diagnostics)
@@ -331,6 +364,14 @@ class MicroDuckEnv(MujocoEnv):
             self.num_envs, self.NUM_JOINTS, dtype=self.dtype, device=self.device
         )
         self._observation_action = self._previous_action.clone()
+        self._feet_air_time = torch.zeros(
+            self.num_envs, 2, dtype=self.dtype, device=self.device
+        )
+        self._touchdown_air_time = torch.zeros_like(self._feet_air_time)
+        self._contacts = torch.zeros(
+            self.num_envs, 2, dtype=torch.bool, device=self.device
+        )
+        self._foot_heights = torch.zeros_like(self._feet_air_time)
         self.action_spec = Bounded(
             low=-1.0,
             high=1.0,
@@ -574,6 +615,9 @@ class MicroDuckEnv(MujocoEnv):
         self._previous_action.zero_()
         self._observation_action.zero_()
         self._commanded_x_velocity = self._sample_command(tensordict)
+        self._feet_air_time.zero_()
+        self._touchdown_air_time.zero_()
+        self._refresh_contacts()
 
     def _on_reset_mask(
         self,
@@ -590,6 +634,13 @@ class MicroDuckEnv(MujocoEnv):
         self._commanded_x_velocity = torch.where(
             mask, self._sample_command(tensordict), self._commanded_x_velocity
         )
+        self._feet_air_time = torch.where(
+            mask, torch.zeros_like(self._feet_air_time), self._feet_air_time
+        )
+        self._touchdown_air_time = torch.where(
+            mask, torch.zeros_like(self._touchdown_air_time), self._touchdown_air_time
+        )
+        self._refresh_contacts()
 
     # ------------------------------------------------------------------
     # Dynamics, reward, termination
@@ -609,6 +660,25 @@ class MicroDuckEnv(MujocoEnv):
             | ~finite
         )
 
+    def _refresh_contacts(self) -> None:
+        self._contacts = self.foot_contacts()
+        self._foot_heights = self.foot_heights().to(self.dtype)
+
+    def _update_gait_state(self) -> None:
+        """Advance the per-foot air-time bookkeeping after a physics step."""
+        self._refresh_contacts()
+        dt = self.frame_skip * self._backend.timestep
+        airborne_before = self._feet_air_time > 0
+        touchdown = self._contacts & airborne_before
+        self._touchdown_air_time = torch.where(
+            touchdown, self._feet_air_time, torch.zeros_like(self._feet_air_time)
+        )
+        self._feet_air_time = torch.where(
+            self._contacts,
+            torch.zeros_like(self._feet_air_time),
+            self._feet_air_time + dt,
+        )
+
     def _reward_components(
         self,
         next_state: TensorDictBase,
@@ -616,42 +686,63 @@ class MicroDuckEnv(MujocoEnv):
     ) -> dict[str, torch.Tensor]:
         qpos = next_state["qpos"].to(self.dtype)
         qvel = next_state["qvel"].to(self.dtype)
-        projected_gravity = _projected_gravity(qpos[..., 3:7])
-        body_velocity = _body_frame_linear_velocity(qpos[..., 3:7], qvel[..., :3])
+        dt = self.frame_skip * self._backend.timestep
+        quaternion = qpos[..., 3:7]
+        body_velocity = _body_frame_linear_velocity(quaternion, qvel[..., :3])
         command = self._commanded_x_velocity.squeeze(-1)
-        tracking_reward = 2.0 * torch.exp(
-            -((body_velocity[..., 0] - command) / self.VELOCITY_TRACKING_STD).square()
+        moving = command.abs() > self.COMMAND_THRESHOLD
+        upright = (-_projected_gravity(quaternion)[..., 2]).clamp(-1.0, 1.0)
+        tilt = torch.acos(upright)
+
+        tracking_error = (body_velocity[..., 0] - command).square() + body_velocity[
+            ..., 1
+        ].square()
+        tracking = torch.exp(-tracking_error / self.TRACKING_STD**2)
+        yaw_rate = torch.exp(-qvel[..., 5].square() / self.YAW_RATE_STD**2)
+        upright_reward = torch.exp(-tilt.square() / self.UPRIGHT_STD**2)
+        pose_std = torch.where(
+            moving,
+            torch.full_like(command, self.POSE_STD_WALKING),
+            torch.full_like(command, self.POSE_STD_STANDING),
         )
-        directional_velocity = command.sign() * body_velocity[..., 0]
-        locomotion_reward = 1.0 + self.FORWARD_VELOCITY_REWARD_SCALE * (
-            directional_velocity.clamp(
-                -self.FORWARD_VELOCITY_CLAMP, self.FORWARD_VELOCITY_CLAMP
-            )
+        pose = torch.exp(
+            -(qpos[..., 7:] - self._home_qpos[7:]).square().mean(dim=-1)
+            / pose_std.square()
         )
-        velocity_reward = torch.where(
-            command.abs() > 1e-6, locomotion_reward, tracking_reward
+        window_low, window_high = self.AIR_TIME_WINDOW
+        air_time = (
+            (self._touchdown_air_time - window_low)
+            .clamp(0.0, window_high - window_low)
+            .sum(dim=-1)
         )
-        upright = (-projected_gravity[..., 2]).clamp(-1.0, 1.0)
-        upright_reward = torch.exp(-4.0 * (1.0 - upright).square())
-        height_reward = torch.exp(
-            -((qpos[..., 2] - self._target_height) / 0.03).square()
-        )
-        pose_reward = torch.exp(
-            -((qpos[..., 7:] - self._home_qpos[7:]) / 0.35).square().mean(dim=-1)
-        )
-        stand_pose_gate = torch.exp(-(command / self.STAND_POSE_COMMAND_STD).square())
+        airborne = ~self._contacts
+        swing_height = (
+            (self._foot_heights / self.SWING_TARGET_HEIGHT).clamp(0.0, 1.0) * airborne
+        ).sum(dim=-1)
+        phase, _ = self._gait_clock()
+        directed_sin = command.sign() * phase.sin()
+        expected_contact = torch.stack((directed_sin <= 0, directed_sin > 0), dim=-1)
+        phase_contact = (self._contacts == expected_contact).to(self.dtype).mean(-1)
+        gait_gate = (moving & (upright >= self.MIN_UPRIGHT)).to(self.dtype)
+
         fallen = self._fallen(qpos, qvel)
         components = {
-            "velocity_tracking": velocity_reward,
-            "upright": 0.5 * upright_reward,
-            "height": 0.25 * height_reward,
-            "pose": 0.5 * stand_pose_gate * pose_reward,
-            "lateral_velocity": -0.1 * body_velocity[..., 1].square(),
-            "roll_yaw_rate": -0.02 * qvel[..., [3, 5]].square().mean(dim=-1),
-            "joint_velocity": -0.002 * qvel[..., 6:].square().mean(dim=-1),
-            "action_rate": -0.02 * (action - self._previous_action).square().mean(-1),
-            "termination": -self.FALL_PENALTY * fallen.to(self.dtype),
+            "tracking": self.TRACKING_WEIGHT * tracking,
+            "yaw_rate": self.YAW_RATE_WEIGHT * yaw_rate,
+            "upright": self.UPRIGHT_WEIGHT * upright_reward,
+            "pose": self.POSE_WEIGHT * pose,
+            "air_time": self.AIR_TIME_WEIGHT * air_time * gait_gate,
+            "swing_height": self.SWING_HEIGHT_WEIGHT * swing_height * gait_gate,
+            "phase_contact": self.PHASE_CONTACT_WEIGHT * phase_contact * gait_gate,
+            "ang_vel_xy": self.ANG_VEL_XY_WEIGHT * qvel[..., 3:5].square().sum(-1),
+            "lin_vel_z": self.LIN_VEL_Z_WEIGHT * body_velocity[..., 2].square(),
+            "action_rate": self.ACTION_RATE_WEIGHT
+            * (action - self._previous_action).square().sum(dim=-1),
+            "joint_velocity": self.JOINT_VELOCITY_WEIGHT
+            * qvel[..., 6:].square().sum(-1),
         }
+        components = {name: dt * value for name, value in components.items()}
+        components["termination"] = -self.FALL_PENALTY * fallen.to(self.dtype)
         return {
             f"diagnostic_reward_{name}": value.unsqueeze(-1)
             for name, value in components.items()
@@ -694,6 +785,12 @@ class MicroDuckEnv(MujocoEnv):
                 .square()
                 .mean(dim=-1, keepdim=True)
                 .sqrt(),
+                "diagnostic_left_foot_contact": self._contacts[..., 0:1].to(self.dtype),
+                "diagnostic_right_foot_contact": self._contacts[..., 1:2].to(
+                    self.dtype
+                ),
+                "diagnostic_left_foot_height": self._foot_heights[..., 0:1],
+                "diagnostic_right_foot_height": self._foot_heights[..., 1:2],
                 "diagnostic_height_failure": (
                     qpos[..., 2] < self.MIN_HEIGHT_RATIO * self._target_height
                 ).unsqueeze(-1),
@@ -712,6 +809,7 @@ class MicroDuckEnv(MujocoEnv):
         next_state: TensorDictBase,
     ) -> torch.Tensor:
         del state
+        self._update_gait_state()
         return torch.stack(
             tuple(self._reward_components(next_state, action).values())
         ).sum(dim=0)
@@ -740,12 +838,16 @@ class MicroDuckEnv(MujocoEnv):
         return {
             "previous_action": self._previous_action[index].clone(),
             "commanded_x_velocity": self._commanded_x_velocity[index].clone(),
+            "feet_air_time": self._feet_air_time[index].clone(),
         }
 
     def _load_indexed_extra_state(self, state: dict[str, Any]) -> None:
         self._previous_action = state["previous_action"].clone()
         self._observation_action = self._previous_action.clone()
         self._commanded_x_velocity = state["commanded_x_velocity"].clone()
+        self._feet_air_time = state["feet_air_time"].clone()
+        self._touchdown_air_time = torch.zeros_like(self._feet_air_time)
+        self._refresh_contacts()
 
     def _set_indexed_extra_state(
         self,
@@ -759,3 +861,5 @@ class MicroDuckEnv(MujocoEnv):
         self._previous_action[index] = source._previous_action.to(self.device)
         self._observation_action[index] = source._observation_action.to(self.device)
         self._commanded_x_velocity[index] = source._commanded_x_velocity.to(self.device)
+        self._feet_air_time[index] = source._feet_air_time.to(self.device)
+        self._refresh_contacts()
