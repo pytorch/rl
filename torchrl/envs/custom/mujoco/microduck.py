@@ -218,87 +218,157 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
 
     The reward follows the mjlab velocity-task recipe (see the module
     docstring); its weights are class attributes so a subclass can retune
-    them. Foot contacts and heights come from :meth:`foot_contacts` and
-    :meth:`foot_heights`, so the gait terms work on every backend.
+    them, and ``reward_scales`` overrides them on one instance. Foot contacts
+    and heights come from :meth:`foot_contacts` and :meth:`foot_heights`, so
+    the gait terms work on every backend.
 
     MuJoCo stores free-joint linear velocity in the world frame and angular
     velocity in the body frame; the task rotates the linear velocity into the
     body frame before computing the observation and the reward.
 
-    The MJCF is resolved from ``microduck_root``, then from the
-    ``MICRODUCK_RL_ROOT`` environment variable, then from an installed
+    The MJCF is not vendored. It is resolved from ``microduck_root``, then from
+    the ``MICRODUCK_RL_ROOT`` environment variable, then from an installed
     ``mjlab_microduck`` package, then from a checkout of the pinned upstream
-    commit under ``root``, which ``download=True`` fetches when absent. A
-    ``microduck_rl`` checkout, its package directory, or the ``scene_walk.xml``
-    file itself are all accepted.
+    commit under ``root``, which ``download=True`` fetches when absent. Any
+    revision of ``microduck_rl`` works through the first three options; the pin
+    only fixes what ``download`` fetches, so the joint layout, the ``STAND``
+    keyframe and the foot geom and site names the task relies on, all checked
+    at load time, are known to match.
 
     Args:
-        microduck_root: ``microduck_rl`` checkout, ``mjlab_microduck`` package
-            directory, or path to ``scene_walk.xml``. Defaults to the
-            :attr:`ROOT_ENV_VAR` environment variable, the installed package,
-            or a download under ``root``.
-        root: directory holding downloaded ``microduck_rl`` checkouts. Defaults
-            to ``~/.cache/torchrl/microduck``.
-        download: whether to download the pinned ``microduck_rl`` commit into
-            ``root`` when no other source resolves. Defaults to ``False``, in
-            which case a missing asset raises an error describing every option.
-            ``"force"`` re-downloads even when the checkout is present.
-        backend: MuJoCo physics backend. Defaults to ``"mujoco"``, which was
-            the fastest backend for this model on CPU in eager mode.
-        commanded_x_velocity: fixed body-frame longitudinal velocity command in
-            m/s, or a sequence sampled uniformly at every reset. A command may
-            also be provided under ``commanded_x_velocity`` in the reset
-            TensorDict; the key is part of the env's ``state_spec`` so it is
-            honored through :class:`~torchrl.envs.TransformedEnv` as well.
-            Defaults to a forward-only ``0.03`` m/s command. Ignored when
-            ``command_range`` is given.
-        command_range: optional ``(low, high)`` interval in m/s from which the
-            command is sampled uniformly at every reset, for training over a
-            continuous speed range.
-        warm_start_velocity: optional ``(low, high)`` forward speed interval in
-            m/s. At reset, a ``warm_start_fraction`` of the environments start
-            already moving along their heading at a speed sampled from it, so
-            an untrained policy experiences locomotion states early.
-        warm_start_fraction: fraction of resets that receive the warm start.
-            Defaults to ``0.0``.
-        joint_reset_noise_scale: uniform noise added to the joint positions at
-            reset, in radians. Defaults to ``reset_noise_scale``. Larger values
-            start episodes in diverse, off-balance poses, including
-            single-support ones, which a from-scratch policy otherwise rarely
-            visits.
-        action_scale: position-target offset in radians for a unit normalized
-            action. Defaults to ``0.35``.
-        diagnostics: if ``True``, add each reward component and pose
-            diagnostics to the observation spec under ``diagnostic_*`` keys.
-            Off by default because it roughly doubles the per-step task cost.
-        low_cost_collisions: if ``True`` (default), replace the collision-class
-            meshes with box proxies at load time. The unmodified meshes make
-            the ``mjx`` and ``mujoco-torch`` backends run out of memory.
-        gait_frequency_hz: frequency of the gait clock exposed in the
-            observation, at zero command. Defaults to ``1.8913``.
-        gait_frequency_per_mps: increase of the gait clock frequency per m/s of
-            commanded speed, so the cadence rewarded by the single-support term
-            follows the command. Defaults to ``0.0`` (fixed clock).
-        observe_lateral_velocity: if ``True``, append the body-frame lateral
-            and vertical velocities to the observation, which gives the
-            lateral tracking term an input. Defaults to ``False``.
-        reward_scales: optional mapping from reward attribute names such as
-            ``"TRACKING_WEIGHT"`` or ``"TRACKING_STD"`` to values that override
-            the class defaults on this instance.
-        gait_phase_offset: phase of the gait clock at the first step, in
-            radians. Defaults to ``-1.5237``.
-        gait_ramp_duration_s: duration over which the gait ramp feature grows
-            from zero to one after a reset. Defaults to ``0.4``.
-        max_episode_steps: truncation horizon. Defaults to ``500``.
-        \*\*kwargs: forwarded to :class:`~torchrl.envs.MujocoEnv`. ``xml_path``
-            and ``patch_xml`` are not accepted.
+        microduck_root (str or Path, optional): ``microduck_rl`` checkout,
+            ``mjlab_microduck`` package directory, or path to
+            ``scene_walk.xml``. Defaults to the :attr:`ROOT_ENV_VAR`
+            environment variable, the installed package, or a download under
+            ``root``.
+
+    Keyword Args:
+        root (str or Path, optional): directory holding downloaded
+            ``microduck_rl`` checkouts. Defaults to
+            ``~/.cache/torchrl/microduck``.
+        download (bool or ``"force"``, optional): whether to download commit
+            :data:`MICRODUCK_RL_COMMIT` of ``microduck_rl`` into ``root`` when
+            no other source resolves. Defaults to ``False``, in which case a
+            missing asset raises an error describing every option. ``"force"``
+            re-downloads even when the checkout is present.
+        backend (str, optional): ``"mujoco"``, ``"mjx"`` or ``"mujoco-torch"``.
+            Defaults to ``"mujoco"``, the fastest backend for this model on CPU
+            in eager mode. The native backend batches ``num_envs`` simulators
+            with :class:`~torchrl.envs.SerialEnv`, or with
+            :class:`~torchrl.envs.ParallelEnv` when ``parallel=True``; the
+            other two batch inside the simulator.
+        commanded_x_velocity (float or Sequence[float], optional): body-frame
+            longitudinal velocity command in m/s. Every reset draws one value
+            uniformly from the sequence for each env (a scalar is a fixed
+            command, and repeating a value weights the draw); the command
+            stays constant until the next reset. A ``commanded_x_velocity``
+            entry of shape ``(num_envs, 1)`` or ``(num_envs,)`` in the reset
+            TensorDict overrides the draw; the key is in ``state_spec`` so
+            :class:`~torchrl.envs.TransformedEnv` forwards it. Defaults to
+            ``(0.03,)``. Ignored when ``command_range`` is given.
+        command_range (tuple[float, float], optional): ``(low, high)`` interval
+            in m/s from which the command is drawn uniformly at every reset
+            instead, for training over a continuous speed range.
+        warm_start_velocity (tuple[float, float], optional): ``(low, high)``
+            forward speed interval in m/s. At reset, a ``warm_start_fraction``
+            of the environments start already moving along their heading at a
+            speed drawn from it, so an untrained policy experiences locomotion
+            states early.
+        warm_start_fraction (float, optional): fraction of resets that receive
+            the warm start. Defaults to ``0.0``.
+        joint_reset_noise_scale (float, optional): uniform noise added to the
+            joint positions at reset, in radians. Defaults to
+            ``reset_noise_scale``. Larger values start episodes in diverse,
+            off-balance poses, including single-support ones, which a
+            from-scratch policy otherwise rarely visits.
+        action_scale (float, optional): position-target offset in radians for
+            a unit normalized action. Defaults to ``0.35``.
+        diagnostics (bool, optional): if ``True``, add each reward component
+            and pose diagnostics to the observation spec under
+            ``diagnostic_*`` keys. Off by default because it roughly doubles
+            the per-step task cost.
+        low_cost_collisions (bool, optional): if ``True`` (default), replace
+            the collision-class meshes with box proxies at load time. The
+            unmodified meshes make the ``mjx`` and ``mujoco-torch`` backends
+            run out of memory.
+        gait_frequency_hz (float, optional): frequency of the gait clock
+            exposed in the observation, at zero command. Defaults to
+            ``1.8913``.
+        gait_frequency_per_mps (float, optional): increase of the gait clock
+            frequency per m/s of commanded speed, so the cadence rewarded by
+            the single-support term follows the command. Defaults to ``0.0``
+            (fixed clock).
+        gait_phase_offset (float, optional): phase of the gait clock at the
+            first step, in radians. Defaults to ``-1.5237``.
+        gait_ramp_duration_s (float, optional): duration over which the gait
+            ramp feature grows from zero to one after a reset. Defaults to
+            ``0.4``.
+        observe_lateral_velocity (bool, optional): if ``True``, append the
+            body-frame lateral and vertical velocities to the observation,
+            which gives the lateral tracking term an input. Defaults to
+            ``False``.
+        reward_scales (Mapping[str, float], optional): reward attribute names
+            such as ``"TRACKING_WEIGHT"`` or ``"TRACKING_STD"`` mapped to
+            values that override the class defaults on this instance.
+        max_episode_steps (int, optional): truncation horizon. Defaults to
+            ``500``.
+        \*\*kwargs: forwarded to :class:`~torchrl.envs.MujocoEnv`:
+            ``num_envs``, ``device``, ``seed``, ``reset_noise_scale``,
+            ``from_pixels``, ``render_width``, ``render_height``, ``camera_id``,
+            ``compile_step`` and so on. ``xml_path`` and ``patch_xml`` are not
+            accepted.
 
     Examples:
-        >>> from torchrl.envs import MicroDuckEnv  # doctest: +SKIP
+        Fetch the assets once and roll out a random policy that receives a
+        different speed command at every reset:
+
+        >>> from torchrl.envs import MicroDuckEnv
+        >>> env = MicroDuckEnv(download=True, commanded_x_velocity=(0.1, 0.2, 0.3))  # doctest: +SKIP
+        >>> rollout = env.rollout(50)  # doctest: +SKIP
+        >>> rollout["observation"].shape[-1], rollout["commanded_x_velocity"][0, 0]  # doctest: +SKIP
+        (53, tensor([0.2000]))
+
+        Scale up: batch 16 native simulators in worker processes, or run
+        thousands inside MJX or ``mujoco-torch`` (optionally compiled) on a
+        GPU. The task code is the same on every backend.
+
+        >>> env = MicroDuckEnv(download=True, num_envs=16, parallel=True)  # doctest: +SKIP
+        >>> env = MicroDuckEnv(download=True, backend="mjx", num_envs=1024, device="cuda")  # doctest: +SKIP
         >>> env = MicroDuckEnv(  # doctest: +SKIP
-        ...     "/path/to/microduck_rl", num_envs=4, parallel=False
+        ...     download=True, backend="mujoco-torch", num_envs=1024, device="cuda", compile_step=True
         ... )
-        >>> td = env.rollout(10)  # doctest: +SKIP
+
+        Pick the task: train over a speed range with a gait clock that follows
+        the command, and pin the speed of an evaluation episode at reset.
+
+        >>> from tensordict import TensorDict
+        >>> env = MicroDuckEnv(  # doctest: +SKIP
+        ...     download=True, command_range=(0.1, 0.3), gait_frequency_hz=1.0, gait_frequency_per_mps=5.0
+        ... )
+        >>> td = env.reset(TensorDict(commanded_x_velocity=torch.full((1, 1), 0.25), batch_size=[1]))  # doctest: +SKIP
+        >>> td["commanded_x_velocity"]  # doctest: +SKIP
+        tensor([[0.2500]])
+
+        Record a video with the standard recorder transform: the env renders
+        offscreen into a ``"pixels"`` observation and the recorder writes an
+        mp4 under ``./microduck/videos``.
+
+        >>> from torchrl.envs import TransformedEnv
+        >>> from torchrl.record import CSVLogger, VideoRecorder
+        >>> env = TransformedEnv(  # doctest: +SKIP
+        ...     MicroDuckEnv(download=True, from_pixels=True, render_width=480, render_height=360),
+        ...     VideoRecorder(CSVLogger("microduck", video_format="mp4"), tag="rollout"),
+        ... )
+        >>> env.rollout(200)  # doctest: +SKIP
+        >>> env.transform.dump()  # doctest: +SKIP
+
+        Look inside the reward: ``diagnostics=True`` exposes every term in the
+        observation, and ``reward_scales`` retunes the weights.
+
+        >>> env = MicroDuckEnv(download=True, diagnostics=True, reward_scales={"TRACKING_WEIGHT": 4.0})  # doctest: +SKIP
+        >>> rollout = env.rollout(10)  # doctest: +SKIP
+        >>> rollout["next", "diagnostic_reward_tracking"].shape  # doctest: +SKIP
+        torch.Size([1, 10, 1])
 
     Reference:
         Pollen Robotics, MicroDuck (https://github.com/pollen-robotics/microduck)
