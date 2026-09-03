@@ -139,13 +139,14 @@ def make_env(
         for key, value in ((recorded.get("config") or {}).get("env") or {}).items()
         if key not in ASSET_KEYS
     }
+    # rlrender passes Path and torch.device objects, which OmegaConf rejects.
     overrides = {
-        "microduck_root": microduck_root,
-        "root": root,
+        "microduck_root": None if microduck_root is None else str(microduck_root),
+        "root": None if root is None else str(root),
         "download": download,
         "num_envs": num_envs,
         "parallel": parallel,
-        "device": device,
+        "device": None if device is None else str(device),
     }
     env_cfg = OmegaConf.to_container(
         OmegaConf.merge(
