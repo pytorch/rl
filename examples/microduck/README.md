@@ -300,16 +300,19 @@ uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
 ```
 
 A PPO checkpoint is a unified TorchRL checkpoint whose policy is the actor,
-so no state-dict key is needed:
+so no state-dict key is needed. Its recorded config rebuilds the trained task;
+the `cfg` entry below pins the native backend, which is all rendering needs,
+and the command to play back (`latest.ckpt` works the same way). The PPO
+factories import Hydra, hence the `utils` extra:
 
 ```bash
-uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
+uv run --extra utils --extra rendering --extra mujoco_wasm --with mujoco rlrender \
   --ckpt microduck_ppo_best.ckpt \
   --policy examples/microduck/ppo_mujoco.py:make_render_policy \
   --env examples/microduck/ppo_mujoco.py:make_env \
   --deterministic \
-  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"cfg\":{\"task\":{\"commanded_x_velocity\":[0.03]}}}" \
-  --render-backend null --max-steps 500 \
+  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"cfg\":{\"backend\":\"mujoco\",\"parallel\":false,\"device\":\"cpu\",\"task\":{\"commanded_x_velocity\":[0.2]}}}" \
+  --render-backend null --max-steps 500 --fps 50 \
   --format ipynb --out microduck_ppo.ipynb \
   --notebook-render-backend mujoco-wasm --notebook-rollout-mode both \
   --mujoco-model-path "$MICRODUCK_RL_ROOT/src/mjlab_microduck/robot/microduck/scene_walk.xml" \
@@ -317,9 +320,11 @@ uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
 ```
 
 Open either notebook with
-`uv run --extra rendering --extra mujoco_wasm --extra notebook --with mujoco jupyter lab <file>`.
+`uv run --extra utils --extra rendering --extra mujoco_wasm --extra notebook --with mujoco jupyter lab <file>`.
 The generated notebook exposes a `live_env_kwargs` cell, so a different
-command can be rolled out in the kernel without regenerating it.
+command (for instance `[-0.2]`) can be rolled out in the kernel without
+regenerating it. For an mp4 instead of a notebook, replace the `--format`,
+`--out` and notebook flags with `--render-backend env --format mp4 --out clip.mp4`.
 
 ## MJLab
 
