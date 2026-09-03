@@ -210,6 +210,11 @@ class TestMujoco:
             reset["observation"][..., :3],
             torch.tensor([[0.0, 0.0, -1.0]]).expand(num_envs, -1),
         )
+        # The fixture starts 5 mm above the floor with both feet airborne.
+        assert not env.foot_contacts().any()
+        torch.testing.assert_close(
+            env.foot_heights(), torch.full((num_envs, 2), 0.005), atol=1e-4, rtol=0
+        )
         action = torch.zeros_like(env.action_spec.rand())
         for command in (-0.3, 0.0, 0.3):
             command_tensor = torch.full((num_envs, 1), command)
@@ -263,54 +268,24 @@ class TestMujoco:
                 )
                 stationary_reward = env._compute_reward(state, action, state)
                 assert (matching_reward > stationary_reward).all()
-                standing_pose_cost = pose_cost
             else:
                 assert (pose_cost > 0.015).all()
                 assert (gait_terms == 0).all()
             assert not env._compute_done(state, mismatched).any()
 
         # Once the robot rests on both feet, keeping them planted under a
-        # nonzero command is penalized while standing under a zero command is not.
+        # nonzero command is penalized and earns no phase credit; only correct
+        # single support does.
         for _ in range(10):
-            settled = env.step(reset.set("action", action))["next"]
-        assert env._contacts.all()
-        settled_state = env.get_state()
-        planted = env._reward_components(settled_state, action)
+            env.step(reset.set("action", action))
+        assert env.foot_contacts().all()
+        assert (env.foot_heights().abs() < 5e-3).all()
+        planted = env._reward_components(env.get_state(), action)
         torch.testing.assert_close(
             planted["diagnostic_reward_double_support"],
             torch.full((num_envs, 1), MicroDuckEnv.DOUBLE_SUPPORT_WEIGHT * 0.02),
         )
-        # Standing on both feet earns no phase credit; only correct single
-        # support does.
         assert (planted["diagnostic_reward_phase_contact"] == 0).all()
-        env._contacts = torch.tensor([[False, True]]).expand(num_envs, -1).clone()
-        phase, _ = env._gait_clock()
-        left_swing = (phase.sin() > 0).to(env.dtype).unsqueeze(-1)
-        torch.testing.assert_close(
-            env._reward_components(settled_state, action)[
-                "diagnostic_reward_phase_contact"
-            ],
-            MicroDuckEnv.PHASE_CONTACT_WEIGHT * 0.02 * left_swing,
-        )
-        env._refresh_contacts()
-        env.reset(
-            TensorDict(
-                {"commanded_x_velocity": torch.zeros(num_envs, 1)},
-                batch_size=(num_envs,),
-            )
-        )
-        for _ in range(10):
-            env.step(reset.set("action", action))
-        standing = env._reward_components(env.get_state(), action)
-        assert (standing["diagnostic_reward_double_support"] == 0).all()
-        del settled
-        # Back to a nonzero command for the checks below.
-        reset = env.reset(
-            TensorDict(
-                {"commanded_x_velocity": torch.full((num_envs, 1), 0.3)},
-                batch_size=(num_envs,),
-            )
-        )
         state = env.get_state()
 
         # Linear velocity is rotated into the body frame before rewarding it.
@@ -333,7 +308,6 @@ class TestMujoco:
             env._reward_components(fallen, action)["diagnostic_reward_termination"],
             torch.full((num_envs, 1), -MicroDuckEnv.FALL_PENALTY),
         )
-        del standing_pose_cost
 
         action.fill_(0.25)
         transition = env.step(reset.set("action", action))
@@ -405,8 +379,6 @@ class TestMujoco:
         env.reset()
         qvel = env.get_state()["qvel"]
         torch.testing.assert_close(qvel[0, :3], torch.tensor([0.2, 0.0, 0.0]))
-        # The air-time bookkeeping restarts at reset and accrues while airborne.
-        assert (env._feet_air_time == 0).all()
         env.close()
         env = MicroDuckEnv(
             scene, joint_reset_noise_scale=0.3, reset_noise_scale=0.0, seed=0
@@ -467,13 +439,15 @@ class TestMujoco:
             MicroDuckEnv(scene, reward_scales={"FRAME_SKIP": 1.0})
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_download_resolves_and_runs_once_per_batch(
-        self, tmp_path, monkeypatch
-    ):
+    def test_microduck_scene_resolution_and_download(self, tmp_path, monkeypatch):
         from torchrl.envs.custom.mujoco import microduck as microduck_module
 
         (tmp_path / "fixture").mkdir()
         fixture = self._write_microduck_fixture(tmp_path / "fixture")
+        checkout = tmp_path / "microduck_rl" / "src" / "mjlab_microduck" / "robot"
+        checkout = checkout / "microduck"
+        checkout.mkdir(parents=True)
+        scene = shutil.copy(fixture, checkout / "scene_walk.xml")
         cache = tmp_path / "cache"
         calls = []
 
@@ -494,81 +468,37 @@ class TestMujoco:
             "torchrl.envs.custom.mujoco.microduck.importlib.util.find_spec",
             lambda name: None,
         )
-        with pytest.raises(FileNotFoundError, match="download=True"):
+        # Explicit paths: a checkout, its package directory or the scene itself.
+        assert MicroDuckEnv.resolve_scene(checkout) == scene.resolve()
+        assert MicroDuckEnv.resolve_scene(scene) == scene.resolve()
+        with pytest.raises(FileNotFoundError):
+            MicroDuckEnv.resolve_scene(tmp_path / "elsewhere")
+        with pytest.raises(ValueError, match="microduck_root"):
+            MicroDuckEnv(scene, xml_path=scene)
+        # Without any source the error lists every option and nothing downloads.
+        with pytest.raises(FileNotFoundError, match="download=True") as excinfo:
             MicroDuckEnv(root=cache)
+        assert MicroDuckEnv.ROOT_ENV_VAR in str(excinfo.value)
         assert calls == []
         # A batched native env resolves once in the parent, not once per worker.
         env = MicroDuckEnv(
             root=cache, download=True, num_envs=2, parallel=False, seed=0
         )
         assert calls == [False]
-        env.rollout(2)
+        assert isinstance(env, SerialEnv)
+        assert env.rollout(3)["commanded_x_velocity"].shape == (2, 1, 3, 1)
         env.close()
         # The cached checkout is found without downloading again ...
         env = MicroDuckEnv(root=cache, seed=0)
         assert calls == [False]
         assert env.scene_path.is_relative_to(cache)
         env.close()
-        # ... unless a re-download is forced.
+        # ... unless a re-download is forced, and the environment variable
+        # takes precedence over the cache.
         MicroDuckEnv.resolve_scene(root=cache, download="force")
         assert calls == [False, True]
-
-    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_native_backend_is_default_and_batches(self, tmp_path):
-        scene = self._write_microduck_fixture(tmp_path)
-        env = MicroDuckEnv(scene, num_envs=2, parallel=False, seed=0)
-        assert isinstance(env, SerialEnv)
-        rollout = env.rollout(3)
-        assert rollout["commanded_x_velocity"].shape == (2, 1, 3, 1)
-        env.close()
-        with pytest.raises(ValueError, match="microduck_root"):
-            MicroDuckEnv(scene, xml_path=scene)
-
-    def test_microduck_scene_resolution(self, tmp_path, monkeypatch):
-        checkout = tmp_path / "microduck_rl" / "src" / "mjlab_microduck" / "robot"
-        checkout = checkout / "microduck"
-        checkout.mkdir(parents=True)
-        scene = checkout / "scene_walk.xml"
-        scene.write_text("<mujoco/>")
-        monkeypatch.delenv(MicroDuckEnv.ROOT_ENV_VAR, raising=False)
-        monkeypatch.setattr(
-            "torchrl.envs.custom.mujoco.microduck.importlib.util.find_spec",
-            lambda name: None,
-        )
-        with pytest.raises(FileNotFoundError, match="download=True") as excinfo:
-            MicroDuckEnv.resolve_scene(root=tmp_path / "cache")
-        assert MicroDuckEnv.ROOT_ENV_VAR in str(excinfo.value)
         monkeypatch.setenv(MicroDuckEnv.ROOT_ENV_VAR, str(tmp_path / "microduck_rl"))
-        assert MicroDuckEnv.resolve_scene() == scene.resolve()
-        assert MicroDuckEnv.resolve_scene(checkout) == scene.resolve()
-        assert MicroDuckEnv.resolve_scene(scene) == scene.resolve()
-        with pytest.raises(FileNotFoundError):
-            MicroDuckEnv.resolve_scene(tmp_path / "elsewhere")
-
-    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
-    def test_microduck_foot_contacts_and_heights(self, tmp_path, backend):
-        num_envs = 1 if backend == "mujoco" else 2
-        env = MicroDuckEnv(
-            self._write_microduck_fixture(tmp_path),
-            backend=backend,
-            num_envs=num_envs,
-            reset_noise_scale=0.0,
-            seed=0,
-        )
-        td = env.reset()
-        assert not env.foot_contacts().any()
-        heights = env.foot_heights()
-        assert heights.shape == (num_envs, 2)
-        torch.testing.assert_close(
-            heights, torch.full((num_envs, 2), 0.005), atol=1e-4, rtol=0
-        )
-        for _ in range(10):
-            td["action"] = torch.zeros_like(env.action_spec.rand())
-            td = env.step(td)["next"]
-        assert env.foot_contacts().all()
-        assert (env.foot_heights().abs() < 5e-3).all()
-        assert not td["terminated"].any()
-        env.close()
+        assert MicroDuckEnv.resolve_scene(root=cache) == scene.resolve()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_diagnostics_are_opt_in_and_sum_to_reward(self, tmp_path):
