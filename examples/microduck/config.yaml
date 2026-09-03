@@ -12,6 +12,9 @@ env:
   device: cpu
   seed: 0
   max_episode_steps: 500
+  camera_id: -1             # rendering: MuJoCo camera and frame size
+  render_width: 640
+  render_height: 480
   task:                     # fields of torchrl.envs.MicroDuckTask
     commanded_x_velocity: [0.03]
     command_range: null
@@ -47,7 +50,7 @@ ppo:
 evaluation:
   interval: 5               # iterations between deterministic evaluations; null disables them
   commands: null            # defaults to the training commands, or the range bounds and midpoint
-  seeds: [0, 1, 2, 3, 4, 5, 6, 7]
+  num_episodes: 8           # complete episodes per command and evaluation
   steps: 500
   best_checkpoint_path: microduck_ppo_best.ckpt
   latest_checkpoint_path: null

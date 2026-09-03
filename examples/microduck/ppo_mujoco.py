@@ -18,9 +18,10 @@ whole, unpadded sequence into a
 :class:`~torchrl.data.TensorDictReplayBuffer`; GAE is computed once over the
 buffer; :class:`~torchrl.data.SliceSampler` draws whole episodes for the
 recurrent PPO updates; the buffer is erased before collecting again with the
-updated policy. Checkpoints are unified TorchRL checkpoints written with
-:func:`~torchrl.render.save_render_checkpoint`, so ``rlrender`` and
-``policy.init_from`` read them directly.
+updated policy. One :class:`~torchrl.collectors.Evaluator` per velocity
+command runs the deterministic evaluations, and checkpoints are unified TorchRL
+checkpoints written with :func:`~torchrl.render.save_render_checkpoint`, so
+``rlrender`` and ``policy.init_from`` read them directly.
 
 The script is configured with Hydra from ``config.yaml``. Run a short CPU job
 from a TorchRL checkout::
@@ -52,11 +53,11 @@ from typing import Any, Literal
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDictBase
 from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl import timeit, torchrl_logger
-from torchrl.collectors import Collector
+from torchrl.collectors import Collector, Evaluator
 from torchrl.data import (
     LazyTensorStorage,
     SliceSampler,
@@ -66,15 +67,12 @@ from torchrl.data import (
 from torchrl.envs import (
     Compose,
     EnvBase,
-    ExplorationType,
     InitTracker,
     MicroDuckEnv,
     MicroDuckTask,
-    set_exploration_type,
     TensorDictPrimer,
     TransformedEnv,
 )
-from torchrl.envs.custom.mujoco._backends import BackendName
 from torchrl.modules import (
     GRUModule,
     ProbabilisticActor,
@@ -96,9 +94,10 @@ from examples.microduck.heuristic_gait import (  # noqa: E402
     MicroDuckGaitConfig,
 )
 
-DEFAULT_EVALUATION_SEEDS = tuple(range(8))
 PolicyHead = Literal["gait-residual", "gaussian"]
 RECURRENT_STATE_KEY = "recurrent_state"
+# The asset location is machine specific and is never taken from a checkpoint.
+ASSET_KEYS = ("microduck_root", "root", "download")
 
 
 # ----------------------------------------------------------------------
@@ -107,63 +106,76 @@ RECURRENT_STATE_KEY = "recurrent_state"
 
 
 def make_env(
-    microduck_root: str | Path | None = None,
+    cfg: DictConfig | Mapping[str, Any] | None = None,
     *,
-    root: str | Path | None = None,
-    download: bool | str = False,
-    backend: BackendName = "mujoco",
-    task: MicroDuckTask | Mapping[str, Any] | None = None,
-    num_envs: int = 8,
-    device: torch.device | str = "cpu",
-    seed: int = 0,
-    parallel: bool = False,
-    compile_step: bool = False,
-    hidden_size: int | None = None,
-    max_episode_steps: int = 500,
-    camera_id: int = -1,
-    render_width: int = 640,
-    render_height: int = 480,
-    reset_noise_scale: float = MicroDuckEnv.RESET_NOISE_SCALE,
     checkpoint: Mapping[str, Any] | None = None,
+    hidden_size: int | None = None,
+    microduck_root: str | Path | None = None,
+    root: str | Path | None = None,
+    download: bool | str | None = None,
+    num_envs: int | None = None,
+    parallel: bool | None = None,
+    device: torch.device | str | None = None,
 ) -> TransformedEnv:
-    """Build the batched task with the transforms the recurrent policy needs.
+    """Build the batched task from the ``env`` section of ``config.yaml``.
+
+    ``cfg`` is that section, as the Hydra ``DictConfig`` or a plain mapping;
+    missing entries take the defaults of ``config.yaml`` and ``task`` becomes a
+    :class:`~torchrl.envs.MicroDuckTask`. ``rlrender`` passes the training
+    checkpoint instead: its recorded config supplies ``cfg`` (minus the asset
+    location, which is machine specific) and its policy kwargs supply
+    ``hidden_size``. The keyword arguments override single entries so a
+    checkpoint renders with one env from a local asset path; other entries go
+    through ``cfg``, e.g. ``--env-kwargs '{"cfg": {"render_width": 480}}'``.
 
     :class:`~torchrl.envs.InitTracker` marks episode starts and a
     :class:`~torchrl.envs.TensorDictPrimer` carries the GRU state between steps,
-    so the same env serves the collector, evaluation rollouts and ``rlrender``.
-    ``rlrender`` passes the loaded training checkpoint as ``checkpoint``; its
-    recorded task and hidden size apply when ``task`` and ``hidden_size`` are
-    omitted, so a checkpoint renders without repeating how it was trained.
-    ``task`` may also be a mapping of :class:`~torchrl.envs.MicroDuckTask`
-    fields, which is how Hydra and ``--env-kwargs`` pass it.
+    so the same env serves the collector, the evaluators and ``rlrender``.
     """
     recorded = checkpoint if isinstance(checkpoint, Mapping) else {}
-    if task is None:
-        task = recorded.get("task")
-    if isinstance(task, Mapping):
-        task = MicroDuckTask(**task)
+    if cfg is None:
+        cfg = {
+            key: value
+            for key, value in ((recorded.get("config") or {}).get("env") or {}).items()
+            if key not in ASSET_KEYS
+        }
+    overrides = {
+        "microduck_root": microduck_root,
+        "root": root,
+        "download": download,
+        "num_envs": num_envs,
+        "parallel": parallel,
+        "device": device,
+    }
+    env_cfg = OmegaConf.to_container(
+        OmegaConf.merge(
+            OmegaConf.load(PACKAGE_DIR / "config.yaml").env,
+            cfg,
+            {key: value for key, value in overrides.items() if value is not None},
+        ),
+        resolve=True,
+    )
     if hidden_size is None:
         hidden_size = (recorded.get("policy_kwargs") or {}).get("hidden_size", 128)
     kwargs: dict[str, Any] = {
-        "root": root,
-        "download": download,
-        "backend": backend,
-        "task": task,
-        "num_envs": num_envs,
-        "device": torch.device(device),
-        "seed": seed,
-        "max_episode_steps": max_episode_steps,
-        "camera_id": camera_id,
-        "render_width": render_width,
-        "render_height": render_height,
-        "reset_noise_scale": reset_noise_scale,
+        "root": env_cfg["root"],
+        "download": env_cfg["download"],
+        "backend": env_cfg["backend"],
+        "task": MicroDuckTask(**env_cfg["task"]),
+        "num_envs": env_cfg["num_envs"],
+        "device": torch.device(env_cfg["device"]),
+        "seed": env_cfg["seed"],
+        "max_episode_steps": env_cfg["max_episode_steps"],
+        "camera_id": env_cfg["camera_id"],
+        "render_width": env_cfg["render_width"],
+        "render_height": env_cfg["render_height"],
     }
-    if backend == "mujoco":
-        kwargs["parallel"] = parallel
-    elif backend == "mujoco-torch":
-        kwargs["compile_step"] = compile_step
+    if env_cfg["backend"] == "mujoco":
+        kwargs["parallel"] = env_cfg["parallel"]
+    elif env_cfg["backend"] == "mujoco-torch":
+        kwargs["compile_step"] = env_cfg["compile_step"]
     return TransformedEnv(
-        MicroDuckEnv(microduck_root, **kwargs),
+        MicroDuckEnv(env_cfg["microduck_root"], **kwargs),
         Compose(
             InitTracker(),
             TensorDictPrimer(
@@ -362,25 +374,23 @@ def save_checkpoint(
     critic: TensorDictSequential,
     *,
     transitions: int,
-    task: MicroDuckTask,
     policy_kwargs: Mapping[str, Any],
     metrics: Mapping[str, Any],
-    config: Mapping[str, Any] | None = None,
+    config: Mapping[str, Any],
 ) -> Path:
     """Write a unified TorchRL checkpoint that ``rlrender`` and ``init_from`` read.
 
-    The actor is the checkpoint policy; the task and the policy kwargs are
-    stored as environment metadata so :func:`make_env` and
-    :func:`make_render_policy` rebuild the training setup, and the critic is
-    kept alongside for resuming.
+    The actor is the checkpoint policy, the Hydra ``config`` and the policy
+    kwargs let :func:`make_env` and :func:`make_render_policy` rebuild the
+    training setup, and the critic is kept alongside for resuming.
     """
     return save_render_checkpoint(
         path,
         actor,
-        env_metadata={"task": asdict(task), "policy_kwargs": dict(policy_kwargs)},
+        env_metadata={"policy_kwargs": dict(policy_kwargs)},
         frames=transitions,
         metrics=dict(metrics),
-        config=None if config is None else dict(config),
+        config=dict(config),
         extra={"critic_state_dict": critic.state_dict()},
         format="archive",
     )
@@ -401,8 +411,9 @@ def load_parameters(
     except RuntimeError as err:
         raise RuntimeError(
             f"The checkpoint {path} was trained with policy kwargs "
-            f"{payload.get('policy_kwargs')} and task {payload.get('task')}; the "
-            "current models must match them."
+            f"{payload.get('policy_kwargs')} and env config "
+            f"{(payload.get('config') or {}).get('env')}; the current models must "
+            "match them."
         ) from err
     return int(payload.get("frames", 0))
 
@@ -412,99 +423,114 @@ def load_parameters(
 # ----------------------------------------------------------------------
 
 
-@torch.no_grad()
-def evaluate_policy(
-    env: TransformedEnv,
-    policy: ProbabilisticActor,
-    *,
-    commanded_x_velocities: Sequence[float],
-    seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
-    steps: int = 500,
-) -> TensorDict:
-    """Roll the deterministic policy out for every command and seed.
+def command_name(command: float) -> str:
+    """Return the metric group of a velocity command, e.g. ``plus_0.200``."""
+    return f"{float(command):+.3f}".replace("+", "plus_").replace("-", "minus_")
 
-    Returns:
-        A :class:`~tensordict.TensorDict` of shape ``(num_commands, num_seeds)``
-        holding, for every rollout, the command, the return, the mean absolute
-        velocity tracking error, the survival flag, the episode length and the
-        mean body-frame forward speed.
+
+def microduck_metrics(trajectories: TensorDictBase) -> dict[str, float]:
+    """Gait metrics of the padded trajectory batch an :class:`Evaluator` collects.
+
+    Speeds are the body-frame forward velocity read from the observation, so a
+    policy that turns is still credited for walking. ``wrong_way`` counts the
+    episodes whose mean speed opposes the command (or moves under a zero one).
     """
-    if env.batch_size.numel() != 1:
-        raise ValueError("MicroDuck evaluation expects a single environment.")
-    if steps < 1 or not commanded_x_velocities or not seeds:
-        raise ValueError("Evaluation commands, seeds and steps must be non-empty.")
-    was_training = policy.training
-    policy.eval()
-    rows = []
-    try:
-        with set_exploration_type(ExplorationType.DETERMINISTIC):
-            for command in commanded_x_velocities:
-                for seed in seeds:
-                    env.set_seed(seed)
-                    reset = env.reset(
-                        TensorDict(
-                            commanded_x_velocity=torch.full(
-                                (*env.batch_size, 1), float(command)
-                            ),
-                            batch_size=env.batch_size,
-                        )
-                    )
-                    rollout = env.rollout(
-                        steps,
-                        policy,
-                        tensordict=reset,
-                        auto_reset=False,
-                        break_when_any_done=True,
-                    ).reshape(-1)
-                    forward_speed = rollout["next", "observation"][:, 6]
-                    rows.append(
-                        TensorDict(
-                            commanded_x_velocity=torch.tensor(float(command)),
-                            episode_return=rollout["next", "reward"].sum(),
-                            tracking_error=(forward_speed - command).abs().mean(),
-                            survived=~rollout["next", "terminated"][-1].any(),
-                            episode_length=torch.tensor(rollout.shape[-1]),
-                            forward_speed=forward_speed.mean(),
-                        ).float()
-                    )
-    finally:
-        policy.train(was_training)
-    return torch.stack(rows).reshape(len(commanded_x_velocities), len(seeds))
-
-
-def evaluation_metrics(evaluation: TensorDictBase) -> dict[str, float]:
-    """Average the evaluation fields over all rollouts and per command."""
-    fields = evaluation.exclude("commanded_x_velocity")
-    metrics = {
-        f"evaluation/{key}": float(value) for key, value in fields.mean().items()
+    mask = trajectories["collector", "mask"]
+    lengths = mask.sum(-1)
+    speed = trajectories["next", "observation"][..., 6]
+    command = trajectories["commanded_x_velocity"][..., 0]
+    forward_speed = (speed * mask).sum(-1) / lengths
+    tracking_error = ((speed - command).abs() * mask).sum(-1) / lengths
+    last = trajectories["next", "terminated"][..., 0].gather(
+        -1, (lengths - 1).unsqueeze(-1)
+    )
+    command = command[:, 0]
+    directional = torch.where(
+        command != 0, command.sign() * forward_speed, -forward_speed.abs()
+    )
+    return {
+        "tracking_error": float(tracking_error.mean()),
+        "forward_speed": float(forward_speed.mean()),
+        "survival_rate": float((~last).float().mean()),
+        "episode_length_min": float(lengths.min()),
+        "directional_speed_min": float(directional.min()),
+        "directional_speed_mean": float(directional.mean()),
+        "wrong_way": float((directional <= 0).sum()),
     }
-    for command, row in zip(
-        evaluation["commanded_x_velocity"][:, 0], fields.mean(dim=1)
+
+
+def make_evaluator(
+    env: TransformedEnv,
+    actor: ProbabilisticActor,
+    *,
+    command: float,
+    num_episodes: int,
+    steps: int,
+) -> Evaluator:
+    """Deterministic evaluator of ``actor`` on an env whose task fixes ``command``.
+
+    Metrics are logged under ``evaluation/<command name>/``; the evaluator
+    adds ``reward`` and ``episode_length`` to :func:`microduck_metrics`.
+    """
+    return Evaluator(
+        env,
+        actor,
+        num_trajectories=num_episodes,
+        max_steps=steps,
+        metrics_fn=microduck_metrics,
+        log_prefix=f"evaluation/{command_name(command)}",
+    )
+
+
+def evaluation_metrics(results: Sequence[Mapping[str, float]]) -> dict[str, float]:
+    """Merge the per-command evaluator results and average them over commands."""
+    metrics = {
+        key.replace("/custom/", "/"): float(value)
+        for result in results
+        for key, value in result.items()
+        if isinstance(value, (int, float))
+    }
+    for name in (
+        "reward",
+        "episode_length",
+        "tracking_error",
+        "forward_speed",
+        "survival_rate",
     ):
-        name = f"{float(command):+.3f}".replace("+", "plus_").replace("-", "minus_")
-        metrics.update(
-            {f"evaluation/{name}/{key}": float(value) for key, value in row.items()}
-        )
+        values = [value for key, value in metrics.items() if key.endswith(f"/{name}")]
+        metrics[f"evaluation/{name}"] = sum(values) / len(values)
     return metrics
 
 
-def evaluation_score(evaluation: TensorDictBase) -> tuple[float, ...]:
+def evaluation_score(results: Sequence[Mapping[str, float]]) -> tuple[float, ...]:
     """Rank checkpoints by survival, then direction, then speed, then return.
 
     A short forward fall can earn a higher raw return than a full episode of
-    balanced walking, so survival and the number of wrong-way rollouts are
+    balanced walking, so survival and the number of wrong-way episodes are
     compared before any speed or reward figure.
     """
-    command = evaluation["commanded_x_velocity"]
-    speed = evaluation["forward_speed"]
-    directional = torch.where(command != 0, command.sign() * speed, -speed.abs())
+
+    def per_command(name: str) -> list[float]:
+        return [
+            float(value)
+            for result in results
+            for key, value in result.items()
+            if key.endswith(f"/{name}")
+        ]
+
+    survived = sum(
+        rate * episodes
+        for rate, episodes in zip(
+            per_command("survival_rate"), per_command("num_episodes")
+        )
+    )
     return (
-        float(evaluation["survived"].sum()),
-        float(evaluation["episode_length"].min()),
-        -float((directional <= 0).sum()),
-        float(directional.min()),
-        float(directional.mean()),
-        float(evaluation["episode_return"].mean()),
+        survived,
+        min(per_command("episode_length_min")),
+        -sum(per_command("wrong_way")),
+        min(per_command("directional_speed_min")),
+        sum(per_command("directional_speed_mean")) / len(results),
+        sum(per_command("reward")) / len(results),
     )
 
 
@@ -553,14 +579,10 @@ def train_ppo(
     gamma: float = 0.99,
     gae_lambda: float = 0.95,
     max_grad_norm: float = 1.0,
-    evaluation_env: TransformedEnv | None = None,
+    evaluators: Sequence[Evaluator] | None = None,
     evaluation_interval: int | None = None,
-    evaluation_commands: Sequence[float] = (0.03,),
-    evaluation_seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
-    evaluation_steps: int = 500,
     best_checkpoint_path: str | Path | None = None,
     latest_checkpoint_path: str | Path | None = None,
-    task: MicroDuckTask | None = None,
     policy_kwargs: Mapping[str, Any] | None = None,
     config: Mapping[str, Any] | None = None,
     logger: Logger | None = None,
@@ -573,10 +595,12 @@ def train_ppo(
     empties the buffer and drops the collector's in-flight episodes so the next
     collection only contains data from the updated policy.
 
-    ``best_checkpoint_path`` receives the best-scoring parameters and
+    Every ``evaluation_interval`` iterations the ``evaluators`` (one per
+    velocity command, see :func:`make_evaluator`) run the actor's current
+    weights. ``best_checkpoint_path`` receives the best-scoring parameters and
     ``latest_checkpoint_path`` the current ones at every evaluation, so
     training progress can be rendered while the best checkpoint protects
-    against regressions. Checkpoints record ``task``, ``policy_kwargs`` and
+    against regressions. Checkpoints record ``policy_kwargs`` and the Hydra
     ``config`` so ``rlrender`` rebuilds the actor and the env through
     :func:`make_render_policy` and :func:`make_env`.
 
@@ -596,15 +620,15 @@ def train_ppo(
         )
     if evaluation_interval is not None and evaluation_interval < 1:
         raise ValueError("evaluation_interval must be positive when provided.")
-    if evaluation_interval is not None and evaluation_env is None:
-        raise ValueError("evaluation_interval requires an evaluation_env.")
+    if evaluation_interval is not None and not evaluators:
+        raise ValueError("evaluation_interval requires evaluators.")
     checkpointing = (
         best_checkpoint_path is not None or latest_checkpoint_path is not None
     )
     if checkpointing and evaluation_interval is None:
         raise ValueError("Checkpoint paths require periodic evaluation.")
-    if checkpointing and (task is None or policy_kwargs is None):
-        raise ValueError("Checkpoint paths require task and policy_kwargs.")
+    if checkpointing and (config is None or policy_kwargs is None):
+        raise ValueError("Checkpoint paths require config and policy_kwargs.")
 
     device = next(actor.parameters()).device
     num_envs = env.batch_size.numel()
@@ -669,7 +693,6 @@ def train_ppo(
             actor,
             critic,
             transitions=step,
-            task=task,
             policy_kwargs=policy_kwargs,
             metrics={**metrics, "evaluation_score": list(score)},
             config=config,
@@ -677,15 +700,11 @@ def train_ppo(
 
     def evaluate(step: int) -> dict[str, float]:
         nonlocal best_score, best_state
-        evaluation = evaluate_policy(
-            evaluation_env,
-            actor,
-            commanded_x_velocities=evaluation_commands,
-            seeds=evaluation_seeds,
-            steps=evaluation_steps,
-        )
-        metrics = evaluation_metrics(evaluation)
-        score = evaluation_score(evaluation)
+        results = [
+            evaluator.evaluate(weights=actor, step=step) for evaluator in evaluators
+        ]
+        metrics = evaluation_metrics(results)
+        score = evaluation_score(results)
         checkpoint(latest_checkpoint_path, step, metrics, score)
         if best_score is None or score > best_score:
             best_score = score
@@ -696,7 +715,7 @@ def train_ppo(
             "MicroDuck evaluation transitions=%d survival=%.2f length=%.1f "
             "forward_speed=%+.4f tracking_error=%.4f",
             step,
-            metrics["evaluation/survived"],
+            metrics["evaluation/survival_rate"],
             metrics["evaluation/episode_length"],
             metrics["evaluation/forward_speed"],
             metrics["evaluation/tracking_error"],
@@ -844,6 +863,7 @@ def main(cfg: DictConfig) -> None:
         cfg.ppo.epochs = 1
         cfg.ppo.minibatch_trajectories = 2
         cfg.evaluation.interval = 1
+        cfg.evaluation.num_episodes = 1
         cfg.evaluation.steps = 20
         cfg.evaluation.best_checkpoint_path = None
         cfg.evaluation.latest_checkpoint_path = None
@@ -878,24 +898,8 @@ def main(cfg: DictConfig) -> None:
         evaluation_commands = (low, (low + high) / 2, high)
     else:
         evaluation_commands = task.commanded_x_velocity
-    env_kwargs = {
-        "root": cfg.env.root,
-        "download": cfg.env.download,
-        "backend": cfg.env.backend,
-        "task": task,
-        "device": cfg.env.device,
-        "seed": cfg.env.seed,
-        "compile_step": cfg.env.compile_step,
-        "hidden_size": cfg.policy.hidden_size,
-        "max_episode_steps": cfg.env.max_episode_steps,
-    }
-    env = make_env(
-        cfg.env.microduck_root,
-        num_envs=cfg.env.num_envs,
-        parallel=cfg.env.parallel,
-        **env_kwargs,
-    )
-    evaluation_env = None
+    env = make_env(cfg.env, hidden_size=cfg.policy.hidden_size)
+    evaluators: list[Evaluator] = []
     logger = None
     try:
         actor, critic = make_models(env, device=cfg.env.device, **policy_kwargs)
@@ -907,7 +911,31 @@ def main(cfg: DictConfig) -> None:
                 trained,
             )
         if cfg.evaluation.interval is not None:
-            evaluation_env = make_env(cfg.env.microduck_root, num_envs=1, **env_kwargs)
+            for command in evaluation_commands:
+                # One single-env evaluator per command, its task pinned to it.
+                evaluation_cfg = OmegaConf.merge(
+                    cfg.env,
+                    {
+                        "task": {
+                            "commanded_x_velocity": [command],
+                            "command_range": None,
+                        }
+                    },
+                )
+                evaluators.append(
+                    make_evaluator(
+                        make_env(
+                            evaluation_cfg,
+                            hidden_size=cfg.policy.hidden_size,
+                            num_envs=1,
+                            parallel=False,
+                        ),
+                        actor,
+                        command=command,
+                        num_episodes=cfg.evaluation.num_episodes,
+                        steps=cfg.evaluation.steps,
+                    )
+                )
         logger = get_logger(
             cfg.logger.backend,
             logger_name="microduck_ppo",
@@ -926,14 +954,10 @@ def main(cfg: DictConfig) -> None:
             critic,
             **config["ppo"],
             max_episode_steps=cfg.env.max_episode_steps,
-            evaluation_env=evaluation_env,
+            evaluators=evaluators,
             evaluation_interval=cfg.evaluation.interval,
-            evaluation_commands=evaluation_commands,
-            evaluation_seeds=tuple(cfg.evaluation.seeds),
-            evaluation_steps=cfg.evaluation.steps,
             best_checkpoint_path=cfg.evaluation.best_checkpoint_path,
             latest_checkpoint_path=cfg.evaluation.latest_checkpoint_path,
-            task=task,
             policy_kwargs=policy_kwargs,
             config=config,
             logger=logger,
@@ -941,8 +965,8 @@ def main(cfg: DictConfig) -> None:
     finally:
         if logger is not None and hasattr(logger.experiment, "finish"):
             logger.experiment.finish()
-        if evaluation_env is not None:
-            evaluation_env.close()
+        for evaluator in evaluators:
+            evaluator.shutdown()
         if not env.is_closed:
             env.close()
 

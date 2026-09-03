@@ -13,6 +13,7 @@ import math
 import os
 import shutil
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -717,13 +718,22 @@ class TestMujoco:
         ppo = self._load_example("ppo_mujoco")
         scene = self._write_microduck_fixture(tmp_path)
         task = MicroDuckTask(observe_lateral_velocity=True, action_scale=0.5)
-        env = ppo.make_env(
-            scene, num_envs=2, seed=0, hidden_size=16, max_episode_steps=20, task=task
-        )
-        evaluation_env = ppo.make_env(
-            scene, num_envs=1, seed=1, hidden_size=16, task=task
-        )
+        env_cfg = {
+            "microduck_root": str(scene),
+            "num_envs": 2,
+            "seed": 0,
+            "max_episode_steps": 20,
+            "task": asdict(task),
+        }
+        env = ppo.make_env(env_cfg, hidden_size=16)
         actor, critic = ppo.make_models(env, hidden_size=16)
+        evaluator = ppo.make_evaluator(
+            ppo.make_env({**env_cfg, "seed": 1}, hidden_size=16, num_envs=1),
+            actor,
+            command=0.03,
+            num_episodes=1,
+            steps=5,
+        )
         with set_exploration_type(ExplorationType.DETERMINISTIC):
             reset = env.reset()
             actor(reset)
@@ -774,25 +784,23 @@ class TestMujoco:
             max_episode_steps=20,
             epochs=1,
             minibatch_trajectories=2,
-            evaluation_env=evaluation_env,
+            evaluators=[evaluator],
             evaluation_interval=1,
-            evaluation_commands=(0.03,),
-            evaluation_seeds=(0,),
-            evaluation_steps=5,
             best_checkpoint_path=checkpoint,
             latest_checkpoint_path=tmp_path / "latest.ckpt",
-            task=task,
             policy_kwargs={"hidden_size": 16},
+            config={"env": env_cfg},
         )
-        assert "evaluation/survived" in history[0]
+        assert history[0]["evaluation/plus_0.030/num_episodes"] == 1
+        assert "evaluation/survival_rate" in history[0]
         # Checkpoints are unified TorchRL checkpoints in the rlrender layout.
         latest = load_checkpoint(tmp_path / "latest.ckpt")
         assert latest["frames"] >= 100
         saved = load_checkpoint(checkpoint)
         for name, parameter in actor.state_dict().items():
             torch.testing.assert_close(parameter, saved["model_state_dict"][name])
-        # rlrender rebuilds the actor and the env from the recorded task and kwargs.
-        render_env = ppo.make_env(scene, num_envs=1, checkpoint=saved)
+        # rlrender rebuilds the actor and the env from the recorded config.
+        render_env = ppo.make_env(checkpoint=saved, microduck_root=scene, num_envs=1)
         rendered = ppo.make_render_policy(render_env, checkpoint=saved)
         rendered.load_state_dict(saved["model_state_dict"])
         assert render_env.observation_spec["recurrent_state"].shape[-1] == 16
@@ -810,23 +818,23 @@ class TestMujoco:
             saved["metrics"]["evaluation/forward_speed"]
         )
         # A short forward fall with a huge return ranks below a full episode.
-        walked = TensorDict(
-            commanded_x_velocity=torch.tensor([[0.03]]),
-            forward_speed=torch.tensor([[0.02]]),
-            episode_return=torch.tensor([[1.0]]),
-            survived=torch.tensor([[1.0]]),
-            episode_length=torch.tensor([[500.0]]),
-            batch_size=[1, 1],
-        )
-        fell = walked.clone().update(
-            {
-                "survived": torch.tensor([[0.0]]),
-                "episode_length": torch.tensor([[100.0]]),
-                "episode_return": torch.tensor([[1e6]]),
-            }
-        )
-        assert ppo.evaluation_score(walked) > ppo.evaluation_score(fell)
-        evaluation_env.close()
+        walked = {
+            "evaluation/plus_0.030/reward": 1.0,
+            "evaluation/plus_0.030/num_episodes": 1,
+            "evaluation/plus_0.030/custom/survival_rate": 1.0,
+            "evaluation/plus_0.030/custom/episode_length_min": 500.0,
+            "evaluation/plus_0.030/custom/wrong_way": 0.0,
+            "evaluation/plus_0.030/custom/directional_speed_min": 0.02,
+            "evaluation/plus_0.030/custom/directional_speed_mean": 0.02,
+        }
+        fell = {
+            **walked,
+            "evaluation/plus_0.030/reward": 1e6,
+            "evaluation/plus_0.030/custom/survival_rate": 0.0,
+            "evaluation/plus_0.030/custom/episode_length_min": 100.0,
+        }
+        assert ppo.evaluation_score([walked]) > ppo.evaluation_score([fell])
+        evaluator.shutdown()
         env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)

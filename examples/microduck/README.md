@@ -89,10 +89,11 @@ controller. Data flows through standard TorchRL components:
 4. the buffer is emptied and in-flight episodes dropped before collecting
    again with the updated policy.
 
-`KLAdaptiveLR` keeps the mean policy KL near `ppo.target_kl`. Deterministic,
-fixed-seed evaluation runs every `evaluation.interval` iterations and keeps
-the checkpoint that ranks best on survival, direction, forward speed and
-return, in that order.
+`KLAdaptiveLR` keeps the mean policy KL near `ppo.target_kl`. Every
+`evaluation.interval` iterations one `torchrl.collectors.Evaluator` per
+velocity command runs `evaluation.num_episodes` deterministic episodes, and the
+checkpoint that ranks best on survival, direction, forward speed and return, in
+that order, is kept.
 
 ```bash
 WANDB_BASE_URL=https://api.wandb.ai \
@@ -299,7 +300,7 @@ uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
   --policy examples/microduck/ppo_mujoco.py:make_render_policy \
   --env examples/microduck/ppo_mujoco.py:make_env \
   --deterministic \
-  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"commanded_x_velocity\":0.03}" \
+  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"cfg\":{\"task\":{\"commanded_x_velocity\":[0.03]}}}" \
   --render-backend null --max-steps 500 \
   --format ipynb --out microduck_ppo.ipynb \
   --notebook-render-backend mujoco-wasm --notebook-rollout-mode both \
