@@ -109,21 +109,6 @@ uv run --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
 `--wandb-mode disabled` for a local run. Repeat `--commanded-x-velocity` to
 train a command distribution, and `--smoke` for a pipeline check.
 
-Training from scratch over a speed range, with 16 native workers:
-
-```bash
-WANDB_BASE_URL=https://api.wandb.ai \
-uv run --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
-  --microduck-root "$MICRODUCK_RL_ROOT" --num-envs 16 --parallel \
-  --policy-head gaussian --command-range 0.0 0.3 \
-  --warm-start-velocity 0.05 0.25 --warm-start-fraction 0.3 \
-  --learning-rate 3e-4 --entropy-coeff 0.005 \
-  --transitions-per-update 32768 --minibatch-trajectories 64 \
-  --total-transitions 30000000 --evaluation-interval 10 \
-  --evaluation-command 0.0 --evaluation-command 0.15 --evaluation-command 0.3 \
-  --wandb-entity YOUR_ENTITY
-```
-
 ### Backends
 
 Pass `--backend mjx` or `--backend mujoco-torch` to change only the physics.
@@ -191,6 +176,92 @@ Every policy survives all 500 steps for every command. What the runs show:
   matching its magnitude, and the gait prior only reads the command's sign, so
   every policy behaved identically at 0.03 and 0.06 m/s. The current reward
   tracks the command magnitude and rewards stepping through foot contacts.
+
+## Training from scratch
+
+The Gaussian head learns to walk without the closed-form prior once the
+exploration noise is wide enough to lift a foot and the reward pays for
+stepping rather than for standing. Four earlier from-scratch attempts
+converged to standing still under every command; the `diagnostics=True`
+reward breakdown showed why (the phase term paid half credit with both feet
+planted, and the default 0.35 rad action scale with a 0.3 initial standard
+deviation never broke ground contact). The recipe that walks is:
+
+- `--action-scale 1.0 --initial-policy-scale 1.0`: one radian of position
+  target per unit action and an initial policy standard deviation of one, so
+  the untrained policy actually swings its legs;
+- dense contact shaping in `MicroDuckEnv`: single-support credit only when the
+  clock's swing foot is airborne, a dense swing-height term, and a penalty for
+  standing on both feet under a nonzero command;
+- a velocity command in `[0.1, 0.3]` m/s with a warm start on half of the
+  resets (`--warm-start-velocity 0.05 0.25 --warm-start-fraction 0.5`) and
+  0.25 rad of joint noise at reset, so episodes start away from the standing
+  fixed point;
+- PPO with 32,768 transitions per update, 5 epochs, 64 whole episodes per
+  minibatch, `--learning-rate 3e-4` under the KL-adaptive schedule
+  (`--target-kl 0.01`) and `--entropy-coeff 0.01`.
+
+```bash
+WANDB_BASE_URL=https://api.wandb.ai \
+uv run --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
+  --microduck-root "$MICRODUCK_RL_ROOT" --num-envs 16 --parallel \
+  --policy-head gaussian --action-scale 1.0 --initial-policy-scale 1.0 \
+  --command-range 0.1 0.3 --warm-start-velocity 0.05 0.25 \
+  --warm-start-fraction 0.5 --joint-reset-noise-scale 0.25 \
+  --gait-frequency-hz 1.0 --gait-frequency-per-mps 5.0 \
+  --transitions-per-update 32768 --epochs 5 --minibatch-trajectories 64 \
+  --learning-rate 3e-4 --target-kl 0.01 --entropy-coeff 0.01 \
+  --total-transitions 10000000 --evaluation-interval 10 \
+  --latest-checkpoint-path microduck_ppo_latest.pt \
+  --wandb-entity YOUR_ENTITY
+```
+
+The baseline run
+[`9jgfqj8p`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/9jgfqj8p)
+(16 native workers on Apple silicon, about 3,500 collected transitions/s,
+without the two gait clock flags that the ablations below added) stood still
+until 2M transitions, started stepping around 3M and walked 1.5 m in 10 s
+under every command by 7.5M with full survival.
+
+### Ablations
+
+Each variant below changed one setting of the baseline and trained for 5M
+transitions from scratch; `S0` and `S1` instead continued the baseline
+checkpoint taken at 7.46M transitions for 5M more. Evaluation is
+deterministic over seeds 0-7 and 500 steps (10 s) at 0.1, 0.2 and 0.3 m/s.
+"Speed error" is the mean absolute difference between the body-frame forward
+speed and the command, averaged over the three commands; "displacement" is
+the world-frame distance covered along the initial heading.
+
+| Run | Change | Speed error (m/s) | Displacement at 0.1 / 0.2 / 0.3 m/s (m) | Forward speed at 0.1 / 0.2 / 0.3 m/s (m/s) |
+| --- | --- | ---: | --- | --- |
+| [`9jgfqj8p`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/9jgfqj8p) at 5M | baseline | 0.109 | +0.99 / +0.95 / +0.89 | 0.10 / 0.10 / 0.10 |
+| [`9jgfqj8p`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/9jgfqj8p) at 7.46M | baseline | 0.080 | +1.72 / +1.62 / +1.52 | 0.19 / 0.19 / 0.19 |
+| [`vwk0hgu2`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/vwk0hgu2) A1 | 16 episodes per minibatch | 0.087 | -0.21 / -0.20 / -0.39 | 0.17 / 0.17 / 0.17 |
+| [`kkz2ctnm`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/kkz2ctnm) A2 | gait clock 1 Hz + 5 Hz per m/s | 0.076 | +0.22 / +1.01 / +1.64 | 0.11 / 0.15 / 0.17 |
+| [`iirlbbkv`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/iirlbbkv) A3 | lateral and vertical velocity observed | 0.087 | +0.03 / -0.00 / +0.11 | 0.19 / 0.19 / 0.19 |
+| [`fdit1i9n`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/fdit1i9n) A4 | entropy coefficient 0.003 | 0.103 | -0.25 / -0.21 / -0.20 | 0.12 / 0.12 / 0.12 |
+| [`4ae0vl4t`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/4ae0vl4t) S0 | baseline continued to 12.5M | 0.085 | -0.39 / -0.61 / -0.59 | 0.22 / 0.23 / 0.24 |
+| [`ahqvrivb`](https://wandb.ai/vmoens/torchrl-microduck-ppo/runs/ahqvrivb) S1 | continued to 12.5M with phase-contact 1.5, swing height 1.0, tracking 4.0 | 0.053 | +0.13 / +0.50 / +0.46 | 0.15 / 0.19 / 0.21 |
+
+Every run survives all 500 steps for every command. What the ablations show:
+
+- Two changes make the speed follow the command. From scratch, the
+  command-scaled gait clock (A2) is the only variant that does it, which is
+  why the recipe above passes `--gait-frequency-hz 1.0
+  --gait-frequency-per-mps 5.0`. Once a gait exists, halving the contact
+  shaping and doubling the tracking weight (S1) cuts the speed error from
+  0.085 to 0.053 m/s where continuing unchanged (S0) plateaus. Every other
+  policy settles on a single gait at 0.12-0.24 m/s whatever the command.
+- Smaller minibatches (A1) learn fastest early but end at the same speed
+  error as the baseline; a lower entropy coefficient (A4) and extra velocity
+  observations (A3) do not help.
+- World-frame displacement understates walking: the deterministic rollouts
+  cover 2.1-2.7 m of path but turn by 50-160 degrees in 10 s, because the
+  yaw-rate term (Gaussian with standard deviation 0.71 rad/s) costs at most
+  about 0.006 per step against 0.03 for velocity tracking, and body-frame
+  tracking is blind to heading. Judge speed by the tracking error; a tighter
+  yaw-rate term or a heading-error term is the next reward change to try.
 
 ## Rendering
 
