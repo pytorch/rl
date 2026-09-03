@@ -3,15 +3,16 @@
 [MicroDuck](https://github.com/pollen-robotics/microduck) is a small
 open-hardware biped from Pollen Robotics. Its walking model and meshes live in
 [`microduck_rl`](https://github.com/pollen-robotics/microduck_rl) and are not
-vendored in TorchRL. Pass `--download` (or `MicroDuckEnv(download=True)`) to
-fetch a pinned commit into `~/.cache/torchrl/microduck`, or point the scripts
-at an existing checkout with `--microduck-root /path/to/microduck_rl` or
-`export MICRODUCK_RL_ROOT=...`. Without any of these the env raises an error
-listing the options.
+vendored in TorchRL. Pass `env.download=true` to the PPO script, `--download`
+to the gait script (or `MicroDuckEnv(download=True)`) to fetch a pinned commit
+into `~/.cache/torchrl/microduck`, or point the scripts at an existing checkout
+with `env.microduck_root=/path/to/microduck_rl` (`--microduck-root` for the
+gait script) or `export MICRODUCK_RL_ROOT=...`. Without any of these the env
+raises an error listing the options.
 
 | File | What it does | Needs |
 | --- | --- | --- |
-| [`ppo_mujoco.py`](ppo_mujoco.py) | Recurrent PPO on `torchrl.envs.MicroDuckEnv`; native MuJoCo, MJX or `mujoco-torch` | `mujoco` (+ `mujoco-mjx`/`jax` or `mujoco-torch`) |
+| [`ppo_mujoco.py`](ppo_mujoco.py) | Recurrent PPO on `torchrl.envs.MicroDuckEnv`, configured by Hydra from [`config.yaml`](config.yaml); native MuJoCo, MJX or `mujoco-torch` | `mujoco`, the `utils` extra (+ `mujoco-mjx`/`jax` or `mujoco-torch`) |
 | [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
 
@@ -76,8 +77,8 @@ uv run --with mujoco python examples/microduck/heuristic_gait.py \
 ## Recurrent PPO
 
 The policy is a GRU backbone shared by the actor and the critic. With
-`--policy-head gaussian` the actor is a plain Gaussian head trained from
-scratch; with `--policy-head gait-residual` it adds a bounded, zero-initialized
+`policy.head=gaussian` the actor is a plain Gaussian head trained from
+scratch; with `policy.head=gait-residual` it adds a bounded, zero-initialized
 residual to the closed-form gait, so training starts from a walking
 controller. Data flows through standard TorchRL components:
 
@@ -88,28 +89,32 @@ controller. Data flows through standard TorchRL components:
 4. the buffer is emptied and in-flight episodes dropped before collecting
    again with the updated policy.
 
-`KLAdaptiveLR` keeps the mean policy KL near `--target-kl`. Deterministic,
-fixed-seed evaluation runs every `--evaluation-interval` iterations and keeps
+`KLAdaptiveLR` keeps the mean policy KL near `ppo.target_kl`. Deterministic,
+fixed-seed evaluation runs every `evaluation.interval` iterations and keeps
 the checkpoint that ranks best on survival, direction, forward speed and
 return, in that order.
 
 ```bash
 WANDB_BASE_URL=https://api.wandb.ai \
-uv run --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
-  --microduck-root "$MICRODUCK_RL_ROOT" \
-  --num-envs 8 --total-transitions 2000000 \
-  --best-checkpoint-path microduck_ppo_best.pt \
-  --wandb-entity YOUR_ENTITY
+uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
+  env.microduck_root="$MICRODUCK_RL_ROOT" env.num_envs=8 \
+  ppo.total_transitions=2000000 logger.entity=YOUR_ENTITY
 ```
 
-`--wandb-entity` is required whenever logging is enabled; use
-`--wandb-mode disabled` for a local run. Repeat `--commanded-x-velocity` to
-train a command distribution, and `--smoke` for a pipeline check.
+[`config.yaml`](config.yaml) holds every setting and each one is a Hydra
+override; the `utils` extra provides Hydra. `logger.entity` is required for
+W&B so runs never land in a default workspace; use `logger.backend=csv` or
+`logger.backend=null` for a local run. Set
+`env.task.commanded_x_velocity=[0.0,0.03,0.06]` to train a command
+distribution (`env.task` mirrors the fields of `torchrl.envs.MicroDuckTask`),
+and `smoke=true` for a pipeline check. Checkpoints are unified TorchRL
+checkpoints written with `save_render_checkpoint`, which `rlrender` and
+`policy.init_from` read directly.
 
 ### Backends
 
-Pass `--backend mjx` or `--backend mujoco-torch` to change only the physics.
-`--compile-step` compiles the `mujoco-torch` step; with the fixes in
+Pass `env.backend=mjx` or `env.backend=mujoco-torch` to change only the
+physics. `env.compile_step=true` compiles the `mujoco-torch` step; with the fixes in
 [pytorch/rl#4202](https://github.com/pytorch/rl/pull/4202) and
 [vmoens/mujoco-torch#85](https://github.com/vmoens/mujoco-torch/pull/85) the
 compiled eight-environment MicroDuck step runs at roughly 180-190 transitions/s
@@ -184,33 +189,35 @@ reward breakdown showed why (the phase term paid half credit with both feet
 planted, and the default 0.35 rad action scale with a 0.3 initial standard
 deviation never broke ground contact). The recipe that walks is:
 
-- `--action-scale 1.0 --initial-policy-scale 1.0`: one radian of position
+- `env.task.action_scale=1.0 policy.initial_policy_scale=1.0`: one radian of position
   target per unit action and an initial policy standard deviation of one, so
   the untrained policy actually swings its legs;
 - dense contact shaping in `MicroDuckEnv`: single-support credit only when the
   clock's swing foot is airborne, a dense swing-height term, and a penalty for
   standing on both feet under a nonzero command;
 - a velocity command in `[0.1, 0.3]` m/s with a warm start on half of the
-  resets (`--warm-start-velocity 0.05 0.25 --warm-start-fraction 0.5`) and
+  resets (`env.task.warm_start_velocity=[0.05,0.25]
+  env.task.warm_start_fraction=0.5`) and
   0.25 rad of joint noise at reset, so episodes start away from the standing
   fixed point;
 - PPO with 32,768 transitions per update, 5 epochs, 64 whole episodes per
-  minibatch, `--learning-rate 3e-4` under the KL-adaptive schedule
-  (`--target-kl 0.01`) and `--entropy-coeff 0.01`.
+  minibatch, `ppo.learning_rate=3e-4` under the KL-adaptive schedule
+  (`ppo.target_kl=0.01`) and `ppo.entropy_coeff=0.01`.
 
 ```bash
 WANDB_BASE_URL=https://api.wandb.ai \
-uv run --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
-  --microduck-root "$MICRODUCK_RL_ROOT" --num-envs 16 --parallel \
-  --policy-head gaussian --action-scale 1.0 --initial-policy-scale 1.0 \
-  --command-range 0.1 0.3 --warm-start-velocity 0.05 0.25 \
-  --warm-start-fraction 0.5 --joint-reset-noise-scale 0.25 \
-  --gait-frequency-hz 1.0 --gait-frequency-per-mps 5.0 \
-  --transitions-per-update 32768 --epochs 5 --minibatch-trajectories 64 \
-  --learning-rate 3e-4 --target-kl 0.01 --entropy-coeff 0.01 \
-  --total-transitions 10000000 --evaluation-interval 10 \
-  --latest-checkpoint-path microduck_ppo_latest.pt \
-  --wandb-entity YOUR_ENTITY
+uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
+  env.microduck_root="$MICRODUCK_RL_ROOT" env.num_envs=16 env.parallel=true \
+  policy.head=gaussian policy.initial_policy_scale=1.0 \
+  env.task.action_scale=1.0 env.task.command_range=[0.1,0.3] \
+  env.task.warm_start_velocity=[0.05,0.25] env.task.warm_start_fraction=0.5 \
+  env.task.joint_reset_noise_scale=0.25 \
+  env.task.gait_frequency_hz=1.0 env.task.gait_frequency_per_mps=5.0 \
+  ppo.transitions_per_update=32768 ppo.epochs=5 ppo.minibatch_trajectories=64 \
+  ppo.learning_rate=3e-4 ppo.target_kl=0.01 ppo.entropy_coeff=0.01 \
+  ppo.total_transitions=10000000 evaluation.interval=10 \
+  evaluation.latest_checkpoint_path=microduck_ppo_latest.ckpt \
+  logger.entity=YOUR_ENTITY
 ```
 
 The baseline run
@@ -247,8 +254,9 @@ Every run survives all 500 steps for every command. What the ablations show:
 
 - Two changes make the speed follow the command. From scratch, the
   command-scaled gait clock (A2) is the only variant that does it, which is
-  why the recipe above passes `--gait-frequency-hz 1.0
-  --gait-frequency-per-mps 5.0`. Once a gait exists, halving the contact
+  why the recipe above passes `env.task.gait_frequency_hz=1.0
+  env.task.gait_frequency_per_mps=5.0` (the `MicroDuckEnv.speed_range_task`
+  preset in Python). Once a gait exists, halving the contact
   shaping and doubling the tracking weight (S1) cuts the speed error from
   0.085 to 0.053 m/s where continuing unchanged (S0) plateaus. Every other
   policy settles on a single gait at 0.12-0.24 m/s whatever the command.
@@ -282,14 +290,15 @@ uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
   --mujoco-qpos-key qpos --overwrite
 ```
 
-A PPO checkpoint stores the actor under the `actor` key:
+A PPO checkpoint is a unified TorchRL checkpoint whose policy is the actor,
+so no state-dict key is needed:
 
 ```bash
 uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
-  --ckpt microduck_ppo_best.pt \
+  --ckpt microduck_ppo_best.ckpt \
   --policy examples/microduck/ppo_mujoco.py:make_render_policy \
   --env examples/microduck/ppo_mujoco.py:make_env \
-  --state-dict-key actor --deterministic \
+  --deterministic \
   --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"commanded_x_velocity\":0.03}" \
   --render-backend null --max-steps 500 \
   --format ipynb --out microduck_ppo.ipynb \

@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -279,11 +279,15 @@ def make_env(
     ``rlrender`` can call this factory with its own keyword arguments.
     """
     gait = MicroDuckGaitActor(gait).config
+    task = replace(
+        MicroDuckEnv.tracking_task(commanded_x_velocity, diagnostics=True),
+        **gait.env_kwargs(),
+    )
     return MicroDuckEnv(
         microduck_root,
         download=download,
         backend=backend,
-        commanded_x_velocity=commanded_x_velocity,
+        task=task,
         num_envs=1,
         seed=seed,
         reset_noise_scale=reset_noise_scale,
@@ -291,8 +295,6 @@ def make_env(
         camera_id=camera_id,
         render_width=render_width,
         render_height=render_height,
-        diagnostics=True,
-        **gait.env_kwargs(),
     )
 
 

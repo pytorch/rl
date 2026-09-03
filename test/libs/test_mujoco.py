@@ -59,6 +59,7 @@ from torchrl.envs.custom.mujoco._math import (
 )
 from torchrl.envs.custom.mujoco.microduck import _low_cost_collision_scene
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.render import load_checkpoint
 
 if _has_mujoco:
     import mujoco
@@ -715,17 +716,12 @@ class TestMujoco:
     def test_microduck_example_recurrent_ppo_trains_on_whole_episodes(self, tmp_path):
         ppo = self._load_example("ppo_mujoco")
         scene = self._write_microduck_fixture(tmp_path)
-        env_options = {"observe_lateral_velocity": True, "action_scale": 0.5}
+        task = MicroDuckTask(observe_lateral_velocity=True, action_scale=0.5)
         env = ppo.make_env(
-            scene,
-            num_envs=2,
-            seed=0,
-            hidden_size=16,
-            max_episode_steps=20,
-            **env_options,
+            scene, num_envs=2, seed=0, hidden_size=16, max_episode_steps=20, task=task
         )
         evaluation_env = ppo.make_env(
-            scene, num_envs=1, seed=1, hidden_size=16, **env_options
+            scene, num_envs=1, seed=1, hidden_size=16, task=task
         )
         actor, critic = ppo.make_models(env, hidden_size=16)
         with set_exploration_type(ExplorationType.DETERMINISTIC):
@@ -768,7 +764,7 @@ class TestMujoco:
 
         # With evaluation enabled, the best-scoring parameters are checkpointed
         # and restored into the actor at the end of training.
-        checkpoint = tmp_path / "best.pt"
+        checkpoint = tmp_path / "best.ckpt"
         history = ppo.train_ppo(
             env,
             actor,
@@ -784,35 +780,35 @@ class TestMujoco:
             evaluation_seeds=(0,),
             evaluation_steps=5,
             best_checkpoint_path=checkpoint,
-            latest_checkpoint_path=tmp_path / "latest.pt",
+            latest_checkpoint_path=tmp_path / "latest.ckpt",
+            task=task,
             policy_kwargs={"hidden_size": 16},
-            env_kwargs=env_options,
         )
         assert "evaluation/survived" in history[0]
-        latest = torch.load(tmp_path / "latest.pt", weights_only=False)
-        assert latest["transitions"] >= 100
-        saved = torch.load(checkpoint, weights_only=False)
+        # Checkpoints are unified TorchRL checkpoints in the rlrender layout.
+        latest = load_checkpoint(tmp_path / "latest.ckpt")
+        assert latest["frames"] >= 100
+        saved = load_checkpoint(checkpoint)
         for name, parameter in actor.state_dict().items():
-            torch.testing.assert_close(parameter, saved["actor"][name])
-        # rlrender rebuilds the actor and the env from the checkpoint's kwargs.
+            torch.testing.assert_close(parameter, saved["model_state_dict"][name])
+        # rlrender rebuilds the actor and the env from the recorded task and kwargs.
         render_env = ppo.make_env(scene, num_envs=1, checkpoint=saved)
         rendered = ppo.make_render_policy(render_env, checkpoint=saved)
-        rendered.load_state_dict(saved["actor"])
+        rendered.load_state_dict(saved["model_state_dict"])
         assert render_env.observation_spec["recurrent_state"].shape[-1] == 16
-        assert render_env.base_env.observe_lateral_velocity
-        assert render_env.base_env.action_scale == 0.5
+        assert render_env.base_env.task == task
         render_env.close()
-        # --init-from restores the trained parameters into fresh models.
+        # policy.init_from restores the trained parameters into fresh models.
         fresh_actor, fresh_critic = ppo.make_models(env, hidden_size=16)
         assert (
-            ppo.load_parameters(tmp_path / "latest.pt", fresh_actor, fresh_critic)
+            ppo.load_parameters(tmp_path / "latest.ckpt", fresh_actor, fresh_critic)
             >= 100
         )
         for name, parameter in fresh_actor.state_dict().items():
-            torch.testing.assert_close(parameter, latest["actor"][name])
-        assert saved["evaluation"][
-            "evaluation/plus_0.030/forward_speed"
-        ] == pytest.approx(saved["evaluation"]["evaluation/forward_speed"])
+            torch.testing.assert_close(parameter, latest["model_state_dict"][name])
+        assert saved["metrics"]["evaluation/plus_0.030/forward_speed"] == pytest.approx(
+            saved["metrics"]["evaluation/forward_speed"]
+        )
         # A short forward fall with a huge return ranks below a full episode.
         walked = TensorDict(
             commanded_x_velocity=torch.tensor([[0.03]]),
