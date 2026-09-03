@@ -302,7 +302,18 @@ class _TorchBackend(_PhysicsBackend):
 
     def _init_model(self, source: ModelSource) -> None:
         import mujoco
-        import mujoco_torch
+
+        try:
+            import mujoco_torch
+        except AttributeError as err:
+            # mujoco-torch mirrors MuJoCo enums at import time, so a release
+            # built for another MuJoCo version fails with an AttributeError.
+            raise ImportError(
+                "backend='mujoco-torch' could not import mujoco_torch against "
+                f"mujoco {mujoco.__version__}: {err}. Install a mujoco-torch "
+                "build that matches this MuJoCo version, or pass "
+                "backend='mjx' or backend='mujoco'."
+            ) from err
 
         m_mj = _load_mujoco_model(source)
         d_mj = mujoco.MjData(m_mj)
