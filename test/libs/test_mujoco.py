@@ -720,6 +720,8 @@ class TestMujoco:
         task = MicroDuckTask(observe_lateral_velocity=True, action_scale=0.5)
         env_cfg = {
             "microduck_root": str(scene),
+            "backend": "mujoco",
+            "parallel": False,
             "num_envs": 2,
             "seed": 0,
             "max_episode_steps": 20,

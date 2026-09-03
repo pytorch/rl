@@ -5,11 +5,11 @@ env:
   microduck_root: null      # microduck_rl checkout; MICRODUCK_RL_ROOT or `download` otherwise
   root: null                # cache directory for downloads (~/.cache/torchrl/microduck)
   download: false
-  backend: mujoco           # mujoco | mjx | mujoco-torch
-  num_envs: 8
-  parallel: false           # ParallelEnv instead of SerialEnv for the native backend
+  backend: mujoco-torch     # mujoco-torch and mjx vectorize num_envs simulators; mujoco runs one process per env
+  num_envs: 1024
+  parallel: true            # mujoco only: ParallelEnv (false: SerialEnv)
   compile_step: false       # torch.compile the mujoco-torch physics step
-  device: cpu
+  device: null              # null picks CUDA when available, else CPU
   seed: 0
   max_episode_steps: 500
   camera_id: -1             # rendering: MuJoCo camera and frame size

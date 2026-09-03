@@ -98,7 +98,7 @@ that order, is kept.
 ```bash
 WANDB_BASE_URL=https://api.wandb.ai \
 uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
-  env.microduck_root="$MICRODUCK_RL_ROOT" env.num_envs=8 \
+  env.microduck_root="$MICRODUCK_RL_ROOT" \
   ppo.total_transitions=2000000 logger.entity=YOUR_ENTITY
 ```
 
@@ -114,15 +114,22 @@ checkpoints written with `save_render_checkpoint`, which `rlrender` and
 
 ### Backends
 
-Pass `env.backend=mjx` or `env.backend=mujoco-torch` to change only the
-physics. `env.compile_step=true` compiles the `mujoco-torch` step; with the fixes in
+The backend name decides how `env.num_envs` simulators are batched, and
+nothing else: `mujoco-torch` (the default) and `mjx` vectorize them inside the
+simulator, which is the fast path on an accelerator; `env.backend=mujoco` runs
+the official C bindings with one process per env (`ParallelEnv`, or `SerialEnv`
+with `env.parallel=false`) and is the fallback for a CPU-only machine.
+`env.device=null` picks the available accelerator. `env.compile_step=true`
+compiles the `mujoco-torch` step; with the fixes in
 [pytorch/rl#4202](https://github.com/pytorch/rl/pull/4202) and
 [vmoens/mujoco-torch#85](https://github.com/vmoens/mujoco-torch/pull/85) the
 compiled eight-environment MicroDuck step runs at roughly 180-190 transitions/s
 on an Apple-silicon CPU after a one-off compile of about a minute, against
 about 45 transitions/s in eager mode.
 
-Measured on an Apple-silicon CPU with random actions at 50 Hz control:
+Measured on an Apple-silicon CPU (no accelerator) with random actions at 50 Hz
+control, which is why the CPU commands in this README pass
+`env.backend=mujoco env.parallel=true env.num_envs=16`:
 
 | Backend | Batch | Transitions/s |
 | --- | ---: | ---: |
@@ -208,7 +215,8 @@ deviation never broke ground contact). The recipe that walks is:
 ```bash
 WANDB_BASE_URL=https://api.wandb.ai \
 uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
-  env.microduck_root="$MICRODUCK_RL_ROOT" env.num_envs=16 env.parallel=true \
+  env.microduck_root="$MICRODUCK_RL_ROOT" \
+  env.backend=mujoco env.parallel=true env.num_envs=16 \
   policy.head=gaussian policy.initial_policy_scale=1.0 \
   env.task.action_scale=1.0 env.task.command_range=[0.1,0.3] \
   env.task.warm_start_velocity=[0.05,0.25] env.task.warm_start_fraction=0.5 \

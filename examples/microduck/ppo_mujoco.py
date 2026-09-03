@@ -163,7 +163,10 @@ def make_env(
         "backend": env_cfg["backend"],
         "task": MicroDuckTask(**env_cfg["task"]),
         "num_envs": env_cfg["num_envs"],
-        "device": torch.device(env_cfg["device"]),
+        # MuJoCo state is float64, which MPS does not support: CUDA or CPU.
+        "device": torch.device(
+            env_cfg["device"] or ("cuda" if torch.cuda.is_available() else "cpu")
+        ),
         "seed": env_cfg["seed"],
         "max_episode_steps": env_cfg["max_episode_steps"],
         "camera_id": env_cfg["camera_id"],
@@ -852,6 +855,9 @@ def train_ppo(
 @hydra.main(config_path="", config_name="config", version_base="1.3")
 def main(cfg: DictConfig) -> None:
     if cfg.smoke:
+        # One native simulator on CPU: a pipeline check, not a speed test.
+        cfg.env.backend = "mujoco"
+        cfg.env.device = "cpu"
         cfg.env.num_envs = 1
         cfg.env.max_episode_steps = 50
         cfg.ppo.total_transitions = 200
@@ -898,7 +904,7 @@ def main(cfg: DictConfig) -> None:
     evaluators: list[Evaluator] = []
     logger = None
     try:
-        actor, critic = make_models(env, device=cfg.env.device, **policy_kwargs)
+        actor, critic = make_models(env, device=env.device, **policy_kwargs)
         if cfg.policy.init_from:
             trained = load_parameters(cfg.policy.init_from, actor, critic)
             torchrl_logger.info(
