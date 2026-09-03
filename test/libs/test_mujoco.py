@@ -28,6 +28,7 @@ from torchrl.envs import (
     MacroPrimitive,
     MacroPrimitiveTransform,
     MicroDuckEnv,
+    MicroDuckTask,
     MujocoEnv,
     ParallelEnv,
     RobotMacroAction,
@@ -343,7 +344,7 @@ class TestMujoco:
             self._write_microduck_fixture(tmp_path),
             backend=backend,
             num_envs=num_envs,
-            commanded_x_velocity=(0.0, 0.03),
+            task=MicroDuckEnv.tracking_task((0.0, 0.03)),
             reset_noise_scale=0.0,
             seed=0,
         )
@@ -367,12 +368,13 @@ class TestMujoco:
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(
             scene,
-            command_range=(0.1, 0.3),
-            warm_start_velocity=(0.2, 0.2),
-            warm_start_fraction=1.0,
+            task=MicroDuckEnv.speed_range_task(
+                0.1, 0.3, warm_start_velocity=(0.2, 0.2), warm_start_fraction=1.0
+            ),
             reset_noise_scale=0.0,
             seed=0,
         )
+        assert env.task.gait_frequency_per_mps == 5.0
         commands = torch.stack([env.reset()["commanded_x_velocity"] for _ in range(20)])
         assert (commands >= 0.1).all() and (commands <= 0.3).all()
         assert commands.std() > 0.01
@@ -381,7 +383,10 @@ class TestMujoco:
         torch.testing.assert_close(qvel[0, :3], torch.tensor([0.2, 0.0, 0.0]))
         env.close()
         env = MicroDuckEnv(
-            scene, joint_reset_noise_scale=0.3, reset_noise_scale=0.0, seed=0
+            scene,
+            task=MicroDuckTask(joint_reset_noise_scale=0.3),
+            reset_noise_scale=0.0,
+            seed=0,
         )
         env.reset()
         qpos = env.get_state()["qpos"]
@@ -390,19 +395,21 @@ class TestMujoco:
         assert (qpos[0, 7:].abs() <= 0.3).all()
         env.close()
         with pytest.raises(ValueError, match="warm_start_velocity"):
-            MicroDuckEnv(scene, warm_start_fraction=0.5)
+            MicroDuckTask(warm_start_fraction=0.5)
         with pytest.raises(ValueError, match="command_range"):
-            MicroDuckEnv(scene, command_range=(0.3, 0.1))
+            MicroDuckTask(command_range=(0.3, 0.1))
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_clock_velocity_observation_and_reward_scales(self, tmp_path):
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(
             scene,
-            gait_frequency_hz=1.0,
-            gait_frequency_per_mps=5.0,
-            observe_lateral_velocity=True,
-            reward_scales={"TRACKING_WEIGHT": 4.0, "PHASE_CONTACT_WEIGHT": 0.0},
+            task=MicroDuckTask(
+                gait_frequency_hz=1.0,
+                gait_frequency_per_mps=5.0,
+                observe_lateral_velocity=True,
+                reward_scales={"TRACKING_WEIGHT": 4.0, "PHASE_CONTACT_WEIGHT": 0.0},
+            ),
             reset_noise_scale=0.0,
             seed=0,
         )
@@ -434,9 +441,9 @@ class TestMujoco:
         assert (components["diagnostic_reward_phase_contact"] == 0).all()
         env.close()
         with pytest.raises(ValueError, match="reward_scales"):
-            MicroDuckEnv(scene, reward_scales={"not_a_weight": 1.0})
+            MicroDuckEnv(scene, task=MicroDuckTask(reward_scales={"not_a_weight": 1.0}))
         with pytest.raises(ValueError, match="reward_scales"):
-            MicroDuckEnv(scene, reward_scales={"FRAME_SKIP": 1.0})
+            MicroDuckEnv(scene, task=MicroDuckTask(reward_scales={"FRAME_SKIP": 1.0}))
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_scene_resolution_and_download(self, tmp_path, monkeypatch):
@@ -508,7 +515,9 @@ class TestMujoco:
             str(key).startswith("diagnostic_") for key in env.observation_spec.keys()
         )
         env.close()
-        env = MicroDuckEnv(scene, backend="mujoco", seed=0, diagnostics=True)
+        env = MicroDuckEnv(
+            scene, backend="mujoco", seed=0, task=MicroDuckTask(diagnostics=True)
+        )
         check_env_specs(env)
         rollout = env.rollout(4)
         components = torch.stack(
@@ -519,6 +528,19 @@ class TestMujoco:
         ).sum(0)
         torch.testing.assert_close(components, rollout["next", "reward"])
         assert rollout["next", "diagnostic_height"].shape == (1, 4, 1)
+        env.close()
+        # Switching the reward off keeps the diagnostics, so a transform can
+        # build its own reward from them.
+        env = MicroDuckEnv(
+            scene,
+            backend="mujoco",
+            seed=0,
+            task=MicroDuckEnv.standing_task(compute_reward=False, diagnostics=True),
+        )
+        rollout = env.rollout(4)
+        assert (rollout["next", "reward"] == 0).all()
+        assert (rollout["commanded_x_velocity"] == 0).all()
+        assert (rollout["next", "diagnostic_reward_upright"] > 0).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")

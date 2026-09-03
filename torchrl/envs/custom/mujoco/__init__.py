@@ -31,7 +31,7 @@ from torchrl.envs.custom.mujoco.base import MujocoEnv
 from torchrl.envs.custom.mujoco.cube_bowl import CubeBowlEnv
 from torchrl.envs.custom.mujoco.hopper import HopperEnv
 from torchrl.envs.custom.mujoco.humanoid import HumanoidEnv
-from torchrl.envs.custom.mujoco.microduck import MicroDuckEnv
+from torchrl.envs.custom.mujoco.microduck import MicroDuckEnv, MicroDuckTask
 from torchrl.envs.custom.mujoco.satellite import SatelliteEnv
 from torchrl.envs.custom.mujoco.walker import Walker2dEnv
 
@@ -42,6 +42,7 @@ __all__ = [
     "HumanoidMacroAction",
     "HumanoidEnv",
     "MicroDuckEnv",
+    "MicroDuckTask",
     "MujocoEnv",
     "SatelliteMacroAction",
     "SatelliteAttitudeTransform",

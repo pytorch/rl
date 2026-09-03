@@ -40,6 +40,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, ClassVar
@@ -205,6 +206,149 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
         yield patched_scene
 
 
+@dataclass(frozen=True)
+class MicroDuckTask:
+    """Task parameters of :class:`MicroDuckEnv`.
+
+    Commands, reset distribution, actuation scale, gait clock, observation and
+    reward options live here, so a task is one object rather than a dozen
+    constructor arguments. Build one directly or start from a preset such as
+    :meth:`MicroDuckEnv.tracking_task`, :meth:`MicroDuckEnv.standing_task` or
+    :meth:`MicroDuckEnv.speed_range_task` and pass field overrides.
+
+    Args:
+        commanded_x_velocity (float or Sequence[float], optional): body-frame
+            longitudinal velocity command in m/s. Every reset draws one value
+            uniformly from the sequence for each env (a scalar is a fixed
+            command, and repeating a value weights the draw); the command
+            stays constant until the next reset. A ``commanded_x_velocity``
+            entry of shape ``(num_envs, 1)`` or ``(num_envs,)`` in the reset
+            TensorDict overrides the draw; the key is in the env's
+            ``state_spec`` so :class:`~torchrl.envs.TransformedEnv` forwards
+            it. Defaults to ``(0.03,)``. Ignored when ``command_range`` is
+            given.
+        command_range (tuple[float, float], optional): ``(low, high)`` interval
+            in m/s from which the command is drawn uniformly at every reset
+            instead, for training over a continuous speed range.
+        warm_start_velocity (tuple[float, float], optional): ``(low, high)``
+            forward speed interval in m/s. At reset, a ``warm_start_fraction``
+            of the environments start already moving along their heading at a
+            speed drawn from it, so an untrained policy experiences locomotion
+            states early.
+        warm_start_fraction (float, optional): fraction of resets that receive
+            the warm start. Defaults to ``0.0``.
+        joint_reset_noise_scale (float, optional): uniform noise added to the
+            joint positions at reset, in radians. Defaults to the env's
+            ``reset_noise_scale``. Larger values start episodes in diverse,
+            off-balance poses, including single-support ones, which a
+            from-scratch policy otherwise rarely visits.
+        action_scale (float, optional): position-target offset in radians for
+            a unit normalized action. Defaults to ``0.35``.
+        gait_frequency_hz (float, optional): frequency of the gait clock
+            exposed in the observation, at zero command. Defaults to
+            ``1.8913``.
+        gait_frequency_per_mps (float, optional): increase of the gait clock
+            frequency per m/s of commanded speed, so the cadence rewarded by
+            the single-support term follows the command. Defaults to ``0.0``
+            (fixed clock).
+        gait_phase_offset (float, optional): phase of the gait clock at the
+            first step, in radians. Defaults to ``-1.5237``.
+        gait_ramp_duration_s (float, optional): duration over which the gait
+            ramp feature grows from zero to one after a reset. Defaults to
+            ``0.4``.
+        observe_lateral_velocity (bool, optional): if ``True``, append the
+            body-frame lateral and vertical velocities to the observation,
+            which gives the lateral tracking term an input. Defaults to
+            ``False``.
+        reward_scales (Mapping[str, float], optional): reward attribute names
+            of :class:`MicroDuckEnv` such as ``"TRACKING_WEIGHT"`` or
+            ``"TRACKING_STD"`` mapped to values that override the class
+            defaults on the env instance.
+        compute_reward (bool, optional): if ``False``, the env writes a zero
+            reward and leaves the reward to a transform, which can read the
+            observation or the ``diagnostics`` keys. Defaults to ``True``.
+        diagnostics (bool, optional): if ``True``, add each reward component
+            and pose diagnostics to the observation spec under
+            ``diagnostic_*`` keys. Off by default because it roughly doubles
+            the per-step task cost.
+
+    Examples:
+        >>> from torchrl.envs import MicroDuckEnv, MicroDuckTask
+        >>> task = MicroDuckEnv.speed_range_task(0.1, 0.3, action_scale=1.0)
+        >>> task.command_range, task.gait_frequency_per_mps, task.action_scale
+        ((0.1, 0.3), 5.0, 1.0)
+        >>> MicroDuckTask(commanded_x_velocity=0.2).commanded_x_velocity
+        (0.2,)
+    """
+
+    commanded_x_velocity: float | Sequence[float] = (0.03,)
+    command_range: tuple[float, float] | None = None
+    warm_start_velocity: tuple[float, float] | None = None
+    warm_start_fraction: float = 0.0
+    joint_reset_noise_scale: float | None = None
+    action_scale: float = 0.35
+    gait_frequency_hz: float = 1.8913
+    gait_frequency_per_mps: float = 0.0
+    gait_phase_offset: float = -1.5237
+    gait_ramp_duration_s: float = 0.4
+    observe_lateral_velocity: bool = False
+    reward_scales: Mapping[str, float] = field(default_factory=dict)
+    compute_reward: bool = True
+    diagnostics: bool = False
+
+    def __post_init__(self):
+        if not math.isfinite(self.gait_frequency_hz) or self.gait_frequency_hz <= 0:
+            raise ValueError("gait_frequency_hz must be finite and positive.")
+        if (
+            not math.isfinite(self.gait_frequency_per_mps)
+            or self.gait_frequency_per_mps < 0
+        ):
+            raise ValueError("gait_frequency_per_mps must be finite and non-negative.")
+        if not math.isfinite(self.gait_phase_offset):
+            raise ValueError("gait_phase_offset must be finite.")
+        if (
+            not math.isfinite(self.gait_ramp_duration_s)
+            or self.gait_ramp_duration_s < 0
+        ):
+            raise ValueError("gait_ramp_duration_s must be finite and non-negative.")
+        if not math.isfinite(self.action_scale) or self.action_scale <= 0:
+            raise ValueError("action_scale must be finite and positive.")
+        commands = torch.as_tensor(self.commanded_x_velocity, dtype=torch.float64)
+        if commands.ndim == 0:
+            commands = commands.unsqueeze(0)
+        if commands.ndim != 1 or commands.numel() == 0:
+            raise ValueError(
+                "commanded_x_velocity must be a scalar or a non-empty 1-D sequence."
+            )
+        if not torch.isfinite(commands).all():
+            raise ValueError("commanded_x_velocity values must be finite.")
+        object.__setattr__(self, "commanded_x_velocity", tuple(commands.tolist()))
+        for name in ("command_range", "warm_start_velocity"):
+            interval = getattr(self, name)
+            if interval is None:
+                continue
+            if (
+                len(interval) != 2
+                or not all(math.isfinite(v) for v in interval)
+                or interval[0] > interval[1]
+            ):
+                raise ValueError(f"{name} must be a finite (low, high) pair.")
+            object.__setattr__(self, name, tuple(float(v) for v in interval))
+        if not 0.0 <= self.warm_start_fraction <= 1.0:
+            raise ValueError("warm_start_fraction must be in [0, 1].")
+        if self.warm_start_fraction > 0 and self.warm_start_velocity is None:
+            raise ValueError("warm_start_fraction requires warm_start_velocity.")
+        if self.joint_reset_noise_scale is not None and (
+            not math.isfinite(self.joint_reset_noise_scale)
+            or self.joint_reset_noise_scale < 0
+        ):
+            raise ValueError("joint_reset_noise_scale must be finite and non-negative.")
+        for name, value in self.reward_scales.items():
+            if not math.isfinite(value):
+                raise ValueError(f"reward_scales[{name!r}] must be finite.")
+        object.__setattr__(self, "reward_scales", dict(self.reward_scales))
+
+
 class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     r"""Commanded longitudinal-velocity locomotion task for the MicroDuck biped.
 
@@ -243,6 +387,11 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             ``root``.
 
     Keyword Args:
+        task (MicroDuckTask, optional): commands, reset distribution, action
+            scale, gait clock, observation and reward options. Defaults to
+            :meth:`tracking_task`, a fixed ``0.03`` m/s forward command; see
+            :class:`MicroDuckTask` for every field and :meth:`standing_task`
+            and :meth:`speed_range_task` for the other presets.
         root (str or Path, optional): directory holding downloaded
             ``microduck_rl`` checkouts. Defaults to
             ``~/.cache/torchrl/microduck``.
@@ -257,59 +406,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             with :class:`~torchrl.envs.SerialEnv`, or with
             :class:`~torchrl.envs.ParallelEnv` when ``parallel=True``; the
             other two batch inside the simulator.
-        commanded_x_velocity (float or Sequence[float], optional): body-frame
-            longitudinal velocity command in m/s. Every reset draws one value
-            uniformly from the sequence for each env (a scalar is a fixed
-            command, and repeating a value weights the draw); the command
-            stays constant until the next reset. A ``commanded_x_velocity``
-            entry of shape ``(num_envs, 1)`` or ``(num_envs,)`` in the reset
-            TensorDict overrides the draw; the key is in ``state_spec`` so
-            :class:`~torchrl.envs.TransformedEnv` forwards it. Defaults to
-            ``(0.03,)``. Ignored when ``command_range`` is given.
-        command_range (tuple[float, float], optional): ``(low, high)`` interval
-            in m/s from which the command is drawn uniformly at every reset
-            instead, for training over a continuous speed range.
-        warm_start_velocity (tuple[float, float], optional): ``(low, high)``
-            forward speed interval in m/s. At reset, a ``warm_start_fraction``
-            of the environments start already moving along their heading at a
-            speed drawn from it, so an untrained policy experiences locomotion
-            states early.
-        warm_start_fraction (float, optional): fraction of resets that receive
-            the warm start. Defaults to ``0.0``.
-        joint_reset_noise_scale (float, optional): uniform noise added to the
-            joint positions at reset, in radians. Defaults to
-            ``reset_noise_scale``. Larger values start episodes in diverse,
-            off-balance poses, including single-support ones, which a
-            from-scratch policy otherwise rarely visits.
-        action_scale (float, optional): position-target offset in radians for
-            a unit normalized action. Defaults to ``0.35``.
-        diagnostics (bool, optional): if ``True``, add each reward component
-            and pose diagnostics to the observation spec under
-            ``diagnostic_*`` keys. Off by default because it roughly doubles
-            the per-step task cost.
         low_cost_collisions (bool, optional): if ``True`` (default), replace
             the collision-class meshes with box proxies at load time. The
             unmodified meshes make the ``mjx`` and ``mujoco-torch`` backends
             run out of memory.
-        gait_frequency_hz (float, optional): frequency of the gait clock
-            exposed in the observation, at zero command. Defaults to
-            ``1.8913``.
-        gait_frequency_per_mps (float, optional): increase of the gait clock
-            frequency per m/s of commanded speed, so the cadence rewarded by
-            the single-support term follows the command. Defaults to ``0.0``
-            (fixed clock).
-        gait_phase_offset (float, optional): phase of the gait clock at the
-            first step, in radians. Defaults to ``-1.5237``.
-        gait_ramp_duration_s (float, optional): duration over which the gait
-            ramp feature grows from zero to one after a reset. Defaults to
-            ``0.4``.
-        observe_lateral_velocity (bool, optional): if ``True``, append the
-            body-frame lateral and vertical velocities to the observation,
-            which gives the lateral tracking term an input. Defaults to
-            ``False``.
-        reward_scales (Mapping[str, float], optional): reward attribute names
-            such as ``"TRACKING_WEIGHT"`` or ``"TRACKING_STD"`` mapped to
-            values that override the class defaults on this instance.
         max_episode_steps (int, optional): truncation horizon. Defaults to
             ``500``.
         \*\*kwargs: forwarded to :class:`~torchrl.envs.MujocoEnv`:
@@ -323,7 +423,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         different speed command at every reset:
 
         >>> from torchrl.envs import MicroDuckEnv
-        >>> env = MicroDuckEnv(download=True, commanded_x_velocity=(0.1, 0.2, 0.3))  # doctest: +SKIP
+        >>> env = MicroDuckEnv(  # doctest: +SKIP
+        ...     download=True, task=MicroDuckEnv.tracking_task((0.1, 0.2, 0.3))
+        ... )
         >>> rollout = env.rollout(50)  # doctest: +SKIP
         >>> rollout["observation"].shape[-1], rollout["commanded_x_velocity"][0, 0]  # doctest: +SKIP
         (53, tensor([0.2000]))
@@ -338,12 +440,14 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         ...     download=True, backend="mujoco-torch", num_envs=1024, device="cuda", compile_step=True
         ... )
 
-        Pick the task: train over a speed range with a gait clock that follows
-        the command, and pin the speed of an evaluation episode at reset.
+        Pick the task: balance in place, track a speed range with a gait clock
+        that follows the command (with a wider action scale for training from
+        scratch), or pin the speed of an evaluation episode at reset.
 
         >>> from tensordict import TensorDict
+        >>> env = MicroDuckEnv(download=True, task=MicroDuckEnv.standing_task())  # doctest: +SKIP
         >>> env = MicroDuckEnv(  # doctest: +SKIP
-        ...     download=True, command_range=(0.1, 0.3), gait_frequency_hz=1.0, gait_frequency_per_mps=5.0
+        ...     download=True, task=MicroDuckEnv.speed_range_task(0.1, 0.3, action_scale=1.0)
         ... )
         >>> td = env.reset(TensorDict(commanded_x_velocity=torch.full((1, 1), 0.25), batch_size=[1]))  # doctest: +SKIP
         >>> td["commanded_x_velocity"]  # doctest: +SKIP
@@ -362,13 +466,25 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         >>> env.rollout(200)  # doctest: +SKIP
         >>> env.transform.dump()  # doctest: +SKIP
 
-        Look inside the reward: ``diagnostics=True`` exposes every term in the
-        observation, and ``reward_scales`` retunes the weights.
+        Look inside the reward, retune it, or replace it: ``diagnostics=True``
+        exposes every term in the observation, ``reward_scales`` changes the
+        weights, and ``compute_reward=False`` leaves the reward to a transform.
 
-        >>> env = MicroDuckEnv(download=True, diagnostics=True, reward_scales={"TRACKING_WEIGHT": 4.0})  # doctest: +SKIP
-        >>> rollout = env.rollout(10)  # doctest: +SKIP
-        >>> rollout["next", "diagnostic_reward_tracking"].shape  # doctest: +SKIP
+        >>> env = MicroDuckEnv(  # doctest: +SKIP
+        ...     download=True,
+        ...     task=MicroDuckEnv.tracking_task(diagnostics=True, reward_scales={"TRACKING_WEIGHT": 4.0}),
+        ... )
+        >>> env.rollout(10)["next", "diagnostic_reward_tracking"].shape  # doctest: +SKIP
         torch.Size([1, 10, 1])
+        >>> from torchrl.envs import Transform
+        >>> class ForwardSpeedReward(Transform):
+        ...     def _step(self, tensordict, next_tensordict):
+        ...         next_tensordict["reward"] = next_tensordict["observation"][..., 6:7]
+        ...         return next_tensordict
+        >>> env = TransformedEnv(  # doctest: +SKIP
+        ...     MicroDuckEnv(download=True, task=MicroDuckEnv.tracking_task(compute_reward=False)),
+        ...     ForwardSpeedReward(),
+        ... )
 
     Reference:
         Pollen Robotics, MicroDuck (https://github.com/pollen-robotics/microduck)
@@ -468,23 +584,11 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self,
         microduck_root: str | Path | None = None,
         *,
+        task: MicroDuckTask | None = None,
         root: str | Path | None = None,
         download: bool | str = False,
         backend: BackendName = "mujoco",
-        commanded_x_velocity: float | Sequence[float] = (0.03,),
-        command_range: tuple[float, float] | None = None,
-        warm_start_velocity: tuple[float, float] | None = None,
-        warm_start_fraction: float = 0.0,
-        joint_reset_noise_scale: float | None = None,
-        action_scale: float = 0.35,
-        diagnostics: bool = False,
         low_cost_collisions: bool = True,
-        gait_frequency_hz: float = 1.8913,
-        gait_frequency_per_mps: float = 0.0,
-        gait_phase_offset: float = -1.5237,
-        gait_ramp_duration_s: float = 0.4,
-        observe_lateral_velocity: bool = False,
-        reward_scales: Mapping[str, float] | None = None,
         max_episode_steps: int = 500,
         **kwargs: Any,
     ) -> None:
@@ -494,66 +598,23 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                     f"MicroDuckEnv loads the MicroDuck MJCF itself; pass "
                     f"microduck_root=... instead of {forbidden}=..."
                 )
-        if not math.isfinite(gait_frequency_hz) or gait_frequency_hz <= 0:
-            raise ValueError("gait_frequency_hz must be finite and positive.")
-        if not math.isfinite(gait_frequency_per_mps) or gait_frequency_per_mps < 0:
-            raise ValueError("gait_frequency_per_mps must be finite and non-negative.")
-        if not math.isfinite(gait_phase_offset):
-            raise ValueError("gait_phase_offset must be finite.")
-        if not math.isfinite(gait_ramp_duration_s) or gait_ramp_duration_s < 0:
-            raise ValueError("gait_ramp_duration_s must be finite and non-negative.")
-        if not math.isfinite(action_scale) or action_scale <= 0:
-            raise ValueError("action_scale must be finite and positive.")
-        command_values = torch.as_tensor(commanded_x_velocity, dtype=torch.float64)
-        if command_values.ndim == 0:
-            command_values = command_values.unsqueeze(0)
-        if command_values.ndim != 1 or command_values.numel() == 0:
-            raise ValueError(
-                "commanded_x_velocity must be a scalar or a non-empty 1-D sequence."
-            )
-        if not torch.isfinite(command_values).all():
-            raise ValueError("commanded_x_velocity values must be finite.")
-        for name, interval in (
-            ("command_range", command_range),
-            ("warm_start_velocity", warm_start_velocity),
-        ):
-            if interval is not None and (
-                len(interval) != 2
-                or not all(math.isfinite(v) for v in interval)
-                or interval[0] > interval[1]
-            ):
-                raise ValueError(f"{name} must be a finite (low, high) pair.")
-        if not 0.0 <= warm_start_fraction <= 1.0:
-            raise ValueError("warm_start_fraction must be in [0, 1].")
-        if warm_start_fraction > 0 and warm_start_velocity is None:
-            raise ValueError("warm_start_fraction requires warm_start_velocity.")
-        if joint_reset_noise_scale is not None and (
-            not math.isfinite(joint_reset_noise_scale) or joint_reset_noise_scale < 0
-        ):
-            raise ValueError("joint_reset_noise_scale must be finite and non-negative.")
-
+        self.task = self.tracking_task() if task is None else task
         self.scene_path = self.resolve_scene(
             microduck_root, root=root, download=download
         )
-        self.command_range = (
-            None if command_range is None else tuple(float(v) for v in command_range)
-        )
-        self.warm_start_velocity = (
-            None
-            if warm_start_velocity is None
-            else tuple(float(v) for v in warm_start_velocity)
-        )
-        self.warm_start_fraction = float(warm_start_fraction)
-        self._joint_reset_noise_scale = joint_reset_noise_scale
-        self.action_scale = float(action_scale)
-        self.diagnostics = bool(diagnostics)
+        self.command_range = self.task.command_range
+        self.warm_start_velocity = self.task.warm_start_velocity
+        self.warm_start_fraction = self.task.warm_start_fraction
+        self._joint_reset_noise_scale = self.task.joint_reset_noise_scale
+        self.action_scale = self.task.action_scale
+        self.diagnostics = self.task.diagnostics
         self.low_cost_collisions = bool(low_cost_collisions)
-        self.gait_frequency_hz = float(gait_frequency_hz)
-        self.gait_frequency_per_mps = float(gait_frequency_per_mps)
-        self.gait_phase_offset = float(gait_phase_offset)
-        self.gait_ramp_duration_s = float(gait_ramp_duration_s)
-        self.observe_lateral_velocity = bool(observe_lateral_velocity)
-        for name, value in dict(reward_scales or {}).items():
+        self.gait_frequency_hz = self.task.gait_frequency_hz
+        self.gait_frequency_per_mps = self.task.gait_frequency_per_mps
+        self.gait_phase_offset = self.task.gait_phase_offset
+        self.gait_ramp_duration_s = self.task.gait_ramp_duration_s
+        self.observe_lateral_velocity = self.task.observe_lateral_velocity
+        for name, value in self.task.reward_scales.items():
             if not name.isupper() or not isinstance(
                 getattr(type(self), name, None), float
             ):
@@ -561,8 +622,6 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                     f"reward_scales key {name!r} is not a float reward attribute of "
                     f"{type(self).__name__}."
                 )
-            if not math.isfinite(value):
-                raise ValueError(f"reward_scales[{name!r}] must be finite.")
             setattr(self, name, float(value))
         physics_scene = (
             _low_cost_collision_scene(self.scene_path)
@@ -578,7 +637,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 **kwargs,
             )
         self._configure_from_model()
-        self._command_values = command_values.to(device=self.device, dtype=self.dtype)
+        self._command_values = torch.tensor(
+            self.task.commanded_x_velocity, dtype=self.dtype, device=self.device
+        )
         self._commanded_x_velocity = torch.zeros(
             self.num_envs, 1, dtype=self.dtype, device=self.device
         )
@@ -609,6 +670,41 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             ),
             shape=(self.num_envs,),
             device=self.device,
+        )
+
+    @classmethod
+    def tracking_task(
+        cls, commanded_x_velocity: float | Sequence[float] = (0.03,), **overrides: Any
+    ) -> MicroDuckTask:
+        """Track a forward speed drawn from ``commanded_x_velocity`` at every reset.
+
+        This is the default task. ``overrides`` set any other
+        :class:`MicroDuckTask` field.
+        """
+        return MicroDuckTask(commanded_x_velocity=commanded_x_velocity, **overrides)
+
+    @classmethod
+    def standing_task(cls, **overrides: Any) -> MicroDuckTask:
+        """Balance in place under a zero command.
+
+        The zero command turns the gait terms off, leaving velocity tracking
+        toward zero, posture, uprightness and the regularization costs.
+        """
+        return MicroDuckTask(commanded_x_velocity=0.0, **overrides)
+
+    @classmethod
+    def speed_range_task(
+        cls, low: float = 0.1, high: float = 0.3, **overrides: Any
+    ) -> MicroDuckTask:
+        """Track a speed drawn uniformly from ``[low, high]`` at every reset.
+
+        The gait clock runs at 1 Hz plus 5 Hz per m/s of command so the
+        rewarded cadence follows the speed, which is what lets a policy trained
+        from scratch modulate its speed with the command.
+        """
+        return MicroDuckTask(
+            command_range=(float(low), float(high)),
+            **{"gait_frequency_hz": 1.0, "gait_frequency_per_mps": 5.0, **overrides},
         )
 
     @property
@@ -1104,6 +1200,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     ) -> torch.Tensor:
         del state
         self._update_gait_state()
+        if not self.task.compute_reward:
+            return torch.zeros(self.num_envs, 1, dtype=self.dtype, device=self.device)
         return torch.stack(
             tuple(self._reward_components(next_state, action).values())
         ).sum(dim=0)
