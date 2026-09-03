@@ -419,9 +419,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         backend (str, optional): ``"mujoco"``, ``"mjx"`` or ``"mujoco-torch"``.
             Defaults to ``"mujoco"``, the fastest backend for this model on CPU
             in eager mode. The native backend batches ``num_envs`` simulators
-            with :class:`~torchrl.envs.SerialEnv`, or with
-            :class:`~torchrl.envs.ParallelEnv` when ``parallel=True``; the
-            other two batch inside the simulator.
+            in worker processes with :class:`~torchrl.envs.ParallelEnv`, or
+            in one process with :class:`~torchrl.envs.SerialEnv` when
+            ``parallel=False``; the other two batch inside the simulator.
         low_cost_collisions (bool, optional): if ``True`` (default), replace
             the collision-class meshes with box proxies at load time. The
             unmodified meshes make the ``mjx`` and ``mujoco-torch`` backends
