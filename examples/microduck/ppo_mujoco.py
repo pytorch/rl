@@ -758,8 +758,7 @@ def train_ppo(
             updates_per_epoch = max(
                 1, math.ceil(num_trajectories / minibatch_trajectories)
             )
-            sums: dict[str, float] = {}
-            update_count = 0
+            updates = []
             trained_transitions = 0
             with timeit("train"):
                 for _ in range(epochs):
@@ -779,25 +778,22 @@ def train_ppo(
                             loss_module.parameters(), max_grad_norm
                         )
                         optimizer.step()
-                        for key in (
-                            "loss_objective",
-                            "loss_critic",
-                            "loss_entropy",
-                            "entropy",
-                            "kl_approx",
-                            "clip_fraction",
-                            "ESS",
-                        ):
-                            sums[f"ppo/{key}"] = sums.get(f"ppo/{key}", 0.0) + float(
-                                losses[key].detach()
+                        updates.append(
+                            losses.select(
+                                "loss_objective",
+                                "loss_critic",
+                                "loss_entropy",
+                                "entropy",
+                                "kl_approx",
+                                "clip_fraction",
+                                "ESS",
                             )
-                        sums["ppo/grad_norm"] = sums.get("ppo/grad_norm", 0.0) + float(
-                            grad_norm
+                            .detach()
+                            .set("grad_norm", grad_norm)
                         )
-                        update_count += 1
-                metrics.update(
-                    {key: value / update_count for key, value in sums.items()}
-                )
+                # Average the per-update loss tensordicts over the epoch passes.
+                for key, value in torch.stack(updates).mean(dim=0).items():
+                    metrics[f"ppo/{key}"] = float(value)
                 if scheduler is not None:
                     scheduler.step(metrics["ppo/kl_approx"])
                 metrics["ppo/learning_rate"] = optimizer.param_groups[0]["lr"]
