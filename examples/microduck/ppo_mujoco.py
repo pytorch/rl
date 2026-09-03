@@ -437,30 +437,28 @@ def microduck_metrics(trajectories: TensorDictBase) -> dict[str, float]:
     """Gait metrics of the padded trajectory batch an :class:`Evaluator` collects.
 
     Speeds are the body-frame forward velocity read from the observation, so a
-    policy that turns is still credited for walking. ``wrong_way`` counts the
-    episodes whose mean speed opposes the command (or moves under a zero one).
+    policy that turns is still credited for walking. Means are taken over
+    transitions, so an episode that falls after twenty steps does not weigh as
+    much as one that walks for five hundred. ``wrong_way`` counts the episodes
+    whose mean speed opposes the command (or moves under a zero one).
     """
     mask = trajectories["collector", "mask"]
     lengths = mask.sum(-1)
     speed = trajectories["next", "observation"][..., 6]
     command = trajectories["commanded_x_velocity"][..., 0]
-    forward_speed = (speed * mask).sum(-1) / lengths
-    tracking_error = ((speed - command).abs() * mask).sum(-1) / lengths
+    directional_step = torch.where(command != 0, command.sign() * speed, -speed.abs())
+    episode_directional = (directional_step * mask).sum(-1) / lengths
     last = trajectories["next", "terminated"][..., 0].gather(
         -1, (lengths - 1).unsqueeze(-1)
     )
-    command = command[:, 0]
-    directional = torch.where(
-        command != 0, command.sign() * forward_speed, -forward_speed.abs()
-    )
     return {
-        "tracking_error": float(tracking_error.mean()),
-        "forward_speed": float(forward_speed.mean()),
+        "tracking_error": float((speed - command).abs()[mask].mean()),
+        "forward_speed": float(speed[mask].mean()),
         "survival_rate": float((~last).float().mean()),
         "episode_length_min": float(lengths.min()),
-        "directional_speed_min": float(directional.min()),
-        "directional_speed_mean": float(directional.mean()),
-        "wrong_way": float((directional <= 0).sum()),
+        "directional_speed_min": float(episode_directional.min()),
+        "directional_speed_mean": float(directional_step[mask].mean()),
+        "wrong_way": float((episode_directional <= 0).sum()),
     }
 
 
