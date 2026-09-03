@@ -1858,6 +1858,51 @@ class TestValues:
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    def test_vtrace_truncated_matches_split_trajectories(self, device, gamma, dtype):
+        # A truncated (done & ~terminated) step must bootstrap its advantage from
+        # its own next value, not from the v-trace target of the next trajectory.
+        torch.manual_seed(0)
+        T, t_trunc = 6, 3
+        done = torch.zeros(T, 1, device=device, dtype=torch.bool)
+        done[t_trunc - 1] = True
+        terminated = torch.zeros_like(done)
+        reward, state_value, next_state_value = torch.randn(
+            3, T, 1, device=device, dtype=dtype
+        )
+        log_pi = torch.rand(T, 1, device=device, dtype=dtype).log()
+        log_mu = torch.rand(T, 1, device=device, dtype=dtype).log()
+
+        adv, vs = vtrace_advantage_estimate(
+            gamma,
+            log_pi,
+            log_mu,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
+        adv_split, vs_split = zip(
+            *(
+                vtrace_advantage_estimate(
+                    gamma,
+                    log_pi[s],
+                    log_mu[s],
+                    state_value[s],
+                    next_state_value[s],
+                    reward[s],
+                    done=done[s],
+                    terminated=terminated[s],
+                )
+                for s in (slice(None, t_trunc), slice(t_trunc, None))
+            )
+        )
+        torch.testing.assert_close(vs, torch.cat(vs_split))
+        torch.testing.assert_close(adv, torch.cat(adv_split))
+
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
