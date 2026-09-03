@@ -231,10 +231,11 @@ class MicroDuckTask:
             in m/s from which the command is drawn uniformly at every reset
             instead, for training over a continuous speed range.
         warm_start_velocity (tuple[float, float], optional): ``(low, high)``
-            forward speed interval in m/s. At reset, a ``warm_start_fraction``
-            of the environments start already moving along their heading at a
-            speed drawn from it, so an untrained policy experiences locomotion
-            states early.
+            speed interval in m/s. At reset, a ``warm_start_fraction`` of the
+            environments start already moving at a speed drawn from it, along
+            their heading for a non-negative command and against it for a
+            negative one, so an untrained policy experiences locomotion states
+            in the commanded direction early.
         warm_start_fraction (float, optional): fraction of resets that receive
             the warm start. Defaults to ``0.0``.
         joint_reset_noise_scale (float, optional): uniform noise added to the
@@ -658,6 +659,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self._commanded_x_velocity = torch.zeros(
             self.num_envs, 1, dtype=self.dtype, device=self.device
         )
+        # Command drawn while sampling the initial state, consumed by the
+        # reset hooks so the warm start and the command agree on direction.
+        self._pending_command: torch.Tensor | None = None
         self._previous_action = torch.zeros(
             self.num_envs, self.NUM_JOINTS, dtype=self.dtype, device=self.device
         )
@@ -948,7 +952,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         n: int,
         tensordict: TensorDictBase | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        del tensordict
+        command = self._sample_command(tensordict)
+        self._pending_command = command
         qpos = self._home_qpos.unsqueeze(0).expand(n, -1).clone()
         qpos = qpos.to(dtype=self._backend.qpos0.dtype)
         qvel = torch.zeros(
@@ -976,7 +981,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             )
             heading = _body_forward_vector(qpos[..., 3:7].to(self.dtype))
             heading = heading / heading.norm(dim=-1, keepdim=True).clamp_min(1e-8)
-            warm = speed.unsqueeze(-1) * heading.to(qvel.dtype)
+            direction = torch.where(command[..., 0] < 0, -1.0, 1.0).to(qvel.dtype)
+            warm = (direction * speed).unsqueeze(-1) * heading.to(qvel.dtype)
             qvel[..., :3] = torch.where(selected.unsqueeze(-1), warm, qvel[..., :3])
         return qpos, qvel
 
@@ -1009,10 +1015,20 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         )
         return self._command_values[indices].unsqueeze(-1)
 
+    def _consume_command(self, tensordict: TensorDictBase | None) -> torch.Tensor:
+        """Return the command drawn with the initial state, or draw one now.
+
+        A reset to a provided ``qpos``/``qvel`` snapshot skips
+        :meth:`_sample_initial_state`, so no command is pending in that case.
+        """
+        command = self._pending_command
+        self._pending_command = None
+        return self._sample_command(tensordict) if command is None else command
+
     def _on_reset_all(self, tensordict: TensorDictBase | None = None) -> None:
         self._previous_action.zero_()
         self._observation_action.zero_()
-        self._commanded_x_velocity = self._sample_command(tensordict)
+        self._commanded_x_velocity = self._consume_command(tensordict)
         self._feet_air_time.zero_()
         self._touchdown_air_time.zero_()
         self._refresh_contacts()
@@ -1030,7 +1046,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             mask, torch.zeros_like(self._observation_action), self._observation_action
         )
         self._commanded_x_velocity = torch.where(
-            mask, self._sample_command(tensordict), self._commanded_x_velocity
+            mask, self._consume_command(tensordict), self._commanded_x_velocity
         )
         self._feet_air_time = torch.where(
             mask, torch.zeros_like(self._feet_air_time), self._feet_air_time

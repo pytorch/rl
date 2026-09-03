@@ -382,6 +382,19 @@ class TestMujoco:
         env.reset()
         qvel = env.get_state()["qvel"]
         torch.testing.assert_close(qvel[0, :3], torch.tensor([0.2, 0.0, 0.0]))
+        # The warm start follows the command's direction, including a command
+        # provided at reset.
+        reset = env.reset(
+            TensorDict(
+                {"commanded_x_velocity": torch.tensor([[-0.2]])}, batch_size=(1,)
+            )
+        )
+        torch.testing.assert_close(
+            reset["commanded_x_velocity"], torch.tensor([[-0.2]])
+        )
+        torch.testing.assert_close(
+            env.get_state()["qvel"][0, :3], torch.tensor([-0.2, 0.0, 0.0])
+        )
         env.close()
         env = MicroDuckEnv(
             scene,
