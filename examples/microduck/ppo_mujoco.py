@@ -122,23 +122,23 @@ def make_env(
     ``cfg`` is that section, as the Hydra ``DictConfig`` or a plain mapping;
     missing entries take the defaults of ``config.yaml`` and ``task`` becomes a
     :class:`~torchrl.envs.MicroDuckTask`. ``rlrender`` passes the training
-    checkpoint instead: its recorded config supplies ``cfg`` (minus the asset
-    location, which is machine specific) and its policy kwargs supply
-    ``hidden_size``. The keyword arguments override single entries so a
-    checkpoint renders with one env from a local asset path; other entries go
-    through ``cfg``, e.g. ``--env-kwargs '{"cfg": {"render_width": 480}}'``.
+    checkpoint, whose recorded config (minus the asset location, which is
+    machine specific) sits between those defaults and ``cfg``, and whose
+    policy kwargs supply ``hidden_size``. The keyword arguments override single
+    entries so a checkpoint renders with one env from a local asset path; other
+    entries go through ``cfg``, e.g.
+    ``--env-kwargs '{"cfg": {"backend": "mujoco", "render_width": 480}}'``.
 
     :class:`~torchrl.envs.InitTracker` marks episode starts and a
     :class:`~torchrl.envs.TensorDictPrimer` carries the GRU state between steps,
     so the same env serves the collector, the evaluators and ``rlrender``.
     """
     recorded = checkpoint if isinstance(checkpoint, Mapping) else {}
-    if cfg is None:
-        cfg = {
-            key: value
-            for key, value in ((recorded.get("config") or {}).get("env") or {}).items()
-            if key not in ASSET_KEYS
-        }
+    recorded_env = {
+        key: value
+        for key, value in ((recorded.get("config") or {}).get("env") or {}).items()
+        if key not in ASSET_KEYS
+    }
     overrides = {
         "microduck_root": microduck_root,
         "root": root,
@@ -150,7 +150,8 @@ def make_env(
     env_cfg = OmegaConf.to_container(
         OmegaConf.merge(
             OmegaConf.load(PACKAGE_DIR / "config.yaml").env,
-            cfg,
+            recorded_env,
+            cfg or {},
             {key: value for key, value in overrides.items() if value is not None},
         ),
         resolve=True,
