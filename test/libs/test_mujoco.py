@@ -129,6 +129,20 @@ class TestMujoco:
         assert torch.equal(state["qpos"], qpos)
         env.close()
 
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_native_batched_workers_draw_distinct_reset_noise(self, parallel):
+        # Workers built from one seed used to replay the same reset noise.
+        env = HopperEnv(num_envs=2, seed=0, backend="mujoco", parallel=parallel)
+        twin = HopperEnv(num_envs=2, seed=0, backend="mujoco", parallel=parallel)
+        try:
+            observation = env.reset()["observation"]
+            assert not torch.equal(observation[0], observation[1])
+            torch.testing.assert_close(observation, twin.reset()["observation"])
+        finally:
+            env.close()
+            twin.close()
+
     @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
     def test_torch_backend_rollout_partial_reset(self):
         env = HopperEnv(
