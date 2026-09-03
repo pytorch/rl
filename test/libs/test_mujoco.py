@@ -368,6 +368,7 @@ class TestMujoco:
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(
             scene,
+            backend="mujoco",
             task=MicroDuckEnv.speed_range_task(
                 0.1, 0.3, warm_start_velocity=(0.2, 0.2), warm_start_fraction=1.0
             ),
@@ -384,6 +385,7 @@ class TestMujoco:
         env.close()
         env = MicroDuckEnv(
             scene,
+            backend="mujoco",
             task=MicroDuckTask(joint_reset_noise_scale=0.3),
             reset_noise_scale=0.0,
             seed=0,
@@ -404,6 +406,7 @@ class TestMujoco:
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(
             scene,
+            backend="mujoco",
             task=MicroDuckTask(
                 gait_frequency_hz=1.0,
                 gait_frequency_per_mps=5.0,
@@ -441,9 +444,17 @@ class TestMujoco:
         assert (components["diagnostic_reward_phase_contact"] == 0).all()
         env.close()
         with pytest.raises(ValueError, match="reward_scales"):
-            MicroDuckEnv(scene, task=MicroDuckTask(reward_scales={"not_a_weight": 1.0}))
+            MicroDuckEnv(
+                scene,
+                backend="mujoco",
+                task=MicroDuckTask(reward_scales={"not_a_weight": 1.0}),
+            )
         with pytest.raises(ValueError, match="reward_scales"):
-            MicroDuckEnv(scene, task=MicroDuckTask(reward_scales={"FRAME_SKIP": 1.0}))
+            MicroDuckEnv(
+                scene,
+                backend="mujoco",
+                task=MicroDuckTask(reward_scales={"FRAME_SKIP": 1.0}),
+            )
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_scene_resolution_and_download(self, tmp_path, monkeypatch):
@@ -489,14 +500,19 @@ class TestMujoco:
         assert calls == []
         # A batched native env resolves once in the parent, not once per worker.
         env = MicroDuckEnv(
-            root=cache, download=True, num_envs=2, parallel=False, seed=0
+            root=cache,
+            download=True,
+            backend="mujoco",
+            num_envs=2,
+            parallel=False,
+            seed=0,
         )
         assert calls == [False]
         assert isinstance(env, SerialEnv)
         assert env.rollout(3)["commanded_x_velocity"].shape == (2, 1, 3, 1)
         env.close()
         # The cached checkout is found without downloading again ...
-        env = MicroDuckEnv(root=cache, seed=0)
+        env = MicroDuckEnv(root=cache, backend="mujoco", seed=0)
         assert calls == [False]
         assert env.scene_path.is_relative_to(cache)
         env.close()

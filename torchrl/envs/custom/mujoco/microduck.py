@@ -416,12 +416,13 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             no other source resolves. Defaults to ``False``, in which case a
             missing asset raises an error describing every option. ``"force"``
             re-downloads even when the checkout is present.
-        backend (str, optional): ``"mujoco"``, ``"mjx"`` or ``"mujoco-torch"``.
-            Defaults to ``"mujoco"``, the fastest backend for this model on CPU
-            in eager mode. The native backend batches ``num_envs`` simulators
-            in worker processes with :class:`~torchrl.envs.ParallelEnv`, or
-            in one process with :class:`~torchrl.envs.SerialEnv` when
-            ``parallel=False``; the other two batch inside the simulator.
+        backend (str, optional): ``"mujoco-torch"`` (default) and ``"mjx"``
+            vectorize the ``num_envs`` simulators inside the simulator, which
+            is how the env is meant to run at scale on an accelerator.
+            ``"mujoco"`` runs the official C bindings, one simulator per
+            worker process with :class:`~torchrl.envs.ParallelEnv` (or in one
+            process with :class:`~torchrl.envs.SerialEnv` when
+            ``parallel=False``); it is the fallback for CPU-only machines.
         low_cost_collisions (bool, optional): if ``True`` (default), replace
             the collision-class meshes with box proxies at load time. The
             unmodified meshes make the ``mjx`` and ``mujoco-torch`` backends
@@ -446,15 +447,14 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         >>> rollout["observation"].shape[-1], rollout["commanded_x_velocity"][0, 0]  # doctest: +SKIP
         (53, tensor([0.2000]))
 
-        Scale up: batch 16 native simulators in worker processes, or run
-        thousands inside MJX or ``mujoco-torch`` (optionally compiled) on a
-        GPU. The task code is the same on every backend.
+        Scale up: run thousands of vectorized simulators inside
+        ``mujoco-torch`` (optionally compiled) or MJX on a GPU, or fall back
+        to 16 native simulators in worker processes on a CPU-only machine. The
+        task code is the same on every backend.
 
-        >>> env = MicroDuckEnv(download=True, num_envs=16, parallel=True)  # doctest: +SKIP
+        >>> env = MicroDuckEnv(download=True, num_envs=1024, device="cuda", compile_step=True)  # doctest: +SKIP
         >>> env = MicroDuckEnv(download=True, backend="mjx", num_envs=1024, device="cuda")  # doctest: +SKIP
-        >>> env = MicroDuckEnv(  # doctest: +SKIP
-        ...     download=True, backend="mujoco-torch", num_envs=1024, device="cuda", compile_step=True
-        ... )
+        >>> env = MicroDuckEnv(download=True, backend="mujoco", num_envs=16, parallel=True)  # doctest: +SKIP
 
         Pick the task: balance in place, track a speed range with a gait clock
         that follows the command (with a wider action scale for training from
@@ -508,7 +508,6 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         (https://github.com/pollen-robotics/microduck_rl).
     """
 
-    DEFAULT_BACKEND: ClassVar[BackendName] = "mujoco"
     FRAME_SKIP = 10
     RESET_NOISE_SCALE = 0.02
     ROOT_ENV_VAR: ClassVar[str] = "MICRODUCK_RL_ROOT"
@@ -603,7 +602,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         task: MicroDuckTask | None = None,
         root: str | Path | None = None,
         download: bool | str = False,
-        backend: BackendName = "mujoco",
+        backend: BackendName = "mujoco-torch",
         low_cost_collisions: bool = True,
         max_episode_steps: int = 500,
         **kwargs: Any,
