@@ -273,12 +273,28 @@ class MicroDuckTask:
             the per-step task cost.
 
     Examples:
+        Start from a preset, override a field, and hand the task to the env:
+
+        >>> from dataclasses import replace
         >>> from torchrl.envs import MicroDuckEnv, MicroDuckTask
         >>> task = MicroDuckEnv.speed_range_task(0.1, 0.3, action_scale=1.0)
         >>> task.command_range, task.gait_frequency_per_mps, task.action_scale
         ((0.1, 0.3), 5.0, 1.0)
-        >>> MicroDuckTask(commanded_x_velocity=0.2).commanded_x_velocity
-        (0.2,)
+        >>> env = MicroDuckEnv(download=True, task=task, num_envs=4)  # doctest: +SKIP
+        >>> rollout = env.rollout(20)  # doctest: +SKIP
+        >>> rollout["commanded_x_velocity"][:, 0, 0]  # one command per env, drawn in [0.1, 0.3]  # doctest: +SKIP
+        tensor([0.2731, 0.1207, 0.2942, 0.1685])
+
+        The same task with the reward turned off, for a transform to fill in:
+
+        >>> env = MicroDuckEnv(download=True, task=replace(task, compute_reward=False))  # doctest: +SKIP
+        >>> env.rollout(5)["next", "reward"].sum()  # doctest: +SKIP
+        tensor(0.)
+
+        A task built field by field is equivalent to the presets:
+
+        >>> MicroDuckTask(commanded_x_velocity=0.2) == MicroDuckEnv.tracking_task(0.2)
+        True
     """
 
     commanded_x_velocity: float | Sequence[float] = (0.03,)
