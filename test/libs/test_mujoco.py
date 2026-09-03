@@ -654,23 +654,62 @@ class TestMujoco:
         gait = self._load_example("heuristic_gait")
         scene = self._write_microduck_fixture(tmp_path)
         env = gait.make_env(scene, seed=0, max_episode_steps=30)
-        config = gait.MicroDuckGaitConfig()
-        observation = env.reset()["observation"]
-        action = gait.gait_action(config, observation)
-        assert action.shape == (1, 14)
-        assert (action.abs() <= 1.0).all()
-        trials = gait.evaluate_gait(
-            env, config, seeds=(0, 1), steps=30, commanded_x_velocity=0.03
+        actor = gait.MicroDuckGaitActor()
+        rollout = env.rollout(30, actor, break_when_any_done=True)
+        assert rollout["action"].shape == (1, 30, 14)
+        assert (rollout["action"].abs() <= 1.0).all()
+        metrics = torch.stack(
+            [gait.gait_metrics(rollout), gait.gait_metrics(env.rollout(30, actor))]
         )
-        summary = gait.summarize(trials)
-        # The fixture's feet never leave the ground, so displacement alone must
-        # not be mistaken for walking.
-        assert summary["survival_rate"] == 1.0
-        assert summary["episode_length_min"] == 30.0
-        assert summary["walking_success_rate"] == 0.0
-        assert summary["left_swing_phases_min"] == 0.0
-        assert all(trial.left_single_support_steps == 0 for trial in trials)
+        # The fixture's feet never leave the ground, so forward motion alone
+        # must not be mistaken for walking.
+        assert (metrics["survived"] == 1.0).all()
+        assert (metrics["episode_length"] == 30.0).all()
+        assert (metrics["walking"] == 0.0).all()
+        assert (metrics["left_swing_phases"] == 0.0).all()
+        assert (metrics["left_single_support_steps"] == 0.0).all()
         env.close()
+
+    def test_microduck_example_gait_metrics_count_swing_phases(self):
+        gait = self._load_example("heuristic_gait")
+        steps = 40
+        phase_start = gait.MicroDuckEnv.GAIT_PHASE_START
+        observation = torch.zeros(steps, gait.MicroDuckEnv.OBSERVATION_DIM)
+        observation[:, 7] = 0.2
+        # Five clock periods of eight steps: the left foot swings for the first
+        # four steps of each, the right foot for the last four.
+        clock = torch.arange(steps) % 8 < 4
+        observation[:, phase_start] = torch.where(clock, 1.0, -1.0)
+        left_contact = ~clock
+        rollout = TensorDict(
+            {
+                "observation": observation,
+                "next": TensorDict(
+                    {
+                        "observation": observation.roll(-1, 0) + 0.01,
+                        "terminated": torch.zeros(steps, 1, dtype=torch.bool),
+                        "diagnostic_left_foot_contact": left_contact.float()[:, None],
+                        "diagnostic_right_foot_contact": clock.float()[:, None],
+                        "diagnostic_left_foot_height": torch.full((steps, 1), 0.02),
+                        "diagnostic_right_foot_height": torch.full((steps, 1), 0.03),
+                    },
+                    batch_size=[steps],
+                ),
+            },
+            batch_size=[steps],
+        )
+        metrics = gait.gait_metrics(rollout)
+        assert metrics["left_swing_phases"] == 5.0
+        assert metrics["right_swing_phases"] == 5.0
+        assert metrics["left_single_support_steps"] == 20.0
+        assert metrics["right_foot_height_max"] == 0.03
+        assert metrics["walking"] == 1.0
+        # Three supporting steps per swing phase fall short of the minimum.
+        short = rollout.clone()
+        short["next", "diagnostic_right_foot_contact"][::8] = 0.0
+        short["next", "diagnostic_left_foot_contact"][4::8] = 0.0
+        assert gait.gait_metrics(short)["left_swing_phases"] == 0.0
+        assert gait.gait_metrics(short)["walking"] == 0.0
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_example_recurrent_ppo_trains_on_whole_episodes(self, tmp_path):
@@ -695,7 +734,7 @@ class TestMujoco:
         # The zero-initialized residual makes the first policy the closed-form gait.
         torch.testing.assert_close(
             reset["action"],
-            ppo.gait_action(ppo.MicroDuckGaitConfig(), reset["observation"]),
+            ppo.MicroDuckGaitActor().gait_action(reset["observation"]),
             atol=1e-5,
             rtol=0,
         )
@@ -771,18 +810,26 @@ class TestMujoco:
         )
         for name, parameter in fresh_actor.state_dict().items():
             torch.testing.assert_close(parameter, latest["actor"][name])
-        assert ppo.evaluation_score(
-            [dict(saved["evaluation"][0], survived=1.0, episode_length=500.0)]
-        ) > ppo.evaluation_score(
-            [
-                dict(
-                    saved["evaluation"][0],
-                    survived=0.0,
-                    episode_length=100.0,
-                    episode_return=1e6,
-                )
-            ]
+        assert saved["evaluation"][
+            "evaluation/plus_0.030/forward_speed"
+        ] == pytest.approx(saved["evaluation"]["evaluation/forward_speed"])
+        # A short forward fall with a huge return ranks below a full episode.
+        walked = TensorDict(
+            commanded_x_velocity=torch.tensor([[0.03]]),
+            forward_speed=torch.tensor([[0.02]]),
+            episode_return=torch.tensor([[1.0]]),
+            survived=torch.tensor([[1.0]]),
+            episode_length=torch.tensor([[500.0]]),
+            batch_size=[1, 1],
         )
+        fell = walked.clone().update(
+            {
+                "survived": torch.tensor([[0.0]]),
+                "episode_length": torch.tensor([[100.0]]),
+                "episode_return": torch.tensor([[1e6]]),
+            }
+        )
+        assert ppo.evaluation_score(walked) > ppo.evaluation_score(fell)
         evaluation_env.close()
         env.close()
 

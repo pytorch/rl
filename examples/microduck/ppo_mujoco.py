@@ -82,8 +82,7 @@ if str(PACKAGE_DIR.parent.parent) not in sys.path:
     sys.path.insert(0, str(PACKAGE_DIR.parent.parent))
 
 from examples.microduck.heuristic_gait import (  # noqa: E402
-    gait_action,
-    heading_xy,
+    MicroDuckGaitActor,
     MicroDuckGaitConfig,
 )
 
@@ -92,32 +91,6 @@ DEFAULT_EVALUATION_SEEDS = tuple(range(8))
 PolicyHead = Literal["gait-residual", "gaussian"]
 DEFAULT_TRANSITIONS_PER_UPDATE = 16_384
 RECURRENT_STATE_KEY = "recurrent_state"
-
-
-def _as_gait(
-    gait: MicroDuckGaitConfig | Mapping[str, float] | None
-) -> MicroDuckGaitConfig:
-    if isinstance(gait, Mapping):
-        return MicroDuckGaitConfig(**gait)
-    return MicroDuckGaitConfig() if gait is None else gait
-
-
-def _checkpoint_policy_kwargs(checkpoint: Any) -> dict[str, Any]:
-    """Return the policy kwargs a training checkpoint recorded, if any."""
-    if isinstance(checkpoint, Mapping) and isinstance(
-        checkpoint.get("policy_kwargs"), Mapping
-    ):
-        return dict(checkpoint["policy_kwargs"])
-    return {}
-
-
-def _checkpoint_env_kwargs(checkpoint: Any) -> dict[str, Any]:
-    """Return the env kwargs a training checkpoint recorded, if any."""
-    if isinstance(checkpoint, Mapping) and isinstance(
-        checkpoint.get("env_kwargs"), Mapping
-    ):
-        return dict(checkpoint["env_kwargs"])
-    return {}
 
 
 def load_parameters(
@@ -191,12 +164,13 @@ def make_env(
     environment arguments are accepted so ``rlrender`` can call this factory
     with its own keyword arguments.
     """
-    recorded_env = _checkpoint_env_kwargs(checkpoint)
-    if gait is None and recorded_env.get("gait") is not None:
-        gait = MicroDuckGaitConfig(**recorded_env["gait"])
-    gait = _as_gait(gait)
+    recorded = checkpoint if isinstance(checkpoint, Mapping) else {}
+    recorded_env = dict(recorded.get("env_kwargs") or {})
+    if gait is None:
+        gait = recorded_env.get("gait")
+    gait = MicroDuckGaitActor(gait).config
     if hidden_size is None:
-        hidden_size = _checkpoint_policy_kwargs(checkpoint).get("hidden_size", 128)
+        hidden_size = (recorded.get("policy_kwargs") or {}).get("hidden_size", 128)
     if action_scale is None:
         action_scale = recorded_env.get("action_scale", 0.35)
     if gait_frequency_per_mps is None:
@@ -261,13 +235,13 @@ class GaitResidualHead(nn.Module):
     def __init__(
         self,
         hidden_size: int,
-        gait: MicroDuckGaitConfig,
+        gait: MicroDuckGaitConfig | Mapping[str, float] | None,
         *,
         residual_scale: float,
         initial_policy_scale: float,
     ):
         super().__init__()
-        self.gait = gait
+        self.gait = MicroDuckGaitActor(gait)
         self.residual_scale = float(residual_scale)
         self.residual = nn.Linear(hidden_size, MicroDuckEnv.NUM_JOINTS)
         nn.init.zeros_(self.residual.weight)
@@ -280,7 +254,7 @@ class GaitResidualHead(nn.Module):
     def forward(
         self, features: torch.Tensor, observation: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        nominal = gait_action(self.gait, observation)
+        nominal = self.gait.gait_action(observation)
         mean = nominal + self.residual_scale * torch.tanh(self.residual(features))
         pre_tanh_mean = torch.atanh(mean.clamp(-0.999, 0.999))
         scale = self.scale.expand_as(pre_tanh_mean)
@@ -351,7 +325,7 @@ def make_models(
         actor_head = TensorDictModule(
             GaitResidualHead(
                 hidden_size,
-                _as_gait(gait),
+                gait,
                 residual_scale=residual_scale,
                 initial_policy_scale=initial_policy_scale,
             ),
@@ -403,7 +377,11 @@ def make_render_policy(
     training checkpoint, which ``rlrender`` passes as ``checkpoint``; explicit
     ``--policy-kwargs`` override them.
     """
-    recorded = _checkpoint_policy_kwargs(checkpoint)
+    recorded = (
+        dict(checkpoint.get("policy_kwargs") or {})
+        if isinstance(checkpoint, Mapping)
+        else {}
+    )
     overrides = {
         "hidden_size": hidden_size,
         "policy_head": policy_head,
@@ -431,16 +409,14 @@ def evaluate_policy(
     commanded_x_velocities: Sequence[float] = DEFAULT_COMMANDS,
     seeds: Sequence[int] = DEFAULT_EVALUATION_SEEDS,
     steps: int = 500,
-) -> list[dict[str, float]]:
+) -> TensorDict:
     """Roll the deterministic policy out for every command and seed.
 
-    Results are kept per command so an aggregate cannot hide a policy that
-    walks the wrong way for some commands.
-
     Returns:
-        One dictionary per rollout with the return, mean absolute velocity
-        tracking error, survival flag, episode length and displacement along
-        the initial heading.
+        A :class:`~tensordict.TensorDict` of shape ``(num_commands, num_seeds)``
+        holding, for every rollout, the command, the return, the mean absolute
+        velocity tracking error, the survival flag, the episode length and the
+        mean body-frame forward speed.
     """
     if env.batch_size.numel() != 1:
         raise ValueError("MicroDuck evaluation expects a single environment.")
@@ -448,7 +424,7 @@ def evaluate_policy(
         raise ValueError("Evaluation commands, seeds and steps must be non-empty.")
     was_training = policy.training
     policy.eval()
-    results = []
+    rows = []
     try:
         with set_exploration_type(ExplorationType.DETERMINISTIC):
             for command in commanded_x_velocities:
@@ -456,91 +432,68 @@ def evaluate_policy(
                     env.set_seed(seed)
                     reset = env.reset(
                         TensorDict(
-                            {
-                                "commanded_x_velocity": torch.full(
-                                    (*env.batch_size, 1), float(command)
-                                )
-                            },
+                            commanded_x_velocity=torch.full(
+                                (*env.batch_size, 1), float(command)
+                            ),
                             batch_size=env.batch_size,
                         )
                     )
-                    start_qpos = env.base_env.get_state()["qpos"].reshape(-1)
-                    heading = heading_xy(start_qpos[3:7])
                     rollout = env.rollout(
                         steps,
-                        policy=policy,
+                        policy,
                         tensordict=reset,
                         auto_reset=False,
                         break_when_any_done=True,
-                    )
-                    end_qpos = env.base_env.get_state()["qpos"].reshape(-1)
-                    measured = rollout["next", "observation"][..., 6]
-                    results.append(
-                        {
-                            "commanded_x_velocity": float(command),
-                            "seed": float(seed),
-                            "episode_return": float(rollout["next", "reward"].sum()),
-                            "tracking_error": float((measured - command).abs().mean()),
-                            "survived": float(
-                                not rollout["next", "terminated"][..., -1, :].any()
-                            ),
-                            "episode_length": float(rollout.shape[-1]),
-                            "signed_displacement": float(
-                                torch.dot(end_qpos[:2] - start_qpos[:2], heading)
-                            ),
-                        }
+                    ).reshape(-1)
+                    forward_speed = rollout["next", "observation"][:, 6]
+                    rows.append(
+                        TensorDict(
+                            commanded_x_velocity=torch.tensor(float(command)),
+                            episode_return=rollout["next", "reward"].sum(),
+                            tracking_error=(forward_speed - command).abs().mean(),
+                            survived=~rollout["next", "terminated"][-1].any(),
+                            episode_length=torch.tensor(rollout.shape[-1]),
+                            forward_speed=forward_speed.mean(),
+                        ).float()
                     )
     finally:
         policy.train(was_training)
-    return results
+    return torch.stack(rows).reshape(len(commanded_x_velocities), len(seeds))
 
 
-def evaluation_metrics(evaluation: Sequence[dict[str, float]]) -> dict[str, float]:
-    """Average the per-rollout evaluation fields, overall and per command."""
-    fields = (
-        "episode_return",
-        "tracking_error",
-        "survived",
-        "episode_length",
-        "signed_displacement",
-    )
+def evaluation_metrics(evaluation: TensorDictBase) -> dict[str, float]:
+    """Average the evaluation fields over all rollouts and per command."""
+    fields = evaluation.exclude("commanded_x_velocity")
     metrics = {
-        f"evaluation/{field}": sum(row[field] for row in evaluation) / len(evaluation)
-        for field in fields
+        f"evaluation/{key}": float(value) for key, value in fields.mean().items()
     }
-    for command in sorted({row["commanded_x_velocity"] for row in evaluation}):
-        rows = [row for row in evaluation if row["commanded_x_velocity"] == command]
-        name = f"{command:+.3f}".replace("+", "plus_").replace("-", "minus_")
-        for field in fields:
-            metrics[f"evaluation/{name}/{field}"] = sum(
-                row[field] for row in rows
-            ) / len(rows)
+    for command, row in zip(
+        evaluation["commanded_x_velocity"][:, 0], fields.mean(dim=1)
+    ):
+        name = f"{float(command):+.3f}".replace("+", "plus_").replace("-", "minus_")
+        metrics.update(
+            {f"evaluation/{name}/{key}": float(value) for key, value in row.items()}
+        )
     return metrics
 
 
-def evaluation_score(evaluation: Sequence[dict[str, float]]) -> tuple[float, ...]:
-    """Rank checkpoints by survival, then direction, then displacement, then return.
+def evaluation_score(evaluation: TensorDictBase) -> tuple[float, ...]:
+    """Rank checkpoints by survival, then direction, then speed, then return.
 
     A short forward fall can earn a higher raw return than a full episode of
     balanced walking, so survival and the number of wrong-way rollouts are
-    compared before any displacement or reward figure.
+    compared before any speed or reward figure.
     """
-    directional = []
-    for row in evaluation:
-        command = row["commanded_x_velocity"]
-        displacement = row["signed_displacement"]
-        directional.append(
-            math.copysign(1.0, command) * displacement
-            if command
-            else -abs(displacement)
-        )
+    command = evaluation["commanded_x_velocity"]
+    speed = evaluation["forward_speed"]
+    directional = torch.where(command != 0, command.sign() * speed, -speed.abs())
     return (
-        sum(row["survived"] for row in evaluation),
-        min(row["episode_length"] for row in evaluation),
-        -float(sum(value <= 0.0 for value in directional)),
-        min(directional),
-        sum(directional) / len(directional),
-        sum(row["episode_return"] for row in evaluation) / len(evaluation),
+        float(evaluation["survived"].sum()),
+        float(evaluation["episode_length"].min()),
+        -float((directional <= 0).sum()),
+        float(directional.min()),
+        float(directional.mean()),
+        float(evaluation["episode_return"].mean()),
     )
 
 
@@ -695,12 +648,12 @@ def train_ppo(
     checkpoint_path = Path(best_checkpoint_path) if best_checkpoint_path else None
     latest_path = Path(latest_checkpoint_path) if latest_checkpoint_path else None
 
-    def save_checkpoint(path: Path, step: int, evaluation, score) -> None:
+    def save_checkpoint(path: Path, step: int, metrics, score) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(
             {
                 "transitions": step,
-                "evaluation": evaluation,
+                "evaluation": metrics,
                 "evaluation_score": list(score),
                 "actor": actor.state_dict(),
                 "critic": critic.state_dict(),
@@ -722,20 +675,20 @@ def train_ppo(
         metrics = evaluation_metrics(evaluation)
         score = evaluation_score(evaluation)
         if latest_path is not None:
-            save_checkpoint(latest_path, step, evaluation, score)
+            save_checkpoint(latest_path, step, metrics, score)
         if best_score is None or score > best_score:
             best_score = score
             best_state = (deepcopy(actor.state_dict()), deepcopy(critic.state_dict()))
             if checkpoint_path is not None:
-                save_checkpoint(checkpoint_path, step, evaluation, score)
+                save_checkpoint(checkpoint_path, step, metrics, score)
         metrics["evaluation/is_best"] = float(score == best_score)
         torchrl_logger.info(
             "MicroDuck evaluation transitions=%d survival=%.2f length=%.1f "
-            "displacement=%+.4f tracking_error=%.4f",
+            "forward_speed=%+.4f tracking_error=%.4f",
             step,
             metrics["evaluation/survived"],
             metrics["evaluation/episode_length"],
-            metrics["evaluation/signed_displacement"],
+            metrics["evaluation/forward_speed"],
             metrics["evaluation/tracking_error"],
         )
         return metrics

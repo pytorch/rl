@@ -12,9 +12,8 @@ listing the options.
 | File | What it does | Needs |
 | --- | --- | --- |
 | [`ppo_mujoco.py`](ppo_mujoco.py) | Recurrent PPO on `torchrl.envs.MicroDuckEnv`; native MuJoCo, MJX or `mujoco-torch` | `mujoco` (+ `mujoco-mjx`/`jax` or `mujoco-torch`) |
-| [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait, contact-based gait metrics, gait search, `rlrender` policy | `mujoco` |
+| [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
-| [`microduck_ppo.ipynb`](microduck_ppo.ipynb) | Interactive version of the MuJoCo pipeline with native and WASM rendering | `rendering` and `mujoco_wasm` extras |
 
 ## The task
 
@@ -58,12 +57,14 @@ Contact-based gait metrics are available through `env.foot_contacts()` and
 
 ## Closed-form gait
 
-`heuristic_gait.py` combines a bilateral phase oscillator with hip and ankle
-pitch feedback. The same `gait_action` function drives the baseline, seeds the
-PPO actor and serves as the `rlrender` policy. Rollouts are judged from foot
-contacts: a rollout counts as walking only when both feet alternate swing
-phases while the other foot is in single support, torso pitch stays bounded,
-and the robot moves in the commanded direction. Displacement alone is not
+`MicroDuckGaitActor` in `heuristic_gait.py` is a `TensorDictModuleBase` that
+combines a bilateral phase oscillator with hip and ankle pitch feedback,
+reading only the env observation. The same module drives the baseline through
+`env.rollout(steps, actor)`, seeds the PPO actor and serves as the `rlrender`
+policy. `gait_metrics` judges a rollout of an env built with
+`diagnostics=True` from foot contacts: it counts as walking only when both
+feet alternate swing phases in single support, torso pitch stays bounded and
+the mean forward speed points along the command. Forward motion alone is not
 accepted, since a planted-foot controller can move forward by pitching.
 
 ```bash
@@ -71,10 +72,6 @@ uv run --with mujoco python examples/microduck/heuristic_gait.py \
   --microduck-root "$MICRODUCK_RL_ROOT" --num-seeds 20 \
   --render-checkpoint microduck_gait.pt
 ```
-
-Add `--search-candidates 128 --search-num-seeds 8` to run a gait-constrained
-random search around the defaults; candidates are ranked by worst-case
-survival and bilateral stepping before speed.
 
 ## Recurrent PPO
 
@@ -93,7 +90,7 @@ controller. Data flows through standard TorchRL components:
 
 `KLAdaptiveLR` keeps the mean policy KL near `--target-kl`. Deterministic,
 fixed-seed evaluation runs every `--evaluation-interval` iterations and keeps
-the checkpoint that ranks best on survival, direction, displacement and
+the checkpoint that ranks best on survival, direction, forward speed and
 return, in that order.
 
 ```bash
@@ -231,7 +228,9 @@ checkpoint taken at 7.46M transitions for 5M more. Evaluation is
 deterministic over seeds 0-7 and 500 steps (10 s) at 0.1, 0.2 and 0.3 m/s.
 "Speed error" is the mean absolute difference between the body-frame forward
 speed and the command, averaged over the three commands; "displacement" is
-the world-frame distance covered along the initial heading.
+the world-frame distance covered along the initial heading, which these runs
+logged. The example now evaluates and ranks checkpoints by the mean
+body-frame forward speed instead, for the reason given below.
 
 | Run | Change | Speed error (m/s) | Displacement at 0.1 / 0.2 / 0.3 m/s (m) | Forward speed at 0.1 / 0.2 / 0.3 m/s (m/s) |
 | --- | --- | ---: | --- | --- |
@@ -276,7 +275,7 @@ uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
   --policy examples/microduck/heuristic_gait.py:make_render_policy \
   --env examples/microduck/heuristic_gait.py:make_env \
   --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"commanded_x_velocity\":0.03}" \
-  --render-backend env --no-auto-load-policy --max-steps 500 --fps 125 \
+  --render-backend env --no-auto-load-policy --max-steps 500 --fps 50 \
   --format ipynb --out microduck_gait.ipynb \
   --notebook-render-backend mujoco-wasm --notebook-rollout-mode both \
   --mujoco-model-path "$MICRODUCK_RL_ROOT/src/mjlab_microduck/robot/microduck/scene_walk.xml" \
