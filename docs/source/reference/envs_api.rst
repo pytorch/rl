@@ -348,6 +348,9 @@ proxies so the accelerated backends fit in memory, and exposes foot contacts
 and foot heights for gait metrics through
 :meth:`~torchrl.envs.MujocoEnv.geom_contacts` and
 :meth:`~torchrl.envs.MujocoEnv.site_positions`.
+Its commands, reset distribution, gait clock and reward options form a
+:class:`~torchrl.envs.MicroDuckTask`, with presets such as
+:meth:`~torchrl.envs.MicroDuckEnv.speed_range_task`.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -365,6 +368,7 @@ state into the parent batch. Boolean masks are not supported.
     HopperEnv
     HumanoidEnv
     MicroDuckEnv
+    MicroDuckTask
     SatelliteEnv
     Walker2dEnv
 

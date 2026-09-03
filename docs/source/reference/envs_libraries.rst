@@ -129,19 +129,6 @@ Available wrappers
     set_gym_backend
     register_gym_spec_conversion
 
-MuJoCo tasks
-------------
-
-Locomotion tasks built on :class:`~torchrl.envs.MujocoEnv`, which run on the
-native MuJoCo, MJX and ``mujoco-torch`` backends.
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template_fun.rst
-
-    MicroDuckEnv
-    MicroDuckTask
-
 .. note:: **Minecraft licensing** (:class:`~torchrl.envs.CraftGroundEnv`,
     :class:`~torchrl.envs.CraftGroundWrapper`): TorchRL does not ship or
     redistribute Minecraft. The CraftGround backend downloads the Minecraft
