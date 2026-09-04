@@ -23,8 +23,8 @@ raises an error listing the options.
 observation, action, reward and termination definitions. A task is data:
 `MicroDuckTask` is a tensorclass holding the planar command box `(vx, vy)`
 in body-frame m/s, the warm start and joint reset noise, the gait clock
-frequency, one weight per reward term, the term parameters and a sampling
-`weight`. The presets `MicroDuckEnv.tracking_task(speed)`, `standing_task()`,
+frequency, one weight per reward term, the term parameters, a sampling
+`weight` and a `name`. The presets `MicroDuckEnv.tracking_task(speed)`, `standing_task()`,
 `speed_range_task(low, high)`, `sidestep_task(speed)` and `jump_task()` fill
 every field and take overrides by name (`reward_weights={"tracking": 4.0}`,
 `tracking_std=0.2`, `warm_start_fraction=0.5`). The env takes a library, one
@@ -131,12 +131,12 @@ override; the `utils` extra provides Hydra. `logger.entity` is required for
 W&B so runs never land in a default workspace; use `logger.backend=csv` or
 `logger.backend=null` for a local run. `env.tasks` is the task library, one
 `MicroDuckEnv` preset per entry with its arguments, so
-`'env.tasks=[{name:standing_task},{name:tracking_task,speed:0.03},{name:tracking_task,speed:0.06}]'`
+`'env.tasks=[{preset:standing_task},{preset:tracking_task,speed:0.03},{preset:tracking_task,speed:0.06}]'`
 trains a command distribution and
-`'env.tasks=[{name:standing_task},{name:tracking_task,speed:0.2},{name:tracking_task,speed:-0.2},{name:sidestep_task,speed:0.15,weight:0.5},{name:sidestep_task,speed:-0.15,weight:0.5},{name:jump_task}]'`
-the whole mixture, with one evaluator per task and a policy conditioned on
-the task index; `env.task_id=2` pins one task at every reset (evaluation,
-rendering). `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
+`'env.tasks=[{preset:standing_task},{preset:tracking_task,speed:0.2},{preset:tracking_task,speed:-0.2},{preset:sidestep_task,speed:0.15,weight:0.5},{preset:sidestep_task,speed:-0.15,weight:0.5},{preset:jump_task}]'`
+the whole mixture, with one evaluator per task (logged under the task's
+`name`, e.g. `evaluation/sidestep+0.15/`) and a policy conditioned on the task
+index; `env.task_id=2` pins one task at every reset (evaluation, rendering). `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
 `policy.init_from` read directly.
 
@@ -247,7 +247,7 @@ uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mu
   env.backend=mujoco env.parallel=true env.num_envs=16 \
   policy.head=gaussian policy.initial_policy_scale=1.0 \
   env.action_scale=1.0 \
-  'env.tasks=[{name:speed_range_task,low:0.1,high:0.3,warm_start_velocity:[0.05,0.25],warm_start_fraction:0.5,joint_reset_noise_scale:0.25}]' \
+  'env.tasks=[{preset:speed_range_task,low:0.1,high:0.3,warm_start_velocity:[0.05,0.25],warm_start_fraction:0.5,joint_reset_noise_scale:0.25}]' \
   ppo.transitions_per_update=32768 ppo.epochs=5 ppo.minibatch_trajectories=64 \
   ppo.learning_rate=3e-4 ppo.target_kl=0.01 ppo.entropy_coeff=0.01 \
   ppo.total_transitions=10000000 evaluation.interval=10 \

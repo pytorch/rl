@@ -234,10 +234,12 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
 class MicroDuckTask:
     """One locomotion task of :class:`MicroDuckEnv`, as data.
 
-    A task is a row of tensors: the command box, the reset distribution, the
-    gait clock and the reward weights and parameters. A library is a stack of
-    tasks, and every env of a :class:`MicroDuckEnv` batch holds one row of
-    the library for the duration of an episode. Build tasks with the presets
+    A task is a row of tensors and a name: the command box, the reset
+    distribution, the gait clock, the reward weights and parameters, and a
+    label. A library is a stack of tasks, and every env of a
+    :class:`MicroDuckEnv` batch holds one row of the library for the duration
+    of an episode. Gathering rows with ``library[task_id]`` copies the name
+    entries like the tensors, which needs ``tensordict>=0.14.1``. Build tasks with the presets
     (:meth:`MicroDuckEnv.tracking_task`, :meth:`MicroDuckEnv.standing_task`,
     :meth:`MicroDuckEnv.speed_range_task`, :meth:`MicroDuckEnv.sidestep_task`,
     :meth:`MicroDuckEnv.jump_task`), which fill every field and accept
@@ -273,6 +275,9 @@ class MicroDuckTask:
             ``tracking_std`` or ``pose_std``).
         weight (torch.Tensor): relative weight of the task when the env draws
             a task per env at reset, scalar and non-negative.
+        name (str): label of the task, for logging and evaluation; the presets
+            derive it from their arguments (``"tracking+0.20"``,
+            ``"sidestep-0.15"``, ``"jump"``) and accept ``name=`` to override.
 
     Examples:
         Two tasks stacked into a library, one row per env picked at reset:
@@ -284,6 +289,8 @@ class MicroDuckTask:
         ... )
         >>> library.shape, library.command_high[:, 0], library.weight
         (torch.Size([2]), tensor([0.2000, 0.0000]), tensor([2., 1.]))
+        >>> list(library.name)
+        ['tracking+0.20', 'jump']
         >>> env = MicroDuckEnv(download=True, tasks=library, num_envs=4)  # doctest: +SKIP
         >>> rollout = env.rollout(20)  # doctest: +SKIP
         >>> rollout["task_id"][:, 0, 0], rollout["command"][:, 0]  # doctest: +SKIP
@@ -312,6 +319,7 @@ class MicroDuckTask:
     reward_weights: torch.Tensor
     params: TensorDict
     weight: torch.Tensor
+    name: str
 
 
 @dataclass(frozen=True)
@@ -335,7 +343,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     stands for them, and a transform can gather ``env.tasks[task_id]`` when
     they are needed.
 
-    The env holds a library of :class:`MicroDuckTask` rows in :attr:`tasks`.
+    The env holds a library of :class:`MicroDuckTask` rows in :attr:`tasks`
+    (``env.tasks.name`` lists their labels).
     At every reset, the envs being reset pick a row: the ``task_id`` entry of
     the reset TensorDict when present (``(num_envs, 1)`` or ``(num_envs,)``
     integers), otherwise a draw weighted by the tasks' ``weight`` field with
@@ -718,6 +727,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         fraction = library.warm_start_fraction
         if ((fraction < 0) | (fraction > 1)).any():
             raise ValueError("warm_start_fraction must be in [0, 1].")
+        if not all(isinstance(name, str) and name for name in library.name):
+            raise ValueError("Every task needs a non-empty string name.")
         return library
 
     @classmethod
@@ -795,20 +806,23 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         command_low: Sequence[float],
         command_high: Sequence[float],
         *,
+        name: str,
         weight: float = 1.0,
         reward_weights: Mapping[str, float] | None = None,
         **overrides: Any,
     ) -> MicroDuckTask:
-        """Build a :class:`MicroDuckTask` from a command box and named overrides.
+        """Build a :class:`MicroDuckTask` from a command box, a name and overrides.
 
-        The presets call this with their box and their weight and parameter
-        choices. ``reward_weights`` maps term names to weights that replace
-        the registered defaults; ``overrides`` set reset and clock fields
-        (``warm_start_velocity``, ``warm_start_fraction``,
+        The presets call this with their box, their name and their weight and
+        parameter choices. ``reward_weights`` maps term names to weights that
+        replace the registered defaults; ``overrides`` set reset and clock
+        fields (``warm_start_velocity``, ``warm_start_fraction``,
         ``joint_reset_noise_scale``, ``gait_frequency_hz``,
         ``gait_frequency_per_mps``) or term parameters (any key of
         :attr:`REWARD_PARAMS`) by name.
         """
+        if not isinstance(name, str) or not name:
+            raise ValueError("A task needs a non-empty string name.")
         fields: dict[str, Any] = {
             "warm_start_velocity": (0.0, 0.0),
             "warm_start_fraction": 0.0,
@@ -876,6 +890,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 batch_size=[],
             ),
             weight=torch.tensor(float(weight), dtype=torch.float32),
+            name=name,
             batch_size=[],
         )
         return task
@@ -897,7 +912,11 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             (float(speed), 0.0),
             (float(speed), 0.0),
             weight=weight,
-            **{"pose_std": cls.POSE_STD_MOVING, **overrides},
+            **{
+                "name": f"tracking{float(speed):+.2f}",
+                "pose_std": cls.POSE_STD_MOVING,
+                **overrides,
+            },
         )
 
     @classmethod
@@ -915,7 +934,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             (0.0, 0.0),
             weight=weight,
             reward_weights=reward_weights,
-            **{"pose_std": cls.POSE_STD_STANDING, **overrides},
+            **{"name": "standing", "pose_std": cls.POSE_STD_STANDING, **overrides},
         )
 
     @classmethod
@@ -940,6 +959,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             (float(high), 0.0),
             weight=weight,
             **{
+                "name": f"speed_range{float(low):+.2f}..{float(high):+.2f}",
                 "gait_frequency_hz": 1.0,
                 "gait_frequency_per_mps": 5.0,
                 "pose_std": cls.POSE_STD_MOVING,
@@ -960,7 +980,11 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             (0.0, float(speed)),
             (0.0, float(speed)),
             weight=weight,
-            **{"pose_std": cls.POSE_STD_MOVING, **overrides},
+            **{
+                "name": f"sidestep{float(speed):+.2f}",
+                "pose_std": cls.POSE_STD_MOVING,
+                **overrides,
+            },
         )
 
     @classmethod
@@ -980,7 +1004,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             (0.0, 0.0),
             weight=weight,
             reward_weights=reward_weights,
-            **{"pose_std": cls.POSE_STD_MOVING, **overrides},
+            **{"name": "jump", "pose_std": cls.POSE_STD_MOVING, **overrides},
         )
 
     # ------------------------------------------------------------------

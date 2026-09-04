@@ -17,8 +17,8 @@ env:
   render_height: 480
   action_scale: 0.35        # position-target offset in radians for a unit action
   diagnostics: false        # reward breakdown in the observation; evaluators turn it on
-  tasks:                    # task library: one MicroDuckEnv preset per entry with its arguments (and a `weight`)
-    - {name: tracking_task, speed: 0.03}
+  tasks:                    # task library: one MicroDuckEnv preset per entry with its arguments (`weight`, `name`, ...)
+    - {preset: tracking_task, speed: 0.03}
   task_id: null             # pin one task of the library at every reset (evaluation, rendering)
 
 policy:

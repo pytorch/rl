@@ -31,11 +31,11 @@ from a TorchRL checkout::
 and train from scratch over a speed range with::
 
     python examples/microduck/ppo_mujoco.py env.download=true policy.head=gaussian \\
-        'env.tasks=[{name:speed_range_task,low:0.1,high:0.3}]' env.action_scale=1.0 \\
+        'env.tasks=[{preset:speed_range_task,low:0.1,high:0.3}]' env.action_scale=1.0 \\
         logger.entity=YOUR_ENTITY
 
 ``env.tasks`` is the task library: one :class:`~torchrl.envs.MicroDuckEnv`
-preset per entry with its arguments, e.g. ``{name: sidestep_task, speed: 0.15,
+preset per entry with its arguments, e.g. ``{preset: sidestep_task, speed: 0.15,
 weight: 0.5}``. Every env picks a task at reset and the policy reads the task
 index through a learned embedding, so one policy trains on the whole library.
 
@@ -227,40 +227,31 @@ def make_tasks(entries: Sequence[Mapping[str, Any]]) -> list[MicroDuckTask]:
     """Build the task library from the ``env.tasks`` list of ``config.yaml``.
 
     Each entry names a :class:`~torchrl.envs.MicroDuckEnv` preset in
-    :data:`TASK_PRESETS` and passes its other keys to it, e.g.
-    ``{name: tracking_task, speed: 0.2, weight: 2.0}`` or
-    ``{name: jump_task, reward_weights: {jump: 8.0}}``.
+    :data:`TASK_PRESETS` under ``preset`` and passes its other keys to it,
+    e.g. ``{preset: tracking_task, speed: 0.2, weight: 2.0}`` or
+    ``{preset: jump_task, reward_weights: {jump: 8.0}, name: hop}``.
     """
     if not entries:
         raise ValueError("env.tasks needs at least one task entry.")
     tasks = []
     for entry in entries:
         kwargs = dict(entry)
-        name = kwargs.pop("name", None)
-        if name not in TASK_PRESETS:
+        preset = kwargs.pop("preset", None)
+        if preset not in TASK_PRESETS:
             raise ValueError(
-                f"Unknown task preset {name!r}; env.tasks entries name one of "
-                f"{TASK_PRESETS}."
+                f"Unknown task preset {preset!r}; env.tasks entries name one of "
+                f"{TASK_PRESETS} under `preset`."
             )
-        tasks.append(getattr(MicroDuckEnv, name)(**kwargs))
+        tasks.append(getattr(MicroDuckEnv, preset)(**kwargs))
     return tasks
 
 
-def task_labels(entries: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Name the metric group of every ``env.tasks`` entry, e.g. ``tracking+0.20``.
+def task_labels(tasks: Sequence[MicroDuckTask]) -> list[str]:
+    """Metric group of every task of the library: its name, made unique.
 
-    The preset name loses its ``_task`` suffix and gains its speed arguments;
-    duplicate labels get their library index appended.
+    Duplicate names get their library index appended.
     """
-    labels = [
-        str(entry["name"]).removesuffix("_task")
-        + "".join(
-            f"{float(value):+.2f}"
-            for key, value in entry.items()
-            if key in ("speed", "low", "high")
-        )
-        for entry in entries
-    ]
+    labels = [str(task.name) for task in tasks]
     if len(set(labels)) != len(labels):
         labels = [f"{label}#{index}" for index, label in enumerate(labels)]
     return labels
@@ -986,7 +977,7 @@ def main(cfg: DictConfig) -> None:
     torch.manual_seed(cfg.env.seed)
     config = OmegaConf.to_container(cfg, resolve=True)
     tasks = make_tasks(config["env"]["tasks"])
-    labels = task_labels(config["env"]["tasks"])
+    labels = task_labels(tasks)
     # The closed-form gait follows the clock the tasks expose in the
     # observation; its frequency is the first task's.
     gait = replace(

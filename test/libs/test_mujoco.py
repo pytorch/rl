@@ -372,6 +372,7 @@ class TestMujoco:
         ]
         stacked = torch.stack(tasks)
         assert stacked.shape == (3,)
+        assert list(stacked.name) == ["standing", "tracking+0.20", "sidestep-0.15"]
         torch.testing.assert_close(
             stacked.command_high, torch.tensor([[0.0, 0.0], [0.2, 0.0], [0.0, -0.15]])
         )
@@ -428,6 +429,9 @@ class TestMujoco:
             MicroDuckEnv.stack_tasks(stale)
         with pytest.raises(ValueError, match="Unknown task field"):
             MicroDuckEnv.tracking_task(0.2, gait_ramp=1.0)
+        with pytest.raises(ValueError, match="string name"):
+            MicroDuckEnv.tracking_task(0.2, name="")
+        assert MicroDuckEnv.tracking_task(0.2, name="fwd").name == "fwd"
         with pytest.raises(ValueError, match="unregistered"):
             MicroDuckEnv.jump_task(reward_weights={"fly": 1.0})
 
@@ -945,13 +949,19 @@ class TestMujoco:
             "max_episode_steps": 20,
             "device": "cpu",  # the models below are built on CPU
             "action_scale": 0.5,
-            "tasks": [{"name": "tracking_task", "speed": 0.03}],
+            "tasks": [{"preset": "tracking_task", "speed": 0.03}],
         }
         assert ppo.task_labels(
-            [{"name": "jump_task"}, {"name": "sidestep_task", "speed": -0.15}]
-        ) == ["jump", "sidestep-0.15"]
+            ppo.make_tasks(
+                [
+                    {"preset": "jump_task"},
+                    {"preset": "sidestep_task", "speed": -0.15},
+                    {"preset": "jump_task", "name": "hop"},
+                ]
+            )
+        ) == ["jump", "sidestep-0.15", "hop"]
         with pytest.raises(ValueError, match="preset"):
-            ppo.make_tasks([{"name": "fly_task"}])
+            ppo.make_tasks([{"preset": "fly_task"}])
         env = ppo.make_env(env_cfg, hidden_size=16)
         actor, critic = ppo.make_models(env, hidden_size=16)
         evaluator = ppo.make_evaluator(
