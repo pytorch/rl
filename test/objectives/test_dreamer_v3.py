@@ -33,7 +33,7 @@ from torchrl.data import Unbounded
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
-from torchrl.modules.distributions.continuous import TanhNormal
+from torchrl.modules.distributions.continuous import IndependentNormal, TanhNormal
 from torchrl.modules.models.model_based import (
     DreamerActor,
     RSSMPosteriorV3,
@@ -644,6 +644,50 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         assert grad_total > 0, "All gradients are zero after actor backward"
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_dreamer_v3_actor_loss_cuda_graph(self, device):
+        device = torch.device(device)
+        if device.type != "cuda":
+            pytest.skip("CUDA graph test only runs for the CUDA parametrization")
+
+        tensordict = self._create_actor_data().to(device).reshape(-1)
+        actor_model = self._create_actor_model().to(device)
+        # The DMC reproduction uses IndependentNormal, whose constructor does
+        # not materialize action bounds from the host during graph capture.
+        actor_model[-1].distribution_class = IndependentNormal
+        continuation_model = TensorDictModule(
+            nn.Sequential(nn.Linear(self.state_dim, 1), nn.Sigmoid()).to(device),
+            in_keys=["state"],
+            out_keys=["continuation"],
+        )
+        loss_module = DreamerV3ActorLoss(
+            actor_model,
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            continuation_model=continuation_model,
+            imagination_horizon=3,
+        )
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_module.to(device)
+
+        warmup_stream = torch.cuda.Stream(device)
+        warmup_stream.wait_stream(torch.cuda.current_stream(device))
+        with torch.cuda.stream(warmup_stream):
+            for _ in range(3):
+                loss_module(tensordict)
+        torch.cuda.current_stream(device).wait_stream(warmup_stream)
+        torch.cuda.synchronize(device)
+
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            loss_td, fake_data = loss_module(tensordict)
+        graph.replay()
+        torch.cuda.synchronize(device)
+
+        assert torch.isfinite(loss_td["loss_actor"])
+        assert fake_data.shape == (tensordict.shape[0], 3)
+
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
         class _ConstantContinuation(nn.Module):
             def forward(self_, state, belief):
@@ -736,6 +780,35 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             horizon=2.0,
             lmbda=0.5,
         )
+        torch.testing.assert_close(
+            target, torch.tensor([[9.8125, 15.25, 23.0]], device=device)
+        )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_dreamer_v3_replay_value_target_cuda_graph(self, device):
+        device = torch.device(device)
+        if device.type != "cuda":
+            pytest.skip("CUDA graph test only runs for the CUDA parametrization")
+
+        reward = torch.tensor([[0.0, 1.0, 2.0, 3.0]], device=device)
+        bootstrap = torch.tensor([[10.0, 20.0, 30.0, 40.0]], device=device)
+        done = torch.zeros_like(reward, dtype=torch.bool)
+        terminated = torch.zeros_like(done)
+
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            target = _replay_value_target(
+                reward,
+                done,
+                terminated,
+                bootstrap,
+                horizon=2.0,
+                lmbda=0.5,
+            )
+        graph.replay()
+        torch.cuda.synchronize(device)
+
         torch.testing.assert_close(
             target, torch.tensor([[9.8125, 15.25, 23.0]], device=device)
         )
@@ -1785,6 +1858,7 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
         "dmc_walker_runs",
         "optimization.compile_rssm=scan",
         "optimization.rssm_scan_unroll=8",
+        "optimization.cudagraph_train_step=true",
         "benchmark.seeds=[0]",
     ]
 

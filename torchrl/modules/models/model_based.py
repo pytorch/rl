@@ -2128,8 +2128,8 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 masked_state.clone(),
                 masked_belief.clone(),
                 action_t,
-                prior_logits,
-                posterior_logits,
+                prior_logits.clone(),
+                posterior_logits.clone(),
                 state.clone(),
                 belief.clone(),
             )

@@ -757,6 +757,9 @@ class DreamerV3ActorLoss(LossModule):
                 policy=self.actor_model,
                 auto_reset=False,
                 tensordict=tensordict,
+                # Imagination is fixed-horizon; skip per-step CUDA-to-host
+                # synchronization for done checks.
+                break_when_any_done=False,
             )
             next_tensordict = step_mdp(fake_data, keep_other=True)
             with hold_out_net(self.value_model):
@@ -978,10 +981,11 @@ def _replay_value_target(
     terminated = terminated.squeeze(-1).unsqueeze(-1)
     bootstrap = bootstrap.squeeze(-1).unsqueeze(-1)
     # The vectorized path discovers and pads trajectory lengths dynamically,
-    # which cannot be captured by Dynamo in fullgraph mode.
+    # which cannot be captured by Dynamo or a CUDA graph.
     return_estimate = (
         td_lambda_return_estimate
         if _is_dynamo_compiling()
+        or (reward.is_cuda and torch.cuda.is_current_stream_capturing())
         else vec_td_lambda_return_estimate
     )
     return return_estimate(
