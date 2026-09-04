@@ -1028,13 +1028,15 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             update_bias,
             num_blocks,
             num_layers,
+            input_before_hidden,
             save_state,
-        ) = args[-6:]
-        tensors = args[:-6]
+        ) = args[-7:]
+        tensors = args[:-7]
         dynamic = [tensors[index : index + 3] for index in range(0, 3 * num_layers, 3)]
         gate_weight, gate_bias = tensors[3 * num_layers :]
-        batch, time, projected_size = projected_input.shape
+        batch, time, input_size = projected_input.shape
         hidden_size = initial_hidden.shape[-1]
+        projected_size = hidden_weight.shape[0]
         block_size = hidden_size // num_blocks
         compute_dtype = projected_input.dtype
         h_pad = max(
@@ -1059,8 +1061,12 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
 
         first_weight = dynamic[0][0].to(compute_dtype)
         first_carry = first_weight[:, :block_size]
-        first_input = first_weight[:, block_size : block_size + projected_size]
-        first_hidden = first_weight[:, block_size + projected_size :]
+        if input_before_hidden:
+            first_input = first_weight[:, block_size : block_size + input_size]
+            first_hidden = first_weight[:, block_size + input_size :]
+        else:
+            first_hidden = first_weight[:, block_size : block_size + projected_size]
+            first_input = first_weight[:, block_size + projected_size :]
         first_recurrent = torch.cat((first_carry, first_hidden), 1)
         first_recurrent_p = F.pad(
             first_recurrent,
@@ -1213,6 +1219,7 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
         ctx.activation_code = activation_code
         ctx.num_blocks = num_blocks
         ctx.num_layers = num_layers
+        ctx.input_before_hidden = input_before_hidden
         ctx.padding = (h_pad, p_pad, d_pad, g_pad, k_rec_pad)
         if save_state:
             ctx.save_for_backward(
@@ -1268,8 +1275,9 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             dynamic_norm_p,
             gate_weight_t_p,
         ) = saved[offset:]
-        batch, time, projected_size = projected_input.shape
+        batch, time, input_size = projected_input.shape
         hidden_size = initial_hidden.shape[-1]
+        projected_size = hidden_weight.shape[0]
         block_size = hidden_size // ctx.num_blocks
         h_pad, p_pad, d_pad, g_pad, k_rec_pad = ctx.padding
         if grad_outputs is None:
@@ -1341,7 +1349,7 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
 
         # Input order: projected_input, initial_hidden, is_init, hidden_weight,
         # hidden_bias, hidden_norm_weight, 3 dynamic params per layer,
-        # gate_weight, gate_bias, then the 6 non-tensor arguments.
+        # gate_weight, gate_bias, then the 7 non-tensor arguments.
         needs_input_grad = ctx.needs_input_grad
         first_weight_index = 6
         gate_weight_index = first_weight_index + 3 * num_layers
@@ -1388,31 +1396,47 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
                     hidden_normalized.float() * hidden_norm_weight.float(),
                     ctx.activation_code,
                 ).to(outputs.dtype)
-                grad_weight = torch.cat(
-                    (
-                        _block_weight_grad(
-                            previous,
-                            grad_pre,
-                            weight[:, :block_size],
-                        ),
-                        _block_weight_grad(
-                            projected_input,
-                            grad_pre,
-                            weight[
-                                :,
-                                block_size : block_size + projected_size,
-                            ],
-                            value_shared_across_blocks=True,
-                        ),
-                        _block_weight_grad(
-                            hidden_features,
-                            grad_pre,
-                            weight[:, block_size + projected_size :],
-                            value_shared_across_blocks=True,
-                        ),
-                    ),
-                    1,
+                grad_carry_weight = _block_weight_grad(
+                    previous,
+                    grad_pre,
+                    weight[:, :block_size],
                 )
+                if ctx.input_before_hidden:
+                    input_weight = weight[:, block_size : block_size + input_size]
+                    hidden_weight = weight[:, block_size + input_size :]
+                else:
+                    hidden_weight = weight[:, block_size : block_size + projected_size]
+                    input_weight = weight[:, block_size + projected_size :]
+                grad_input_weight = _block_weight_grad(
+                    projected_input,
+                    grad_pre,
+                    input_weight,
+                    value_shared_across_blocks=True,
+                )
+                grad_projected_hidden_weight = _block_weight_grad(
+                    hidden_features,
+                    grad_pre,
+                    hidden_weight,
+                    value_shared_across_blocks=True,
+                )
+                if ctx.input_before_hidden:
+                    grad_weight = torch.cat(
+                        (
+                            grad_carry_weight,
+                            grad_input_weight,
+                            grad_projected_hidden_weight,
+                        ),
+                        1,
+                    )
+                else:
+                    grad_weight = torch.cat(
+                        (
+                            grad_carry_weight,
+                            grad_projected_hidden_weight,
+                            grad_input_weight,
+                        ),
+                        1,
+                    )
             else:
                 layer_input = _activation(
                     dynamic_normalized[layer_index - 1].float()
@@ -1435,12 +1459,15 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             )
         if needs_input_grad[0]:
             first_weight = dynamic[0][0].to(outputs.dtype)
-            input_weight = first_weight[:, block_size : block_size + projected_size]
+            if ctx.input_before_hidden:
+                input_weight = first_weight[:, block_size : block_size + input_size]
+            else:
+                input_weight = first_weight[:, block_size + projected_size :]
             # The flat GEMM's reduction dimension sums over the blocks.
             grad_projected = (
                 (
                     grad_dynamic_pre[0].reshape(batch * time, hidden_size)
-                    @ input_weight.transpose(1, 2).reshape(hidden_size, projected_size)
+                    @ input_weight.transpose(1, 2).reshape(hidden_size, input_size)
                 )
                 .reshape_as(projected_input)
                 .to(projected_input.dtype)
@@ -1471,7 +1498,7 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             grad_gate_weight,
             grad_gate_bias,
         )
-        return (*tensor_grads, None, None, None, None, None, None)
+        return (*tensor_grads, None, None, None, None, None, None, None)
 
 
 def dreamer_v3_block_gru_triton(
@@ -1489,6 +1516,7 @@ def dreamer_v3_block_gru_triton(
     update_bias: float,
     num_blocks: int,
     num_layers: int,
+    input_before_hidden: bool = True,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Run the CUDA-only fused DreamerV3 block-GRU recurrence."""
     if not _has_triton:
@@ -1544,5 +1572,6 @@ def dreamer_v3_block_gru_triton(
         update_bias,
         num_blocks,
         num_layers,
+        input_before_hidden,
         save_state,
     )

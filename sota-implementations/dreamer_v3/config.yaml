@@ -27,6 +27,8 @@ networks:
   num_classes: 4
   unimix: 0.01
   recurrent_model: block_gru
+  # Block-GRU execution backend: "reference" or CUDA-only "triton".
+  recurrent_backend: reference
   num_blocks: 8
   dynamics_layers: 1
   prior_layers: 2

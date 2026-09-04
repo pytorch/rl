@@ -213,9 +213,19 @@ class _DreamerV3BlockGRU(nn.Module):
         num_blocks: int,
         num_layers: int,
         norm_eps: float,
+        recurrent_backend: Literal["reference", "triton"] = "reference",
         device=None,
     ):
         super().__init__()
+        if recurrent_backend not in ("reference", "triton"):
+            raise ValueError(
+                "recurrent_backend must be 'reference' or 'triton', got "
+                f"{recurrent_backend!r}."
+            )
+        if recurrent_backend == "triton" and not _has_dreamer_v3_triton:
+            raise RuntimeError(
+                "recurrent_backend='triton' requires Triton 3.3 or newer."
+            )
         if belief_dim % num_blocks:
             raise ValueError(
                 "rnn_hidden_dim must be divisible by num_blocks, got "
@@ -223,6 +233,7 @@ class _DreamerV3BlockGRU(nn.Module):
             )
         self.belief_dim = belief_dim
         self.num_blocks = num_blocks
+        self.recurrent_backend = recurrent_backend
         self.belief_projection = nn.Sequential(
             nn.Linear(belief_dim, hidden_dim, device=device),
             _DreamerV3RMSNorm(hidden_dim, norm_eps, device=device),
@@ -264,6 +275,8 @@ class _DreamerV3BlockGRU(nn.Module):
         action: torch.Tensor,
     ) -> torch.Tensor:
         action = action / action.detach().abs().clamp_min(1)
+        if self.recurrent_backend == "triton":
+            return self._triton(state, belief, action)
         features = torch.cat(
             [
                 self.belief_projection(belief),
@@ -280,6 +293,47 @@ class _DreamerV3BlockGRU(nn.Module):
             num_blocks=self.num_blocks,
             update_bias=-1.0,
         )
+
+    def _triton(
+        self,
+        state: torch.Tensor,
+        belief: torch.Tensor,
+        action: torch.Tensor,
+    ) -> torch.Tensor:
+        from torchrl.modules.models._dreamer_v3_block_gru_triton import (
+            dreamer_v3_block_gru_triton,
+        )
+
+        state_features = self.state_projection(state)
+        action_features = self.action_projection(action)
+        projected_input = torch.cat((state_features, action_features), -1)
+        batch_shape = belief.shape[:-1]
+        projected_input = projected_input.reshape(-1, 1, projected_input.shape[-1])
+        initial_hidden = belief.reshape(-1, self.belief_dim)
+        is_init = belief.new_zeros(initial_hidden.shape[0], 1, dtype=torch.bool)
+        dynamic_parameters = []
+        for index in range(0, len(self.hidden_layers), 3):
+            linear = self.hidden_layers[index]
+            norm = self.hidden_layers[index + 1]
+            dynamic_parameters.extend((linear.weight, linear.bias, norm.weight))
+        output, _ = dreamer_v3_block_gru_triton(
+            projected_input,
+            initial_hidden,
+            is_init,
+            self.belief_projection[0].weight,
+            self.belief_projection[0].bias,
+            self.belief_projection[1].weight,
+            dynamic_parameters,
+            self.gates.weight,
+            self.gates.bias,
+            self.hidden_layers[2],
+            self.hidden_layers[1].eps,
+            -1.0,
+            self.num_blocks,
+            len(self.hidden_layers) // 3,
+            input_before_hidden=False,
+        )
+        return output.reshape(*batch_shape, self.belief_dim)
 
 
 def _activation_with_derivative(
@@ -1425,6 +1479,10 @@ class RSSMPriorV3(nn.Module):
             ``"gru"`` preserves the historical TorchRL implementation while
             ``"block_gru"`` selects the grouped DreamerV3 core. Defaults to
             ``"gru"``.
+        recurrent_backend ("reference" or "triton", optional): Execution
+            backend for ``recurrent_model="block_gru"``. The explicit
+            ``"triton"`` backend requires an NVIDIA GPU and Triton 3.3 or
+            newer. Defaults to ``"reference"``.
         num_blocks (int, optional): Number of groups in the block GRU.
             Defaults to 8.
         num_layers (int, optional): Number of block-linear dynamics layers.
@@ -1468,6 +1526,7 @@ class RSSMPriorV3(nn.Module):
         *,
         action_shape: torch.Size | tuple[int, ...] | None = None,
         recurrent_model: Literal["gru", "block_gru"] = "gru",
+        recurrent_backend: Literal["reference", "triton"] = "reference",
         num_blocks: int = 8,
         num_layers: int = 1,
         prior_num_layers: int = 2,
@@ -1501,6 +1560,10 @@ class RSSMPriorV3(nn.Module):
             )
         if recurrent_model == "block_gru" and action_dim is None:
             raise ValueError("block_gru requires an explicit action_dim.")
+        if recurrent_model != "block_gru" and recurrent_backend != "reference":
+            raise ValueError(
+                "recurrent_backend only applies when recurrent_model='block_gru'."
+            )
         self.recurrent_model = recurrent_model
 
         if recurrent_model == "block_gru":
@@ -1512,6 +1575,7 @@ class RSSMPriorV3(nn.Module):
                 num_blocks=num_blocks,
                 num_layers=num_layers,
                 norm_eps=norm_eps,
+                recurrent_backend=recurrent_backend,
                 device=device,
             )
             prior_layers = []

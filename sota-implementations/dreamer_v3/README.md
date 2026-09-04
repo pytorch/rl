@@ -64,6 +64,18 @@ learner forward/backward:
 ./sota-implementations/dreamer_v3/reproduce_dmc_walker.sh --fast
 ```
 
+The RSSM block GRU has an experimental NVIDIA-only Triton 3.3+ backend. It is
+an explicit ablation because its benefit depends on whether the learner is
+CUDA-graph captured; select it alongside any other Hydra overrides with:
+
+```bash
+./sota-implementations/dreamer_v3/reproduce_dmc_walker.sh --fast \
+  networks.recurrent_backend=triton
+```
+
+The default remains `reference`. Benchmark both choices on the target GPU
+after compile and capture warmup before selecting the Triton backend.
+
 Compilation has an up-front cost, so the short validation remains eager:
 
 ```bash

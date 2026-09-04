@@ -442,10 +442,12 @@ def main(cfg: DictConfig):
     use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
     torchrl_logger.info(
         "DreamerV3 execution: device=%s, replay_device=%s, rssm_backend=%s, "
-        "rssm_scan_unroll=%s, mixed_precision=%s, cudagraph_train_step=%s",
+        "rssm_recurrent_backend=%s, rssm_scan_unroll=%s, mixed_precision=%s, "
+        "cudagraph_train_step=%s",
         device,
         replay_device,
         cfg.optimization.compile_rssm or "eager",
+        cfg.networks.recurrent_backend,
         (
             cfg.optimization.rssm_scan_unroll
             if cfg.optimization.compile_rssm == "scan"
