@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import runpy
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -1754,3 +1757,56 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert prior_grad > 0, "Real prior received no gradient"
         assert posterior_grad > 0, "Real posterior received no gradient"
         assert B == 2 and T == 3
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="requires bash")
+def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
+    repo_root = Path(__file__).parents[2]
+    script = repo_root / "sota-implementations/dreamer_v3/reproduce_dmc_walker.sh"
+    benchmark = repo_root / "sota-implementations/dreamer_v3/benchmark.py"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python"
+    fake_python.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    fake_python.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+
+    fast = subprocess.run(
+        ["bash", str(script), "--fast", "benchmark.seeds=[0]"],
+        check=True,
+        capture_output=True,
+        env=env,
+        text=True,
+    ).stdout.splitlines()
+    assert fast == [
+        str(benchmark),
+        "--output-dir",
+        "dmc_walker_runs",
+        "optimization.compile_rssm=scan",
+        "optimization.rssm_scan_unroll=8",
+        "benchmark.seeds=[0]",
+    ]
+
+    smoke = subprocess.run(
+        ["bash", str(script), "--smoke"],
+        check=True,
+        capture_output=True,
+        env=env,
+        text=True,
+    ).stdout.splitlines()
+    assert smoke[:3] == [str(benchmark), "--output-dir", "dmc_walker_smoke"]
+    assert "replay_buffer.buffer_size=400" in smoke
+    assert "optimization.compile_rssm=null" in smoke
+    assert "optimization.updates_per_batch=1" in smoke
+    assert "optimization.train_ratio=null" in smoke
+
+    incompatible = subprocess.run(
+        ["bash", str(script), "--fast", "--smoke"],
+        check=False,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+    assert incompatible.returncode == 2
+    assert "mutually exclusive" in incompatible.stderr
