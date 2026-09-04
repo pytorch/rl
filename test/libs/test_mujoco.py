@@ -691,6 +691,24 @@ class TestMujoco:
         assert (components["diagnostic_reward_swing_height"] > 0).all()
         assert (components["diagnostic_reward_jump"] == 0).all()
 
+        # Tracking is anisotropic: under the -0.15 sidestep command, a 0.05 m/s
+        # forward drift at the right lateral speed earns less than a 0.05 m/s
+        # lateral shortfall with no drift; under a zero command the two errors
+        # are worth the same.
+        def tracking(state):
+            return env._reward_components(state, action)["diagnostic_reward_tracking"]
+
+        diagonal, short = state.clone(), state.clone()
+        diagonal["qvel"][..., 0], diagonal["qvel"][..., 1] = 0.05, -0.15
+        short["qvel"][..., 1] = -0.10
+        assert (tracking(diagonal) < tracking(short)).all()
+        assert (tracking(short) < tracking(right)).all()
+        env.reset(TensorDict({"task_id": torch.tensor([[3]])}, batch_size=(1,)))
+        forward, lateral = state.clone(), state.clone()
+        forward["qvel"][..., :2] = torch.tensor([0.05, 0.0])
+        lateral["qvel"][..., :2] = torch.tensor([0.0, 0.05])
+        torch.testing.assert_close(tracking(forward), tracking(lateral))
+
         # The fixture starts with both feet airborne: under the jump row,
         # raising the base by the target height earns the full jump reward,
         # the vertical-velocity cost is off and the gait terms are silent.

@@ -48,8 +48,10 @@ The reward is a registry of terms over shared per-step features (body-frame
 velocity, uprightness, joint errors, contacts, foot heights, base height, gait
 phase, command, previous action), multiplied by each env's weight row, with
 every per-second term scaled by the control period in the style of the mjlab
-velocity tasks: Gaussian tracking of the commanded planar velocity and of a
-zero yaw rate, a Gaussian uprightness term, a nominal-pose term (tight for
+velocity tasks: Gaussian tracking of the commanded planar velocity, with a
+tighter width across the commanded direction than along it so that drifting
+sideways while walking or forward while sidestepping earns less than an
+on-axis error of the same size, tracking of a zero yaw rate, a Gaussian uprightness term, a nominal-pose term (tight for
 standing, loose for walking and jumping through the `pose_std` parameter),
 contact-based gait terms (foot air time inside a 0.125 to 0.3 s swing window,
 swing-foot height toward a 2 cm clearance target, agreement between foot

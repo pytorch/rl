@@ -21,7 +21,9 @@ Reward
     A locomotion reward in the style of the mjlab velocity tasks, computed as
     a matrix of registered terms times each env's weight row, with every
     per-second term multiplied by the control period: Gaussian tracking of
-    the commanded planar body-frame velocity and of a zero yaw rate, a
+    the commanded planar body-frame velocity (tighter across the commanded
+    direction than along it, so diagonal motion earns less than an on-axis
+    error of the same size) and of a zero yaw rate, a
     Gaussian uprightness term, a nominal-pose term, contact-based gait terms
     (foot air time inside a swing window, swing-foot height toward a
     clearance target, correct single support with respect to the gait clock,
@@ -1603,10 +1605,29 @@ def _directed_clock(features: TensorDictBase) -> torch.Tensor:
     return direction.to(features["gait_phase"].dtype) * features["gait_phase"].sin()
 
 
-@MicroDuckEnv.register_reward("tracking", weight=2.0, tracking_std=0.1)
+@MicroDuckEnv.register_reward(
+    "tracking", weight=2.0, tracking_std=0.1, tracking_off_axis_std=0.05
+)
 def _tracking(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
-    error = (features["body_velocity"][..., :2] - features["command"]).square().sum(-1)
-    return torch.exp(-error / params["tracking_std"].square())
+    # Anisotropic Gaussian on the planar velocity error: the width across the
+    # commanded direction is tighter than along it, so moving diagonally earns
+    # less than an on-axis error of the same size. A zero command has no axis
+    # and falls back to the isotropic Gaussian.
+    command = features["command"]
+    error = features["body_velocity"][..., :2] - command
+    speed = command.norm(dim=-1)
+    unit = command / speed.clamp_min(1e-8).unsqueeze(-1)
+    along = (error * unit).sum(-1)
+    total = error.square().sum(-1)
+    across = (total - along.square()).clamp_min(0.0)
+    anisotropic = (
+        along.square() / params["tracking_std"].square()
+        + across / params["tracking_off_axis_std"].square()
+    )
+    isotropic = total / params["tracking_std"].square()
+    return torch.exp(
+        -torch.where(speed > MicroDuckEnv.COMMAND_THRESHOLD, anisotropic, isotropic)
+    )
 
 
 @MicroDuckEnv.register_reward("yaw_rate", weight=1.0, yaw_rate_std=0.5**0.5)
