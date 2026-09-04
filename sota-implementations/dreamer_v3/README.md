@@ -53,7 +53,20 @@ CPU execution.
 For a three-seed median and interquartile reproduction run:
 
 ```bash
-python sota-implementations/dreamer_v3/benchmark.py --output-dir dmc_walker_runs
+./sota-implementations/dreamer_v3/reproduce_dmc_walker.sh
+```
+
+For the fastest supported accelerator path, enable the compiled RSSM scan
+(unrolled eight steps at a time):
+
+```bash
+./sota-implementations/dreamer_v3/reproduce_dmc_walker.sh --fast
+```
+
+Compilation has an up-front cost, so the short validation remains eager:
+
+```bash
+./sota-implementations/dreamer_v3/reproduce_dmc_walker.sh --smoke
 ```
 
 The benchmark writes one metrics file per seed plus `summary.json`, aggregates
@@ -65,7 +78,12 @@ minimum final median return of 900; `benchmark.*` Hydra overrides change them,
 as in `benchmark.seeds=[0,1,2,3,4]`. `env.seed` and `logger.metrics_jsonl` are
 set per run and are rejected as overrides, since either would collapse the
 seeds onto one trajectory. Full learning-curve runs are intended for scheduled
-or manual validation; pull-request CI uses short smoke overrides.
+or manual validation; pull-request CI uses short smoke overrides. Set
+`OUTPUT_DIR` to change the output directory (the defaults are
+`dmc_walker_runs` and `dmc_walker_smoke`), and append any other Hydra overrides
+to the wrapper, for example `benchmark.seeds=[0]`. Each run logs the resolved
+training device, replay device, RSSM backend, scan unroll and mixed-precision
+state.
 
 For a smaller ablation, shorten the run rather than the window:
 

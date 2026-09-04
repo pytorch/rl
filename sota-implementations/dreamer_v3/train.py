@@ -439,6 +439,20 @@ def main(cfg: DictConfig):
     replay_device = (
         torch.device(cfg.replay_buffer.device) if cfg.replay_buffer.device else device
     )
+    use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
+    torchrl_logger.info(
+        "DreamerV3 execution: device=%s, replay_device=%s, rssm_backend=%s, "
+        "rssm_scan_unroll=%s, mixed_precision=%s",
+        device,
+        replay_device,
+        cfg.optimization.compile_rssm or "eager",
+        (
+            cfg.optimization.rssm_scan_unroll
+            if cfg.optimization.compile_rssm == "scan"
+            else "n/a"
+        ),
+        use_bfloat16,
+    )
     num_envs = cfg.collector.num_envs
     count_reset_records = cfg.collector.count_reset_records
     collector_action_frames = _validated_action_budget(cfg)
@@ -505,8 +519,6 @@ def main(cfg: DictConfig):
         if cfg.optimization.train_ratio is not None
         else None
     )
-    use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
-
     def train_step(
         sample: TensorDictBase,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
