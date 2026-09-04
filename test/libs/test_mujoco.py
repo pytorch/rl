@@ -291,9 +291,13 @@ class TestMujoco:
         assert env.foot_contacts().all()
         assert (env.foot_heights().abs() < 5e-3).all()
         planted = env._reward_components(env.get_state(), action)
+        # Standing still under a walking command keeps the floor (one half)
+        # of the gait credit, penalty included.
         torch.testing.assert_close(
             planted["diagnostic_reward_double_support"],
-            torch.full((num_envs, 1), -1.0 * 0.02),
+            torch.full((num_envs, 1), -1.0 * 0.02 * 0.5),
+            atol=1e-4,
+            rtol=0,
         )
         assert (planted["diagnostic_reward_phase_contact"] == 0).all()
         state = env.get_state()
@@ -720,10 +724,50 @@ class TestMujoco:
         lateral["qvel"][..., :2] = torch.tensor([0.0, 0.05])
         torch.testing.assert_close(tracking(forward), tracking(lateral))
 
+        # Progress is linear along the command and signed; gait credit keeps
+        # its floor when stepping in place and doubles when moving where
+        # asked, and neither pays for motion perpendicular to a sidestep.
+        env.reset(TensorDict({"task_id": torch.tensor([[1]])}, batch_size=(1,)))
+
+        def term(state, name):
+            return env._reward_components(state, action)[f"diagnostic_reward_{name}"]
+
+        still, half, drift = state.clone(), state.clone(), state.clone()
+        still["qvel"][..., :2] = 0.0
+        half["qvel"][..., :2] = torch.tensor([0.0, -0.075])
+        drift["qvel"][..., :2] = torch.tensor([0.075, 0.0])
+        torch.testing.assert_close(term(still, "progress"), torch.zeros(1, 1))
+        torch.testing.assert_close(
+            term(half, "progress"), torch.full((1, 1), 2.0 * 0.5 * 0.02)
+        )
+        assert (term(left, "progress") < 0).all()
+        torch.testing.assert_close(term(drift, "progress"), torch.zeros(1, 1))
+        torch.testing.assert_close(
+            term(right, "swing_height"), 2 * term(still, "swing_height")
+        )
+        torch.testing.assert_close(
+            term(drift, "swing_height"), term(still, "swing_height")
+        )
+        assert (term(still, "swing_height") > 0).all()
+
         # The fixture starts with both feet airborne: under the jump row,
         # raising the base by the target height earns the full jump reward,
         # the vertical-velocity cost is off and the gait terms are silent.
         env.reset(TensorDict({"task_id": torch.tensor([[2]])}, batch_size=(1,)))
+        # The hop rhythm pays in full for a vertical velocity on the clock's
+        # reference and less off it.
+        phase, _ = env._gait_clock()
+        on_beat, off_beat = env.get_state().clone(), env.get_state().clone()
+        on_beat["qvel"][..., 2] = 0.2 * phase.cos()
+        off_beat["qvel"][..., 2] = 0.2 * phase.cos() + 0.15
+        rhythm = env._reward_components(on_beat, action)["diagnostic_reward_hop_rhythm"]
+        torch.testing.assert_close(
+            rhythm, torch.full((1, 1), MicroDuckEnv.HOP_RHYTHM_WEIGHT * 0.02)
+        )
+        assert (
+            env._reward_components(off_beat, action)["diagnostic_reward_hop_rhythm"]
+            < rhythm
+        ).all()
         risen = env.get_state().clone()
         risen["qpos"][..., 2] += MicroDuckEnv.REWARD_PARAMS["jump_target_height"]
         risen["qvel"][..., 2] = 1.0

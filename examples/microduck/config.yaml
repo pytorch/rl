@@ -40,6 +40,7 @@ ppo:
   gamma: 0.99
   gae_lambda: 0.95
   max_grad_norm: 1.0
+  per_task_advantage: true  # standardize advantages within each task of the library
 
 evaluation:
   interval: 5               # iterations between deterministic evaluations; null disables them

@@ -56,9 +56,13 @@ standing, loose for walking and jumping through the `pose_std` parameter),
 contact-based gait terms (foot air time inside a 0.125 to 0.3 s swing window,
 swing-foot height toward a 2 cm clearance target, agreement between foot
 contacts and the gait clock, mirrored for backward commands, and a penalty for
-keeping both feet planted), a launch term for upward base velocity while both
-feet are planted and a jump term that pays for base height gained above the
-standing height, up to 2 cm, while both feet are off the ground, small
+keeping both feet planted; their credit scales with the progress along the
+command, with a floor of one half, so stepping in place or drifting off-axis
+earns less than moving where asked), a progress term linear in the velocity
+along the command, and three hop terms (a vertical-velocity rhythm on the
+task clock, upward base velocity while both feet are planted, and base height
+gained above the standing height, up to 2 cm, while both feet are off the
+ground), small
 costs on vertical and roll/pitch base motion, joint velocity and action rate,
 and a fixed fall penalty. A term is off when its weight is zero: the standing
 and jump presets zero the gait terms, the jump preset turns the jump term on

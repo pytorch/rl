@@ -27,9 +27,11 @@ Reward
     Gaussian uprightness term, a nominal-pose term, contact-based gait terms
     (foot air time inside a swing window, swing-foot height toward a
     clearance target, correct single support with respect to the gait clock,
-    a penalty for keeping both feet planted), a launch term for upward base
-    velocity while planted and a jump term that pays for base height gained
-    while both feet are airborne, small costs on vertical and
+    a penalty for keeping both feet planted; their credit scales with the
+    progress along the command), a progress term linear in the velocity along
+    the command, hop terms (a vertical-velocity rhythm on the task clock,
+    upward velocity while planted, base height gained while both feet are
+    airborne), small costs on vertical and
     roll/pitch base motion, joint velocity and action rate, and a fixed fall
     penalty. A term is off when its weight is zero; the presets set the
     weights, and :meth:`MicroDuckEnv.register_reward` adds user terms.
@@ -559,6 +561,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     POSE_STD_MOVING: ClassVar[float] = 0.5
     JUMP_WEIGHT: ClassVar[float] = 5.0
     LAUNCH_WEIGHT: ClassVar[float] = 2.0
+    HOP_RHYTHM_WEIGHT: ClassVar[float] = 2.0
+    HOP_FREQUENCY_HZ: ClassVar[float] = 1.5
     GAIT_TERMS: ClassVar[tuple[str, ...]] = (
         "air_time",
         "swing_height",
@@ -1023,12 +1027,15 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     def jump_task(cls, *, weight: float = 1.0, **overrides: Any) -> MicroDuckTask:
         """Hop in place under a zero command (experimental).
 
-        The ``launch`` term pays for upward base velocity while both feet are
-        planted, so the take-off is shaped before any flight happens, and the
-        ``jump`` term pays for base height gained above the standing height
-        while both feet are off the ground, up to the ``jump_target_height``
-        parameter (2 cm). The gait terms and the vertical-velocity cost are
-        off and the pose term is loose so the robot can crouch and extend.
+        Three terms shape the hop. ``hop_rhythm`` tracks a vertical base
+        velocity oscillating on the task clock (1.5 Hz, 0.2 m/s amplitude:
+        a crouch and extension of about 2 cm), so the rhythm is learned before
+        any flight; ``launch`` pays for upward base velocity while both feet
+        are planted; ``jump`` pays for base height gained above the standing
+        height while both feet are off the ground, up to the
+        ``jump_target_height`` parameter (2 cm). The gait terms and the
+        vertical-velocity cost are off and the pose term is loose so the robot
+        can crouch and extend.
 
         The MicroDuck servos (0.55 N m/rad, clipped at 0.96 N m, 0.74 kg
         robot) allow only a small hop: an open-loop crouch and extension with
@@ -1037,7 +1044,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         """
         reward_weights = dict.fromkeys(cls.GAIT_TERMS, 0.0)
         reward_weights.update(
-            {"jump": cls.JUMP_WEIGHT, "launch": cls.LAUNCH_WEIGHT, "lin_vel_z": 0.0}
+            {
+                "jump": cls.JUMP_WEIGHT,
+                "launch": cls.LAUNCH_WEIGHT,
+                "hop_rhythm": cls.HOP_RHYTHM_WEIGHT,
+                "lin_vel_z": 0.0,
+            }
         )
         reward_weights.update(overrides.pop("reward_weights", None) or {})
         return cls.make_task(
@@ -1045,7 +1057,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             (0.0, 0.0),
             weight=weight,
             reward_weights=reward_weights,
-            **{"name": "jump", "pose_std": cls.POSE_STD_MOVING, **overrides},
+            **{
+                "name": "jump",
+                "pose_std": cls.POSE_STD_MOVING,
+                "gait_frequency_hz": cls.HOP_FREQUENCY_HZ,
+                **overrides,
+            },
         )
 
     # ------------------------------------------------------------------
@@ -1628,10 +1645,39 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
 
 
 def _gait_gate(features: TensorDictBase) -> torch.Tensor:
-    """Gait terms only pay while the torso is upright enough to be stepping."""
+    """Contact terms only pay while the torso is upright enough to be stepping."""
     return (features["upright"] >= MicroDuckEnv.MIN_UPRIGHT).to(
         features["upright"].dtype
     )
+
+
+def _progress_fraction(features: TensorDictBase) -> torch.Tensor:
+    """Body velocity along the commanded direction as a fraction of the command.
+
+    Clipped to ``[-1, 1]``; zero under a command below the standing threshold,
+    which has no direction.
+    """
+    command = features["command"]
+    speed = command.norm(dim=-1)
+    unit = command / speed.clamp_min(1e-8).unsqueeze(-1)
+    along = (features["body_velocity"][..., :2] * unit).sum(-1)
+    fraction = (along / speed.clamp_min(1e-8)).clamp(-1.0, 1.0)
+    return torch.where(
+        speed > MicroDuckEnv.COMMAND_THRESHOLD, fraction, torch.zeros_like(fraction)
+    )
+
+
+def _stepping_gate(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    """Gait credit scaled by progress along the command, with a floor.
+
+    Stepping in place keeps ``gait_progress_floor`` of the credit so a policy
+    can still leave the standing optimum; full credit needs the body to move
+    where the command points, so drifting sideways or forward under a
+    sidestep command no longer collects the gait terms for free.
+    """
+    floor = params["gait_progress_floor"]
+    progress = _progress_fraction(features).clamp_min(0.0)
+    return _gait_gate(features) * (floor + (1.0 - floor) * progress)
 
 
 def _directed_clock(features: TensorDictBase) -> torch.Tensor:
@@ -1689,8 +1735,20 @@ def _pose(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     )
 
 
+@MicroDuckEnv.register_reward("progress", weight=2.0)
+def _progress(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    # Linear in the velocity along the command, so the gradient toward moving
+    # where asked does not vanish at zero speed the way the Gaussian does, and
+    # moving against the command costs.
+    return _progress_fraction(features)
+
+
 @MicroDuckEnv.register_reward(
-    "air_time", weight=3.0, air_time_min=0.125, air_time_max=0.3
+    "air_time",
+    weight=3.0,
+    air_time_min=0.125,
+    air_time_max=0.3,
+    gait_progress_floor=0.5,
 )
 def _air_time(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     window = (params["air_time_max"] - params["air_time_min"]).unsqueeze(-1)
@@ -1700,7 +1758,7 @@ def _air_time(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
         ).clamp_min(0.0),
         window,
     )
-    return credited.sum(dim=-1) * _gait_gate(features)
+    return credited.sum(dim=-1) * _stepping_gate(features, params)
 
 
 @MicroDuckEnv.register_reward("swing_height", weight=2.0, swing_target_height=0.02)
@@ -1712,7 +1770,7 @@ def _swing_height(features: TensorDictBase, params: TensorDictBase) -> torch.Ten
     lift = (
         features["foot_heights"] / params["swing_target_height"].unsqueeze(-1)
     ).clamp(0.0, 1.0)
-    return (lift * swing_foot).sum(dim=-1) * _gait_gate(features)
+    return (lift * swing_foot).sum(dim=-1) * _stepping_gate(features, params)
 
 
 @MicroDuckEnv.register_reward("phase_contact", weight=3.0)
@@ -1722,13 +1780,13 @@ def _phase_contact(features: TensorDictBase, params: TensorDictBase) -> torch.Te
     directed_sin = _directed_clock(features)
     expected = torch.stack((directed_sin <= 0, directed_sin > 0), dim=-1)
     correct = (features["contacts"] == expected).all(dim=-1)
-    return correct.to(directed_sin.dtype) * _gait_gate(features)
+    return correct.to(directed_sin.dtype) * _stepping_gate(features, params)
 
 
 @MicroDuckEnv.register_reward("double_support", weight=-1.0)
 def _double_support(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     planted = features["contacts"].all(dim=-1).to(features["upright"].dtype)
-    return planted * _gait_gate(features)
+    return planted * _stepping_gate(features, params)
 
 
 @MicroDuckEnv.register_reward("ang_vel_xy", weight=-0.05)
@@ -1749,6 +1807,18 @@ def _action_rate(features: TensorDictBase, params: TensorDictBase) -> torch.Tens
 @MicroDuckEnv.register_reward("joint_velocity", weight=-0.001)
 def _joint_velocity(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     return features["joint_velocity"].square().sum(-1)
+
+
+@MicroDuckEnv.register_reward(
+    "hop_rhythm", weight=0.0, hop_velocity_amplitude=0.2, hop_velocity_std=0.1
+)
+def _hop_rhythm(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    # Track a vertical base velocity that oscillates on the task clock: a
+    # dense signal for the crouch-and-extend rhythm that a hop needs, which
+    # random exploration around standing does not produce on its own.
+    reference = params["hop_velocity_amplitude"] * features["gait_phase"].cos()
+    error = features["body_velocity"][..., 2] - reference
+    return torch.exp(-error.square() / params["hop_velocity_std"].square())
 
 
 @MicroDuckEnv.register_reward("launch", weight=0.0)
