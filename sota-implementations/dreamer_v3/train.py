@@ -520,6 +520,7 @@ def main(cfg: DictConfig):
         if cfg.optimization.train_ratio is not None
         else None
     )
+
     def train_step(
         sample: TensorDictBase,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
