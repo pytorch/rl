@@ -83,6 +83,7 @@ elif [ "$fast" -eq 1 ]; then
   benchmark_command+=(
     optimization.compile_rssm=scan
     optimization.rssm_scan_unroll=8
+    optimization.cudagraph_train_step=true
   )
 fi
 

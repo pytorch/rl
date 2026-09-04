@@ -842,19 +842,21 @@ class TestDreamerV3Components:
             )
 
     @implement_for("torch", None, "2.6.0", compilable=True)
-    @pytest.mark.parametrize("scope", ["step"])
-    def test_rssm_rollout_compile(self, scope):
-        self._test_rssm_rollout_compile(scope)
+    @pytest.mark.parametrize(("scope", "unroll"), [("step", 1)])
+    def test_rssm_rollout_compile(self, scope, unroll):
+        self._test_rssm_rollout_compile(scope, unroll)
 
     @implement_for("torch", "2.6.0", compilable=True)
-    @pytest.mark.parametrize("scope", ["step", "scan"])
-    def test_rssm_rollout_compile(self, scope):  # noqa: F811
-        self._test_rssm_rollout_compile(scope)
+    @pytest.mark.parametrize(
+        ("scope", "unroll"), [("step", 1), ("scan", 1), ("scan", 3)]
+    )
+    def test_rssm_rollout_compile(self, scope, unroll):  # noqa: F811
+        self._test_rssm_rollout_compile(scope, unroll)
 
-    def _test_rssm_rollout_compile(self, scope):
+    def _test_rssm_rollout_compile(self, scope, unroll):
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
-        rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)
+        rollout.compile_rollout(scope, unroll=unroll)
 
         output = rollout(data)
         (

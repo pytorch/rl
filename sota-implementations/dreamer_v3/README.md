@@ -57,7 +57,8 @@ For a three-seed median and interquartile reproduction run:
 ```
 
 For the fastest supported accelerator path, enable the compiled RSSM scan
-(unrolled eight steps at a time):
+(unrolled eight steps at a time) and CUDA-graph capture of the fixed-shape
+learner forward/backward:
 
 ```bash
 ./sota-implementations/dreamer_v3/reproduce_dmc_walker.sh --fast
@@ -82,8 +83,8 @@ or manual validation; pull-request CI uses short smoke overrides. Set
 `OUTPUT_DIR` to change the output directory (the defaults are
 `dmc_walker_runs` and `dmc_walker_smoke`), and append any other Hydra overrides
 to the wrapper, for example `benchmark.seeds=[0]`. Each run logs the resolved
-training device, replay device, RSSM backend, scan unroll and mixed-precision
-state.
+training device, replay device, RSSM backend, scan unroll, mixed-precision state
+and learner CUDA-graph setting.
 
 For a smaller ablation, shorten the run rather than the window:
 
@@ -107,3 +108,7 @@ recurrence and the imagination prior, and is faster, but its draws fall inside
 the compiled region, so a seeded run diverges from an eager one. The scan uses
 `optimization.rssm_scan_unroll=8` by default; lower values reduce compilation
 time and graph size, while `1` disables manual unrolling.
+`optimization.cudagraph_train_step=true` captures the learner forward and
+backward after five warmup calls. It requires CUDA and fixed input shapes;
+optimizer and target-network steps remain outside capture so their schedules
+continue to advance normally.
