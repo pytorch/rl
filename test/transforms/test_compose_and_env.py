@@ -1427,6 +1427,28 @@ class TestTensorDictPrimer(TransformBase):
         assert "mykey" in env.reset().keys()
         assert ("next", "mykey") in env.rollout(3).keys(True)
 
+    def test_spec_dtype_respected(self):
+        """The float default fill must not promote int/bool specs to float32."""
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TensorDictPrimer(
+                intkey=Unbounded([1], dtype=torch.long),
+                boolkey=Unbounded([1], dtype=torch.bool),
+            ),
+        )
+        check_env_specs(env)
+        reset = env.reset()
+        assert reset["intkey"].dtype is torch.long
+        assert reset["boolkey"].dtype is torch.bool
+        rollout = env.rollout(3)
+        assert rollout[("next", "intkey")].dtype is torch.long
+        assert rollout[("next", "boolkey")].dtype is torch.bool
+
+        t = TensorDictPrimer(intkey=Unbounded([1], dtype=torch.long))
+        td = TensorDict({"a": torch.zeros(())}, [])
+        t(td)
+        assert td["intkey"].dtype is torch.long
+
     def test_nested_key_env(self):
         env = MultiKeyCountingEnv()
         env_obs_spec_prior_primer = env.observation_spec.clone()
