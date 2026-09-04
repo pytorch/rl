@@ -30,13 +30,16 @@ SFT
     SFTLoss
     SFTLossOutput
 
-Distillation
-------------
+Reward Model Training
+---------------------
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
 
+    RewardModelLoss
+    RewardModelLossOutput
+    reward_model_loss
     DistillationLoss
     DistillationLossOutput
     k3_kl_token_estimate

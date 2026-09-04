@@ -544,8 +544,8 @@ SFT
     SFTLoss
     SFTLossOutput
 
-Distillation
-~~~~~~~~~~~~
+Reward Model Training
+~~~~~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: torchrl.objectives.llm
 
@@ -553,6 +553,9 @@ Distillation
     :toctree: generated/
     :template: rl_template.rst
 
+    RewardModelLoss
+    RewardModelLossOutput
+    reward_model_loss
     DistillationLoss
     DistillationLossOutput
     k3_kl_token_estimate
