@@ -1031,7 +1031,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         ``hop_velocity_amplitude`` of 0.2 m/s, for vertical base velocity in
         phase with the task clock (1.5 Hz: a crouch and extension of about
         2 cm), so the rhythm is learned before any flight; ``launch`` pays for
-        upward base velocity while both feet are planted; ``jump`` pays for
+        upward base velocity while both feet are planted, linearly up to
+        ``launch_velocity_scale`` (0.5 m/s, take-off speed); ``jump`` pays for
         base height gained above the standing height while both feet are off
         the ground, up to the ``jump_target_height`` parameter (2 cm). The gait terms and the
         vertical-velocity cost are off and the pose term is loose so the robot
@@ -1824,14 +1825,15 @@ def _hop_rhythm(features: TensorDictBase, params: TensorDictBase) -> torch.Tenso
     return fraction.clamp(-1.0, 1.0) * _gait_gate(features)
 
 
-@MicroDuckEnv.register_reward("launch", weight=0.0)
+@MicroDuckEnv.register_reward("launch", weight=0.0, launch_velocity_scale=0.5)
 def _launch(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
-    # Upward base velocity while both feet are planted, as a fraction of the
-    # hop amplitude: the take-off of a hop, which the airborne-gated jump
-    # term cannot see.
+    # Upward base velocity while both feet are planted, as a fraction of
+    # ``launch_velocity_scale``: the take-off of a hop, which the airborne
+    # gated jump term cannot see. The scale sits well above the rhythm
+    # amplitude so a faster extension keeps paying up to take-off speed.
     planted = features["contacts"].all(dim=-1).to(features["upright"].dtype)
     upward = (
-        features["body_velocity"][..., 2] / params["hop_velocity_amplitude"]
+        features["body_velocity"][..., 2] / params["launch_velocity_scale"]
     ).clamp(0.0, 1.0)
     return upward * planted * _gait_gate(features)
 
