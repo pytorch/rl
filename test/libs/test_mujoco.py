@@ -725,6 +725,7 @@ class TestMujoco:
             "num_envs": 2,
             "seed": 0,
             "max_episode_steps": 20,
+            "device": "cpu",  # the models below are built on CPU
             "task": asdict(task),
         }
         env = ppo.make_env(env_cfg, hidden_size=16)
