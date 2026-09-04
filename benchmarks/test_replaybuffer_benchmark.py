@@ -456,6 +456,52 @@ class create_prioritized_replay_buffer:
         return ((rb,), {})
 
 
+class create_prioritized_extend_rb:
+    """Builds a prioritized buffer ready to be extended.
+
+    ``max_pending`` controls how many ``mark_update`` calls
+    :class:`~torchrl.data.replay_buffers.PrioritizedSampler` defers before it
+    writes them to the segment trees. ``max_pending=0`` restores the eager
+    behavior (one tree write per extend) and is the baseline the lazy path is
+    compared against.
+    """
+
+    def __init__(self, size, batch, max_pending, alpha=0.7, beta=0.5):
+        self.size = size
+        self.batch = batch
+        self.max_pending = max_pending
+        self.alpha = alpha
+        self.beta = beta
+
+    def __call__(self):
+        ext = pytest.importorskip("torchrl._torchrl")
+        if not hasattr(ext, "SumSegmentTreeFp32"):
+            _skip_or_fail_unavailable("TorchRL was not built with segment tree support")
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(self.size),
+            sampler=PrioritizedSampler(
+                max_capacity=self.size,
+                alpha=self.alpha,
+                beta=self.beta,
+                max_pending=self.max_pending,
+            ),
+            batch_size=self.batch,
+        )
+        data = TensorDict({"a": torch.zeros(self.batch, 5)}, batch_size=[self.batch])
+        return ((rb, data), {})
+
+
+def extend_prioritized(rb, data):
+    for _ in range(10):
+        rb.extend(data)
+
+
+def extend_and_sample_prioritized(rb, data):
+    for _ in range(10):
+        rb.extend(data)
+        rb.sample()
+
+
 def _prioritized_sampler_benchmark_devices():
     device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
     if device == "CPU":
@@ -575,6 +621,30 @@ class TestPrioritizedReplayBufferBenchmark:
             batch_size=batch_size,
         )()
         benchmark(sample_prioritized_replay_buffer, rb)
+
+    @pytest.mark.parametrize("max_pending", [0, 64])
+    def test_extend_throughput(self, benchmark, max_pending):
+        """Write-only throughput: ``max_pending=0`` is the eager baseline."""
+        benchmark.pedantic(
+            extend_prioritized,
+            setup=create_prioritized_extend_rb(
+                size=100_000, batch=256, max_pending=max_pending
+            ),
+            iterations=1,
+            rounds=50,
+        )
+
+    @pytest.mark.parametrize("max_pending", [0, 64])
+    def test_extend_sample_throughput(self, benchmark, max_pending):
+        """End-to-end extend/sample loop, where every extend is followed by a flush."""
+        benchmark.pedantic(
+            extend_and_sample_prioritized,
+            setup=create_prioritized_extend_rb(
+                size=100_000, batch=256, max_pending=max_pending
+            ),
+            iterations=1,
+            rounds=50,
+        )
 
 
 def infinite_iter(obj):

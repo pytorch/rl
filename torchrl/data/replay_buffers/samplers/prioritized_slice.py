@@ -151,6 +151,11 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             is tracked within the buffer. When ``False``, the max-priority tracks
             the maximum value since the instantiation of the sampler.
             Defaults to ``False``.
+        max_pending (int, optional): maximum number of :meth:`mark_update` calls
+            whose priority writes may be deferred before the sampler flushes them
+            to the segment trees. See
+            :class:`~torchrl.data.replay_buffers.PrioritizedSampler`.
+            Defaults to ``64``.
 
     Examples:
         >>> import torch
@@ -219,6 +224,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         compile: bool | dict = False,
         span: bool | int | tuple[bool | int, bool | int] = False,
         max_priority_within_buffer: bool = False,
+        max_pending: int = 64,
     ):
         SliceSampler.__init__(
             self,
@@ -244,6 +250,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             dtype=dtype,
             reduction=reduction,
             max_priority_within_buffer=max_priority_within_buffer,
+            max_pending=max_pending,
         )
         if self.span[0]:
             # Span left is hard to achieve because we need to sample 'negative' starts, but to sample
@@ -345,6 +352,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         return preceding_stop_idx
 
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
+        self._flush_pending_updates()
         # Sample `batch_size` indices representing the start of a slice.
         # The sampling is based on a weight vector.
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
