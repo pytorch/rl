@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import abc
 import re
+from collections.abc import Sequence
 from copy import copy
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -632,6 +633,50 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             environment batch size.
         """
         return self._state_td().clone()
+
+    def _mujoco_ids(
+        self, kind: Literal["geom", "site"], names: Sequence[str]
+    ) -> list[int]:
+        import mujoco
+
+        obj_type = {
+            "geom": mujoco.mjtObj.mjOBJ_GEOM,
+            "site": mujoco.mjtObj.mjOBJ_SITE,
+        }[kind]
+        model = self._backend.mj_model
+        ids = []
+        for name in names:
+            obj_id = mujoco.mj_name2id(model, obj_type, name)
+            if obj_id < 0:
+                raise KeyError(f"The MuJoCo model has no {kind} named {name!r}.")
+            ids.append(int(obj_id))
+        return ids
+
+    def geom_contacts(self, geom_names: Sequence[str]) -> torch.Tensor:
+        """Report which of the named geoms currently touch another geom.
+
+        A geom counts as touching when it takes part in an active contact
+        whose distance is non-positive. Useful for contact-based gait metrics
+        such as foot-strike detection.
+
+        Args:
+            geom_names: MuJoCo geom names to query.
+
+        Returns:
+            A ``(num_envs, len(geom_names))`` boolean tensor.
+        """
+        return self._backend.geom_contacts(self._mujoco_ids("geom", geom_names))
+
+    def site_positions(self, site_names: Sequence[str]) -> torch.Tensor:
+        """Return the world-frame positions of the named sites.
+
+        Args:
+            site_names: MuJoCo site names to query.
+
+        Returns:
+            A ``(num_envs, len(site_names), 3)`` tensor of xyz positions.
+        """
+        return self._backend.site_positions(self._mujoco_ids("site", site_names))
 
     def _index_extra_state(self, index: slice | torch.Tensor) -> dict[str, Any]:
         """Return subclass-owned batched state for an indexed env snapshot."""

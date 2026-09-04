@@ -21,6 +21,7 @@ from __future__ import annotations
 import abc
 import importlib.util
 import urllib.request
+from collections.abc import Sequence
 from copy import copy
 from pathlib import Path
 from typing import Any, Literal
@@ -111,6 +112,16 @@ def resolve_xml_string(path_or_url: str | Path) -> str:
     return Path(p).read_text()
 
 
+def _batched_geom_contacts(
+    geom: torch.Tensor, dist: torch.Tensor, geom_ids: Sequence[int]
+) -> torch.Tensor:
+    """Reduce ``(num_envs, ncon, 2)`` contact pairs to per-geom contact flags."""
+    ids = torch.as_tensor(list(geom_ids), dtype=torch.long, device=geom.device)
+    active = (dist <= 0).unsqueeze(-1)
+    touching = (geom[..., :1] == ids) | (geom[..., 1:] == ids)
+    return (touching & active).any(dim=-2)
+
+
 class _PhysicsBackend(abc.ABC):
     """Common contract across the three engines.
 
@@ -193,6 +204,38 @@ class _PhysicsBackend(abc.ABC):
     def time(self) -> torch.Tensor:
         """Current simulation time per env, shape ``(num_envs,)``."""
 
+    @property
+    @abc.abstractmethod
+    def mj_model(self) -> Any:
+        """The compiled ``mujoco.MjModel`` this backend was built from."""
+
+    def geom_contacts(self, geom_ids: Sequence[int]) -> torch.Tensor:
+        """Whether each geom currently touches another geom.
+
+        A geom is in contact when it appears in an active contact whose
+        distance is non-positive, i.e. the geoms touch or penetrate.
+
+        Args:
+            geom_ids: MuJoCo geom ids to query.
+
+        Returns:
+            A ``(num_envs, len(geom_ids))`` boolean tensor on ``self.device``.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not expose contacts.")
+
+    def site_positions(self, site_ids: Sequence[int]) -> torch.Tensor:
+        """World-frame positions of the requested sites.
+
+        Args:
+            site_ids: MuJoCo site ids to query.
+
+        Returns:
+            A ``(num_envs, len(site_ids), 3)`` float tensor on ``self.device``.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not expose site positions."
+        )
+
     def render(
         self,
         *,
@@ -259,7 +302,18 @@ class _TorchBackend(_PhysicsBackend):
 
     def _init_model(self, source: ModelSource) -> None:
         import mujoco
-        import mujoco_torch
+
+        try:
+            import mujoco_torch
+        except AttributeError as err:
+            # mujoco-torch mirrors MuJoCo enums at import time, so a release
+            # built for another MuJoCo version fails with an AttributeError.
+            raise ImportError(
+                "backend='mujoco-torch' could not import mujoco_torch against "
+                f"mujoco {mujoco.__version__}: {err}. Install a mujoco-torch "
+                "build that matches this MuJoCo version, or pass "
+                "backend='mjx' or backend='mujoco'."
+            ) from err
 
         m_mj = _load_mujoco_model(source)
         d_mj = mujoco.MjData(m_mj)
@@ -436,6 +490,22 @@ class _TorchBackend(_PhysicsBackend):
             t = t.expand(self.num_envs)
         return t
 
+    @property
+    def mj_model(self) -> Any:
+        return self._m_mj
+
+    def geom_contacts(self, geom_ids: Sequence[int]) -> torch.Tensor:
+        contact = self._dx.contact
+        return _batched_geom_contacts(
+            contact.geom.to(self.device),
+            contact.dist.to(self.device),
+            geom_ids,
+        )
+
+    def site_positions(self, site_ids: Sequence[int]) -> torch.Tensor:
+        ids = torch.as_tensor(list(site_ids), dtype=torch.long, device=self.device)
+        return self._dx.site_xpos.to(self.device)[:, ids].to(torch.float32)
+
     def render(
         self,
         *,
@@ -596,6 +666,30 @@ class _MujocoBackend(_PhysicsBackend):
     @property
     def time(self) -> torch.Tensor:
         return torch.tensor([self._d.time], device=self.device, dtype=torch.float32)
+
+    @property
+    def mj_model(self) -> Any:
+        return self._m
+
+    def geom_contacts(self, geom_ids: Sequence[int]) -> torch.Tensor:
+        ncon = int(self._d.ncon)
+        geom = torch.as_tensor(
+            np.stack(
+                (self._d.contact.geom1[:ncon], self._d.contact.geom2[:ncon]), axis=-1
+            ).reshape(1, ncon, 2),
+            device=self.device,
+        )
+        dist = torch.as_tensor(
+            self._d.contact.dist[:ncon].reshape(1, ncon), device=self.device
+        )
+        return _batched_geom_contacts(geom, dist, geom_ids)
+
+    def site_positions(self, site_ids: Sequence[int]) -> torch.Tensor:
+        return torch.as_tensor(
+            self._d.site_xpos[list(site_ids)].copy(),
+            device=self.device,
+            dtype=torch.float32,
+        ).unsqueeze(0)
 
     def render(
         self,
@@ -828,6 +922,21 @@ class _MJXBackend(_PhysicsBackend):
     @property
     def time(self) -> torch.Tensor:
         return self._jax_to_torch(self._dx.time)
+
+    @property
+    def mj_model(self) -> Any:
+        return self._m_mj
+
+    def geom_contacts(self, geom_ids: Sequence[int]) -> torch.Tensor:
+        from torchrl.envs.libs.jax_utils import _ndarray_to_tensor
+
+        contact = self._dx.contact
+        geom = _ndarray_to_tensor(contact.geom).to(self.device)
+        dist = _ndarray_to_tensor(contact.dist).to(self.device)
+        return _batched_geom_contacts(geom, dist, geom_ids)
+
+    def site_positions(self, site_ids: Sequence[int]) -> torch.Tensor:
+        return self._jax_to_torch(self._dx.site_xpos[:, list(site_ids)])
 
     def render(
         self,
