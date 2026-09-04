@@ -221,6 +221,9 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         compile_step: when ``backend="mujoco-torch"``, wrap the per-env
             physics step in :func:`torch.compile`. Ignored otherwise.
         compile_kwargs: forwarded to :func:`torch.compile` when applicable.
+            ``fullgraph=True`` is used unless overridden, so a graph break in
+            the physics step raises instead of silently falling back to eager
+            fragments.
         from_pixels: if ``True``, include a ``"pixels"`` observation rendered
             from MuJoCo at reset and after every step.
         pixels_only: if ``True``, return only the ``"pixels"`` observation.

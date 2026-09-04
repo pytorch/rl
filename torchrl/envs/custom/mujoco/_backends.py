@@ -320,8 +320,14 @@ class _TorchBackend(_PhysicsBackend):
         # keep the frame_skip loop in Python. Compiling the unrolled loop
         # blows up the graph (50x more nodes), which sends inductor's
         # fusion analysis into multi-hour territory on CUDA backends.
+        #
+        # ``fullgraph=True`` by default: a graph break inside ``vmap(step)``
+        # would otherwise be papered over by splitting the step into eager
+        # fragments (and, once the recompile limit is hit, by falling back
+        # to eager entirely), silently discarding the compiled path.
         if self._compile_step:
-            base_compiled = torch.compile(base, **self._compile_kwargs)
+            compile_kwargs = {"fullgraph": True, **self._compile_kwargs}
+            base_compiled = torch.compile(base, **compile_kwargs)
 
             def _multi_step(d, frame_skip: int):
                 for _ in range(frame_skip):
