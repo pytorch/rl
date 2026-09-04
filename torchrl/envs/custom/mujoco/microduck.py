@@ -67,8 +67,9 @@ MICRODUCK_RL_ARCHIVE_URL = (
     "https://github.com/pollen-robotics/microduck_rl/archive/{commit}.zip"
 )
 
+# A reward term maps (features, params) to a (num_envs,) tensor; see
+# MicroDuckEnv.register_reward.
 RewardTerm = Callable[[TensorDictBase, TensorDictBase], torch.Tensor]
-"""A reward term: ``(features, params) -> (num_envs,)``, see :meth:`MicroDuckEnv.register_reward`."""
 
 
 def _download_microduck_rl(root: Path, commit: str, *, force: bool) -> Path:
@@ -780,7 +781,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         per_second: bool = True,
         **params: float,
     ) -> Callable[[RewardTerm], RewardTerm]:
-        """Register a reward term that every task weights.
+        r"""Register a reward term that every task weights.
 
         Used as a decorator on a function ``(features, params) -> Tensor`` of
         shape ``(num_envs,)``. ``features`` is the step's feature TensorDict
@@ -804,7 +805,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 rate and is multiplied by the control period, like the mjlab
                 velocity tasks. ``False`` for one-off terms such as the fall
                 penalty.
-            \\*\\*params: default values of parameters the term reads from
+            \*\*params: default values of parameters the term reads from
                 ``params``; the presets carry them and accept overrides by
                 name. A parameter name may be registered by one term only.
 
