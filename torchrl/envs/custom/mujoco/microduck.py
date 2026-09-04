@@ -27,8 +27,9 @@ Reward
     Gaussian uprightness term, a nominal-pose term, contact-based gait terms
     (foot air time inside a swing window, swing-foot height toward a
     clearance target, correct single support with respect to the gait clock,
-    a penalty for keeping both feet planted), a jump term that pays for base
-    height gained while both feet are airborne, small costs on vertical and
+    a penalty for keeping both feet planted), a launch term for upward base
+    velocity while planted and a jump term that pays for base height gained
+    while both feet are airborne, small costs on vertical and
     roll/pitch base motion, joint velocity and action rate, and a fixed fall
     penalty. A term is off when its weight is zero; the presets set the
     weights, and :meth:`MicroDuckEnv.register_reward` adds user terms.
@@ -556,6 +557,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     POSE_STD_STANDING: ClassVar[float] = 0.1
     POSE_STD_MOVING: ClassVar[float] = 0.5
     JUMP_WEIGHT: ClassVar[float] = 5.0
+    LAUNCH_WEIGHT: ClassVar[float] = 2.0
     GAIT_TERMS: ClassVar[tuple[str, ...]] = (
         "air_time",
         "swing_height",
@@ -707,31 +709,67 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 f"A task library has one batch dimension, got shape {library.shape}."
             )
         library = library.contiguous()
+        cls._validate_rows(library)
+        if library.weight.sum() <= 0:
+            raise ValueError("Task weights must not all be zero.")
+        return library
+
+    @classmethod
+    def _validate_rows(cls, rows: MicroDuckTask) -> None:
+        """Range and finiteness checks shared by :meth:`make_task` and :meth:`stack_tasks`."""
         num_terms = len(cls.REWARD_TERMS)
-        if library.reward_weights.shape[-1:] != (num_terms,):
+        if rows.reward_weights.shape[-1:] != (num_terms,):
             raise ValueError(
                 f"reward_weights must have one entry per registered term "
                 f"({num_terms}: {tuple(cls.REWARD_TERMS)}), got shape "
-                f"{tuple(library.reward_weights.shape[1:])}. Build the tasks after "
+                f"{tuple(rows.reward_weights.shape[1:])}. Build the tasks after "
                 "registering every term."
             )
-        missing = set(cls.REWARD_PARAMS) - set(library.params.keys())
+        missing = set(cls.REWARD_PARAMS) - set(rows.params.keys())
         if missing:
             raise ValueError(f"tasks are missing the reward params {sorted(missing)}.")
-        if library.command_low.shape[-1:] != (2,) or library.command_high.shape[
-            -1:
-        ] != (2,):
+        for field in (
+            "command_low",
+            "command_high",
+            "warm_start_velocity",
+            "warm_start_fraction",
+            "joint_reset_noise_scale",
+            "gait_frequency_hz",
+            "gait_frequency_per_mps",
+            "reward_weights",
+            "weight",
+        ):
+            if not torch.isfinite(getattr(rows, field)).all():
+                raise ValueError(f"Task field {field!r} must be finite.")
+        for key, value in rows.params.items():
+            if not torch.isfinite(value).all():
+                raise ValueError(f"Reward param {key!r} must be finite.")
+        if rows.command_low.shape[-1:] != (2,) or rows.command_high.shape[-1:] != (2,):
             raise ValueError("command_low and command_high are planar (vx, vy) boxes.")
-        if (library.command_low > library.command_high).any():
+        if (rows.command_low > rows.command_high).any():
             raise ValueError("Every task needs command_low <= command_high.")
-        if (library.weight < 0).any() or library.weight.sum() <= 0:
-            raise ValueError("Task weights must be non-negative and not all zero.")
-        fraction = library.warm_start_fraction
+        if (
+            rows.warm_start_velocity.shape[-1:] != (2,)
+            or (
+                rows.warm_start_velocity[..., 0] > rows.warm_start_velocity[..., 1]
+            ).any()
+        ):
+            raise ValueError("warm_start_velocity must be a (low, high) pair.")
+        if (rows.warm_start_velocity < 0).any():
+            raise ValueError("warm_start_velocity speeds must be non-negative.")
+        fraction = rows.warm_start_fraction
         if ((fraction < 0) | (fraction > 1)).any():
             raise ValueError("warm_start_fraction must be in [0, 1].")
-        if not all(isinstance(name, str) and name for name in library.name):
+        if (rows.joint_reset_noise_scale < 0).any():
+            raise ValueError("joint_reset_noise_scale must be non-negative.")
+        if (rows.gait_frequency_hz <= 0).any():
+            raise ValueError("gait_frequency_hz must be positive.")
+        if (rows.gait_frequency_per_mps < 0).any():
+            raise ValueError("gait_frequency_per_mps must be non-negative.")
+        if (rows.weight < 0).any():
+            raise ValueError("Task weights must be non-negative.")
+        if not all(isinstance(name, str) and name for name in rows.name):
             raise ValueError("Every task needs a non-empty string name.")
-        return library
 
     @classmethod
     def register_reward(
@@ -852,16 +890,6 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             )
         weights.update(reward_weights or {})
         warm_low, warm_high = fields["warm_start_velocity"]
-        if warm_low > warm_high:
-            raise ValueError("warm_start_velocity must be a (low, high) pair.")
-        if not 0.0 <= float(fields["warm_start_fraction"]) <= 1.0:
-            raise ValueError("warm_start_fraction must be in [0, 1].")
-        if len(command_low) != 2 or len(command_high) != 2:
-            raise ValueError("command_low and command_high are planar (vx, vy) pairs.")
-        if any(low > high for low, high in zip(command_low, command_high)):
-            raise ValueError("A task needs command_low <= command_high.")
-        if weight < 0:
-            raise ValueError("A task weight must be non-negative.")
         task = MicroDuckTask(
             command_low=torch.tensor(command_low, dtype=torch.float32),
             command_high=torch.tensor(command_high, dtype=torch.float32),
@@ -895,6 +923,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             name=name,
             batch_size=[],
         )
+        cls._validate_rows(task.unsqueeze(0))
         return task
 
     @classmethod
@@ -991,15 +1020,24 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
 
     @classmethod
     def jump_task(cls, *, weight: float = 1.0, **overrides: Any) -> MicroDuckTask:
-        """Jump in place under a zero command.
+        """Hop in place under a zero command (experimental).
 
-        The jump term pays for base height gained above the standing height
+        The ``launch`` term pays for upward base velocity while both feet are
+        planted, so the take-off is shaped before any flight happens, and the
+        ``jump`` term pays for base height gained above the standing height
         while both feet are off the ground, up to the ``jump_target_height``
-        parameter; the gait terms and the vertical-velocity cost are off and
-        the pose term is loose so the robot can crouch and extend.
+        parameter (2 cm). The gait terms and the vertical-velocity cost are
+        off and the pose term is loose so the robot can crouch and extend.
+
+        The MicroDuck servos (0.55 N m/rad, clipped at 0.96 N m, 0.74 kg
+        robot) allow only a small hop: an open-loop crouch and extension with
+        ``action_scale=1.0`` leaves the ground for about 0.1 s and gains 1 to
+        2 cm. No policy has learned the hop yet.
         """
         reward_weights = dict.fromkeys(cls.GAIT_TERMS, 0.0)
-        reward_weights.update({"jump": cls.JUMP_WEIGHT, "lin_vel_z": 0.0})
+        reward_weights.update(
+            {"jump": cls.JUMP_WEIGHT, "launch": cls.LAUNCH_WEIGHT, "lin_vel_z": 0.0}
+        )
         reward_weights.update(overrides.pop("reward_weights", None) or {})
         return cls.make_task(
             (0.0, 0.0),
@@ -1712,7 +1750,16 @@ def _joint_velocity(features: TensorDictBase, params: TensorDictBase) -> torch.T
     return features["joint_velocity"].square().sum(-1)
 
 
-@MicroDuckEnv.register_reward("jump", weight=0.0, jump_target_height=0.05)
+@MicroDuckEnv.register_reward("launch", weight=0.0)
+def _launch(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    # Upward base velocity while both feet are planted: the take-off of a
+    # hop, which the airborne-gated jump term cannot see.
+    planted = features["contacts"].all(dim=-1).to(features["upright"].dtype)
+    upward = features["body_velocity"][..., 2].clamp_min(0.0)
+    return upward * planted * _gait_gate(features)
+
+
+@MicroDuckEnv.register_reward("jump", weight=0.0, jump_target_height=0.02)
 def _jump(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     # Height gained with both feet in the air, so hopping in place beats
     # standing tall on the toes.

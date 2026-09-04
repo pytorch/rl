@@ -56,8 +56,9 @@ standing, loose for walking and jumping through the `pose_std` parameter),
 contact-based gait terms (foot air time inside a 0.125 to 0.3 s swing window,
 swing-foot height toward a 2 cm clearance target, agreement between foot
 contacts and the gait clock, mirrored for backward commands, and a penalty for
-keeping both feet planted), a jump term that pays for base height gained above
-the standing height, up to 5 cm, while both feet are off the ground, small
+keeping both feet planted), a launch term for upward base velocity while both
+feet are planted and a jump term that pays for base height gained above the
+standing height, up to 2 cm, while both feet are off the ground, small
 costs on vertical and roll/pitch base motion, joint velocity and action rate,
 and a fixed fall penalty. A term is off when its weight is zero: the standing
 and jump presets zero the gait terms, the jump preset turns the jump term on
@@ -138,7 +139,11 @@ trains a command distribution and
 `'env.tasks=[{preset:standing_task},{preset:tracking_task,speed:0.2},{preset:tracking_task,speed:-0.2},{preset:sidestep_task,speed:0.15,weight:0.5},{preset:sidestep_task,speed:-0.15,weight:0.5},{preset:jump_task}]'`
 the whole mixture, with one evaluator per task (logged under the task's
 `name`, e.g. `evaluation/sidestep+0.15/`) and a policy conditioned on the task
-index; `env.task_id=2` pins one task at every reset (evaluation, rendering). `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
+index; `env.task_id=2` pins one task at every reset (evaluation, rendering).
+Sidestep and jump tasks need the from-scratch recipe, `policy.head=gaussian
+env.action_scale=1.0`: the closed-form gait prior of the default
+`gait-residual` head only walks along the forward command and the script
+refuses those tasks with it. `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
 `policy.init_from` read directly.
 

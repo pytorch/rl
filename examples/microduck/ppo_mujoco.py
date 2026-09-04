@@ -246,6 +246,31 @@ def make_tasks(entries: Sequence[Mapping[str, Any]]) -> list[MicroDuckTask]:
     return tasks
 
 
+def check_gait_prior(tasks: Sequence[MicroDuckTask], labels: Sequence[str]) -> None:
+    """Refuse tasks the closed-form gait prior cannot express.
+
+    The gait of ``heuristic_gait.py`` walks along the body x axis with a
+    direction read from the sign of the forward command, so a task with a
+    lateral command and no forward one, or a jump task, leaves the
+    ``gait-residual`` head with a balance-only prior and a bounded residual.
+    Those tasks need ``policy.head=gaussian`` (and ``env.action_scale=1.0``).
+    """
+    threshold = MicroDuckEnv.COMMAND_THRESHOLD
+    jump_index = list(MicroDuckEnv.REWARD_TERMS).index("jump")
+    for task, label in zip(tasks, labels):
+        box = torch.stack((task.command_low, task.command_high))
+        forward = bool((box[:, 0].abs() > threshold).any())
+        lateral = bool((box[:, 1].abs() > threshold).any())
+        jumping = bool(task.reward_weights[jump_index] > 0)
+        if (lateral and not forward) or jumping:
+            raise ValueError(
+                f"policy.head=gait-residual cannot express task {label!r}: the "
+                "closed-form gait only walks along the forward command. Use "
+                "policy.head=gaussian env.action_scale=1.0 for sidestep and jump "
+                "tasks."
+            )
+
+
 def task_labels(tasks: Sequence[MicroDuckTask]) -> list[str]:
     """Metric group of every task of the library: its name, made unique.
 
@@ -978,6 +1003,8 @@ def main(cfg: DictConfig) -> None:
     config = OmegaConf.to_container(cfg, resolve=True)
     tasks = make_tasks(config["env"]["tasks"])
     labels = task_labels(tasks)
+    if cfg.policy.head == "gait-residual":
+        check_gait_prior(tasks, labels)
     # The closed-form gait follows the clock the tasks expose in the
     # observation; its frequency is the first task's.
     gait = replace(

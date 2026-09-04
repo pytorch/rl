@@ -432,6 +432,17 @@ class TestMujoco:
         with pytest.raises(ValueError, match="string name"):
             MicroDuckEnv.tracking_task(0.2, name="")
         assert MicroDuckEnv.tracking_task(0.2, name="fwd").name == "fwd"
+        # Non-finite or out-of-range rows are rejected when built and when stacked.
+        with pytest.raises(ValueError, match="finite"):
+            MicroDuckEnv.tracking_task(0.2, reward_weights={"tracking": float("nan")})
+        with pytest.raises(ValueError, match="finite"):
+            MicroDuckEnv.tracking_task(float("inf"))
+        with pytest.raises(ValueError, match="gait_frequency_hz"):
+            MicroDuckEnv.tracking_task(0.2, gait_frequency_hz=0.0)
+        poisoned = tasks[1].clone()
+        poisoned.reward_weights[0] = float("nan")
+        with pytest.raises(ValueError, match="finite"):
+            MicroDuckEnv.stack_tasks([tasks[0], poisoned])
         with pytest.raises(ValueError, match="unregistered"):
             MicroDuckEnv.jump_task(reward_weights={"fly": 1.0})
 
@@ -980,6 +991,13 @@ class TestMujoco:
         ) == ["jump", "sidestep-0.15", "hop"]
         with pytest.raises(ValueError, match="preset"):
             ppo.make_tasks([{"preset": "fly_task"}])
+        # The gait-residual head cannot express a sidestep or a jump.
+        library = ppo.make_tasks(
+            [{"preset": "tracking_task", "speed": 0.2}, {"preset": "sidestep_task"}]
+        )
+        with pytest.raises(ValueError, match="gait-residual"):
+            ppo.check_gait_prior(library, ppo.task_labels(library))
+        ppo.check_gait_prior(library[:1], ppo.task_labels(library[:1]))
         env = ppo.make_env(env_cfg, hidden_size=16)
         actor, critic = ppo.make_models(env, hidden_size=16)
         evaluator = ppo.make_evaluator(
