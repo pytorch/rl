@@ -23,12 +23,14 @@ from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import Logger
 from torchrl.trainers.trainers import (
     LogScalar,
     LRSchedulerHook,
     ReplayBufferTrainer,
+    TargetNetUpdaterHook,
     Trainer,
     UpdateWeights,
     ValueEstimatorHook,
@@ -61,6 +63,12 @@ class OnPolicyTrainer(Trainer):
         optimizer (optim.Optimizer, optional): The optimizer for training.
         lr_scheduler (optim.lr_scheduler.LRScheduler, optional): Learning-rate scheduler,
             stepped once per collected batch via :class:`~torchrl.trainers.LRSchedulerHook`.
+        target_net_updater (TargetNetUpdater, optional): Target-parameter updater, stepped
+            after every optimizer step via :class:`~torchrl.trainers.TargetNetUpdaterHook`.
+            Pair it with a loss built with ``delay_actor=True`` (see
+            :class:`~torchrl.objectives.ClipPPOLoss`) to maintain the proximal policy of
+            PPO-EWMA: a :class:`~torchrl.objectives.SoftUpdate` turns it into an
+            exponentially-weighted moving average of the policy. Default: ``None``.
         logger (Logger, optional): Logger for tracking training metrics.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Default: True.
         clip_norm (float, optional): Maximum gradient norm value.
@@ -118,6 +126,7 @@ class OnPolicyTrainer(Trainer):
         loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
         lr_scheduler: optim.lr_scheduler.LRScheduler | None = None,
+        target_net_updater: TargetNetUpdater | None = None,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -167,6 +176,7 @@ class OnPolicyTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
+            target_net_updater=target_net_updater,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
@@ -216,6 +226,12 @@ class OnPolicyTrainer(Trainer):
 
         if lr_scheduler is not None:
             LRSchedulerHook(lr_scheduler).register(self)
+
+        if target_net_updater is not None:
+            # stepped after every optimizer step, as the PPO-EWMA proximal
+            # policy requires (a post_steps registration would only step it
+            # once per collected batch)
+            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         if hasattr(self.loss_module, "set_keys"):
             self.loss_module.set_keys(

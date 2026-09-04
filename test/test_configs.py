@@ -2889,6 +2889,122 @@ trainer:
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ppo_ewma_trainer_parsing_with_file(self, tmpdir):
+        """PPO-EWMA: a soft target updater on a delay_actor loss reaches the trainer."""
+        os.makedirs(tmpdir / "save", exist_ok=True)
+
+        yaml_config = f"""
+defaults:
+  - env@training_env: gym
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  - collector@data_collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@storage: tensor
+  - sampler@sampler: without_replacement
+  - writer@writer: round_robin
+  - trainer@trainer: ppo
+  - optimizer@optimizer: adam
+  - loss@loss: ppo
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 4
+
+  value_network:
+    out_features: 1
+    in_features: 4
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${{networks.policy_network}}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${{networks.value_network}}
+
+training_env:
+  env_name: CartPole-v1
+
+storage:
+  max_size: 1000
+  device: cpu
+  ndim: 1
+
+replay_buffer:
+  storage: ${{storage}}
+  sampler: ${{sampler}}
+  writer: ${{writer}}
+
+loss:
+  actor_network: ${{models.policy_model}}
+  critic_network: ${{models.value_model}}
+  delay_actor: true
+  max_importance_ratio: 100.0
+
+target_net_updater:
+  eps: 0.889
+  tau: null
+
+data_collector:
+  create_env_fn: ${{training_env}}
+  policy: ${{models.policy_model}}
+  total_frames: 1000
+  frames_per_batch: 100
+
+optimizer:
+  lr: 0.001
+
+logger:
+  exp_name: test_exp
+
+trainer:
+  collector: ${{data_collector}}
+  optimizer: ${{optimizer}}
+  replay_buffer: ${{replay_buffer}}
+  loss_module: ${{loss}}
+  target_net_updater: ${{target_net_updater}}
+  logger: ${{logger}}
+  total_frames: 1000
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 100.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 100
+  log_interval: 100
+  save_trainer_file: {tmpdir}/save/ckpt.pt
+  optim_steps_per_batch: 1
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)
+    assert trainer.loss_module.delay_actor
+    assert float(trainer.loss_module.max_importance_ratio) == 100.0
+    assert isinstance(trainer.target_net_updater, torchrl.objectives.SoftUpdate)
+    assert trainer.target_net_updater.eps == 0.889
+    # the updater is stepped after every optimizer step
+    assert any(
+        isinstance(getattr(op, "__wrapped__", op), torchrl.trainers.trainers.TargetNetUpdaterHook)
+        for op, _ in trainer._post_optim_ops
+    )
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_a2c_trainer_parsing_with_file(self, tmpdir):
         """Test A2C trainer parsing with file config."""
         os.makedirs(tmpdir / "save", exist_ok=True)

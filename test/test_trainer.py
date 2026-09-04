@@ -23,6 +23,12 @@ from torch import nn
 _has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
+from tensordict.nn import (
+    NormalParamExtractor,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+)
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.data import (
     LazyMemmapStorage,
@@ -33,7 +39,8 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.objectives import LossModule
+from torchrl.modules import TanhNormal
+from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
@@ -1987,6 +1994,96 @@ class TestLRSchedulerHook:
         # no new optimization step: the scheduler must not advance
         hook()
         assert optimizer.param_groups[0]["lr"] == 0.5
+
+
+class TestOnPolicyTargetNetUpdater:
+    # OnPolicyTrainer(target_net_updater=...) must step the updater after every
+    # optimizer step: this is what keeps the proximal policy of a
+    # ClipPPOLoss(delay_actor=True) an EWMA of the policy (PPO-EWMA)
+
+    @staticmethod
+    def _make_trainer(updater_cls, **updater_kwargs):
+        torch.manual_seed(0)
+        actor = ProbabilisticTensorDictSequential(
+            TensorDictModule(
+                nn.Sequential(nn.Linear(3, 8), NormalParamExtractor()),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            ),
+        )
+        critic = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["observation"], out_keys=["state_value"]
+        )
+        loss_module = ClipPPOLoss(actor, critic, delay_actor=True, entropy_bonus=False)
+        updater = updater_cls(loss_module, **updater_kwargs)
+        with warnings.catch_warnings():
+            # the on-policy trainers warn that they are experimental
+            warnings.simplefilter("ignore", UserWarning)
+            trainer = PPOTrainer(
+                collector=MockingCollector(),
+                total_frames=None,
+                frame_skip=1,
+                optim_steps_per_batch=3,
+                loss_module=loss_module,
+                optimizer=torch.optim.SGD(loss_module.parameters(), lr=0.1),
+                target_net_updater=updater,
+                num_epochs=1,
+                add_gae=False,
+                progress_bar=False,
+                enable_logging=False,
+            )
+        trainer._pbar_str = OrderedDict()
+        batch = TensorDict(
+            {
+                "observation": torch.randn(8, 3),
+                "action": torch.rand(8, 4) * 1.8 - 0.9,
+                loss_module.tensor_keys.sample_log_prob: torch.randn(8),
+                "advantage": torch.randn(8, 1),
+                "value_target": torch.randn(8, 1),
+            },
+            [8],
+        )
+        return trainer, loss_module, updater, batch
+
+    def test_updater_steps_once_per_optim_step(self):
+        trainer, loss_module, updater, batch = self._make_trainer(
+            HardUpdate, value_network_update_interval=100
+        )
+        before = {
+            key: value.clone()
+            for key, value in loss_module.target_actor_network_params.items(True, True)
+        }
+        trainer.optim_steps(batch)
+        assert trainer._optim_count == 3
+        # one updater step per optimizer step, none of which reached the
+        # hard-update interval: the proximal policy is still the snapshot
+        assert updater.counter == 3
+        after = loss_module.target_actor_network_params
+        for key, value in before.items():
+            torch.testing.assert_close(after.get(key), value)
+
+    def test_soft_update_moves_proximal_policy(self):
+        trainer, loss_module, updater, batch = self._make_trainer(SoftUpdate, eps=0.5)
+        before = {
+            key: value.clone()
+            for key, value in loss_module.target_actor_network_params.items(True, True)
+        }
+        trainer.optim_steps(batch)
+        after = loss_module.target_actor_network_params
+        current = loss_module.actor_network_params
+        # the proximal policy followed the policy without copying it
+        assert any(
+            not torch.allclose(after.get(key), value) for key, value in before.items()
+        )
+        assert any(
+            not torch.allclose(after.get(key), current.get(key)) for key in before
+        )
 
 
 class TestValueEstimatorHook:

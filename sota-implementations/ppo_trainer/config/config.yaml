@@ -115,8 +115,6 @@ replay_buffer:
 
 logger:
   exp_name: ppo_pendulum_v1
-  offline: false
-  project: torchrl-sota-implementations
 
 # Trainer configuration
 trainer:
