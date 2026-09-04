@@ -18,26 +18,50 @@ raises an error listing the options.
 
 ## The task
 
-`MicroDuckEnv` is a commanded longitudinal-velocity task written once against
+`MicroDuckEnv` is a family of locomotion tasks written once against
 `MujocoEnv`, so `backend="mujoco"`, `"mjx"` and `"mujoco-torch"` share the
-observation, action, reward and termination definitions. The 14 actions are
-normalized offsets around the `STAND` keyframe targets, applied at 50 Hz. The
-53-value observation holds projected gravity, body angular velocity, measured
-and commanded body-frame forward velocity, joint errors and velocities, a
-fixed-frequency gait clock and the previous action; the command is also
-exposed under `commanded_x_velocity`.
+observation, action, reward and termination definitions. A task is data:
+`MicroDuckTask` is a tensorclass holding the planar command box `(vx, vy)`
+in body-frame m/s, the warm start and joint reset noise, the gait clock
+frequency, one weight per reward term, the term parameters and a sampling
+`weight`. The presets `MicroDuckEnv.tracking_task(speed)`, `standing_task()`,
+`speed_range_task(low, high)`, `sidestep_task(speed)` and `jump_task()` fill
+every field and take overrides by name (`reward_weights={"tracking": 4.0}`,
+`tracking_std=0.2`, `warm_start_fraction=0.5`). The env takes a library, one
+task, a list or a `torch.stack` of tasks, and every env of the batch holds one
+row of it: at reset the envs being reset read `task_id` from the reset
+TensorDict when present, otherwise draw a row weighted by the tasks' `weight`
+with the env's generator, and hold the row's command, warm start, clock and
+reward for the episode. `MicroDuckTaskSampler` is a transform that writes
+`task_id` at reset from weights of its own, for curricula or to pin one task
+for evaluation.
 
-The reward follows the mjlab velocity-task recipe, with every term weighted
-per second and multiplied by the control period: Gaussian tracking of the
-commanded velocity (lateral velocity tracked to zero) and of a zero yaw rate,
-a Gaussian uprightness term, a nominal-pose term that is tight when standing
-and loose when walking, and contact-based gait terms that are active under a
-nonzero command: foot air time inside a 0.125 to 0.3 s swing window,
+The 14 actions are normalized offsets around the `STAND` keyframe targets,
+applied at 50 Hz. The 56-value observation holds projected gravity, body
+angular velocity, the body-frame linear velocity, the command, joint errors
+and velocities, the gait clock and the previous action; the command and the
+task index are also exposed under the `command` and `task_id` keys. Task
+parameters are not in the observation: the PPO example conditions the policy
+on a learned embedding of `task_id`.
+
+The reward is a registry of terms over shared per-step features (body-frame
+velocity, uprightness, joint errors, contacts, foot heights, base height, gait
+phase, command, previous action), multiplied by each env's weight row, with
+every per-second term scaled by the control period in the style of the mjlab
+velocity tasks: Gaussian tracking of the commanded planar velocity and of a
+zero yaw rate, a Gaussian uprightness term, a nominal-pose term (tight for
+standing, loose for walking and jumping through the `pose_std` parameter),
+contact-based gait terms (foot air time inside a 0.125 to 0.3 s swing window,
 swing-foot height toward a 2 cm clearance target, agreement between foot
-contacts and the gait clock, and a penalty for keeping both feet planted.
-Small costs act on vertical and roll/pitch base motion, joint velocity and
-action rate; a fall costs a fixed penalty and terminates the episode. Weights
-are class attributes on `MicroDuckEnv`.
+contacts and the gait clock, mirrored for backward commands, and a penalty for
+keeping both feet planted), a jump term that pays for base height gained above
+the standing height, up to 5 cm, while both feet are off the ground, small
+costs on vertical and roll/pitch base motion, joint velocity and action rate,
+and a fixed fall penalty. A term is off when its weight is zero: the standing
+and jump presets zero the gait terms, the jump preset turns the jump term on
+and the vertical-velocity cost off. `diagnostics=True` exposes every weighted
+term under `diagnostic_reward_<name>`, and `MicroDuckEnv.register_reward`
+adds a term that every task can weight.
 
 The gait terms and the 0.1 m/s tracking std exist because of a failure mode
 seen in training: with a looser tracking term and no double-support penalty,
@@ -45,9 +69,9 @@ a from-scratch policy learned to stand perfectly still under every command
 within 600k transitions (full survival, 3 mm displacement, tracking error
 equal to the command) and never left that optimum. Standing under a nonzero
 command must earn clearly less than stepping.
-`command_range` samples the command from an interval and
-`warm_start_velocity` launches a fraction of resets already moving forward,
-so an untrained policy sees locomotion states early.
+`speed_range_task` draws the forward command from an interval and a task's
+`warm_start_velocity` launches a fraction of its resets already moving along
+the commanded direction, so an untrained policy sees locomotion states early.
 
 The upstream walking MJCF reuses detailed render meshes as collision geoms.
 Their convex-hull edge pairs make the accelerated backends run out of memory,
@@ -105,10 +129,14 @@ uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mu
 [`config.yaml`](config.yaml) holds every setting and each one is a Hydra
 override; the `utils` extra provides Hydra. `logger.entity` is required for
 W&B so runs never land in a default workspace; use `logger.backend=csv` or
-`logger.backend=null` for a local run. Set
-`env.task.commanded_x_velocity=[0.0,0.03,0.06]` to train a command
-distribution (`env.task` mirrors the fields of `torchrl.envs.MicroDuckTask`),
-and `smoke=true` for a pipeline check. Checkpoints are unified TorchRL
+`logger.backend=null` for a local run. `env.tasks` is the task library, one
+`MicroDuckEnv` preset per entry with its arguments, so
+`'env.tasks=[{name:standing_task},{name:tracking_task,speed:0.03},{name:tracking_task,speed:0.06}]'`
+trains a command distribution and
+`'env.tasks=[{name:standing_task},{name:tracking_task,speed:0.2},{name:tracking_task,speed:-0.2},{name:sidestep_task,speed:0.15,weight:0.5},{name:sidestep_task,speed:-0.15,weight:0.5},{name:jump_task}]'`
+the whole mixture, with one evaluator per task and a policy conditioned on
+the task index; `env.task_id=2` pins one task at every reset (evaluation,
+rendering). `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
 `policy.init_from` read directly.
 
@@ -197,15 +225,15 @@ reward breakdown showed why (the phase term paid half credit with both feet
 planted, and the default 0.35 rad action scale with a 0.3 initial standard
 deviation never broke ground contact). The recipe that walks is:
 
-- `env.task.action_scale=1.0 policy.initial_policy_scale=1.0`: one radian of position
+- `env.action_scale=1.0 policy.initial_policy_scale=1.0`: one radian of position
   target per unit action and an initial policy standard deviation of one, so
   the untrained policy actually swings its legs;
 - dense contact shaping in `MicroDuckEnv`: single-support credit only when the
   clock's swing foot is airborne, a dense swing-height term, and a penalty for
   standing on both feet under a nonzero command;
 - a velocity command in `[0.1, 0.3]` m/s with a warm start on half of the
-  resets (`env.task.warm_start_velocity=[0.05,0.25]
-  env.task.warm_start_fraction=0.5`) and
+  resets (`warm_start_velocity:[0.05,0.25]` and `warm_start_fraction:0.5` in
+  the task entry) and
   0.25 rad of joint noise at reset, so episodes start away from the standing
   fixed point;
 - PPO with 32,768 transitions per update, 5 epochs, 64 whole episodes per
@@ -218,10 +246,8 @@ uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mu
   env.microduck_root="$MICRODUCK_RL_ROOT" \
   env.backend=mujoco env.parallel=true env.num_envs=16 \
   policy.head=gaussian policy.initial_policy_scale=1.0 \
-  env.task.action_scale=1.0 env.task.command_range=[0.1,0.3] \
-  env.task.warm_start_velocity=[0.05,0.25] env.task.warm_start_fraction=0.5 \
-  env.task.joint_reset_noise_scale=0.25 \
-  env.task.gait_frequency_hz=1.0 env.task.gait_frequency_per_mps=5.0 \
+  env.action_scale=1.0 \
+  'env.tasks=[{name:speed_range_task,low:0.1,high:0.3,warm_start_velocity:[0.05,0.25],warm_start_fraction:0.5,joint_reset_noise_scale:0.25}]' \
   ppo.transitions_per_update=32768 ppo.epochs=5 ppo.minibatch_trajectories=64 \
   ppo.learning_rate=3e-4 ppo.target_kl=0.01 ppo.entropy_coeff=0.01 \
   ppo.total_transitions=10000000 evaluation.interval=10 \
@@ -263,9 +289,8 @@ Every run survives all 500 steps for every command. What the ablations show:
 
 - Two changes make the speed follow the command. From scratch, the
   command-scaled gait clock (A2) is the only variant that does it, which is
-  why the recipe above passes `env.task.gait_frequency_hz=1.0
-  env.task.gait_frequency_per_mps=5.0` (the `MicroDuckEnv.speed_range_task`
-  preset in Python). Once a gait exists, halving the contact
+  why the recipe above uses the `speed_range_task` preset, whose clock runs
+  at 1 Hz plus 5 Hz per m/s of command. Once a gait exists, halving the contact
   shaping and doubling the tracking weight (S1) cuts the speed error from
   0.085 to 0.053 m/s where continuing unchanged (S0) plateaus. Every other
   policy settles on a single gait at 0.12-0.24 m/s whatever the command.
@@ -291,7 +316,7 @@ uv run --extra rendering --extra mujoco_wasm --with mujoco rlrender \
   --ckpt microduck_gait.pt \
   --policy examples/microduck/heuristic_gait.py:make_render_policy \
   --env examples/microduck/heuristic_gait.py:make_env \
-  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"commanded_x_velocity\":0.03}" \
+  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"speed\":0.03}" \
   --render-backend env --no-auto-load-policy --max-steps 500 --fps 50 \
   --format ipynb --out microduck_gait.ipynb \
   --notebook-render-backend mujoco-wasm --notebook-rollout-mode both \
@@ -311,7 +336,7 @@ uv run --extra utils --extra rendering --extra mujoco_wasm --with mujoco rlrende
   --policy examples/microduck/ppo_mujoco.py:make_render_policy \
   --env examples/microduck/ppo_mujoco.py:make_env \
   --deterministic \
-  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"cfg\":{\"backend\":\"mujoco\",\"parallel\":false,\"device\":\"cpu\",\"task\":{\"commanded_x_velocity\":[0.2]}}}" \
+  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"cfg\":{\"backend\":\"mujoco\",\"parallel\":false,\"device\":\"cpu\",\"task_id\":0}}" \
   --render-backend null --max-steps 500 --fps 50 \
   --format ipynb --out microduck_ppo.ipynb \
   --notebook-render-backend mujoco-wasm --notebook-rollout-mode both \

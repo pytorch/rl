@@ -15,17 +15,11 @@ env:
   camera_id: -1             # rendering: MuJoCo camera and frame size
   render_width: 640
   render_height: 480
-  task:                     # fields of torchrl.envs.MicroDuckTask
-    commanded_x_velocity: [0.03]
-    command_range: null
-    warm_start_velocity: null
-    warm_start_fraction: 0.0
-    joint_reset_noise_scale: null
-    action_scale: 0.35
-    gait_frequency_hz: 1.8913
-    gait_frequency_per_mps: 0.0
-    observe_lateral_velocity: false
-    reward_scales: {}
+  action_scale: 0.35        # position-target offset in radians for a unit action
+  diagnostics: false        # reward breakdown in the observation; evaluators turn it on
+  tasks:                    # task library: one MicroDuckEnv preset per entry with its arguments (and a `weight`)
+    - {name: tracking_task, speed: 0.03}
+  task_id: null             # pin one task of the library at every reset (evaluation, rendering)
 
 policy:
   head: gait-residual       # gait-residual learns around the closed-form gait; gaussian trains from scratch
@@ -49,8 +43,7 @@ ppo:
 
 evaluation:
   interval: 5               # iterations between deterministic evaluations; null disables them
-  commands: null            # defaults to the training commands, or the range bounds and midpoint
-  num_episodes: 8           # complete episodes per command and evaluation
+  num_episodes: 8           # complete episodes per task and evaluation
   steps: 500
   best_checkpoint_path: microduck_ppo_best.ckpt
   latest_checkpoint_path: null

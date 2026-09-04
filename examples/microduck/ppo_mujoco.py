@@ -31,7 +31,13 @@ from a TorchRL checkout::
 and train from scratch over a speed range with::
 
     python examples/microduck/ppo_mujoco.py env.download=true policy.head=gaussian \\
-        env.task.command_range=[0.1,0.3] env.task.action_scale=1.0 logger.entity=YOUR_ENTITY
+        'env.tasks=[{name:speed_range_task,low:0.1,high:0.3}]' env.action_scale=1.0 \\
+        logger.entity=YOUR_ENTITY
+
+``env.tasks`` is the task library: one :class:`~torchrl.envs.MicroDuckEnv`
+preset per entry with its arguments, e.g. ``{name: sidestep_task, speed: 0.15,
+weight: 0.5}``. Every env picks a task at reset and the policy reads the task
+index through a learned embedding, so one policy trains on the whole library.
 
 ``env.download=true`` fetches the pinned ``microduck_rl`` assets into
 ``~/.cache/torchrl/microduck``; set ``env.microduck_root`` or
@@ -47,6 +53,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, replace
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -70,6 +77,7 @@ from torchrl.envs import (
     InitTracker,
     MicroDuckEnv,
     MicroDuckTask,
+    MicroDuckTaskSampler,
     TensorDictPrimer,
     TransformedEnv,
 )
@@ -96,6 +104,13 @@ from examples.microduck.heuristic_gait import (  # noqa: E402
 
 PolicyHead = Literal["gait-residual", "gaussian"]
 RECURRENT_STATE_KEY = "recurrent_state"
+TASK_PRESETS = (
+    "tracking_task",
+    "standing_task",
+    "speed_range_task",
+    "sidestep_task",
+    "jump_task",
+)
 # The asset location is machine specific and is never taken from a checkpoint.
 ASSET_KEYS = ("microduck_root", "root", "download")
 
@@ -117,17 +132,20 @@ def make_env(
     parallel: bool | None = None,
     device: torch.device | str | None = None,
 ) -> TransformedEnv:
-    """Build the batched task from the ``env`` section of ``config.yaml``.
+    """Build the batched env from the ``env`` section of ``config.yaml``.
 
     ``cfg`` is that section, as the Hydra ``DictConfig`` or a plain mapping;
-    missing entries take the defaults of ``config.yaml`` and ``task`` becomes a
-    :class:`~torchrl.envs.MicroDuckTask`. ``rlrender`` passes the training
-    checkpoint, whose recorded config (minus the asset location, which is
-    machine specific) sits between those defaults and ``cfg``, and whose
-    policy kwargs supply ``hidden_size``. The keyword arguments override single
-    entries so a checkpoint renders with one env from a local asset path; other
-    entries go through ``cfg``, e.g.
-    ``--env-kwargs '{"cfg": {"backend": "mujoco", "render_width": 480}}'``.
+    missing entries take the defaults of ``config.yaml``. ``tasks`` becomes
+    the task library through :func:`make_tasks`, and ``task_id`` pins one task
+    of the library at every reset with a
+    :class:`~torchrl.envs.MicroDuckTaskSampler` (the evaluators and
+    ``rlrender`` use it). ``rlrender`` passes the training checkpoint, whose
+    recorded config (minus the asset location, which is machine specific) sits
+    between those defaults and ``cfg``, and whose policy kwargs supply
+    ``hidden_size``. The keyword arguments override single entries so a
+    checkpoint renders with one env from a local asset path; other entries go
+    through ``cfg``, e.g.
+    ``--env-kwargs '{"cfg": {"backend": "mujoco", "task_id": 2}}'``.
 
     :class:`~torchrl.envs.InitTracker` marks episode starts and a
     :class:`~torchrl.envs.TensorDictPrimer` carries the GRU state between steps,
@@ -159,11 +177,32 @@ def make_env(
     )
     if hidden_size is None:
         hidden_size = (recorded.get("policy_kwargs") or {}).get("hidden_size", 128)
+    transforms = [
+        InitTracker(),
+        TensorDictPrimer(
+            {RECURRENT_STATE_KEY: Unbounded(shape=(1, hidden_size))},
+            expand_specs=True,
+        ),
+    ]
+    tasks = make_tasks(env_cfg["tasks"])
+    if env_cfg["task_id"] is not None:
+        task_id = int(env_cfg["task_id"])
+        if not 0 <= task_id < len(tasks):
+            raise ValueError(
+                f"task_id={task_id} does not index the {len(tasks)} tasks of env.tasks."
+            )
+        # Every reset picks this task of the library; the env's own weighted
+        # draw is only replaced, the library (and the ids) stay the same.
+        weights = [0.0] * len(tasks)
+        weights[task_id] = 1.0
+        transforms.append(MicroDuckTaskSampler(weights, seed=env_cfg["seed"]))
     kwargs: dict[str, Any] = {
         "root": env_cfg["root"],
         "download": env_cfg["download"],
         "backend": env_cfg["backend"],
-        "task": MicroDuckTask(**env_cfg["task"]),
+        "tasks": tasks,
+        "action_scale": env_cfg["action_scale"],
+        "diagnostics": env_cfg["diagnostics"],
         "num_envs": env_cfg["num_envs"],
         # MuJoCo state is float64, which MPS does not support: CUDA or CPU.
         "device": torch.device(
@@ -180,20 +219,75 @@ def make_env(
     elif env_cfg["backend"] == "mujoco-torch":
         kwargs["compile_step"] = env_cfg["compile_step"]
     return TransformedEnv(
-        MicroDuckEnv(env_cfg["microduck_root"], **kwargs),
-        Compose(
-            InitTracker(),
-            TensorDictPrimer(
-                {RECURRENT_STATE_KEY: Unbounded(shape=(1, hidden_size))},
-                expand_specs=True,
-            ),
-        ),
+        MicroDuckEnv(env_cfg["microduck_root"], **kwargs), Compose(*transforms)
     )
+
+
+def make_tasks(entries: Sequence[Mapping[str, Any]]) -> list[MicroDuckTask]:
+    """Build the task library from the ``env.tasks`` list of ``config.yaml``.
+
+    Each entry names a :class:`~torchrl.envs.MicroDuckEnv` preset in
+    :data:`TASK_PRESETS` and passes its other keys to it, e.g.
+    ``{name: tracking_task, speed: 0.2, weight: 2.0}`` or
+    ``{name: jump_task, reward_weights: {jump: 8.0}}``.
+    """
+    if not entries:
+        raise ValueError("env.tasks needs at least one task entry.")
+    tasks = []
+    for entry in entries:
+        kwargs = dict(entry)
+        name = kwargs.pop("name", None)
+        if name not in TASK_PRESETS:
+            raise ValueError(
+                f"Unknown task preset {name!r}; env.tasks entries name one of "
+                f"{TASK_PRESETS}."
+            )
+        tasks.append(getattr(MicroDuckEnv, name)(**kwargs))
+    return tasks
+
+
+def task_labels(entries: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Name the metric group of every ``env.tasks`` entry, e.g. ``tracking+0.20``.
+
+    The preset name loses its ``_task`` suffix and gains its speed arguments;
+    duplicate labels get their library index appended.
+    """
+    labels = [
+        str(entry["name"]).removesuffix("_task")
+        + "".join(
+            f"{float(value):+.2f}"
+            for key, value in entry.items()
+            if key in ("speed", "low", "high")
+        )
+        for entry in entries
+    ]
+    if len(set(labels)) != len(labels):
+        labels = [f"{label}#{index}" for index, label in enumerate(labels)]
+    return labels
 
 
 # ----------------------------------------------------------------------
 # Models
 # ----------------------------------------------------------------------
+
+
+class TaskConditionedEncoder(nn.Module):
+    """Observation encoder conditioned on the task index.
+
+    The observation carries the command but no other task parameter, so a
+    learned embedding of the task index tells the policy which task of the
+    library the env is in (for instance jumping, whose command is zero).
+    """
+
+    def __init__(self, observation_dim: int, num_tasks: int, hidden_size: int):
+        super().__init__()
+        self.observation = nn.Linear(observation_dim, hidden_size)
+        self.task = nn.Embedding(num_tasks, hidden_size)
+
+    def forward(self, observation: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
+        return torch.tanh(
+            self.observation(observation) + self.task(task_id.squeeze(-1))
+        )
 
 
 class GaitResidualHead(nn.Module):
@@ -280,8 +374,10 @@ def make_models(
     device = torch.device(device)
     observation_dim = env.observation_spec["observation"].shape[-1]
     embed = TensorDictModule(
-        nn.Sequential(nn.Linear(observation_dim, hidden_size), nn.Tanh()),
-        in_keys=["observation"],
+        TaskConditionedEncoder(
+            observation_dim, env.observation_spec["task_id"].n, hidden_size
+        ),
+        in_keys=["observation", "task_id"],
         out_keys=["embed"],
     )
     gru = GRUModule(
@@ -428,37 +524,47 @@ def load_parameters(
 # ----------------------------------------------------------------------
 
 
-def command_name(command: float) -> str:
-    """Return the metric group of a velocity command, e.g. ``plus_0.200``."""
-    return f"{float(command):+.3f}".replace("+", "plus_").replace("-", "minus_")
+def microduck_metrics(
+    trajectories: TensorDictBase, *, jumping: bool = False
+) -> dict[str, float]:
+    """Task metrics of the padded trajectory batch an :class:`Evaluator` collects.
 
-
-def microduck_metrics(trajectories: TensorDictBase) -> dict[str, float]:
-    """Gait metrics of the padded trajectory batch an :class:`Evaluator` collects.
-
-    Speeds are the body-frame forward velocity read from the observation, so a
+    Speeds are the body-frame velocities read from the observation, so a
     policy that turns is still credited for walking. Means are taken over
     transitions, so an episode that falls after twenty steps does not weigh as
-    much as one that walks for five hundred. ``wrong_way`` counts the episodes
-    whose mean speed opposes the command (or moves under a zero one).
+    much as one that walks for five hundred. ``task_score`` is in ``[0, 1]``
+    for every task: velocity tracking error relative to the commanded speed
+    for walking and sidestepping, stillness for standing, and with
+    ``jumping=True`` the fraction of time with both feet off the ground
+    (which needs the env's ``diagnostics``).
     """
     mask = trajectories["collector", "mask"]
     lengths = mask.sum(-1)
-    speed = trajectories["next", "observation"][..., 6]
-    command = trajectories["commanded_x_velocity"][..., 0]
-    directional_step = torch.where(command != 0, command.sign() * speed, -speed.abs())
-    episode_directional = (directional_step * mask).sum(-1) / lengths
+    velocity = trajectories["next", "observation"][..., 6:8]
+    command = trajectories["command"]
+    error = (velocity - command).norm(dim=-1)
+    velocity_score = 1 - (error / command.norm(dim=-1).clamp_min(0.1)).clamp(max=1.0)
+    if ("next", "diagnostic_left_foot_contact") in trajectories.keys(True):
+        airborne = (
+            (trajectories["next", "diagnostic_left_foot_contact"][..., 0] < 0.5)
+            & (trajectories["next", "diagnostic_right_foot_contact"][..., 0] < 0.5)
+        ).float()
+    else:
+        airborne = torch.zeros_like(error)
+    score = airborne if jumping else velocity_score
+    episode_score = (score * mask).sum(-1) / lengths
     last = trajectories["next", "terminated"][..., 0].gather(
         -1, (lengths - 1).unsqueeze(-1)
     )
     return {
-        "tracking_error": float((speed - command).abs()[mask].mean()),
-        "forward_speed": float(speed[mask].mean()),
+        "tracking_error": float(error[mask].mean()),
+        "forward_speed": float(velocity[..., 0][mask].mean()),
+        "lateral_speed": float(velocity[..., 1][mask].mean()),
+        "airborne_fraction": float(airborne[mask].mean()),
         "survival_rate": float((~last).float().mean()),
         "episode_length_min": float(lengths.min()),
-        "directional_speed_min": float(episode_directional.min()),
-        "directional_speed_mean": float(directional_step[mask].mean()),
-        "wrong_way": float((episode_directional <= 0).sum()),
+        "task_score": float(score[mask].mean()),
+        "task_score_min": float(episode_score.min()),
     }
 
 
@@ -466,27 +572,29 @@ def make_evaluator(
     env: TransformedEnv,
     actor: ProbabilisticActor,
     *,
-    command: float,
+    label: str,
+    jumping: bool = False,
     num_episodes: int,
     steps: int,
 ) -> Evaluator:
-    """Deterministic evaluator of ``actor`` on an env whose task fixes ``command``.
+    """Deterministic evaluator of ``actor`` on an env pinned to one task.
 
-    Metrics are logged under ``evaluation/<command name>/``; the evaluator
-    adds ``reward`` and ``episode_length`` to :func:`microduck_metrics`.
+    Metrics are logged under ``evaluation/<label>/``; the evaluator adds
+    ``reward`` and ``episode_length`` to :func:`microduck_metrics`, whose
+    ``task_score`` measures airborne time when ``jumping`` is set.
     """
     return Evaluator(
         env,
         actor,
         num_trajectories=num_episodes,
         max_steps=steps,
-        metrics_fn=microduck_metrics,
-        log_prefix=f"evaluation/{command_name(command)}",
+        metrics_fn=partial(microduck_metrics, jumping=jumping),
+        log_prefix=f"evaluation/{label}",
     )
 
 
 def evaluation_metrics(results: Sequence[Mapping[str, float]]) -> dict[str, float]:
-    """Merge the per-command evaluator results and average them over commands."""
+    """Merge the per-task evaluator results and average them over tasks."""
     metrics = {
         key.replace("/custom/", "/"): float(value)
         for result in results
@@ -499,6 +607,7 @@ def evaluation_metrics(results: Sequence[Mapping[str, float]]) -> dict[str, floa
         "tracking_error",
         "forward_speed",
         "survival_rate",
+        "task_score",
     ):
         values = [value for key, value in metrics.items() if key.endswith(f"/{name}")]
         metrics[f"evaluation/{name}"] = sum(values) / len(values)
@@ -506,11 +615,11 @@ def evaluation_metrics(results: Sequence[Mapping[str, float]]) -> dict[str, floa
 
 
 def evaluation_score(results: Sequence[Mapping[str, float]]) -> tuple[float, ...]:
-    """Rank checkpoints by survival, then direction, then speed, then return.
+    """Rank checkpoints by survival, then the worst task, then the mean task score, then return.
 
     A short forward fall can earn a higher raw return than a full episode of
-    balanced walking, so survival and the number of wrong-way episodes are
-    compared before any speed or reward figure.
+    balanced walking, so survival and episode length are compared before any
+    task score or reward figure.
     """
 
     def per_command(name: str) -> list[float]:
@@ -530,9 +639,8 @@ def evaluation_score(results: Sequence[Mapping[str, float]]) -> tuple[float, ...
     return (
         survived,
         min(per_command("episode_length_min")),
-        -sum(per_command("wrong_way")),
-        min(per_command("directional_speed_min")),
-        sum(per_command("directional_speed_mean")) / len(results),
+        min(per_command("task_score_min")),
+        sum(per_command("task_score")) / len(results),
         sum(per_command("reward")) / len(results),
     )
 
@@ -553,7 +661,7 @@ def _collection_metrics(data: TensorDictBase) -> tuple[dict[str, float], int]:
         0, inverse, torch.ones_like(rewards)
     )
     ends = done.nonzero().squeeze(-1)
-    tracking_error = data["observation"][..., 6] - data["commanded_x_velocity"][..., 0]
+    tracking_error = (data["observation"][..., 6:8] - data["command"]).norm(dim=-1)
     metrics = {
         "collection/reward_mean": float(rewards.mean()),
         "collection/tracking_error_mean": float(tracking_error.abs().mean()),
@@ -599,7 +707,7 @@ def train_ppo(
     collection only contains data from the updated policy.
 
     Every ``evaluation_interval`` iterations the ``evaluators`` (one per
-    velocity command, see :func:`make_evaluator`) run the actor's current
+    task of the library, see :func:`make_evaluator`) run the actor's current
     weights. ``best_checkpoint_path`` receives the best-scoring parameters and
     ``latest_checkpoint_path`` the current ones at every evaluation, so
     training progress can be rendered while the best checkpoint protects
@@ -877,13 +985,12 @@ def main(cfg: DictConfig) -> None:
         )
     torch.manual_seed(cfg.env.seed)
     config = OmegaConf.to_container(cfg, resolve=True)
-    task = MicroDuckTask(**config["env"]["task"])
-    # The closed-form gait follows the clock the task exposes in the observation.
+    tasks = make_tasks(config["env"]["tasks"])
+    labels = task_labels(config["env"]["tasks"])
+    # The closed-form gait follows the clock the tasks expose in the
+    # observation; its frequency is the first task's.
     gait = replace(
-        MicroDuckGaitConfig(),
-        frequency_hz=task.gait_frequency_hz,
-        phase_offset=task.gait_phase_offset,
-        ramp_duration_s=task.gait_ramp_duration_s,
+        MicroDuckGaitConfig(), frequency_hz=float(tasks[0].gait_frequency_hz)
     )
     policy_kwargs = {
         "hidden_size": cfg.policy.hidden_size,
@@ -893,13 +1000,6 @@ def main(cfg: DictConfig) -> None:
         "initial_policy_scale": cfg.policy.initial_policy_scale
         or (0.05 if cfg.policy.head == "gait-residual" else 0.3),
     }
-    if cfg.evaluation.commands:
-        evaluation_commands = tuple(cfg.evaluation.commands)
-    elif task.command_range is not None:
-        low, high = task.command_range
-        evaluation_commands = (low, (low + high) / 2, high)
-    else:
-        evaluation_commands = task.commanded_x_velocity
     env = make_env(cfg.env, hidden_size=cfg.policy.hidden_size)
     evaluators: list[Evaluator] = []
     logger = None
@@ -913,16 +1013,12 @@ def main(cfg: DictConfig) -> None:
                 trained,
             )
         if cfg.evaluation.interval is not None:
-            for command in evaluation_commands:
-                # One single-env evaluator per command, its task pinned to it.
+            jump_index = list(MicroDuckEnv.REWARD_TERMS).index("jump")
+            for task_id, (task, label) in enumerate(zip(tasks, labels)):
+                # One single-env evaluator per task of the library, pinned to
+                # it at every reset; diagnostics feed the airborne metric.
                 evaluation_cfg = OmegaConf.merge(
-                    cfg.env,
-                    {
-                        "task": {
-                            "commanded_x_velocity": [command],
-                            "command_range": None,
-                        }
-                    },
+                    cfg.env, {"task_id": task_id, "diagnostics": True}
                 )
                 evaluators.append(
                     make_evaluator(
@@ -933,7 +1029,8 @@ def main(cfg: DictConfig) -> None:
                             parallel=False,
                         ),
                         actor,
-                        command=command,
+                        label=label,
+                        jumping=bool(task.reward_weights[jump_index] > 0),
                         num_episodes=cfg.evaluation.num_episodes,
                         steps=cfg.evaluation.steps,
                     )
