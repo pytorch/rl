@@ -80,8 +80,9 @@ explicit = true
 
 [tool.uv.sources]
 tensordict = { git = "https://github.com/pytorch/tensordict" }
-torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
-torchvision = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
+mujoco-torch = { git = "https://github.com/vmoens/mujoco-torch" }
+torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin'" }
+torchvision = { index = "pytorch-nightly", marker = "sys_platform == 'darwin'" }
 
 [[tool.uv.dependency-metadata]]
 name = "lerobot"
