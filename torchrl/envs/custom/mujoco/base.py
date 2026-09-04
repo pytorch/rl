@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Literal
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
+from torchrl._utils import seed_generator
 from torchrl.data.tensor_specs import Binary, Bounded, Composite, Unbounded
 from torchrl.envs.common import _EnvPostInit, EnvBase
 from torchrl.envs.custom.mujoco._backends import (
@@ -155,14 +156,23 @@ class _MujocoMeta(_EnvPostInit):
                 inner_kwargs = dict(kwargs)
                 inner_kwargs["num_envs"] = 1
 
-                def _factory(_args=args, _kwargs=inner_kwargs):
+                def _factory(_args=args, _kwargs=inner_kwargs, **worker_kwargs):
                     # Re-enters this metaclass with N=1 -> falls through.
-                    return cls(*_args, **_kwargs)
+                    return cls(*_args, **{**_kwargs, **worker_kwargs})
 
+                # Chain one seed per worker, as EnvBase.set_seed does across a
+                # batch, so workers draw distinct reset noise from one seed.
+                seed = kwargs.get("seed")
+                worker_kwargs = []
+                for _ in range(n):
+                    worker_kwargs.append({} if seed is None else {"seed": seed})
+                    seed = None if seed is None else seed_generator(seed)
                 parallel_kwargs = (
                     {"metadata_from_workers": True} if wrap_cls is ParallelEnv else {}
                 )
-                return wrap_cls(n, _factory, **parallel_kwargs)
+                return wrap_cls(
+                    n, _factory, create_env_kwargs=worker_kwargs, **parallel_kwargs
+                )
             # Single env: pass through.
             return super().__call__(*args, **kwargs)
 
