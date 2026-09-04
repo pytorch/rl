@@ -1027,13 +1027,13 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     def jump_task(cls, *, weight: float = 1.0, **overrides: Any) -> MicroDuckTask:
         """Hop in place under a zero command (experimental).
 
-        Three terms shape the hop. ``hop_rhythm`` tracks a vertical base
-        velocity oscillating on the task clock (1.5 Hz, 0.2 m/s amplitude:
-        a crouch and extension of about 2 cm), so the rhythm is learned before
-        any flight; ``launch`` pays for upward base velocity while both feet
-        are planted; ``jump`` pays for base height gained above the standing
-        height while both feet are off the ground, up to the
-        ``jump_target_height`` parameter (2 cm). The gait terms and the
+        Three terms shape the hop. ``hop_rhythm`` pays, linearly up to the
+        ``hop_velocity_amplitude`` of 0.2 m/s, for vertical base velocity in
+        phase with the task clock (1.5 Hz: a crouch and extension of about
+        2 cm), so the rhythm is learned before any flight; ``launch`` pays for
+        upward base velocity while both feet are planted; ``jump`` pays for
+        base height gained above the standing height while both feet are off
+        the ground, up to the ``jump_target_height`` parameter (2 cm). The gait terms and the
         vertical-velocity cost are off and the pose term is loose so the robot
         can crouch and extend.
 
@@ -1809,24 +1809,30 @@ def _joint_velocity(features: TensorDictBase, params: TensorDictBase) -> torch.T
     return features["joint_velocity"].square().sum(-1)
 
 
-@MicroDuckEnv.register_reward(
-    "hop_rhythm", weight=0.0, hop_velocity_amplitude=0.2, hop_velocity_std=0.1
-)
+@MicroDuckEnv.register_reward("hop_rhythm", weight=0.0, hop_velocity_amplitude=0.2)
 def _hop_rhythm(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
-    # Track a vertical base velocity that oscillates on the task clock: a
-    # dense signal for the crouch-and-extend rhythm that a hop needs, which
-    # random exploration around standing does not produce on its own.
-    reference = params["hop_velocity_amplitude"] * features["gait_phase"].cos()
-    error = features["body_velocity"][..., 2] - reference
-    return torch.exp(-error.square() / params["hop_velocity_std"].square())
+    # Vertical base velocity in phase with the task clock (up on the positive
+    # half of the cosine, down on the negative half), linear in the speed as a
+    # fraction of the amplitude and clipped at one. A Gaussian on a reference
+    # velocity paid standing still a third of its value and nothing for a
+    # small bob; this term pays nothing for standing still and grows with
+    # every bit of crouch-and-extend motion on the beat.
+    beat = features["gait_phase"].cos().sign()
+    fraction = (
+        features["body_velocity"][..., 2] * beat / params["hop_velocity_amplitude"]
+    )
+    return fraction.clamp(-1.0, 1.0) * _gait_gate(features)
 
 
 @MicroDuckEnv.register_reward("launch", weight=0.0)
 def _launch(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
-    # Upward base velocity while both feet are planted: the take-off of a
-    # hop, which the airborne-gated jump term cannot see.
+    # Upward base velocity while both feet are planted, as a fraction of the
+    # hop amplitude: the take-off of a hop, which the airborne-gated jump
+    # term cannot see.
     planted = features["contacts"].all(dim=-1).to(features["upright"].dtype)
-    upward = features["body_velocity"][..., 2].clamp_min(0.0)
+    upward = (
+        features["body_velocity"][..., 2] / params["hop_velocity_amplitude"]
+    ).clamp(0.0, 1.0)
     return upward * planted * _gait_gate(features)
 
 

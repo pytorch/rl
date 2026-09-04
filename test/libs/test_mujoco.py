@@ -754,20 +754,24 @@ class TestMujoco:
         # raising the base by the target height earns the full jump reward,
         # the vertical-velocity cost is off and the gait terms are silent.
         env.reset(TensorDict({"task_id": torch.tensor([[2]])}, batch_size=(1,)))
-        # The hop rhythm pays in full for a vertical velocity on the clock's
-        # reference and less off it.
+        # The hop rhythm pays linearly for vertical velocity on the beat of
+        # the clock, nothing for standing still and negatively off the beat.
         phase, _ = env._gait_clock()
-        on_beat, off_beat = env.get_state().clone(), env.get_state().clone()
-        on_beat["qvel"][..., 2] = 0.2 * phase.cos()
-        off_beat["qvel"][..., 2] = 0.2 * phase.cos() + 0.15
-        rhythm = env._reward_components(on_beat, action)["diagnostic_reward_hop_rhythm"]
+        beat = phase.cos().sign()
+        on_beat, still, off_beat = (env.get_state().clone() for _ in range(3))
+        on_beat["qvel"][..., 2] = 0.1 * beat
+        still["qvel"][..., 2] = 0.0
+        off_beat["qvel"][..., 2] = -0.1 * beat
+
+        def rhythm(state):
+            return env._reward_components(state, action)["diagnostic_reward_hop_rhythm"]
+
         torch.testing.assert_close(
-            rhythm, torch.full((1, 1), MicroDuckEnv.HOP_RHYTHM_WEIGHT * 0.02)
+            rhythm(on_beat),
+            torch.full((1, 1), MicroDuckEnv.HOP_RHYTHM_WEIGHT * 0.5 * 0.02),
         )
-        assert (
-            env._reward_components(off_beat, action)["diagnostic_reward_hop_rhythm"]
-            < rhythm
-        ).all()
+        torch.testing.assert_close(rhythm(still), torch.zeros(1, 1))
+        torch.testing.assert_close(rhythm(off_beat), -rhythm(on_beat))
         risen = env.get_state().clone()
         risen["qpos"][..., 2] += MicroDuckEnv.REWARD_PARAMS["jump_target_height"]
         risen["qvel"][..., 2] = 1.0
