@@ -1,0 +1,65 @@
+# Hydra configuration of examples/microduck/ppo_mujoco.py.
+# Every field is an override, e.g. `python ppo_mujoco.py env.download=true smoke=true`.
+
+env:
+  microduck_root: null      # microduck_rl checkout; MICRODUCK_RL_ROOT or `download` otherwise
+  root: null                # cache directory for downloads (~/.cache/torchrl/microduck)
+  download: false
+  backend: mujoco-torch     # mujoco-torch and mjx vectorize num_envs simulators; mujoco runs one process per env
+  num_envs: 1024
+  parallel: true            # mujoco only: ParallelEnv (false: SerialEnv)
+  compile_step: false       # torch.compile the mujoco-torch physics step
+  device: null              # null picks CUDA when available, else CPU
+  seed: 0
+  max_episode_steps: 500
+  camera_id: -1             # rendering: MuJoCo camera and frame size
+  render_width: 640
+  render_height: 480
+  task:                     # fields of torchrl.envs.MicroDuckTask
+    commanded_x_velocity: [0.03]
+    command_range: null
+    warm_start_velocity: null
+    warm_start_fraction: 0.0
+    joint_reset_noise_scale: null
+    action_scale: 0.35
+    gait_frequency_hz: 1.8913
+    gait_frequency_per_mps: 0.0
+    observe_lateral_velocity: false
+    reward_scales: {}
+
+policy:
+  head: gait-residual       # gait-residual learns around the closed-form gait; gaussian trains from scratch
+  hidden_size: 128
+  residual_scale: 0.2
+  initial_policy_scale: null  # 0.05 for gait-residual, 0.3 for gaussian
+  init_from: null           # checkpoint whose actor and critic parameters initialize the models
+
+ppo:
+  total_transitions: 10_000_000
+  transitions_per_update: 16_384
+  epochs: 5
+  minibatch_trajectories: 32
+  learning_rate: 1e-4
+  target_kl: 0.01           # null disables the KL-adaptive learning rate
+  entropy_coeff: 0.0
+  critic_coeff: 0.5
+  gamma: 0.99
+  gae_lambda: 0.95
+  max_grad_norm: 1.0
+
+evaluation:
+  interval: 5               # iterations between deterministic evaluations; null disables them
+  commands: null            # defaults to the training commands, or the range bounds and midpoint
+  num_episodes: 8           # complete episodes per command and evaluation
+  steps: 500
+  best_checkpoint_path: microduck_ppo_best.ckpt
+  latest_checkpoint_path: null
+
+logger:
+  backend: wandb            # wandb | csv | tensorboard | null
+  project: torchrl-microduck-ppo
+  entity: null              # required for wandb so runs never land in a default workspace
+  exp_name: null
+  mode: online              # wandb mode: online | offline | disabled
+
+smoke: false                # tiny pipeline check

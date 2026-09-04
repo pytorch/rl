@@ -8,9 +8,12 @@ satellite) across the three physics backends."""
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import math
 import os
 import shutil
+import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +25,7 @@ from torchrl.envs import (
     AntEnv,
     Compose,
     CubeBowlEnv,
+    ExplorationType,
     HopperEnv,
     HumanoidEnv,
     InitTracker,
@@ -34,6 +38,7 @@ from torchrl.envs import (
     RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
+    set_exploration_type,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
@@ -55,6 +60,7 @@ from torchrl.envs.custom.mujoco._math import (
 )
 from torchrl.envs.custom.mujoco.microduck import _low_cost_collision_scene
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.render import load_checkpoint
 
 if _has_mujoco:
     import mujoco
@@ -633,6 +639,206 @@ class TestMujoco:
         np.testing.assert_allclose(
             model.geom_quat[collision_id], original_model.geom_quat[collision_id]
         )
+
+    @staticmethod
+    def _load_example(name: str):
+        """Import an example module from its file without touching sys.path."""
+        path = Path(__file__).parents[2] / "examples" / "microduck" / f"{name}.py"
+        module_name = f"microduck_example_{name}"
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_example_gait_metrics_from_contacts(self, tmp_path):
+        gait = self._load_example("heuristic_gait")
+        scene = self._write_microduck_fixture(tmp_path)
+        env = gait.make_env(scene, seed=0, max_episode_steps=30)
+        actor = gait.MicroDuckGaitActor()
+        rollout = env.rollout(30, actor, break_when_any_done=True)
+        assert rollout["action"].shape == (1, 30, 14)
+        assert (rollout["action"].abs() <= 1.0).all()
+        metrics = torch.stack(
+            [gait.gait_metrics(rollout), gait.gait_metrics(env.rollout(30, actor))]
+        )
+        # The fixture's feet never leave the ground, so forward motion alone
+        # must not be mistaken for walking.
+        assert (metrics["survived"] == 1.0).all()
+        assert (metrics["episode_length"] == 30.0).all()
+        assert (metrics["walking"] == 0.0).all()
+        assert (metrics["left_swing_phases"] == 0.0).all()
+        assert (metrics["left_single_support_steps"] == 0.0).all()
+        env.close()
+
+    def test_microduck_example_gait_metrics_count_swing_phases(self):
+        gait = self._load_example("heuristic_gait")
+        steps = 40
+        phase_start = gait.MicroDuckEnv.GAIT_PHASE_START
+        observation = torch.zeros(steps, gait.MicroDuckEnv.OBSERVATION_DIM)
+        observation[:, 7] = 0.2
+        # Five clock periods of eight steps: the left foot swings for the first
+        # four steps of each, the right foot for the last four.
+        clock = torch.arange(steps) % 8 < 4
+        observation[:, phase_start] = torch.where(clock, 1.0, -1.0)
+        left_contact = ~clock
+        rollout = TensorDict(
+            {
+                "observation": observation,
+                "next": TensorDict(
+                    {
+                        "observation": observation.roll(-1, 0) + 0.01,
+                        "terminated": torch.zeros(steps, 1, dtype=torch.bool),
+                        "diagnostic_left_foot_contact": left_contact.float()[:, None],
+                        "diagnostic_right_foot_contact": clock.float()[:, None],
+                        "diagnostic_left_foot_height": torch.full((steps, 1), 0.02),
+                        "diagnostic_right_foot_height": torch.full((steps, 1), 0.03),
+                    },
+                    batch_size=[steps],
+                ),
+            },
+            batch_size=[steps],
+        )
+        metrics = gait.gait_metrics(rollout)
+        assert metrics["left_swing_phases"] == 5.0
+        assert metrics["right_swing_phases"] == 5.0
+        assert metrics["left_single_support_steps"] == 20.0
+        assert metrics["right_foot_height_max"] == 0.03
+        assert metrics["walking"] == 1.0
+        # Three supporting steps per swing phase fall short of the minimum.
+        short = rollout.clone()
+        short["next", "diagnostic_right_foot_contact"][::8] = 0.0
+        short["next", "diagnostic_left_foot_contact"][4::8] = 0.0
+        assert gait.gait_metrics(short)["left_swing_phases"] == 0.0
+        assert gait.gait_metrics(short)["walking"] == 0.0
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_example_recurrent_ppo_trains_on_whole_episodes(self, tmp_path):
+        ppo = self._load_example("ppo_mujoco")
+        scene = self._write_microduck_fixture(tmp_path)
+        task = MicroDuckTask(observe_lateral_velocity=True, action_scale=0.5)
+        env_cfg = {
+            "microduck_root": str(scene),
+            "backend": "mujoco",
+            "parallel": False,
+            "num_envs": 2,
+            "seed": 0,
+            "max_episode_steps": 20,
+            "device": "cpu",  # the models below are built on CPU
+            "task": asdict(task),
+        }
+        env = ppo.make_env(env_cfg, hidden_size=16)
+        actor, critic = ppo.make_models(env, hidden_size=16)
+        evaluator = ppo.make_evaluator(
+            ppo.make_env({**env_cfg, "seed": 1}, hidden_size=16, num_envs=1),
+            actor,
+            command=0.03,
+            num_episodes=1,
+            steps=5,
+        )
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            reset = env.reset()
+            actor(reset)
+        # The zero-initialized residual makes the first policy the closed-form gait.
+        torch.testing.assert_close(
+            reset["action"],
+            ppo.MicroDuckGaitActor().gait_action(reset["observation"]),
+            atol=1e-5,
+            rtol=0,
+        )
+        parameters_before = [p.detach().clone() for p in actor.parameters()]
+        history = ppo.train_ppo(
+            env,
+            actor,
+            critic,
+            total_transitions=150,
+            transitions_per_update=100,
+            max_episode_steps=20,
+            epochs=2,
+            minibatch_trajectories=2,
+        )
+        assert len(history) == 2
+        for metrics in history:
+            # Only complete 20-step episodes reach the buffer.
+            assert metrics["collection/transitions"] % 20 == 0
+            assert metrics["collection/transitions"] >= 100
+            assert (
+                metrics["collection/trajectories"]
+                == metrics["collection/transitions"] / 20
+            )
+            assert metrics["episode/length_min"] == 20.0
+            assert math.isfinite(metrics["ppo/loss_objective"])
+            assert math.isfinite(metrics["ppo/kl_approx"])
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(parameters_before, actor.parameters())
+        )
+
+        # With evaluation enabled, the best-scoring parameters are checkpointed
+        # and restored into the actor at the end of training.
+        checkpoint = tmp_path / "best.ckpt"
+        history = ppo.train_ppo(
+            env,
+            actor,
+            critic,
+            total_transitions=100,
+            transitions_per_update=100,
+            max_episode_steps=20,
+            epochs=1,
+            minibatch_trajectories=2,
+            evaluators=[evaluator],
+            evaluation_interval=1,
+            best_checkpoint_path=checkpoint,
+            latest_checkpoint_path=tmp_path / "latest.ckpt",
+            policy_kwargs={"hidden_size": 16},
+            config={"env": env_cfg},
+        )
+        assert history[0]["evaluation/plus_0.030/num_episodes"] == 1
+        assert "evaluation/survival_rate" in history[0]
+        # Checkpoints are unified TorchRL checkpoints in the rlrender layout.
+        latest = load_checkpoint(tmp_path / "latest.ckpt")
+        assert latest["frames"] >= 100
+        saved = load_checkpoint(checkpoint)
+        for name, parameter in actor.state_dict().items():
+            torch.testing.assert_close(parameter, saved["model_state_dict"][name])
+        # rlrender rebuilds the actor and the env from the recorded config.
+        render_env = ppo.make_env(checkpoint=saved, microduck_root=scene, num_envs=1)
+        rendered = ppo.make_render_policy(render_env, checkpoint=saved)
+        rendered.load_state_dict(saved["model_state_dict"])
+        assert render_env.observation_spec["recurrent_state"].shape[-1] == 16
+        assert render_env.base_env.task == task
+        render_env.close()
+        # policy.init_from restores the trained parameters into fresh models.
+        fresh_actor, fresh_critic = ppo.make_models(env, hidden_size=16)
+        assert (
+            ppo.load_parameters(tmp_path / "latest.ckpt", fresh_actor, fresh_critic)
+            >= 100
+        )
+        for name, parameter in fresh_actor.state_dict().items():
+            torch.testing.assert_close(parameter, latest["model_state_dict"][name])
+        assert saved["metrics"]["evaluation/plus_0.030/forward_speed"] == pytest.approx(
+            saved["metrics"]["evaluation/forward_speed"]
+        )
+        # A short forward fall with a huge return ranks below a full episode.
+        walked = {
+            "evaluation/plus_0.030/reward": 1.0,
+            "evaluation/plus_0.030/num_episodes": 1,
+            "evaluation/plus_0.030/custom/survival_rate": 1.0,
+            "evaluation/plus_0.030/custom/episode_length_min": 500.0,
+            "evaluation/plus_0.030/custom/wrong_way": 0.0,
+            "evaluation/plus_0.030/custom/directional_speed_min": 0.02,
+            "evaluation/plus_0.030/custom/directional_speed_mean": 0.02,
+        }
+        fell = {
+            **walked,
+            "evaluation/plus_0.030/reward": 1e6,
+            "evaluation/plus_0.030/custom/survival_rate": 0.0,
+            "evaluation/plus_0.030/custom/episode_length_min": 100.0,
+        }
+        assert ppo.evaluation_score([walked]) > ppo.evaluation_score([fell])
+        evaluator.shutdown()
+        env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_geom_contacts_and_site_positions(self, tmp_path, backend):
