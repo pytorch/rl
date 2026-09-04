@@ -1370,6 +1370,9 @@ def vtrace_advantage_estimate(
     vs_t_plus_1 = torch.cat(
         [vs[..., 1:, :], next_state_value[..., -1:, :]], dim=time_dim
     )
+    # at a trajectory boundary (done), the next entry along time belongs to
+    # another trajectory: bootstrap from the true next value instead
+    vs_t_plus_1 = torch.where(done, next_state_value, vs_t_plus_1)
     advantages = clipped_rho * (
         reward + terminated_discounts * vs_t_plus_1 - state_value
     )
