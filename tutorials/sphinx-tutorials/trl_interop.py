@@ -22,13 +22,9 @@ What you will learn
 * How to key-filter the yielded samples and move tensors to a target device.
 * How to wrap an HF reward model as a ``TensorDictModuleBase`` and plug it
   directly into a TorchRL GRPO / PPO rollout.
-* How to chain both adapters in a complete round-trip pipeline.
-* How to build the full end-to-end preference-pair journey: collect
-  ``(prompt, chosen, rejected)`` tuples into a
-  :class:`~torchrl.data.ReplayBuffer` (as an
-  :class:`~torchrl.collectors.llm.LLMCollector` would), bridge to a ``trl``
-  trainer, then score new rollouts with the trained reward model using the
-  canonical TorchRL token-key layout.
+* How to compose both adapters in a local, executable example.
+* Where preference labeling and ``trl`` reward-model training fit into a
+  larger application, and which parts TorchRL's adapters cover.
 """
 
 # %%
@@ -281,8 +277,8 @@ result2 = reward_fn_custom(td2)
 assert result2.get(("reward", "value")).shape == torch.Size([B])
 
 # %%
-# Part 3 -- Round-trip: buffer -> dataset -> reward wrapper
-# ==========================================================
+# Part 3 -- Composing the adapters locally
+# ==========================================
 #
 # We now chain both adapters:
 #
@@ -338,50 +334,50 @@ result_rt = reward_fn_rt(td_rt)
 assert result_rt["reward"].shape == torch.Size([8])
 
 # %%
-# Part 4 -- End-to-end: Preference Buffer → TRL → TorchRL Reward Scoring
-# ========================================================================
+# Part 4 -- Where preference data fits
+# =====================================
 #
-# We now walk through the full user journey that motivates TorchRL's
-# interoperability layer:
+# Preference-model training adds two application-specific stages around the
+# adapters demonstrated above:
 #
-# 1. **Collect** preference pairs (prompt + chosen + rejected) into a
-#    TorchRL :class:`~torchrl.data.ReplayBuffer`.
-# 2. **Bridge** the buffer to a ``trl`` trainer via
+# 1. Generate candidate responses and label or rank them as preference pairs.
+# 2. Store the labeled pairs in a TorchRL
+#    :class:`~torchrl.data.ReplayBuffer`, then expose the buffer to
+#    ``trl.RewardTrainer`` through
 #    :class:`~torchrl.modules.llm.TorchRLBufferDataset`.
-# 3. **Score** new rollout tensors with the trained reward model through
-#    :class:`~torchrl.modules.llm.HFRewardModelWrapper`, using the canonical
-#    TorchRL ``("tokens", "full")`` / ``("masks", "all_attention_mask")`` key
-#    layout produced by
-#    :class:`~torchrl.modules.llm.TransformersWrapper`.
+# 3. After training, score new rollout tensors by wrapping the resulting model
+#    with :class:`~torchrl.modules.llm.HFRewardModelWrapper`, using the
+#    canonical TorchRL ``("tokens", "full")`` /
+#    ``("masks", "all_attention_mask")`` key layout produced by a suitably
+#    configured :class:`~torchrl.modules.llm.TransformersWrapper`.
 #
-# We use toy models throughout so this section runs in CI without any
-# network access or GPU.  In production each step marked with
-# ``# [PRODUCTION]`` would use a real checkpoint and
-# :class:`~torchrl.collectors.llm.LLMCollector`.
+# This section demonstrates the replay-buffer schema and the adapter boundary.
+# It does not run preference labeling or ``trl`` training: those stages depend
+# on the application's evaluator, model, and training configuration.
 
 # %%
 # Step 1: fill the buffer with preference pairs
 # ---------------------------------------------
-# In a real GRPO pipeline an :class:`~torchrl.collectors.llm.LLMCollector`
-# continuously generates ``(prompt, chosen, rejected)`` tuples and writes them
-# into a :class:`~torchrl.data.ReplayBuffer`.  Here we simulate that with
-# synthetic data so the tutorial runs offline.
+# An :class:`~torchrl.collectors.llm.LLMCollector` yields rollout TensorDicts;
+# it does not choose a preferred response or produce ``chosen`` and
+# ``rejected`` fields by itself. A human or automated evaluator must compare
+# candidate responses and convert them into preference pairs before they are
+# added to this buffer. The collector itself is configured with
+# ``dialog_turns_per_batch``, for example::
 #
-# .. code-block:: python
-#
-#     # [PRODUCTION] replace the loop below with:
 #     from torchrl.collectors.llm import LLMCollector
-#     collector = LLMCollector(env, policy, frames_per_batch=16)
-#     for rollout in collector:
-#         rb_e2e.extend(rollout)  # rollout already has prompt/chosen/rejected
+#     collector = LLMCollector(env, policy=policy, dialog_turns_per_batch=16)
+#
+# Here we start after that application-specific labeling stage and use
+# synthetic pairs so the example remains offline and deterministic in scope.
 
-N_E2E = 32
-rb_e2e = ReplayBuffer(storage=ListStorage(max_size=N_E2E), batch_size=8)
+N_PREFERENCES = 32
+preference_rb = ReplayBuffer(storage=ListStorage(max_size=N_PREFERENCES), batch_size=8)
 
-for i in range(N_E2E):
+for i in range(N_PREFERENCES):
     # Each sample preserves the full conversational context:
     # the prompt (user's question) plus the two candidate responses.
-    rb_e2e.add(
+    preference_rb.add(
         TensorDict(
             {
                 # Prompt is kept so the reward model can condition on context.
@@ -394,92 +390,53 @@ for i in range(N_E2E):
         )
     )
 
-print(f"Buffer ready: {len(rb_e2e)} preference pairs")
-print(f"  prompt  : {rb_e2e[0]['prompt']}")
-print(f"  chosen  : {rb_e2e[0]['chosen']}")
-print(f"  rejected: {rb_e2e[0]['rejected']}")
+assert len(preference_rb) == N_PREFERENCES
 
 # %%
 # Step 2: bridge to a trl trainer via TorchRLBufferDataset
 # ---------------------------------------------------------
-# We expose ``prompt``, ``chosen``, and ``rejected`` — the three fields
-# ``trl.RewardTrainer`` (and ``trl.GRPOTrainer``) expect.  The prompt is
-# *not* discarded; it is the conversational context the reward model uses to
-# judge response quality.
+# We expose ``prompt``, ``chosen``, and ``rejected``, the conversational
+# preference format accepted by ``trl.RewardTrainer``. The prompt is not
+# discarded; it is the context the reward model uses to judge response
+# quality. ``trl.GRPOTrainer`` has a different contract: its training dataset
+# requires a ``prompt`` column and generates candidate completions online.
 
-ds_e2e = TorchRLBufferDataset(
-    rb_e2e,
+preference_dataset = TorchRLBufferDataset(
+    preference_rb,
     batch_size=8,
     keys=["prompt", "chosen", "rejected"],
     num_batches=1,
 )
 
-first_e2e = next(iter(ds_e2e))
-assert {"prompt", "chosen", "rejected"} <= set(first_e2e.keys())
-print("\nDataset sample keys:", list(first_e2e.keys()))
-print("  prompt  :", first_e2e["prompt"])
+preference_sample = next(iter(preference_dataset))
+assert set(preference_sample) == {"prompt", "chosen", "rejected"}
 
 # %%
-# With ``datasets`` installed (optional), call ``.as_hf_dataset()`` to get an
-# unbounded ``IterableDataset`` that ``trl.RewardTrainer`` accepts::
+# With the optional ``datasets`` and ``trl`` dependencies installed, call
+# ``.as_hf_dataset()`` to get an unbounded ``IterableDataset`` suitable for
+# ``trl.RewardTrainer``. ``reward_model`` and ``reward_config`` below are
+# ordinary ``trl`` inputs whose construction is outside this interoperability
+# tutorial::
 #
-#     # [PRODUCTION]
+#     from trl import RewardTrainer
+#
 #     hf_ds = TorchRLBufferDataset(
-#         rb_e2e, batch_size=32, keys=["prompt", "chosen", "rejected"],
+#         preference_rb,
+#         batch_size=32,
+#         keys=["prompt", "chosen", "rejected"],
 #         num_batches=None,
 #     ).as_hf_dataset()
-#     trainer = RewardTrainer(model=..., train_dataset=hf_ds, ...)
+#     trainer = RewardTrainer(
+#         model=reward_model,
+#         args=reward_config,
+#         train_dataset=hf_ds,
+#     )
 #     trainer.train()
 
-# %%
-# Step 3: score rollouts with HFRewardModelWrapper
-# ------------------------------------------------
-# After the reward model is trained (or loaded from a checkpoint), wrap it
-# with :class:`~torchrl.modules.llm.HFRewardModelWrapper` and feed it
-# TorchRL rollout tensors.  We use the *canonical* TorchRL token layout:
-#
-# * ``("tokens", "full")``                — token IDs from
-#   :class:`~torchrl.modules.llm.TransformersWrapper`
-# * ``("masks", "all_attention_mask")``   — attention mask from the same
-#   wrapper
-#
-# This layout is what :class:`~torchrl.collectors.llm.LLMCollector` produces
-# by default, so the reward function plugs straight into your rollout loop
-# without any key remapping.
-
-# [PRODUCTION] load a real checkpoint:
-#   hf_model = AutoModelForSequenceClassification.from_pretrained(
-#       "my-org/reward-model-v1", num_labels=1
-#   )
-# Here we reuse the toy model from Part 2.
-reward_fn_e2e = HFRewardModelWrapper(
-    ToyRewardModel(),
-    token_key=("tokens", "full"),
-    attention_mask_key=("masks", "all_attention_mask"),
-    reward_key="reward",
-    inference_mode=True,
-)
-
-B_E2E = 4
-# Simulate a batch arriving from LLMCollector / TransformersWrapper.
-rollout_td = TensorDict(
-    {
-        "tokens": TensorDict(
-            {"full": torch.randint(0, 1000, (B_E2E, SEQ_LEN))},
-            batch_size=[B_E2E],
-        ),
-        "masks": TensorDict(
-            {"all_attention_mask": torch.ones(B_E2E, SEQ_LEN, dtype=torch.long)},
-            batch_size=[B_E2E],
-        ),
-    },
-    batch_size=[B_E2E],
-)
-
-scored_td = reward_fn_e2e(rollout_td)
-assert scored_td["reward"].shape == torch.Size([B_E2E])
-assert scored_td["reward"].dtype == torch.float32
-print(f"\nReward scores for {B_E2E} rollout responses: {scored_td['reward'].tolist()}")
+# The trained model returned by that stage can then replace
+# ``ToyRewardModel`` in Part 2. That earlier example demonstrates the scoring
+# boundary independently; the toy model is not trained from
+# ``preference_dataset`` and its scores have no learned meaning.
 
 # %%
 # Conclusion
@@ -494,9 +451,9 @@ print(f"\nReward scores for {B_E2E} rollout responses: {scored_td['reward'].toli
 # * Adapt any HuggingFace reward model to the TensorDict API with
 #   :class:`~torchrl.modules.llm.HFRewardModelWrapper`, controlling gradient
 #   flow and output key names at construction time.
-# * Chain the two adapters in a complete round-trip pipeline.
-# * Build the full preference-pair journey: buffer (with prompt context) →
-#   ``trl`` trainer → canonical TorchRL reward scoring.
+# * Compose the two adapters in a local TorchRL example.
+# * Expose labeled preference pairs to ``trl.RewardTrainer`` while keeping the
+#   application-specific labeling and training stages explicit.
 #
 # Further reading
 # ---------------
