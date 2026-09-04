@@ -1858,6 +1858,27 @@ class TestValues:
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_default_devices())
+    def test_vtrace_truncated_uses_next_value(self, device):
+        done = torch.tensor([[False], [True], [False], [False]], device=device)
+        terminated = torch.zeros_like(done)
+        reward = torch.zeros(4, 1, device=device)
+        state_value = torch.tensor([[1.0], [1.0], [100.0], [100.0]], device=device)
+        next_state_value = state_value.clone()
+        log_pi = log_mu = torch.zeros_like(state_value)
+
+        advantage, _ = vtrace_advantage_estimate(
+            1.0,
+            log_pi,
+            log_mu,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
+        torch.testing.assert_close(advantage, torch.zeros_like(advantage))
+
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
