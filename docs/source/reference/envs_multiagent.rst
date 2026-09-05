@@ -407,8 +407,12 @@ transition. In ``_step``, take devices from the action tensors.
 
         def _initial_obs(self):
             # Replace with a real reset distribution.
-            red_obs = torch.zeros(*self.batch_size, self.n_red, self.obs_dim)
-            blue_obs = torch.zeros(*self.batch_size, self.n_blue, self.obs_dim)
+            red_obs = torch.zeros(
+                *self.batch_size, self.n_red, self.obs_dim, device=self.device
+            )
+            blue_obs = torch.zeros(
+                *self.batch_size, self.n_blue, self.obs_dim, device=self.device
+            )
             return red_obs, blue_obs
 
         def _apply_dynamics(self, red_action, blue_action):
