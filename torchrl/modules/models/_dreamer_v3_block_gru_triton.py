@@ -200,6 +200,13 @@ if _has_triton:
         triton.Config({"BLOCK_B": 8, "BLOCK_K": 32}, num_warps=4, num_stages=1),
         triton.Config({"BLOCK_B": 8, "BLOCK_K": 64}, num_warps=8, num_stages=1),
     ]
+    # The B2/K16 backward kernel can intermittently produce incorrect gradients.
+    # The same configuration is safe for the forward kernel.
+    _BACKWARD_CONFIGS = [
+        config
+        for config in _CONFIGS
+        if (config.kwargs["BLOCK_B"], config.kwargs["BLOCK_K"]) != (2, 16)
+    ]
 
     def _prune_configs(configs, named_args, **kwargs):
         h_pad = kwargs.get("H_PAD") or named_args["H_PAD"]
@@ -602,7 +609,7 @@ if _has_triton:
         )
 
     @triton.autotune(
-        configs=_CONFIGS,
+        configs=_BACKWARD_CONFIGS,
         key=[
             "T",
             "H",
