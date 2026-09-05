@@ -142,22 +142,26 @@ device = (
 #   calls to :meth:`~torchrl.envs.EnvBase.reset` by adding a ``"is_init"``
 #   boolean mask in the TensorDict that will track which steps require a reset
 #   of the RNN hidden states.
-# - The :class:`~torchrl.envs.transforms.TensorDictPrimer` transform is a bit more
-#   technical. It is not required to use RNN policies. However, it
-#   instructs the environment (and subsequently the collector) that some extra
-#   keys are to be expected. Once added, a call to `env.reset()` will populate
-#   the entries indicated in the primer with zeroed tensors. Knowing that
-#   these tensors are expected by the policy, the collector will pass them on
-#   during collection. Eventually, we'll be storing our hidden states in the
-#   replay buffer, which will help us bootstrap the computation of the
-#   RNN operations in the loss module (which would otherwise be initiated
-#   with 0s). In summary: not including this transform will not impact hugely
-#   the training of our policy, but it will make the recurrent keys disappear
-#   from the collected data and the replay buffer, which will in turn lead to
-#   a slightly less optimal training.
-#   Fortunately, the :class:`~torchrl.modules.LSTMModule` we propose is
-#   equipped with a helper method to build just that transform for us, so
-#   we can wait until we build it!
+# - The :class:`~torchrl.envs.transforms.TensorDictPrimer` transform is
+#   required on this tutorial's collector path if you want hidden states
+#   to travel through ``env.reset`` → collector → policy → replay.
+#   It instructs the environment (and subsequently the collector) that
+#   some extra keys are to be expected. Once added, a call to
+#   ``env.reset()`` will populate the entries indicated in the primer
+#   with zeroed tensors. Knowing that these tensors are expected by the
+#   policy, the collector will pass them on during collection, and we
+#   will store them in the replay buffer so the loss can bootstrap the
+#   RNN from a real carry instead of zeros. Omitting the primer does
+#   not crash: the collector drops the recurrent keys, the policy
+#   zeros its hidden state at every step, and recurrency silently
+#   dies. Training still runs, but it is worse.
+#   ``auto_register_policy_transforms=True`` on the collector is the
+#   equivalent automatic path: it can attach
+#   :class:`~torchrl.envs.transforms.InitTracker` and the primer for you
+#   (see :ref:`ref_recurrent_state_lifecycle`). This tutorial builds
+#   the primer explicitly via
+#   :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer`, so we
+#   wait until the LSTM is constructed before appending it.
 #
 
 env = TransformedEnv(
@@ -259,10 +263,16 @@ print("out_keys", lstm.out_keys)
 # move the recurrent state to the root TensorDict, making it available to the
 # RNN during the following call (see figure in the intro).
 #
-# As mentioned earlier, we have one more optional transform to add to our
-# environment to make sure that the recurrent states are passed to the buffer.
-# The :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer` method does
-# exactly that:
+# As mentioned earlier, we still need a
+# :class:`~torchrl.envs.transforms.TensorDictPrimer` so that hidden
+# states travel through ``env.reset`` → collector → policy → replay.
+# Without it the collector does not feed recurrent state to the
+# policy; the LSTM zeros or drops that state and recurrency silently
+# dies. ``auto_register_policy_transforms=True`` on the collector
+# is the equivalent automatic path (see
+# :ref:`ref_recurrent_state_lifecycle`). This tutorial builds the
+# primer explicitly via
+# :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer`:
 #
 env.append_transform(lstm.make_tensordict_primer())
 
@@ -493,13 +503,17 @@ if traj_lens:
 # - Indicate to the LSTM module that a reset is needed via an :class:`~torchrl.envs.transforms.InitTracker`
 #   transform
 # - Incorporate this module in a policy and in a loss module
-# - Make sure that the collector is made aware of the recurrent state entries
-#   such that they can be stored in the replay buffer along with the rest of
-#   the data
+# - Append a :class:`~torchrl.envs.transforms.TensorDictPrimer` (or enable
+#   ``auto_register_policy_transforms=True`` on the collector) so hidden
+#   states travel through collection and into the replay buffer. Omitting
+#   it does not crash; recurrency just dies silently
 #
 # Further Reading
 # ---------------
 #
+# - :ref:`Recurrent state lifecycle <ref_recurrent_state_lifecycle>` —
+#   how hidden states move through ``env.reset``, collection, replay,
+#   and the loss.
 # - The TorchRL documentation can be found `here <https://pytorch.org/rl/>`_.
 
 

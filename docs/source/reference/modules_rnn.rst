@@ -204,6 +204,8 @@ See also
 
 * :ref:`data-layout` for the contiguous trajectory layout and replay-buffer
   handoff.
+* :ref:`Recurrent state lifecycle <ref_recurrent_state_lifecycle>` for
+  the primer / ``auto_register_policy_transforms`` collection path.
 * :class:`LSTMModule` and :class:`GRUModule` for constructor arguments and
   examples.
 * :class:`set_recurrent_mode` for switching between single-step and recurrent
