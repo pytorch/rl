@@ -48,6 +48,7 @@
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'reference/objectives_value';</script>
     <script src="../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../genindex.html" />
@@ -2570,6 +2571,24 @@ document.write(`
 </tbody>
 </table>
 </div>
+<section id="parallel-q-network-lambda-returns">
+<h2>Parallel Q-Network lambda returns<a class="headerlink" href="#parallel-q-network-lambda-returns" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss" title="torchrl.objectives.DQNLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">DQNLoss</span></code></a> supports the lambda-return target used by <a class="reference external" href="https://arxiv.org/abs/2407.04811">Parallel Q-Networks
+(PQN)</a> through its existing value-estimator
+interface:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">loss</span> <span class="o">=</span> <span class="n">DQNLoss</span><span class="p">(</span><span class="n">value_network</span><span class="p">,</span> <span class="n">action_space</span><span class="o">=</span><span class="n">action_spec</span><span class="p">)</span>
+<span class="n">loss</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span>
+    <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TDLambda</span><span class="p">,</span>
+    <span class="n">gamma</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+    <span class="n">lmbda</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The value network’s greedy action selection writes <code class="docutils literal notranslate"><span class="pre">chosen_action_value</span></code>, so
+the lambda return bootstraps from <span class="math notranslate nohighlight">\(\max_a Q(s_{t+1}, a)\)</span>. It does not use
+the behavior action at the next step, and no <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;action&quot;)</span></code> entry is
+required.</p>
+</section>
 </section>
 
 
@@ -2680,6 +2699,18 @@ document.write(`
               
                 <div class="bd-sidebar-secondary bd-toc">
 <div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#parallel-q-network-lambda-returns">Parallel Q-Network lambda returns</a></li>
+</ul>
+  </nav></div>
     
        <div class="sidebar-secondary-item">
 
@@ -2930,7 +2961,7 @@ document.write(`
        "headline": "Value-Based Methods",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/objectives_value.html",
-       "articleBody": "Value-Based Methods# Loss modules for value-based RL algorithms. DQNLoss(*args, **kwargs) The DQN Loss class. DistributionalDQNLoss(*args, **kwargs) A distributional DQN loss class. IQLLoss(*args, **kwargs) TorchRL implementation of the IQL loss. DiscreteIQLLoss(*args, **kwargs) TorchRL implementation of the discrete IQL loss. CQLLoss(*args, **kwargs) TorchRL implementation of the continuous CQL loss. DiscreteCQLLoss(*args, **kwargs) TorchRL implementation of the discrete CQL loss.",
+       "articleBody": "Value-Based Methods# Loss modules for value-based RL algorithms. DQNLoss(*args, **kwargs) The DQN Loss class. DistributionalDQNLoss(*args, **kwargs) A distributional DQN loss class. IQLLoss(*args, **kwargs) TorchRL implementation of the IQL loss. DiscreteIQLLoss(*args, **kwargs) TorchRL implementation of the discrete IQL loss. CQLLoss(*args, **kwargs) TorchRL implementation of the continuous CQL loss. DiscreteCQLLoss(*args, **kwargs) TorchRL implementation of the discrete CQL loss. Parallel Q-Network lambda returns# DQNLoss supports the lambda-return target used by Parallel Q-Networks (PQN) through its existing value-estimator interface: loss = DQNLoss(value_network, action_space=action_spec) loss.make_value_estimator( ValueEstimators.TDLambda, gamma=0.99, lmbda=0.95, ) The value network\u2019s greedy action selection writes chosen_action_value, so the lambda return bootstraps from \\(\\max_a Q(s_{t+1}, a)\\). It does not use the behavior action at the next step, and no (\"next\", \"action\") entry is required.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

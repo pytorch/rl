@@ -33324,7 +33324,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fc6f4aa41d0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f918a4cdbc0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -45939,7 +45939,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fc6f76ac540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f918d47c540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -272352,6 +272352,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [DiscreteIQLLoss](generated/torchrl.objectives.DiscreteIQLLoss.html)
 - [CQLLoss](generated/torchrl.objectives.CQLLoss.html)
 - [DiscreteCQLLoss](generated/torchrl.objectives.DiscreteCQLLoss.html)
+- [Parallel Q-Network lambda returns](objectives_value.html#parallel-q-network-lambda-returns)
 - [Policy Gradient Methods](objectives_policy.html)
 
 - [PPOLoss](generated/torchrl.objectives.PPOLoss.html)
@@ -272639,6 +272640,26 @@ Loss modules for value-based RL algorithms.
 | [`DiscreteIQLLoss`](generated/torchrl.objectives.DiscreteIQLLoss.html#torchrl.objectives.DiscreteIQLLoss)(*args, **kwargs) | TorchRL implementation of the discrete IQL loss. |
 | [`CQLLoss`](generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss)(*args, **kwargs) | TorchRL implementation of the continuous CQL loss. |
 | [`DiscreteCQLLoss`](generated/torchrl.objectives.DiscreteCQLLoss.html#torchrl.objectives.DiscreteCQLLoss)(*args, **kwargs) | TorchRL implementation of the discrete CQL loss. |
+
+## Parallel Q-Network lambda returns
+
+[`DQNLoss`](generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss) supports the lambda-return target used by [Parallel Q-Networks
+(PQN)](https://arxiv.org/abs/2407.04811) through its existing value-estimator
+interface:
+
+```
+loss = DQNLoss(value_network, action_space=action_spec)
+loss.make_value_estimator(
+ ValueEstimators.TDLambda,
+ gamma=0.99,
+ lmbda=0.95,
+)
+```
+
+The value network's greedy action selection writes `chosen_action_value`, so
+the lambda return bootstraps from \(\max_a Q(s_{t+1}, a)\). It does not use
+the behavior action at the next step, and no `("next", "action")` entry is
+required.
 
 ---
 

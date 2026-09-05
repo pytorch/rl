@@ -49,6 +49,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [DiscreteIQLLoss](generated/torchrl.objectives.DiscreteIQLLoss.html)
 - [CQLLoss](generated/torchrl.objectives.CQLLoss.html)
 - [DiscreteCQLLoss](generated/torchrl.objectives.DiscreteCQLLoss.html)
+- [Parallel Q-Network lambda returns](objectives_value.html#parallel-q-network-lambda-returns)
 - [Policy Gradient Methods](objectives_policy.html)
 
 - [PPOLoss](generated/torchrl.objectives.PPOLoss.html)
