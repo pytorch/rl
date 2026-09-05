@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools as ft
 import importlib.util
 import io
 import pathlib
@@ -23,6 +24,22 @@ from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
 
 _has_torchvision = importlib.util.find_spec("torchvision") is not None
+
+
+def _chess_rand_action(
+    env: EnvBase, tensordict: TensorDictBase | None = None
+) -> TensorDictBase:
+    chess_env = getattr(env, "base_env", env)
+    if tensordict is not None and not chess_env.stateful and chess_env.mask_actions:
+        mask = tensordict.get("action_mask", None)
+        state_key = "fen" if chess_env.include_fen else "pgn"
+        if mask is None and tensordict.get(state_key, None) is not None:
+            mask = chess_env._legal_moves_to_index(
+                tensordict=tensordict, return_mask=True
+            )[1]
+        if mask is not None:
+            env.action_spec.update_mask(mask.to(env.action_spec.device))
+    return EnvBase.rand_action(env, tensordict)
 
 
 class _ChessMeta(_EnvPostInit):
@@ -62,6 +79,9 @@ class _ChessMeta(_EnvPostInit):
             from torchrl.envs import ActionMask
 
             instance = instance.append_transform(ActionMask())
+            # The public ChessEnv is now a TransformedEnv. Keep its specialized
+            # sampler on that wrapper so ActionMask's transformed spec is used.
+            instance.rand_action = ft.partial(_chess_rand_action, instance)
         return instance
 
 
@@ -370,6 +390,10 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
                 "legal ones, call 'env.full_action_spec.enumerate()'."
             )
         return super().all_actions(tensordict)
+
+    def rand_action(self, tensordict: TensorDictBase | None = None) -> TensorDictBase:
+        """Sample a legal action from the state carried by ``tensordict``."""
+        return _chess_rand_action(self, tensordict)
 
     def _reset(self, tensordict=None, **kwargs):
         # ``set_state`` is resolved by ``EnvBase.reset``: when truthy, honor the

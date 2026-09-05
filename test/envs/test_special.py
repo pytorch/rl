@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import pickle
 import threading
 from functools import partial
 
@@ -567,16 +568,45 @@ class TestChessEnv:
             if td["done"]:
                 td = env.reset()
 
-    def test_rand_action_honors_input_state(self):
-        # Mid-game FEN whose only legal move is not legal at the start
-        # position. A stale ActionMask would sample from the start mask
-        # and fail the membership check.
-        fen = "5R1k/8/8/8/6R1/8/8/5K2 b - - 0 1"
-        env = ChessEnv(stateful=False, include_fen=True, mask_actions=True)
+    @pytest.mark.parametrize(
+        "state_key,state",
+        [
+            ("fen", "5R1k/8/8/8/6R1/8/8/5K2 b - - 0 1"),
+            (
+                "pgn",
+                """[Event "?"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "*"]
+
+1. Na3 c6 2. Nc4 c5 3. Nd6+ *""",
+            ),
+        ],
+    )
+    def test_rand_action_honors_input_state(self, state_key, state):
+        # Both positions have one legal move that is illegal at the start.
+        # Pickle round-tripping also exercises the sampler installed on the
+        # public TransformedEnv wrapper.
+        env = ChessEnv(
+            stateful=False,
+            include_fen=state_key == "fen",
+            include_pgn=state_key == "pgn",
+            mask_actions=True,
+        )
         env.reset()
-        td = TensorDict({"fen": fen})
+        env = pickle.loads(pickle.dumps(env))
+        td = TensorDict({state_key: state})
         rand_action = env.rand_action(td.clone())
         all_actions = env.all_actions(td.clone())
+        assert (rand_action["action"] == all_actions["action"]).sum() == 1
+
+        # A supplied mask must also override the stale start-position mask.
+        mask = torch.zeros_like(env.reset()["action_mask"])
+        mask[all_actions["action"]] = True
+        rand_action = env.rand_action(TensorDict({"action_mask": mask}))
         assert (rand_action["action"] == all_actions["action"]).sum() == 1
 
 
