@@ -64,6 +64,26 @@ learner forward/backward:
 ./sota-implementations/dreamer_v3/reproduce_dmc_walker.sh --fast
 ```
 
+To measure the same fixed-shape learner update after compile and capture
+warmup—including every loss, backward, optimizer, and slow-target update—run:
+
+```bash
+python benchmarks/ad_hoc/bench_dreamer_v3_learner.py
+```
+
+The timing excludes replay sampling and environment collection. Use the
+benchmark arguments to change the batch size, sequence length, scan unroll,
+warmup, or number of measured updates. Compilation and graph capture happen
+during warmup and are excluded from the reported samples.
+
+On one NVIDIA GB200 with PyTorch 2.12.0, CUDA 13.0, BF16, batch size 16,
+sequence length 64, scan unroll 8, 10 warmup updates and 50 measured updates:
+
+| Learner backend | Median update | Transitions/s | Speedup |
+| --- | ---: | ---: | ---: |
+| Compiled scan | 358.51 ms | 2,856 | 1.00x |
+| Compiled scan + CUDA graph | 17.83 ms | 57,415 | 20.10x |
+
 Compilation has an up-front cost, so the short validation remains eager:
 
 ```bash
