@@ -16,6 +16,7 @@ from tensordict.utils import _zip_strict
 from torchrl.data import History
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.llm._utils import _runtime_device
 
 if TYPE_CHECKING:
     import transformers
@@ -176,8 +177,10 @@ class DistillationLoss(LossModule):
             with ``DistillationLoss(assistant_only=True)``; use
             ``RetrieveLogProb(assistant_only=False)`` when distilling on all
             attended tokens.
-        device (torch.device, optional): the device to use when tokenizing
-            the input and running the student. Defaults to ``None``.
+        device (torch.device | None, optional): fallback device used when neither
+            the input nor the student parameters and buffers provide one. This
+            does not move the student network; move the complete loss with
+            :meth:`~torch.nn.Module.to`. Defaults to ``None``.
 
     .. note::
         The input tensordict is expected to contain the following keys by
@@ -342,7 +345,9 @@ class DistillationLoss(LossModule):
         self.normalize_by_seq_length = normalize_by_seq_length
         self.assistant_only = assistant_only
         self._set_in_keys()
-        self.device = device
+        self.register_buffer(
+            "_device_fallback", torch.empty(0, device=device), persistent=False
+        )
 
     def _set_in_keys(self) -> None:
         """Sets the input keys for the loss module."""
@@ -355,6 +360,13 @@ class DistillationLoss(LossModule):
         """Returns the loss masks, the attention masks and, when recoverable, the assistant masks."""
         assistant_masks = tensordict.get(("masks", "all_assistant_mask"), as_list=True)
         attention_mask = tensordict.get(("masks", "all_attention_mask"), as_list=True)
+        device = _runtime_device(
+            self.actor_network,
+            tensordict,
+            assistant_masks,
+            attention_mask,
+            fallback=self._device_fallback,
+        )
         if (self.assistant_only and assistant_masks is None) or attention_mask is None:
             if self.tokenizer is None:
                 raise ValueError(
@@ -363,8 +375,8 @@ class DistillationLoss(LossModule):
                     "to the loss constructor or provide the masks in the input."
                 )
             with torch.device(
-                self.device
-            ) if self.device is not None else contextlib.nullcontext():
+                device
+            ) if device is not None else contextlib.nullcontext():
                 token_struct = history.apply_chat_template(
                     tokenizer=self.tokenizer, **self.tokenizer_kwargs
                 )
@@ -436,9 +448,14 @@ class DistillationLoss(LossModule):
             )
 
         input_loss = tensordict.select(self.tensor_keys.history)
-        with torch.device(
-            self.device
-        ) if self.device is not None else contextlib.nullcontext():
+        device = _runtime_device(
+            self.actor_network,
+            tensordict,
+            masks,
+            attention_masks,
+            fallback=self._device_fallback,
+        )
+        with torch.device(device) if device is not None else contextlib.nullcontext():
             output_loss = self.actor_network(input_loss)
         log_probs = output_loss.get(self.tensor_keys.log_probs, as_list=True)
 

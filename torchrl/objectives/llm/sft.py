@@ -17,6 +17,7 @@ from tensordict.utils import _zip_strict
 from torchrl.data import History
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.objectives.common import LossModule
+from torchrl.objectives.llm._utils import _runtime_device
 
 if TYPE_CHECKING:
     import transformers
@@ -121,7 +122,10 @@ class SFTLoss(LossModule):
                 \text{loss} = -\log\sigma(\beta \cdot (\text{log_probs} - \text{ref_log_probs}))
 
             Defaults to `0.1`.
-        device (torch.device | None, optional): the device to use for the loss, when tokenizing the input. Defaults to `None`.
+        device (torch.device | None, optional): fallback device used when neither
+            the input nor the actor parameters and buffers provide one. This does
+            not move the actor network; move the complete loss with
+            :meth:`~torch.nn.Module.to`. Defaults to `None`.
 
     .. note::
         The input tensordict is expected to contain the following keys by default:
@@ -295,7 +299,9 @@ class SFTLoss(LossModule):
             self.kl_to_ref_coeff = 0.0
         self.beta = beta
         self._set_in_keys()
-        self.device = device
+        self.register_buffer(
+            "_device_fallback", torch.empty(0, device=device), persistent=False
+        )
 
     def _set_in_keys(self) -> None:
         """Sets the input keys for the loss module."""
@@ -342,11 +348,18 @@ class SFTLoss(LossModule):
         token_struct = None
         assistant_masks = tensordict.get(("masks", "all_assistant_mask"), as_list=True)
         attention_mask = tensordict.get(("masks", "all_attention_mask"), as_list=True)
+        device = _runtime_device(
+            self.actor_network,
+            tensordict,
+            assistant_masks,
+            attention_mask,
+            fallback=self._device_fallback,
+        )
         if assistant_masks is None:
             # Apply tokenizer to history and gather mask
             with torch.device(
-                self.device
-            ) if self.device is not None else contextlib.nullcontext():
+                device
+            ) if device is not None else contextlib.nullcontext():
                 token_struct = history.apply_chat_template(
                     tokenizer=self.tokenizer, **self.tokenizer_kwargs
                 )
@@ -370,9 +383,7 @@ class SFTLoss(LossModule):
 
         input_loss = tensordict.select(self.tensor_keys.history)
 
-        with torch.device(
-            self.device
-        ) if self.device is not None else contextlib.nullcontext():
+        with torch.device(device) if device is not None else contextlib.nullcontext():
             output_loss = self.actor_network(input_loss)
 
         # get log-probs
