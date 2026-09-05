@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -62,13 +62,21 @@ class MicroDuckGaitConfig:
     ankle_pitch_kd: float = 0.6033
     ramp_duration_s: float = 0.4
 
-    def env_kwargs(self) -> dict[str, float]:
-        """Return the :class:`~torchrl.envs.MicroDuckEnv` gait-clock arguments."""
-        return {
-            "gait_frequency_hz": self.frequency_hz,
-            "gait_phase_offset": self.phase_offset,
-            "gait_ramp_duration_s": self.ramp_duration_s,
-        }
+    def task_kwargs(self) -> dict[str, float]:
+        """Return the :class:`~torchrl.envs.MicroDuckTask` gait-clock overrides.
+
+        The phase offset and the ramp duration are class constants of
+        :class:`~torchrl.envs.MicroDuckEnv` and must match the config.
+        """
+        if (self.phase_offset, self.ramp_duration_s) != (
+            MicroDuckEnv.GAIT_PHASE_OFFSET,
+            MicroDuckEnv.GAIT_RAMP_DURATION_S,
+        ):
+            raise ValueError(
+                "The gait clock offset and ramp are fixed by MicroDuckEnv: "
+                f"{MicroDuckEnv.GAIT_PHASE_OFFSET}, {MicroDuckEnv.GAIT_RAMP_DURATION_S}."
+            )
+        return {"gait_frequency_hz": self.frequency_hz}
 
 
 class MicroDuckGaitActor(TensorDictModuleBase):
@@ -90,7 +98,7 @@ class MicroDuckGaitActor(TensorDictModuleBase):
     Examples:
         >>> from torchrl.envs import MicroDuckEnv
         >>> config = MicroDuckGaitConfig()
-        >>> env = MicroDuckEnv(download=True, commanded_x_velocity=0.03, **config.env_kwargs())
+        >>> env = MicroDuckEnv(download=True, tasks=MicroDuckEnv.tracking_task(0.03, **config.task_kwargs()))
         >>> rollout = env.rollout(100, MicroDuckGaitActor(config))
         >>> rollout["action"].shape
         torch.Size([1, 100, 14])
@@ -129,7 +137,8 @@ class MicroDuckGaitActor(TensorDictModuleBase):
         phase_start = MicroDuckEnv.GAIT_PHASE_START
         pitch = observation[..., 0:1].clamp(-1.0, 1.0).asin()
         pitch_rate = observation[..., 4:5]
-        direction = observation[..., 7:8].sign()
+        command_start = MicroDuckEnv.COMMAND_START
+        direction = observation[..., command_start : command_start + 1].sign()
         gait_sin = direction * observation[..., phase_start : phase_start + 1]
         gait_cos = direction * observation[..., phase_start + 1 : phase_start + 2]
         ramp = observation[..., phase_start + 2 : phase_start + 3]
@@ -184,7 +193,7 @@ def gait_metrics(rollout: TensorDictBase) -> TensorDict:
     rollout = rollout.reshape(-1)
     observation = rollout["observation"]
     after = rollout["next"]
-    direction = observation[0, 7].sign()
+    direction = observation[0, MicroDuckEnv.COMMAND_START].sign()
     # The left foot swings while the directed gait clock is positive.
     swing_left = direction * observation[:, MicroDuckEnv.GAIT_PHASE_START] >= 0
     left_contact = after["diagnostic_left_foot_contact"][:, 0] > 0.5
@@ -263,7 +272,7 @@ def make_env(
     *,
     download: bool | str = False,
     backend: BackendName = "mujoco",
-    commanded_x_velocity: float | Sequence[float] = 0.03,
+    speed: float = 0.03,
     seed: int = 0,
     reset_noise_scale: float = MicroDuckEnv.RESET_NOISE_SCALE,
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
@@ -279,15 +288,12 @@ def make_env(
     ``rlrender`` can call this factory with its own keyword arguments.
     """
     gait = MicroDuckGaitActor(gait).config
-    task = replace(
-        MicroDuckEnv.tracking_task(commanded_x_velocity, diagnostics=True),
-        **gait.env_kwargs(),
-    )
     return MicroDuckEnv(
         microduck_root,
         download=download,
         backend=backend,
-        task=task,
+        tasks=MicroDuckEnv.tracking_task(speed, **gait.task_kwargs()),
+        diagnostics=True,
         num_envs=1,
         seed=seed,
         reset_noise_scale=reset_noise_scale,
@@ -327,7 +333,7 @@ def main(args: argparse.Namespace) -> None:
         args.microduck_root,
         download=args.download,
         backend=args.backend,
-        commanded_x_velocity=args.commanded_x_velocity,
+        speed=args.commanded_x_velocity,
         reset_noise_scale=args.reset_noise_scale,
         gait=actor.config,
         max_episode_steps=args.steps,

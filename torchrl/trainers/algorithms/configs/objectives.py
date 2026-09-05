@@ -24,6 +24,7 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.iql import DiscreteIQLLoss
 from torchrl.objectives.sac import DiscreteSACLoss
+from torchrl.objectives.value import GAE
 from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 
 
@@ -402,6 +403,11 @@ class HardUpdateConfig(TargetNetUpdaterConfig):
     value_network_update_interval: int = 1000
 
 
+def _make_gae(*args, **kwargs) -> GAE:
+    group_key = _normalize_hydra_key(kwargs.pop("group_key", None))
+    return GAE(*args, group_key=group_key, **kwargs)
+
+
 @dataclass
 class GAEConfig(LossConfig):
     """Hydra configuration for :class:`~torchrl.objectives.value.GAE`.
@@ -429,7 +435,8 @@ class GAEConfig(LossConfig):
     num_chunk: int | None = None
     value_chunk_dim: int = 0
     shifted_budget: int = 1
-    _target_: str = "torchrl.objectives.value.GAE"
+    group_key: Any = None
+    _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_gae"
     _partial_: bool = False
 
     def __post_init__(self) -> None:

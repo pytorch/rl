@@ -15,23 +15,17 @@ env:
   camera_id: -1             # rendering: MuJoCo camera and frame size
   render_width: 640
   render_height: 480
-  task:                     # fields of torchrl.envs.MicroDuckTask
-    commanded_x_velocity: [0.03]
-    command_range: null
-    warm_start_velocity: null
-    warm_start_fraction: 0.0
-    joint_reset_noise_scale: null
-    action_scale: 0.35
-    gait_frequency_hz: 1.8913
-    gait_frequency_per_mps: 0.0
-    observe_lateral_velocity: false
-    reward_scales: {}
+  action_scale: 1.0         # position-target offset in radians for a unit action (0.35 with the gait prior)
+  diagnostics: false        # reward breakdown in the observation; evaluators turn it on
+  tasks:                    # task library: one MicroDuckEnv preset per entry with its arguments (`weight`, `name`, ...)
+    - {preset: tracking_task, speed: 0.03}
+  task_id: null             # pin one task of the library at every reset (evaluation, rendering)
 
 policy:
-  head: gait-residual       # gait-residual learns around the closed-form gait; gaussian trains from scratch
+  from_prior: false         # true: quick debugging start, a bounded residual around the closed-form gait
   hidden_size: 128
-  residual_scale: 0.2
-  initial_policy_scale: null  # 0.05 for gait-residual, 0.3 for gaussian
+  residual_scale: 0.2       # bound of the learned residual when starting from the prior
+  initial_policy_scale: null  # exploration std at start: 1.0 from scratch, 0.05 from the prior
   init_from: null           # checkpoint whose actor and critic parameters initialize the models
 
 ppo:
@@ -46,11 +40,11 @@ ppo:
   gamma: 0.99
   gae_lambda: 0.95
   max_grad_norm: 1.0
+  per_task_advantage: true  # standardize advantages within each task of the library
 
 evaluation:
   interval: 5               # iterations between deterministic evaluations; null disables them
-  commands: null            # defaults to the training commands, or the range bounds and midpoint
-  num_episodes: 8           # complete episodes per command and evaluation
+  num_episodes: 8           # complete episodes per task and evaluation
   steps: 500
   best_checkpoint_path: microduck_ppo_best.ckpt
   latest_checkpoint_path: null

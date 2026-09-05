@@ -143,6 +143,32 @@ class TestMultiAgentGAE:
         gae(td)
         assert td[gae.tensor_keys.advantage].shape[-2] == n_agents
 
+    def test_grouped_advantage_keeps_agents_independent(self):
+        n_agents = 3
+        critic = _make_critic(n_agents=n_agents)
+        group = torch.tensor([0, 0, 1, 1]).view(4, 1, 1).expand(4, 5, 1)
+        td = _make_data(B=4, T=5, n_agents=n_agents)
+        td["task_id"] = group
+        gae = MultiAgentGAE(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=critic,
+            average_gae=True,
+            group_key="task_id",
+        )
+        gae.set_keys(value=("agents", "state_value"))
+        gae(td)
+        advantage = td[gae.tensor_keys.advantage]
+        for group_id in (0, 1):
+            for agent in range(n_agents):
+                values = advantage[..., agent, :][group == group_id]
+                torch.testing.assert_close(
+                    values.mean(), torch.zeros(()), atol=1e-5, rtol=0
+                )
+                torch.testing.assert_close(
+                    values.std(), torch.ones(()), atol=1e-5, rtol=0
+                )
+
     def test_broadcast_error_on_bad_shape(self):
         gae = MultiAgentGAE(gamma=0.99, lmbda=0.95, value_network=None, agent_dim=-2)
         # value has ndim=4 (B, T, n_agents, 1); a 2-D reward is neither

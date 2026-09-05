@@ -66,6 +66,49 @@ except ImportError as err:
         ) from err
 
 
+def _standardize_by_group(
+    x: Tensor,
+    groups: Tensor,
+    mask: Tensor | None = None,
+    eps: float = 1e-4,
+) -> Tensor:
+    """Standardize ``x`` to zero mean and unit variance within each group.
+
+    ``groups`` is an integer tensor whose leading dimensions match ``x`` (a
+    trailing singleton dimension, as in ``(*batch, 1)``, is accepted); ``mask``
+    selects the entries that count and is broadcastable to ``x``. Groups are
+    the distinct values of ``groups``, so the reduction is data dependent and
+    not traceable by :func:`torch.compile`.
+    """
+    while groups.ndim < x.ndim:
+        groups = groups.unsqueeze(-1)
+    if groups.ndim > x.ndim:
+        raise ValueError(
+            f"group ids of shape {tuple(groups.shape)} cannot index values of shape "
+            f"{tuple(x.shape)}."
+        )
+    groups = groups.expand(x.shape).reshape(-1)
+    flat = x.reshape(-1)
+    weight = (
+        torch.ones_like(flat)
+        if mask is None
+        else mask.expand(x.shape).reshape(-1).to(flat.dtype)
+    )
+    _, index = torch.unique(groups, return_inverse=True)
+    count = torch.zeros(
+        int(index.max()) + 1, dtype=flat.dtype, device=flat.device
+    ).index_add_(0, index, weight)
+    mean = torch.zeros_like(count).index_add_(
+        0, index, flat * weight
+    ) / count.clamp_min(1)
+    centered = flat - mean[index]
+    # Unbiased variance, like ``Tensor.std`` in the global standardization.
+    variance = torch.zeros_like(count).index_add_(
+        0, index, centered.square() * weight
+    ) / (count - 1).clamp_min(1)
+    return (centered / variance.sqrt().clamp_min(eps)[index]).reshape(x.shape)
+
+
 def _self_set_grad_enabled(fun):
     @wraps(fun)
     def new_fun(self, *args, **kwargs):
@@ -298,8 +341,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
         num_chunk: int | None = None,
         value_chunk_dim: int = 0,
         shifted_budget: int = 1,
+        group_key: NestedKey | None = None,
     ):
         super().__init__()
+        self.group_key = group_key
         if device is None:
             device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
         # this is saved for tracking only and should not be used to cast anything else than buffers during
@@ -423,6 +468,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
         except AttributeError:
             # value network does not have an `in_keys` attribute
             in_keys = []
+        if self.group_key is not None and self.group_key not in in_keys:
+            in_keys.append(self.group_key)
         return in_keys
 
     @property
@@ -630,6 +677,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 copied = True
             next_data.set(key, value)
         return next_data
+
+    def _group_ids(self, tensordict: TensorDictBase) -> Tensor | None:
+        """Return the group ids under ``group_key``, or ``None`` when it is unset."""
+        if self.group_key is None:
+            return None
+        groups = tensordict.get(self.group_key, None)
+        if groups is None:
+            raise KeyError(
+                f"group_key {self.group_key!r} is missing from the tensordict; it is "
+                "needed to standardize within groups."
+            )
+        return groups
 
     @staticmethod
     def _normalize_shifted(
@@ -1007,6 +1066,10 @@ class TD0Estimator(ValueEstimatorBase):
             Defaults to ``False``.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
+        group_key (NestedKey, optional): key of an integer entry of the input
+            tensordict, one id per batch element such as a task id, within whose
+            groups that standardization is done instead of over the whole
+            batch. Defaults to ``None``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
 
@@ -1066,6 +1129,7 @@ class TD0Estimator(ValueEstimatorBase):
         num_chunk: int | None = None,
         value_chunk_dim: int = 0,
         shifted_budget: int = 1,
+        group_key: NestedKey | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -1082,6 +1146,7 @@ class TD0Estimator(ValueEstimatorBase):
             num_chunk=num_chunk,
             value_chunk_dim=value_chunk_dim,
             shifted_budget=shifted_budget,
+            group_key=group_key,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -1218,8 +1283,12 @@ class TD0Estimator(ValueEstimatorBase):
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
         if self.average_rewards:
-            reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-5)
+            groups = self._group_ids(tensordict)
+            if groups is None:
+                reward = reward - reward.mean()
+                reward = reward / reward.std().clamp_min(1e-5)
+            else:
+                reward = _standardize_by_group(reward, groups, eps=1e-5)
             tensordict.set(
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
@@ -1250,6 +1319,10 @@ class TD1Estimator(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
+        group_key (NestedKey, optional): key of an integer entry of the input
+            tensordict, one id per batch element such as a task id, within whose
+            groups that standardization is done instead of over the whole
+            batch. Defaults to ``None``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
 
@@ -1354,6 +1427,7 @@ class TD1Estimator(ValueEstimatorBase):
         num_chunk: int | None = None,
         value_chunk_dim: int = 0,
         shifted_budget: int = 1,
+        group_key: NestedKey | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -1370,6 +1444,7 @@ class TD1Estimator(ValueEstimatorBase):
             num_chunk=num_chunk,
             value_chunk_dim=value_chunk_dim,
             shifted_budget=shifted_budget,
+            group_key=group_key,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -1507,8 +1582,12 @@ class TD1Estimator(ValueEstimatorBase):
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
         if self.average_rewards:
-            reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-5)
+            groups = self._group_ids(tensordict)
+            if groups is None:
+                reward = reward - reward.mean()
+                reward = reward / reward.std().clamp_min(1e-5)
+            else:
+                reward = _standardize_by_group(reward, groups, eps=1e-5)
             tensordict.set(
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
@@ -1547,6 +1626,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
+        group_key (NestedKey, optional): key of an integer entry of the input
+            tensordict, one id per batch element such as a task id, within whose
+            groups that standardization is done instead of over the whole
+            batch. Defaults to ``None``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
 
@@ -1655,6 +1738,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         num_chunk: int | None = None,
         value_chunk_dim: int = 0,
         shifted_budget: int = 1,
+        group_key: NestedKey | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -1671,6 +1755,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             num_chunk=num_chunk,
             value_chunk_dim=value_chunk_dim,
             shifted_budget=shifted_budget,
+            group_key=group_key,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
@@ -1824,10 +1909,14 @@ class TDLambdaEstimator(ValueEstimatorBase):
             self.lmbda = self.lmbda.to(device)
         lmbda = self.lmbda
         if self.average_rewards:
-            reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-4)
+            groups = self._group_ids(tensordict)
+            if groups is None:
+                reward = reward - reward.mean()
+                reward = reward / reward.std().clamp_min(1e-4)
+            else:
+                reward = _standardize_by_group(reward, groups)
             tensordict.set(
-                ("next", self.tensor_keys.steps_to_next_obs), reward
+                ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
 
         if next_value is None:
@@ -1882,6 +1971,10 @@ class GAE(ValueEstimatorBase):
             will not call the value network to produce it.
         average_gae (bool): if ``True``, the resulting GAE values will be standardized.
             Default is ``False``.
+        group_key (NestedKey, optional): key of an integer entry of the input
+            tensordict, one id per batch element such as a task id, within whose
+            groups that standardization is done instead of over the whole
+            batch. Defaults to ``None``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
 
@@ -2019,6 +2112,7 @@ class GAE(ValueEstimatorBase):
         num_chunk: int | None = None,
         value_chunk_dim: int = 0,
         shifted_budget: int = 1,
+        group_key: NestedKey | None = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -2035,6 +2129,7 @@ class GAE(ValueEstimatorBase):
             num_chunk=num_chunk,
             value_chunk_dim=value_chunk_dim,
             shifted_budget=shifted_budget,
+            group_key=group_key,
         )
         self.register_buffer(
             "gamma",
@@ -2241,7 +2336,9 @@ class GAE(ValueEstimatorBase):
             )
 
         if self.average_gae:
-            adv = self._normalize_advantage(adv, valid)
+            adv = self._normalize_advantage(
+                adv, valid, groups=self._group_ids(tensordict)
+            )
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
@@ -2275,14 +2372,21 @@ class GAE(ValueEstimatorBase):
         return tensor
 
     def _normalize_advantage(
-        self, adv: Tensor, valid: torch.Tensor | None = None
+        self,
+        adv: Tensor,
+        valid: torch.Tensor | None = None,
+        groups: torch.Tensor | None = None,
     ) -> Tensor:
         """Standardise the advantage tensor.
 
-        Default standardises globally (single mean/std over the whole tensor).
+        Default standardises globally (single mean/std over the whole tensor),
+        or within the groups of ``groups`` when ``group_key`` is set.
         :class:`MultiAgentGAE` overrides this to leave the agent dim
         independent.
         """
+        if groups is not None:
+            mask = None if valid is None else self._expand_to_match(valid, adv)
+            return _standardize_by_group(adv, groups, mask)
         if valid is None:
             loc = adv.mean()
             scale = adv.std().clamp_min(1e-4)
@@ -2456,11 +2560,24 @@ class MultiAgentGAE(GAE):
         return self._broadcast_to_agents(tensor, value, self.agent_dim)
 
     def _normalize_advantage(
-        self, adv: Tensor, valid: torch.Tensor | None = None
+        self,
+        adv: Tensor,
+        valid: torch.Tensor | None = None,
+        groups: torch.Tensor | None = None,
     ) -> Tensor:
         # Per-agent standardisation: normalise over batch + time but keep the
         # agent dim independent so high-variance agents are not flattened.
         agent_dim = self.agent_dim if self.agent_dim >= 0 else adv.ndim + self.agent_dim
+        if groups is not None:
+            # Group ids combined with the agent index keep both independent.
+            while groups.ndim < adv.ndim:
+                groups = groups.unsqueeze(-1)
+            agents = torch.arange(adv.shape[agent_dim], device=adv.device).reshape(
+                [-1 if d == agent_dim else 1 for d in range(adv.ndim)]
+            )
+            composite = groups.expand(adv.shape) * adv.shape[agent_dim] + agents
+            mask = None if valid is None else self._expand_to_match(valid, adv)
+            return _standardize_by_group(adv, composite, mask)
         reduce_dims = [d for d in range(adv.ndim) if d != agent_dim]
         if valid is None:
             loc = adv.mean(dim=reduce_dims, keepdim=True)
@@ -2497,6 +2614,10 @@ class VTrace(ValueEstimatorBase):
             Defaults to ``1.0``.
         average_adv (bool): if ``True``, the resulting advantage values will be standardized.
             Default is ``False``.
+        group_key (NestedKey, optional): key of an integer entry of the input
+            tensordict, one id per batch element such as a task id, within whose
+            groups that standardization is done instead of over the whole
+            batch. Defaults to ``None``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
 
@@ -2636,6 +2757,7 @@ class VTrace(ValueEstimatorBase):
         num_chunk: int | None = None,
         value_chunk_dim: int = 0,
         shifted_budget: int = 1,
+        group_key: NestedKey | None = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -2651,6 +2773,7 @@ class VTrace(ValueEstimatorBase):
             num_chunk=num_chunk,
             value_chunk_dim=value_chunk_dim,
             shifted_budget=shifted_budget,
+            group_key=group_key,
         )
         if not isinstance(gamma, torch.Tensor):
             gamma = torch.tensor(gamma, device=self._device)
@@ -2860,10 +2983,13 @@ class VTrace(ValueEstimatorBase):
         )
 
         if self.average_adv:
-            loc = adv.mean()
-            scale = adv.std().clamp_min(1e-5)
-            adv = adv - loc
-            adv = adv / scale
+            groups = self._group_ids(tensordict)
+            if groups is None:
+                loc = adv.mean()
+                scale = adv.std().clamp_min(1e-5)
+                adv = (adv - loc) / scale
+            else:
+                adv = _standardize_by_group(adv, groups, eps=1e-5)
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
