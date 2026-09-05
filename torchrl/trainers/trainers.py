@@ -21,13 +21,13 @@ from textwrap import indent
 from typing import Any, Literal
 
 import numpy as np
-import torch.nn
+import torch
+from packaging import version
 from tensordict import NestedKey, NonTensorData, pad, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-from torch.amp import GradScaler
 from torchrl._utils import (
     _CKPT_BACKEND,
     implement_for,
@@ -52,6 +52,13 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
+
+_TORCH_GRAD_SCALER_HAS_DEVICE = version.parse(torch.__version__).release >= (2, 3)
+
+if _TORCH_GRAD_SCALER_HAS_DEVICE:
+    from torch.amp import GradScaler
+else:
+    from torch.cuda.amp import GradScaler
 
 try:
     from tqdm import tqdm
@@ -82,6 +89,17 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+
+@implement_for("torch", "2.3")
+def _make_grad_scaler(device_type: str, enabled: bool) -> GradScaler:
+    return GradScaler(device_type, enabled=enabled)
+
+
+@implement_for("torch", None, "2.3")
+def _make_grad_scaler(device_type: str, enabled: bool) -> GradScaler:  # noqa: F811
+    return GradScaler(enabled=enabled)
+
 
 # On Windows, a memory-mapped checkpoint keeps the file locked for as long as
 # the loaded tensors are alive, so the checkpoint could neither be deleted nor
@@ -377,7 +395,7 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
 
         # GradScaler is only useful for fp16; bf16 doesn't need it.
         self._use_scaler = mixed_precision and (autocast_dtype == torch.float16)
-        self.scaler = GradScaler(self.device_type, enabled=self._use_scaler)
+        self.scaler = _make_grad_scaler(self.device_type, self._use_scaler)
 
         # Internal micro-batch counter (reset after every optimizer step).
         self._micro_step: int = 0
