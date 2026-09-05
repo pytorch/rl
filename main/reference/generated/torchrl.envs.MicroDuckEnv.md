@@ -2,21 +2,34 @@
 
 *class*torchrl.envs.MicroDuckEnv(*microduck_root: str | Path | None = None*, **args: Any*, *root: str | Path | None = None*, *download: bool | str = False*, ***kwargs: Any*)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv)
 
-Commanded longitudinal-velocity locomotion task for the MicroDuck biped.
+Locomotion tasks for the MicroDuck biped: stand, walk, sidestep, jump.
 
 The action is a normalized offset around the actuator targets of the MJCF
 `STAND` keyframe, applied at 50 Hz. The observation concatenates
-projected gravity (3), base angular velocity (3), measured and commanded
-body-frame longitudinal velocity (2), joint-position error (14), joint
-velocity (14), the sine, cosine and ramp of a fixed-frequency gait clock
-(3), and the previous action (14). The command is also exposed under the
-`commanded_x_velocity` key so evaluation can read it directly.
+projected gravity (3), base angular velocity (3), body-frame linear
+velocity (3), the planar command `(vx, vy)` (2), joint-position error
+(14), joint velocity (14), the sine, cosine and ramp of the gait clock
+(3), and the previous action (14). The command and the index of the env's
+task in the library are also exposed under the `command` and `task_id`
+keys; task parameters are not in the observation, and an embedding of the
+id stands for them.
 
-The reward follows the mjlab velocity-task recipe (see the module
-docstring); its weights are class attributes so a subclass can retune
-them, and `reward_scales` overrides them on one instance. Foot contacts
-and heights come from `foot_contacts()` and `foot_heights()`, so
-the gait terms work on every backend.
+The env holds a library of [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) rows in `tasks`
+(`env.tasks.name` lists their labels).
+At every reset, the envs being reset pick a row: the `task_id` entry of
+the reset TensorDict when present (`(num_envs, 1)` or `(num_envs,)`
+integers), otherwise a draw weighted by the tasks' `weight` field with
+the env's generator. The row sets the command box, the warm start, the
+joint reset noise, the gait clock and the reward for the episode. A
+`command` entry in the reset TensorDict pins the command inside the
+row's box. Both keys are in the `state_spec` so
+`TransformedEnv` forwards them; see
+[`MicroDuckTaskSampler`](torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler) for weighted or curriculum mixtures.
+
+The reward is a matrix of registered terms times each env's weight row;
+`register_reward()` adds terms and `REWARD_TERMS` lists them.
+Foot contacts and heights come from `foot_contacts()` and
+`foot_heights()`, so the gait terms work on every backend.
 
 MuJoCo stores free-joint linear velocity in the world frame and angular
 velocity in the body frame; the task rotates the linear velocity into the
@@ -41,11 +54,17 @@ environment variable, the installed package, or a download under
 
 Keyword Arguments:
 
-- **task** ([*MicroDuckTask*](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)*,**optional*) - commands, reset distribution, action
-scale, gait clock, observation and reward options. Defaults to
-`tracking_task()`, a fixed `0.03` m/s forward command; see
-[`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) for every field and `standing_task()`
-and `speed_range_task()` for the other presets.
+- **tasks** ([*MicroDuckTask*](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)*or*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[*[*MicroDuckTask*](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)*]**,**optional*) - the task
+library: one task, a sequence of tasks or a stacked
+[`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) of shape `(num_tasks,)`. A single task is
+a library of one. Defaults to `tracking_task()`, a fixed
+`0.03` m/s forward command.
+- **action_scale** (*float**,**optional*) - position-target offset in radians for
+a unit normalized action. Defaults to `0.35`.
+- **diagnostics** (*bool**,**optional*) - if `True`, add each weighted reward
+term and pose diagnostics to the observation spec under
+`diagnostic_*` keys. Off by default because it roughly doubles
+the per-step task cost.
 - **root** (*str**or**Path**,**optional*) - directory holding downloaded
 `microduck_rl` checkouts. Defaults to
 `~/.cache/torchrl/microduck`.
@@ -61,6 +80,8 @@ is how the env is meant to run at scale on an accelerator.
 worker process with [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) (or in one
 process with [`SerialEnv`](torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv) when
 `parallel=False`); it is the fallback for CPU-only machines.
+Native workers each receive the library and draw their own task
+ids.
 - **low_cost_collisions** (*bool**,**optional*) - if `True` (default), replace
 the collision-class meshes with box proxies at load time. The
 unmodified meshes make the `mjx` and `mujoco-torch` backends
@@ -75,17 +96,22 @@ accepted.
 
 Examples
 
-Fetch the assets once and roll out a random policy that receives a
-different speed command at every reset:
+Fetch the assets once and roll out a random policy on a two-task
+library; each env picks a task at reset and holds it:
 
 ```
+>>> import torch
 >>> from torchrl.envs import MicroDuckEnv
 >>> env = MicroDuckEnv( 
-... download=True, task=MicroDuckEnv.tracking_task((0.1, 0.2, 0.3))
+... download=True,
+... tasks=[MicroDuckEnv.tracking_task(0.2), MicroDuckEnv.sidestep_task(0.15)],
+... num_envs=4,
 ... )
 >>> rollout = env.rollout(50) 
->>> rollout["observation"].shape[-1], rollout["commanded_x_velocity"][0, 0] 
-(53, tensor([0.2000]))
+>>> rollout["observation"].shape[-1], rollout["task_id"][:, 0, 0] 
+(56, tensor([1, 0, 0, 1]))
+>>> rollout["command"][:, 0] 
+tensor([[0.0000, 0.1500], [0.2000, 0.0000], [0.2000, 0.0000], [0.0000, 0.1500]])
 ```
 
 Scale up: run thousands of vectorized simulators inside
@@ -99,19 +125,37 @@ task code is the same on every backend.
 >>> env = MicroDuckEnv(download=True, backend="mujoco", num_envs=16, parallel=True)
 ```
 
-Pick the task: balance in place, track a speed range with a gait clock
-that follows the command (with a wider action scale for training from
-scratch), or pin the speed of an evaluation episode at reset.
+Pick the task per env at reset, or pin the command of an evaluation
+episode inside its box:
 
 ```
 >>> from tensordict import TensorDict
->>> env = MicroDuckEnv(download=True, task=MicroDuckEnv.standing_task()) 
 >>> env = MicroDuckEnv( 
-... download=True, task=MicroDuckEnv.speed_range_task(0.1, 0.3, action_scale=1.0)
+... download=True,
+... tasks=[MicroDuckEnv.standing_task(), MicroDuckEnv.speed_range_task(0.1, 0.3)],
+... num_envs=2,
 ... )
->>> td = env.reset(TensorDict(commanded_x_velocity=torch.full((1, 1), 0.25), batch_size=[1])) 
->>> td["commanded_x_velocity"] 
-tensor([[0.2500]])
+>>> td = env.reset(TensorDict(task_id=torch.tensor([[1], [0]]), batch_size=[2])) 
+>>> td["task_id"][:, 0], td["command"][1] 
+(tensor([1, 0]), tensor([0., 0.]))
+>>> td = env.reset( 
+... TensorDict(task_id=torch.tensor([1, 1]), command=torch.tensor([[0.25, 0.0], [0.1, 0.0]]), batch_size=[2])
+... )
+>>> td["command"][:, 0] 
+tensor([0.2500, 0.1000])
+```
+
+Weighted mixtures: the `weight` field of each task sets its share of
+the env's own draw; [`MicroDuckTaskSampler`](torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler) writes `task_id`
+at reset for weights that change during training.
+
+```
+>>> from torchrl.envs import MicroDuckTaskSampler, TransformedEnv
+>>> library = [MicroDuckEnv.standing_task(weight=0.5), MicroDuckEnv.jump_task(weight=2.0)]
+>>> env = TransformedEnv( 
+... MicroDuckEnv(download=True, backend="mujoco", num_envs=16, tasks=library),
+... MicroDuckTaskSampler([0.0, 1.0]), # every reset picks the jump task
+... )
 ```
 
 Record a video with the standard recorder transform: the env renders
@@ -119,7 +163,6 @@ offscreen into a `"pixels"` observation and the recorder writes an
 mp4 under `./microduck/videos`.
 
 ```
->>> from torchrl.envs import TransformedEnv
 >>> from torchrl.record import CSVLogger, VideoRecorder
 >>> env = TransformedEnv( 
 ... MicroDuckEnv(download=True, from_pixels=True, render_width=480, render_height=360),
@@ -130,25 +173,22 @@ mp4 under `./microduck/videos`.
 ```
 
 Look inside the reward, retune it, or replace it: `diagnostics=True`
-exposes every term in the observation, `reward_scales` changes the
-weights, and `compute_reward=False` leaves the reward to a transform.
+exposes every weighted term in the observation, a task's
+`reward_weights` retune it, an all-zero weight row leaves the reward
+to a transform, and `register_reward()` adds a term that every
+task can weight.
 
 ```
 >>> env = MicroDuckEnv( 
-... download=True,
-... task=MicroDuckEnv.tracking_task(diagnostics=True, reward_scales={"TRACKING_WEIGHT": 4.0}),
+... download=True, diagnostics=True, tasks=MicroDuckEnv.tracking_task(reward_weights={"tracking": 4.0})
 ... )
 >>> env.rollout(10)["next", "diagnostic_reward_tracking"].shape 
 torch.Size([1, 10, 1])
->>> from torchrl.envs import Transform
->>> class ForwardSpeedReward(Transform):
-... def _step(self, tensordict, next_tensordict):
-... next_tensordict["reward"] = next_tensordict["observation"][..., 6:7]
-... return next_tensordict
->>> env = TransformedEnv( 
-... MicroDuckEnv(download=True, task=MicroDuckEnv.tracking_task(compute_reward=False)),
-... ForwardSpeedReward(),
-... )
+>>> @MicroDuckEnv.register_reward("heading", heading_std=0.3)
+... def heading(features, params):
+... return torch.exp(-features["angular_velocity"][..., 2].square() / params["heading_std"].square())
+>>> task = MicroDuckEnv.tracking_task(0.2, reward_weights={"heading": 1.0}, heading_std=0.5)
+>>> env = MicroDuckEnv(download=True, tasks=task)
 ```
 
 Reference:
@@ -157,14 +197,46 @@ Pollen Robotics, MicroDuck ([pollen-robotics/microduck](https://github.com/polle
 and its mjlab training environments
 ([pollen-robotics/microduck_rl](https://github.com/pollen-robotics/microduck_rl)).
 
-OBSERVATION_DIM*: ClassVar[int]**= 53*
+BODY_VELOCITY_START*: ClassVar[int]**= 6*
 
-Observation size without the optional lateral and vertical velocities.
+Index of the body-frame linear velocity `(vx, vy, vz)` in the observation.
+
+COMMAND_START*: ClassVar[int]**= 9*
+
+Index of the planar command `(vx, vy)` in the observation.
+
+COMMAND_THRESHOLD*: ClassVar[float]**= 0.01*
+
+Planar command speed under which a task counts as standing.
+
+GAIT_PHASE_OFFSET*: ClassVar[float]**= -1.5237*
+
+Phase of the gait clock at the first step, in radians.
+
+GAIT_PHASE_START*: ClassVar[int]**= 39*
+
+Index of the gait clock `(sin, cos, ramp)` in the observation.
+
+GAIT_RAMP_DURATION_S*: ClassVar[float]**= 0.4*
+
+Duration over which the gait ramp feature grows from zero to one after a reset.
+
+GAIT_TERMS*: ClassVar[tuple[str, ...]]**= ('air_time', 'swing_height', 'phase_contact', 'double_support')*
+
+Reward terms that shape stepping; the standing and jump presets turn them off.
 
 RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 
 Background color for the `mujoco-torch` ray-cast renderer.
 Subclasses (e.g. satellite) override to a deep-space tone.
+
+REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
+
+Default value of every term parameter a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) carries.
+
+REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
+
+Registered reward terms by name, in weight-vector order.
 
 SKIP_QPOS*: ClassVar[int]**= 0*
 
@@ -1250,9 +1322,33 @@ See also
 
 [Locking environment specs](../envs_api.html#environment-lock).
 
-*property*joint_reset_noise_scale*: float*
+*classmethod*jump_task(***, *weight: float = 1.0*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.jump_task)
 
-Uniform joint-position noise applied at reset, in radians.
+Hop in place under a zero command.
+
+Three terms shape the hop, in the order a policy discovers it.
+`hop_rhythm` (weight 1) pays, linearly up to the
+`hop_velocity_amplitude` of 0.1 m/s, for vertical base velocity in
+phase with the task clock (2 Hz), which starts a crouch-and-extend
+cycle from standing; `launch` (weight 30) pays for upward base
+velocity while both feet are planted, linearly up to
+`launch_velocity_scale` (0.5 m/s, take-off speed), which speeds the
+extension up until the feet leave the ground; `jump` (weight 10)
+pays for base height gained above the standing height while both feet
+are off the ground, in full from `jump_target_height` (5 mm) on, so
+the first real hop is reinforced hard. The gait terms and the
+vertical-velocity cost are off and the pose term is loose so the robot
+can crouch and extend. A linear `drift` penalty (weight -5) on the planar speed keeps
+the hop in place: the zero-command tracking Gaussian saturates a few
+tenths of a m/s away from standing still and would let a hopping
+policy travel unpunished.
+
+The MicroDuck servos (0.55 N m/rad, clipped at 0.96 N m, 0.74 kg
+robot) allow only a small hop. With these weights, a policy resumed
+from a walking one learned 2 Hz hops of about 2 cm, airborne 15% of
+the time, within 6M transitions with the jump row sampled three times
+as often as the others (`weight=3.0`); a dominant rhythm term
+instead produced a bob with the feet never leaving the ground.
 
 load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
 
@@ -1350,6 +1446,18 @@ A ParallelEnv (or SerialEnv if serial_for_single=True and num_envs=1).
 Return type:
 
 [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)
+
+*classmethod*make_task(*command_low: Sequence[float]*, *command_high: Sequence[float]*, ***, *name: str*, *weight: float = 1.0*, *reward_weights: Mapping[str, float] | None = None*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.make_task)
+
+Build a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) from a command box, a name and overrides.
+
+The presets call this with their box, their name and their weight and
+parameter choices. `reward_weights` maps term names to weights that
+replace the registered defaults; `overrides` set reset and clock
+fields (`warm_start_velocity`, `warm_start_fraction`,
+`joint_reset_noise_scale`, `gait_frequency_hz`,
+`gait_frequency_per_mps`) or term parameters (any key of
+`REWARD_PARAMS`) by name.
 
 maybe_reset(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
@@ -1524,10 +1632,6 @@ Example:
 >>> if name in ['bias']:
 >>> print(param.size())
 ```
-
-*property*observation_dim*: int*
-
-Size of the `observation` vector for this instance.
 
 *property*observation_keys*: list[NestedKey]*
 
@@ -2166,6 +2270,55 @@ from this module using the given name
 are ignored. If `None`, the parameter is **not** included in the
 module's `state_dict`.
 
+*classmethod*register_reward(*name: str*, ***, *weight: float = 0.0*, *per_second: bool = True*, ***params: float*) → Callable[[Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase), [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)]], Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase), [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)]][[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.register_reward)
+
+Register a reward term that every task weights.
+
+Used as a decorator on a function `(features, params) -> Tensor` of
+shape `(num_envs,)`. `features` is the step's feature TensorDict
+with entries `body_velocity` (body frame, `(num_envs, 3)`),
+`angular_velocity` (3), `upright` (cosine of the tilt), `base_height`,
+`standing_height`, `joint_error` (14), `joint_velocity` (14),
+`action` (14), `previous_action` (14), `contacts` (bool, 2),
+`foot_heights` (2), `touchdown_air_time` (2), `gait_phase`
+(radians), `command` (2) and `fallen` (bool). `params` is the
+per-env TensorDict of task parameters, each of shape `(num_envs,)`.
+
+Parameters:
+
+**name** (*str*) - term name; the diagnostics key is
+`diagnostic_reward_<name>`.
+
+Keyword Arguments:
+
+- **weight** (*float**,**optional*) - default weight of the term in every
+preset. Defaults to `0.0`, so an existing task ignores the
+term until its `reward_weights` name it.
+- **per_second** (*bool**,**optional*) - if `True` (default), the term is a
+rate and is multiplied by the control period, like the mjlab
+velocity tasks. `False` for one-off terms such as the fall
+penalty.
+- ****params** - default values of parameters the term reads from
+`params`; the presets carry them and accept overrides by
+name. A parameter name may be registered by one term only.
+
+Tasks built before a registration have a shorter weight vector and
+are rejected by the env, so register terms before building tasks.
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.envs import MicroDuckEnv
+>>> @MicroDuckEnv.register_reward("still_head", still_head_std=1.0)
+... def still_head(features, params):
+... head = features["joint_velocity"][..., 5:9].square().sum(-1)
+... return torch.exp(-head / params["still_head_std"].square())
+>>> task = MicroDuckEnv.standing_task(reward_weights={"still_head": 0.5})
+>>> task.reward_weights[-1], task.params["still_head_std"]
+(tensor(0.5000), tensor(1.))
+```
+
 register_state_dict_post_hook(*hook*)
 
 Register a post-hook for the [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) method.
@@ -2295,6 +2448,14 @@ Raises:
 
 **FileNotFoundError** - if the scene cannot be located and `download`
  is `False`.
+
+reward_features(*state: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *action: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.reward_features)
+
+Return the per-step features every reward term reads.
+
+`state` is a simulator state (`qpos`/`qvel`) and `action` the
+normalized action that led to it; the contact bookkeeping is the
+env's current one. See `register_reward()` for the entries.
 
 *property*reward_key
 
@@ -2795,6 +2956,13 @@ share_memory() → Self
 
 See [`torch.Tensor.share_memory_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.share_memory_.html#torch.Tensor.share_memory_).
 
+*classmethod*sidestep_task(*speed: float = 0.15*, ***, *weight: float = 1.0*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.sidestep_task)
+
+Walk sideways at `speed` m/s, to the left (positive) or the right.
+
+The gait clock and the contact terms are the same as for forward
+walking; only the tracked velocity component changes.
+
 site_positions(*site_names: Sequence[str]*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
 Return the world-frame positions of the named sites.
@@ -2814,20 +2982,31 @@ Returns a Composite container where all the environment are present.
 This feature allows one to create an environment, retrieve all of the specs in a single data container and then
 erase the environment from the workspace.
 
-*classmethod*speed_range_task(*low: float = 0.1*, *high: float = 0.3*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.speed_range_task)
+*classmethod*speed_range_task(*low: float = 0.1*, *high: float = 0.3*, ***, *weight: float = 1.0*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.speed_range_task)
 
-Track a speed drawn uniformly from `[low, high]` at every reset.
+Track a forward speed drawn uniformly from `[low, high]` at every reset.
 
 The gait clock runs at 1 Hz plus 5 Hz per m/s of command so the
 rewarded cadence follows the speed, which is what lets a policy trained
-from scratch modulate its speed with the command.
+from scratch modulate its speed with the command. The gait terms stay
+on over the whole range, so a range that spans zero rewards stepping
+in place at low commands.
 
-*classmethod*standing_task(***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.standing_task)
+*classmethod*stack_tasks(*tasks: [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) | Sequence[[MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)] | None*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.stack_tasks)
+
+Normalize one task, a sequence or a stacked task into a `(num_tasks,)` library.
+
+Stacking checks that every task carries the same fields, the full
+reward weight vector and every parameter key; the boxes, weights and
+fractions are then range checked.
+
+*classmethod*standing_task(***, *weight: float = 1.0*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.standing_task)
 
 Balance in place under a zero command.
 
-The zero command turns the gait terms off, leaving velocity tracking
-toward zero, posture, uprightness and the regularization costs.
+The gait terms are off and the pose term tight, leaving velocity
+tracking toward zero, posture, uprightness and the regularization
+costs.
 
 state_dict(**args*, *destination=None*, *prefix=''*, *keep_vars=False*)
 
@@ -3117,12 +3296,14 @@ Return type:
 
 Module
 
-*classmethod*tracking_task(*commanded_x_velocity: float | Sequence[float] = (0.03,)*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.tracking_task)
+*classmethod*tracking_task(*speed: float = 0.03*, ***, *weight: float = 1.0*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.tracking_task)
 
-Track a forward speed drawn from `commanded_x_velocity` at every reset.
+Walk at a fixed forward speed in m/s (negative walks backward).
 
-This is the default task. `overrides` set any other
-[`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) field.
+This is the default task. The gait terms are on and the pose term
+loose unless `speed` is below `COMMAND_THRESHOLD`, in which
+case the task is `standing_task()`. `overrides` go to
+`make_task()`.
 
 train(*mode: bool = True*) → Self
 

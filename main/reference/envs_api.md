@@ -324,9 +324,17 @@ proxies so the accelerated backends fit in memory, and exposes foot contacts
 and foot heights for gait metrics through
 [`geom_contacts()`](generated/torchrl.envs.MujocoEnv.html#torchrl.envs.MujocoEnv.geom_contacts) and
 [`site_positions()`](generated/torchrl.envs.MujocoEnv.html#torchrl.envs.MujocoEnv.site_positions).
-Its commands, reset distribution, gait clock and reward options form a
-[`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask), with presets such as
-[`speed_range_task()`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.speed_range_task).
+A task is data: [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) is a tensorclass
+holding the command box, the reset distribution, the gait clock and the
+reward weights and parameters, built with presets such as
+[`speed_range_task()`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.speed_range_task),
+[`sidestep_task()`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.sidestep_task) and
+[`jump_task()`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.jump_task). The env takes a stacked library
+of tasks and every env of the batch holds one row of it, picked at reset from
+the tasks' weights or from a `task_id` in the reset TensorDict;
+[`MicroDuckTaskSampler`](generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler) writes that id from a mixture of
+its own. The reward is a registry of terms over shared step features that
+[`register_reward()`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.register_reward) extends.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -340,8 +348,9 @@ state into the parent batch. Boolean masks are not supported.
 | [`CubeBowlEnv`](generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv)(*args[, num_workers, parallel]) | UR-style cube-to-bowl manipulation scene. |
 | [`HopperEnv`](generated/torchrl.envs.HopperEnv.html#torchrl.envs.HopperEnv)(*args[, num_workers, parallel]) | Single-legged hopping task (6-DoF, 3 actuators). |
 | [`HumanoidEnv`](generated/torchrl.envs.HumanoidEnv.html#torchrl.envs.HumanoidEnv)(*args[, num_workers, parallel]) | Bipedal humanoid locomotion task (28 DoF, 21 actuators). |
-| [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv)([microduck_root, root, download]) | Commanded longitudinal-velocity locomotion task for the MicroDuck biped. |
-| [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)(commanded_x_velocity, ...) | Task parameters of [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv). |
+| [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv)([microduck_root, root, download]) | Locomotion tasks for the MicroDuck biped: stand, walk, sidestep, jump. |
+| [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)(command_low, command_high, ...) | |
+| [`MicroDuckTaskSampler`](generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler)([weights, task_ids, ...]) | Write a [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) `task_id` per env at reset from a weighted mixture. |
 | [`SatelliteEnv`](generated/torchrl.envs.SatelliteEnv.html#torchrl.envs.SatelliteEnv)(*args[, num_workers, parallel]) | Attitude-control task with 4 or 6 CMGs. |
 | [`Walker2dEnv`](generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv)(*args[, num_workers, parallel]) | Planar bipedal walker (9-DoF, 6 actuators). |
 

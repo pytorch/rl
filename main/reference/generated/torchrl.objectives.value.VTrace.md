@@ -18,6 +18,10 @@ Defaults to `1.0`.
 Defaults to `1.0`.
 - **average_adv** (*bool*) - if `True`, the resulting advantage values will be standardized.
 Default is `False`.
+- **group_key** (*NestedKey**,**optional*) - key of an integer entry of the input
+tensordict, one id per batch element such as a task id, within whose
+groups that standardization is done instead of over the whole
+batch. Defaults to `None`.
 - **differentiable** (*bool**,**optional*) -
 
 if `True`, gradients are propagated through

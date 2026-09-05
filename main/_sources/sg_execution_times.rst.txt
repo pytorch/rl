@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.770** total execution time for 29 files **from all galleries**:
+**00:05.724** total execution time for 29 files **from all galleries**:
 
 .. container::
 
@@ -33,7 +33,7 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_dqn_with_rnn.py` (``reference/generated/tutorials/dqn_with_rnn.py``)
-     - 00:05.770
+     - 00:05.724
      - 0.0
    * - :ref:`sphx_glr_tutorials_checkpointing.py` (``reference/generated/tutorials/checkpointing.py``)
      - 00:00.000

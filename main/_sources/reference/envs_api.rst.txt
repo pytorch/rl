@@ -348,9 +348,17 @@ proxies so the accelerated backends fit in memory, and exposes foot contacts
 and foot heights for gait metrics through
 :meth:`~torchrl.envs.MujocoEnv.geom_contacts` and
 :meth:`~torchrl.envs.MujocoEnv.site_positions`.
-Its commands, reset distribution, gait clock and reward options form a
-:class:`~torchrl.envs.MicroDuckTask`, with presets such as
-:meth:`~torchrl.envs.MicroDuckEnv.speed_range_task`.
+A task is data: :class:`~torchrl.envs.MicroDuckTask` is a tensorclass
+holding the command box, the reset distribution, the gait clock and the
+reward weights and parameters, built with presets such as
+:meth:`~torchrl.envs.MicroDuckEnv.speed_range_task`,
+:meth:`~torchrl.envs.MicroDuckEnv.sidestep_task` and
+:meth:`~torchrl.envs.MicroDuckEnv.jump_task`. The env takes a stacked library
+of tasks and every env of the batch holds one row of it, picked at reset from
+the tasks' weights or from a ``task_id`` in the reset TensorDict;
+:class:`~torchrl.envs.MicroDuckTaskSampler` writes that id from a mixture of
+its own. The reward is a registry of terms over shared step features that
+:meth:`~torchrl.envs.MicroDuckEnv.register_reward` extends.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -369,6 +377,7 @@ state into the parent batch. Boolean masks are not supported.
     HumanoidEnv
     MicroDuckEnv
     MicroDuckTask
+    MicroDuckTaskSampler
     SatelliteEnv
     Walker2dEnv
 
