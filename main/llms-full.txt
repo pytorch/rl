@@ -33314,7 +33314,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f6eeded7dd0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fba4c6d8090>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -45929,7 +45929,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f6ef0c82fc0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fba4f616fc0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -60029,10 +60029,22 @@ Parameters:
 environment instances themselves.
 - **backend** (*Literal**[**"threading"**,**"multiprocessing"**,**"asyncio"**]**,**optional*) - The backend to use for parallel execution. Defaults to "threading".
 - **stack** (*Literal**[**"dense"**,**"maybe_dense"**,**"lazy"**]**,**optional*) - The method to use for stacking environment outputs. Defaults to "dense".
-- **exchange** (*Literal**[**"queue"**,**"shm"**]**,**optional*) - Data exchange used by the
-multiprocessing backend. `"shm"` stores fixed-shape tensor data in
-shared slots and sends only readiness descriptors through queues.
-Defaults to `"queue"`.
+- **exchange** (*Literal**[**"queue"**,**"shm"**,**"auto"**]**,**optional*) -
+
+Data exchange
+used by the multiprocessing backend. `"shm"` stores fixed-shape
+tensor data in shared slots and sends only readiness descriptors
+through queues; it requires identical, fixed-shape, CPU, tensor-only
+schemas across workers. `"auto"` selects `"shm"` when the env
+schema supports it and falls back to `"queue"` otherwise (the
+resolution is reported by `resolved_exchange` and logged on
+fallback). Defaults to `"queue"`.
+
+Warning
+
+The default will change from `"queue"` to `"auto"` in
+v0.15 for the multiprocessing backend. A `FutureWarning` is
+emitted when the default is relied upon.
 - **create_env_kwargs** (*dict**,**optional*) - Keyword arguments to pass to the environment maker. Defaults to {}.
 
 Variables:
@@ -62283,6 +62295,14 @@ a (possibly empty) tuple of strings pointing to a tensordict location
 where a done state can be found.
 
 Keys are sorted by depth in the data tree.
+
+*property*resolved_exchange*: Literal['queue', 'shm']*
+
+The data exchange actually in use, after resolving `exchange="auto"`.
+
+`"shm"` when the shared-memory slot exchange is active, `"queue"`
+otherwise (including the threading backend, which has no shared-memory
+exchange).
 
 *property*reward_key
 
@@ -106354,6 +106374,14 @@ where a done state can be found.
 
 Keys are sorted by depth in the data tree.
 
+*property*resolved_exchange*: Literal['queue', 'shm']*
+
+The data exchange actually in use, after resolving `exchange="auto"`.
+
+`"shm"` when the shared-memory slot exchange is active, `"queue"`
+otherwise (including the threading backend, which has no shared-memory
+exchange).
+
 *property*reward_key
 
 The reward key of an environment.
@@ -116035,6 +116063,14 @@ a (possibly empty) tuple of strings pointing to a tensordict location
 where a done state can be found.
 
 Keys are sorted by depth in the data tree.
+
+*property*resolved_exchange*: Literal['queue', 'shm']*
+
+The data exchange actually in use, after resolving `exchange="auto"`.
+
+`"shm"` when the shared-memory slot exchange is active, `"queue"`
+otherwise (including the threading backend, which has no shared-memory
+exchange).
 
 *property*reward_key
 

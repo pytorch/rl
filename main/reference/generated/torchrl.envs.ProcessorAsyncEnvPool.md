@@ -2178,6 +2178,14 @@ where a done state can be found.
 
 Keys are sorted by depth in the data tree.
 
+*property*resolved_exchange*: Literal['queue', 'shm']*
+
+The data exchange actually in use, after resolving `exchange="auto"`.
+
+`"shm"` when the shared-memory slot exchange is active, `"queue"`
+otherwise (including the threading backend, which has no shared-memory
+exchange).
+
 *property*reward_key
 
 The reward key of an environment.

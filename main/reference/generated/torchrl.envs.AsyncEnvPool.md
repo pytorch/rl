@@ -21,10 +21,22 @@ Parameters:
 environment instances themselves.
 - **backend** (*Literal**[**"threading"**,**"multiprocessing"**,**"asyncio"**]**,**optional*) - The backend to use for parallel execution. Defaults to "threading".
 - **stack** (*Literal**[**"dense"**,**"maybe_dense"**,**"lazy"**]**,**optional*) - The method to use for stacking environment outputs. Defaults to "dense".
-- **exchange** (*Literal**[**"queue"**,**"shm"**]**,**optional*) - Data exchange used by the
-multiprocessing backend. `"shm"` stores fixed-shape tensor data in
-shared slots and sends only readiness descriptors through queues.
-Defaults to `"queue"`.
+- **exchange** (*Literal**[**"queue"**,**"shm"**,**"auto"**]**,**optional*) -
+
+Data exchange
+used by the multiprocessing backend. `"shm"` stores fixed-shape
+tensor data in shared slots and sends only readiness descriptors
+through queues; it requires identical, fixed-shape, CPU, tensor-only
+schemas across workers. `"auto"` selects `"shm"` when the env
+schema supports it and falls back to `"queue"` otherwise (the
+resolution is reported by `resolved_exchange` and logged on
+fallback). Defaults to `"queue"`.
+
+Warning
+
+The default will change from `"queue"` to `"auto"` in
+v0.15 for the multiprocessing backend. A `FutureWarning` is
+emitted when the default is relied upon.
 - **create_env_kwargs** (*dict**,**optional*) - Keyword arguments to pass to the environment maker. Defaults to {}.
 
 Variables:
@@ -2275,6 +2287,14 @@ a (possibly empty) tuple of strings pointing to a tensordict location
 where a done state can be found.
 
 Keys are sorted by depth in the data tree.
+
+*property*resolved_exchange*: Literal['queue', 'shm']*
+
+The data exchange actually in use, after resolving `exchange="auto"`.
+
+`"shm"` when the shared-memory slot exchange is active, `"queue"`
+otherwise (including the threading backend, which has no shared-memory
+exchange).
 
 *property*reward_key
 
