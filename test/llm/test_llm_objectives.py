@@ -1074,14 +1074,11 @@ class TestSFT:
         )
         loss(td)
 
-    def test_sft_does_not_cache_device(self):
+    def test_sft_constructor_device_does_not_move_actor(self):
         policy = _FixedSFTPolicy(torch.tensor([[-2.0, -100.0], [-1.0, -3.0]]))
-        loss = SFTLoss(policy, tokenizer=object(), device="cpu")
-        assert "device" not in vars(loss)
-        loss.cpu()
-        assert "device" not in vars(loss)
-        out = loss(_sft_loss_data())
-        assert torch.isfinite(out.loss_sft)
+        loss = SFTLoss(policy, tokenizer=object(), device="meta")
+        assert policy.log_probs.device.type == "cpu"
+        assert all(value.device.type == "cpu" for value in loss.state_dict().values())
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -1107,9 +1104,7 @@ class TestSFT:
             tokenizer_kwargs={"chat_template_name": "qwen"},
             device="cpu",
         )
-        assert "device" not in vars(loss)
         loss.to(torch.device("cuda"))
-        assert "device" not in vars(loss)
         loss_vals = loss(data)
         assert loss_vals.loss_sft.device.type == "cuda"
         assert torch.isfinite(loss_vals.loss_sft)
@@ -1397,28 +1392,17 @@ class TestDistillation:
         with pytest.raises(KeyError, match="Teacher log-probs"):
             loss_fn(data.clone())
 
-    def test_distillation_does_not_cache_device(self):
-        mask = torch.ones(2, 3, dtype=torch.bool)
-        data = TensorDict(
-            {
-                ("history", "full"): torch.full((2, 3), -1.0),
-                ("masks", "all_attention_mask"): mask,
-                ("masks", "all_assistant_mask"): mask,
-                ("next", "teacher_log_probs", "full"): torch.full((2, 3), -2.0),
-            },
-            batch_size=(2,),
-        )
+    def test_distillation_constructor_device_does_not_move_actor(self):
         student = TensorDictModule(
             torch.nn.Linear(3, 3, bias=False),
             in_keys=[("history", "full")],
             out_keys=[("log_probs", "full")],
         )
-        loss_fn = DistillationLoss(actor_network=student, device="cpu")
-        assert "device" not in vars(loss_fn)
-        loss_fn.cpu()
-        assert "device" not in vars(loss_fn)
-        out = loss_fn(data)
-        assert torch.isfinite(out.loss_distill)
+        loss_fn = DistillationLoss(actor_network=student, device="meta")
+        assert next(student.parameters()).device.type == "cpu"
+        assert all(
+            value.device.type == "cpu" for value in loss_fn.state_dict().values()
+        )
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -1438,9 +1422,7 @@ class TestDistillation:
             tokenizer_kwargs={"chat_template_name": "qwen"},
             device="cpu",
         )
-        assert "device" not in vars(loss_fn)
         loss_fn.to(torch.device("cuda"))
-        assert "device" not in vars(loss_fn)
         td = td.to("cuda")
         loss_vals = loss_fn(td)
         assert loss_vals.loss_distill.device.type == "cuda"
