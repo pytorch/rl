@@ -313,9 +313,7 @@ class TestDQN(LossModuleTestBase):
             action_space="one-hot",
         )
         loss_fn = DQNLoss(actor, action_space=action_spec, delay_value=False)
-        loss_fn.make_value_estimator(
-            ValueEstimators.TDLambda, gamma=1.0, lmbda=0.5
-        )
+        loss_fn.make_value_estimator(ValueEstimators.TDLambda, gamma=1.0, lmbda=0.5)
         td = TensorDict(
             {
                 "observation": torch.zeros(1, 2, 2),
