@@ -1622,18 +1622,9 @@ Example:
 <class 'torch.Tensor'> (20L, 1L, 5L, 5L)
 ```
 
-rand_action(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*)
+rand_action(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/envs/custom/chess.html#ChessEnv.rand_action)
 
-Performs a random action given the action_spec attribute.
-
-Parameters:
-
-**tensordict** (*TensorDictBase**,**optional*) - tensordict where the resulting action should be written.
-
-Returns:
-
-a tensordict object with the "action" entry updated with a random
-sample from the action-spec.
+Sample a legal action from the state carried by `tensordict`.
 
 rand_step(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
