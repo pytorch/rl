@@ -132,6 +132,7 @@ uv_pip_install \
   "huggingface-hub>=1.5.0,<2.0" \
   wandb \
   mlflow \
+  "sqlalchemy<2.1" \
   av \
   coverage \
   transformers \
