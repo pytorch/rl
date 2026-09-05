@@ -358,7 +358,7 @@ class PercentileValueNorm(ValueNorm):
         value_target = value_target.detach()
         self._check_trailing_shape(value_target)
         flat = value_target.reshape(-1, *self.shape).to(self.low.dtype)
-        batch_low, batch_high = torch.quantile(flat, self._q.to(flat.dtype), dim=0)
+        batch_low, batch_high = torch.quantile(flat, self._q.to(device=flat.device, dtype=flat.dtype), dim=0)
         self.low.lerp_(batch_low, self.rate)
         self.high.lerp_(batch_high, self.rate)
 
