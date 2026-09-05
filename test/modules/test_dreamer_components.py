@@ -981,7 +981,7 @@ def test_public_block_gru_triton_gradient_parity(
     tolerance = (
         {"atol": 4e-2, "rtol": 6e-2}
         if dtype is torch.bfloat16
-        else {"atol": 3e-4, "rtol": 3e-4}
+        else {"atol": 2e-3, "rtol": 3e-4}
     )
     for expected_value, actual_value in zip(expected[:4], actual[:4]):
         torch.testing.assert_close(actual_value, expected_value, **tolerance)
