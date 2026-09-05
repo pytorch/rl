@@ -97,9 +97,11 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     Passing a module into a loss does **not** copy it. The same parameters are
     used in-place; optimizer steps on the loss update the original module.
-    Collectors share those weights unless ``policy_device`` or ``device``
-    remapped the policy (see :ref:`ref_lossmodule_weight_sharing` and
-    :ref:`ref_collectors_weightsync`).
+    A collector needs explicit synchronization when its inference policy has
+    distinct parameter storage, such as a worker-created policy, a
+    different-device copy, or a remote policy. Same-device ``policy_device`` or
+    ``device`` arguments need not copy the policy (see
+    :ref:`ref_lossmodule_weight_sharing` and :ref:`ref_collectors_weightsync`).
 
     :cvar default_value_estimator: The default value type of the class.
         Losses that require a value estimation are equipped with a default value
