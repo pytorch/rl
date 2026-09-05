@@ -1983,6 +1983,11 @@ class RSSMRolloutV3(TensorDictModuleBase):
         while reset.ndim < action.ndim:
             reset = reset.unsqueeze(-1)
 
+        if self._scan_fn is not None:
+            # ``compile_rollout`` can run before the module is moved to its
+            # execution device. hoptorch validates scan backward per device
+            # type, and the validation must happen outside the compiled call.
+            _maybe_warm_scan_backward(action.device)
         scan = self._scan_fn or self._loop
         (
             input_states,
