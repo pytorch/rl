@@ -95,6 +95,14 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
+    Passing a module into a loss does **not** copy it. The same parameters are
+    used in-place; optimizer steps on the loss update the original module.
+    A collector needs explicit synchronization when its inference policy has
+    distinct parameter storage, such as a worker-created policy, a
+    different-device copy, or a remote policy. Same-device ``policy_device`` or
+    ``device`` arguments need not copy the policy (see
+    :ref:`ref_lossmodule_weight_sharing` and :ref:`ref_collectors_weightsync`).
+
     :cvar default_value_estimator: The default value type of the class.
         Losses that require a value estimation are equipped with a default value
         pointer. This class attribute indicates which value estimator will be
@@ -139,6 +147,28 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         >>>
         >>> loss = MyLoss()
         >>> loss.set_keys(action="action2")
+
+        The loss stores the same module, not a copy. An optimizer step updates
+        the original actor:
+
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.modules import Actor, ValueOperator
+        >>> from torchrl.objectives import DDPGLoss
+        >>> actor = Actor(nn.Linear(3, 1))
+        >>> value = ValueOperator(nn.Linear(4, 1), in_keys=["observation", "action"])
+        >>> loss = DDPGLoss(actor, value, delay_actor=False, delay_value=False)
+        >>> actor is loss.actor_network
+        True
+        >>> p_actor = next(actor.parameters())
+        >>> p_actor.data_ptr() == next(loss.actor_network.parameters()).data_ptr()
+        True
+        >>> optim = torch.optim.SGD(loss.parameters(), lr=1.0)
+        >>> before = p_actor.detach().clone()
+        >>> (p_actor ** 2).sum().backward()
+        >>> _ = optim.step()
+        >>> torch.equal(p_actor.detach(), before)
+        False
 
     .. note:: When a policy that is wrapped or augmented with an exploration module is passed
         to the loss, we want to deactivate the exploration through ``set_exploration_type(<exploration>)`` where
@@ -438,7 +468,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             module (TensorDictModule or compatible): a stateful tensordict module.
                 Parameters from this module will be isolated in the `<module_name>_params`
                 attribute and a stateless version of the module will be registered
-                under the `module_name` attribute.
+                under the `module_name` attribute. The original module is stored
+                as-is and its parameters are not copied.
             module_name (str): name where the module will be found.
                 The parameters of the module will be found under ``loss_module.<module_name>_params``
                 whereas the module will be found under ``loss_module.<module_name>``.

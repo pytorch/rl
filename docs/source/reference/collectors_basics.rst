@@ -32,9 +32,14 @@ data, it comes at the price of being suitable only in settings where it is accep
 to gather data asynchronously (e.g. off-policy RL or curriculum RL).
 For worker-executed rollouts (``Collector(num_collectors=N)`` with either
 ``sync=True`` or ``sync=False``)
-it is necessary to synchronise the weights of the remote policy with the weights
-from the training worker using either the :meth:`collector.update_policy_weights_` or
-by setting ``update_at_each_batch=True`` in the constructor.
+calling :meth:`collector.update_policy_weights_` after each training step
+(or setting ``update_at_each_batch=True``) is conservative good practice. It is
+required whenever the training and inference policies do not share parameter
+storage, for example when workers build policies with ``policy_factory``, the
+collector copies a policy to another device, or a remote/custom synchronization
+scheme is used. Passing ``policy_device`` or ``device`` alone does not imply a
+copy: if the policy is already on the requested device, the collector can retain
+the same parameter storage. See :ref:`ref_collectors_weightsync`.
 
 The second parameter to consider (in the remote settings) is the device where the
 data will be collected and the device where the environment and policy operations
@@ -141,6 +146,21 @@ keep the training version of the policy on a device and the inference version on
 CUDA devices, it may be wise to train on one device and execute the policy for inference on the other. If that is the
 case, a :meth:`~torchrl.collectors.Collector.update_policy_weights_` can be used to copy the parameters from one
 device to the other (if no copy is required, this method is a no-op).
+
+:class:`~torchrl.objectives.LossModule` does not copy the policy either -- the
+same parameters are used in-place (see :ref:`ref_lossmodule_weight_sharing`).
+Whether the collector then needs an explicit sync depends on parameter storage:
+
+- **Not required** when the training and inference policies use the same
+  parameter storage. This includes same-device placement when no copy is needed.
+- **Required** when the collector owns a distinct policy instance or parameter
+  storage, such as a worker-created policy, a different-device copy, or a remote
+  policy updated through a synchronization scheme.
+
+Calling :meth:`~torchrl.collectors.Collector.update_policy_weights_` anyway is
+conservative good practice. A ``policy_device`` or ``device`` argument only
+causes a copy when an actual device move is needed. Details are in
+:ref:`ref_collectors_weightsync`.
 
 Since the goal is to avoid calling `policy.to(policy_device)` explicitly, the collector will do a deepcopy of the
 policy structure and copy the parameters placed on the new device during instantiation if necessary.

@@ -3,6 +3,8 @@
 Weight Synchronization
 ======================
 
+.. _ref_collectors_weightsync:
+
 RL pipelines are typically split in two big computational buckets: training, and inference.
 While the inference pipeline sends data to the training one, the training pipeline needs to occasionally
 synchronize its weights with the inference one.
@@ -63,6 +65,31 @@ Each of these classes is detailed below.
     - Implement custom weight sync schemes for specialized use cases (e.g., new distributed backends, custom serialization)
     - Debug synchronization issues in complex distributed setups
     - Use weight sync schemes outside of collectors for custom multiprocessing scenarios
+
+When is ``update_policy_weights_`` required?
+--------------------------------------------
+
+:class:`~torchrl.objectives.LossModule` does not copy the policy (see
+:ref:`ref_lossmodule_weight_sharing`). Whether the collector needs an explicit
+sync after an optimizer step depends on whether its inference policy shares
+parameter storage with the training policy:
+
+- **Shared storage.** A policy passed directly can retain its parameter storage
+  when no device transfer or other copy is needed. No extra sync is required.
+- **Distinct storage.** Worker policies created by ``policy_factory``, copies
+  placed on another device, and remote policies have independent storage and
+  require a configured synchronization path.
+
+Passing ``policy_device`` or ``device`` is not by itself evidence of a copy. If
+the policy is already on the requested device, the collector can keep the same
+object and storage. If a move is needed, it creates a separate policy and
+:meth:`~torchrl.collectors.Collector.update_policy_weights_` must propagate the
+trained weights.
+
+Calling :meth:`~torchrl.collectors.Collector.update_policy_weights_` anyway
+is conservative good practice. Use it to push weights through a
+:class:`~torchrl.weight_update.WeightSyncScheme` or another configured transport
+whenever the policies do not share storage (the rest of this page).
 
 Lifecycle of Weight Synchronization
 -----------------------------------
