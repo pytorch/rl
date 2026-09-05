@@ -379,10 +379,11 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
         self._use_scaler = mixed_precision and (autocast_dtype == torch.float16)
         self.scaler = GradScaler(self.device_type, enabled=self._use_scaler)
 
-        # Internal micro-batch counter (reset after every optimizer step).
+        # Internal micro-batch counter, reset after every optimizer step.
         self._micro_step: int = 0
         self._optimizer_step_count: int = 0
         self._skipped_nonfinite_steps: int = 0
+        self._checked_optimizer_coverage = False
 
     @property
     def optimizer_step_count(self) -> int:
@@ -413,6 +414,7 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
             "micro_step": self._micro_step,
             "optimizer_step_count": self._optimizer_step_count,
             "skipped_nonfinite_steps": self._skipped_nonfinite_steps,
+            "checked_optimizer_coverage": self._checked_optimizer_coverage,
         }
         if self._use_scaler:
             sd["scaler"] = self.scaler.state_dict()
@@ -423,8 +425,36 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
         self._micro_step = state_dict.get("micro_step", 0)
         self._optimizer_step_count = state_dict.get("optimizer_step_count", 0)
         self._skipped_nonfinite_steps = state_dict.get("skipped_nonfinite_steps", 0)
+        self._checked_optimizer_coverage = state_dict.get(
+            "checked_optimizer_coverage", False
+        )
         if self._use_scaler and "scaler" in state_dict:
             self.scaler.load_state_dict(state_dict["scaler"])
+
+    def _check_optimizer_coverage(self, context: Any) -> None:
+        loss_module = getattr(context, "loss_module", None)
+        if not isinstance(loss_module, nn.Module):
+            return
+        optimized = {
+            id(parameter)
+            for group in self.optimizer.param_groups
+            for parameter in group["params"]
+        }
+        missing = [
+            name
+            for name, parameter in loss_module.named_parameters()
+            if parameter.grad is not None and id(parameter) not in optimized
+        ]
+        if missing:
+            shown = ", ".join(missing[:5])
+            if len(missing) > 5:
+                shown += f", ... (+{len(missing) - 5} more)"
+            raise RuntimeError(
+                f"The optimization stepper's optimizer does not cover "
+                f"{len(missing)} loss-module parameter(s) that received a "
+                f"gradient: {shown}. Build the optimizer over "
+                "loss_module.parameters() rather than a bare policy model."
+            )
 
     # ------------------------------------------------------------------
     # Core step
@@ -444,6 +474,10 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
             A :class:`~tensordict.TensorDict` with scalar metrics (losses,
             grad_norm) suitable for logging.
         """
+        set_gradient_sync = getattr(trainer, "_set_requires_gradient_sync", None)
+        if set_gradient_sync is not None:
+            set_gradient_sync(self._micro_step + 1 == self.gradient_accumulation_steps)
+
         # ---- forward pass (optionally under autocast) ----
         with torch.amp.autocast(
             self.device_type,
@@ -451,14 +485,20 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
             dtype=self.autocast_dtype,
         ):
             losses_td = trainer.compute_loss(sub_batch)
-            # Sum all loss_* keys and normalise by accumulation steps.
+            # ``loss`` itself is a valid TorchRL loss key, so select the full
+            # prefix rather than only ``loss_*``.
             loss_items = [v for k, v in losses_td.items() if k.startswith("loss")]
             if not loss_items:
-                raise RuntimeError(
-                    "The loss module returned no 'loss_*' keys. "
-                    "Make sure your loss module prefixes scalar outputs with 'loss'."
+                raise ValueError(
+                    "The loss module returned no keys starting with 'loss'."
                 )
             loss = sum(loss_items) / self.gradient_accumulation_steps
+            if loss.numel() != 1:
+                raise ValueError(
+                    "The summed optimization loss must be scalar, but has "
+                    f"shape {tuple(loss.shape)}. Configure the loss with a "
+                    "scalar reduction."
+                )
 
         # ---- non-finite loss guard ----
         # A single non-finite loss would poison the gradients accumulated so
@@ -488,6 +528,10 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
             if self._use_scaler:
                 self.scaler.unscale_(self.optimizer)
 
+            if not self._checked_optimizer_coverage:
+                self._check_optimizer_coverage(trainer)
+                self._checked_optimizer_coverage = True
+
             grad_norm = 0.0
             if self.clip_norm is not None:
                 params = [
@@ -516,6 +560,7 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
                 self.optimizer.step()
                 self._optimizer_step_count += 1
             self.optimizer.zero_grad(set_to_none=True)
+            self._micro_step = 0
 
         metrics = self._reduce_metrics(losses_td)
         if grad_norm is not None:

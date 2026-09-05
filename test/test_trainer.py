@@ -20,6 +20,11 @@ import pytest
 import torch
 from torch import nn
 
+_has_fsdp2 = importlib.util.find_spec("torch.distributed._composable.fsdp") is not None
+if _has_fsdp2:
+    from torch.distributed._composable.fsdp import fully_shard
+    from torch.distributed.device_mesh import init_device_mesh
+
 _has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
@@ -42,7 +47,7 @@ from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import TanhNormal
 from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
 from torchrl.testing import PONG_VERSIONED
-from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers import FSDP2Learner, LocalLearner, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
@@ -2658,8 +2663,235 @@ class TestGRPOTrainer:
             progress_bar=False,
         )
 
-        with pytest.raises(RuntimeError, match="no 'loss_\\*' keys"):
+        with pytest.raises(ValueError, match="no keys starting with 'loss'"):
             stepper.step(trainer, _make_grpo_batch())
+
+
+class _ToyRegressionLoss(LossModule):
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, batch: TensorDict) -> TensorDict:
+        prediction = self.model(batch["x"])
+        loss = (prediction - batch["y"]).pow(2).mean()
+        return TensorDict(
+            {"loss_mse": loss, "prediction_mean": prediction.detach().mean()}
+        )
+
+
+class _ScaledRegressionLoss(_ToyRegressionLoss):
+    def __init__(self, model: nn.Module):
+        super().__init__(model)
+        self.scale = nn.Parameter(torch.tensor(2.0))
+
+    def forward(self, batch: TensorDict) -> TensorDict:
+        prediction = self.model(batch["x"]) * self.scale
+        return TensorDict({"loss_mse": (prediction - batch["y"]).pow(2).mean()})
+
+
+class _TwoNetworkLoss(_ToyRegressionLoss):
+    def __init__(self, model: nn.Module):
+        super().__init__(model)
+        self.critic = nn.Linear(4, 1)
+
+    def forward(self, batch: TensorDict) -> TensorDict:
+        prediction = self.model(batch["x"])
+        value = self.critic(batch["x"])
+        return TensorDict(
+            {
+                "loss_actor": (prediction - batch["y"]).pow(2).mean(),
+                "loss_critic": (value - batch["y"]).pow(2).mean(),
+            }
+        )
+
+
+def _learner_batch(seed: int) -> TensorDict:
+    generator = torch.Generator().manual_seed(seed)
+    return TensorDict(
+        {
+            "x": torch.randn(8, 4, generator=generator),
+            "y": torch.randn(8, 1, generator=generator),
+        },
+        [8],
+    )
+
+
+def _make_local_learner(
+    *,
+    loss_type: type[LossModule] = _ToyRegressionLoss,
+    gradient_accumulation_steps: int = 1,
+    optimizer_on_model: bool = False,
+):
+    torch.manual_seed(0)
+    model = nn.Linear(4, 1)
+    loss_module = loss_type(model)
+    parameters = model.parameters() if optimizer_on_model else loss_module.parameters()
+    stepper = MixedPrecisionOptimizationStepper(
+        torch.optim.Adam(parameters, lr=0.05),
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        clip_norm=1.0,
+    )
+    return LocalLearner(model, loss_module, stepper), model, loss_module, stepper
+
+
+class TestLocalLearner:
+    def test_update_matches_the_trainer_stepper_contract(self):
+        learner, learner_model, _, learner_stepper = _make_local_learner(
+            gradient_accumulation_steps=2
+        )
+
+        torch.manual_seed(0)
+        trainer_model = nn.Linear(4, 1)
+        trainer_loss = _ToyRegressionLoss(trainer_model)
+        trainer_stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.Adam(trainer_loss.parameters(), lr=0.05),
+            gradient_accumulation_steps=2,
+            clip_norm=1.0,
+        )
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=16,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=trainer_loss,
+            optimization_stepper=trainer_stepper,
+            progress_bar=False,
+        )
+
+        for seed in (1, 2):
+            learner_metrics = learner.update(_learner_batch(seed))
+            trainer_metrics = trainer_stepper.step(trainer, _learner_batch(seed))
+            torch.testing.assert_close(learner_metrics, trainer_metrics)
+
+        torch.testing.assert_close(learner_model.weight, trainer_model.weight)
+        assert learner_stepper.optimizer_step_count == 1
+        assert trainer_stepper.optimizer_step_count == 1
+
+    def test_get_weights_returns_an_independent_snapshot(self):
+        learner, model, _, _ = _make_local_learner()
+        weights = learner.get_weights()
+
+        with torch.no_grad():
+            model.weight.add_(1)
+
+        assert not torch.equal(weights["weight"], model.weight)
+
+    def test_checkpoint_restores_model_loss_and_optimization_state(self):
+        learner, model, loss_module, stepper = _make_local_learner(
+            loss_type=_ScaledRegressionLoss
+        )
+        learner.update(_learner_batch(1))
+        checkpoint = learner.checkpoint()
+        expected_weight = model.weight.detach().clone()
+        expected_scale = loss_module.scale.detach().clone()
+        expected_moment = stepper.optimizer.state[loss_module.scale]["exp_avg"].clone()
+
+        learner.update(_learner_batch(2))
+        learner.load_checkpoint(checkpoint)
+
+        torch.testing.assert_close(model.weight, expected_weight)
+        torch.testing.assert_close(loss_module.scale, expected_scale)
+        torch.testing.assert_close(
+            stepper.optimizer.state[loss_module.scale]["exp_avg"], expected_moment
+        )
+        assert stepper.optimizer_step_count == 1
+
+    def test_checkpoint_rejects_a_partial_accumulation_window(self):
+        learner, _, _, _ = _make_local_learner(gradient_accumulation_steps=2)
+        learner.update(_learner_batch(1))
+
+        with pytest.raises(RuntimeError, match="mid-accumulation"):
+            learner.checkpoint()
+
+    def test_optimizer_must_cover_differentiated_loss_parameters(self):
+        learner, _, _, _ = _make_local_learner(
+            loss_type=_TwoNetworkLoss,
+            optimizer_on_model=True,
+        )
+
+        with pytest.raises(RuntimeError, match="does not cover"):
+            learner.update(_learner_batch(1))
+
+
+@pytest.mark.skipif(
+    not torch.distributed.is_available() or not _has_fsdp2,
+    reason="FSDP2 required",
+)
+class TestFSDP2Learner:
+    _PORT = "29601"
+
+    @pytest.fixture(autouse=True)
+    def _process_group(self):
+        os.environ.setdefault("MASTER_ADDR", "localhost")
+        os.environ["MASTER_PORT"] = self._PORT
+        torch.distributed.init_process_group(backend="gloo", rank=0, world_size=1)
+        try:
+            yield
+        finally:
+            torch.distributed.destroy_process_group()
+
+    @staticmethod
+    def _make(
+        *,
+        loss_type: type[LossModule] = _ToyRegressionLoss,
+        gradient_accumulation_steps: int = 1,
+    ):
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        fully_shard(model, mesh=init_device_mesh("cpu", (1,)))
+        loss_module = loss_type(model)
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.Adam(loss_module.parameters(), lr=0.05),
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            clip_norm=1.0,
+        )
+        return (
+            FSDP2Learner(model, loss_module, stepper),
+            model,
+            loss_module,
+            stepper,
+        )
+
+    def test_update_matches_local_and_publishes_plain_weights(self):
+        fsdp_learner, _, _, fsdp_stepper = self._make(gradient_accumulation_steps=2)
+        local_learner, local_model, _, local_stepper = _make_local_learner(
+            gradient_accumulation_steps=2
+        )
+
+        for seed in (1, 2, 3, 4):
+            fsdp_metrics = fsdp_learner.update(_learner_batch(seed))
+            local_metrics = local_learner.update(_learner_batch(seed))
+            torch.testing.assert_close(fsdp_metrics, local_metrics)
+
+        weights = fsdp_learner.get_weights()
+        torch.testing.assert_close(weights["weight"], local_model.weight)
+        assert all(
+            not isinstance(value, torch.distributed.tensor.DTensor)
+            for value in weights.values(True, True)
+        )
+        assert fsdp_stepper.optimizer_step_count == local_stepper.optimizer_step_count
+        assert fsdp_stepper.optimizer_step_count == 2
+
+    def test_checkpoint_restores_sharded_and_loss_owned_state(self):
+        learner, model, loss_module, stepper = self._make(
+            loss_type=_ScaledRegressionLoss
+        )
+        learner.update(_learner_batch(1))
+        checkpoint = learner.checkpoint()
+        expected_weight = model.weight.full_tensor().clone()
+        expected_scale = loss_module.scale.detach().clone()
+        expected_moment = stepper.optimizer.state[loss_module.scale]["exp_avg"].clone()
+
+        learner.update(_learner_batch(2))
+        learner.load_checkpoint(checkpoint)
+
+        torch.testing.assert_close(model.weight.full_tensor(), expected_weight)
+        torch.testing.assert_close(loss_module.scale, expected_scale)
+        torch.testing.assert_close(
+            stepper.optimizer.state[loss_module.scale]["exp_avg"], expected_moment
+        )
+        assert stepper.optimizer_step_count == 1
 
 
 if __name__ == "__main__":
