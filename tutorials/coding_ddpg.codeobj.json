@@ -1,0 +1,7343 @@
+{
+ "ActorCriticWrapper": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.actors",
+   "module_short": "torchrl.modules",
+   "name": "ActorCriticWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "ActorCriticWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ActorCriticWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ActorCriticWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.sequence",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.sequence",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.common",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ActorCriticWrapper"
+  }
+ ],
+ "CatTensors": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._tensor",
+   "module_short": "torchrl.envs",
+   "name": "CatTensors"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "CatTensors"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "CatTensors"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "CatTensors"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "CatTensors"
+  }
+ ],
+ "Collector": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.collectors._single",
+   "module_short": "torchrl.collectors",
+   "name": "Collector"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.collectors",
+   "module_short": "torchrl.collectors",
+   "name": "Collector"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Collector"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.collectors._base",
+   "module_short": "torchrl.collectors",
+   "name": "BaseCollector"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.collectors",
+   "module_short": "torchrl.collectors",
+   "name": "BaseCollector"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "BaseCollector"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils.data.dataset",
+   "module_short": "torch.utils.data",
+   "name": "IterableDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils.data",
+   "module_short": "torch.utils.data",
+   "name": "IterableDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils",
+   "module_short": "torch.utils",
+   "name": "IterableDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "IterableDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils.data.dataset",
+   "module_short": "torch.utils.data",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils.data",
+   "module_short": "torch.utils.data",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils",
+   "module_short": "torch.utils",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "typing",
+   "module_short": "typing",
+   "name": "Generic"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.collectors",
+   "module_short": "torchrl.collectors",
+   "name": "Collector"
+  }
+ ],
+ "Composite": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.tensor_specs",
+   "module_short": "torchrl.data",
+   "name": "Composite"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "Composite"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Composite"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.tensor_specs",
+   "module_short": "torchrl.data",
+   "name": "TensorSpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "TensorSpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TensorSpec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "Composite"
+  }
+ ],
+ "DDPGLoss": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "__main__",
+   "module_short": "__main__",
+   "name": "DDPGLoss"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.common",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "LossModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  }
+ ],
+ "DMControlEnv": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.dm_control",
+   "module_short": "torchrl.envs",
+   "name": "DMControlEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs",
+   "module_short": "torchrl.envs",
+   "name": "DMControlEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "DMControlEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "DMControlEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.dm_control",
+   "module_short": "torchrl.envs",
+   "name": "DMControlWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs",
+   "module_short": "torchrl.envs",
+   "name": "DMControlWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "DMControlWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "DMControlWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.gym_like",
+   "module_short": "torchrl.envs",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs.common",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.dm_control",
+   "module_short": "torchrl.envs",
+   "name": "DMControlEnv"
+  }
+ ],
+ "DdpgMlpActor": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.models.models",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.models",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "DdpgMlpActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpActor"
+  }
+ ],
+ "DdpgMlpQNet": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.models.models",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpQNet"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.models",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpQNet"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpQNet"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "DdpgMlpQNet"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpQNet"
+  }
+ ],
+ "DoubleToFloat": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._device",
+   "module_short": "torchrl.envs",
+   "name": "DoubleToFloat"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "DoubleToFloat"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "DoubleToFloat"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "DoubleToFloat"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._device",
+   "module_short": "torchrl.envs",
+   "name": "DTypeCastTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "DTypeCastTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "DTypeCastTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "DTypeCastTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "DoubleToFloat"
+  }
+ ],
+ "EnvCreator": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.env_creator",
+   "module_short": "torchrl.envs",
+   "name": "EnvCreator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvCreator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvCreator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvCreator"
+  }
+ ],
+ "ExplorationType.DETERMINISTIC": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.probabilistic",
+   "module_short": "tensordict.nn",
+   "name": "InteractionType"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "InteractionType"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "InteractionType"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.ExplorationType",
+   "module_short": "torchrl.envs.ExplorationType",
+   "name": "DETERMINISTIC"
+  }
+ ],
+ "ExplorationType.RANDOM": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.probabilistic",
+   "module_short": "tensordict.nn",
+   "name": "InteractionType"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "InteractionType"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "InteractionType"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.ExplorationType",
+   "module_short": "torchrl.envs.ExplorationType",
+   "name": "RANDOM"
+  }
+ ],
+ "GymEnv": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.gym",
+   "module_short": "torchrl.envs",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs",
+   "module_short": "torchrl.envs",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.gym",
+   "module_short": "torchrl.envs",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs",
+   "module_short": "torchrl.envs",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.gym_like",
+   "module_short": "torchrl.envs",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs.common",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.gym",
+   "module_short": "torchrl.envs",
+   "name": "GymEnv"
+  }
+ ],
+ "InitTracker": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._env",
+   "module_short": "torchrl.envs",
+   "name": "InitTracker"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "InitTracker"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "InitTracker"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "InitTracker"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "InitTracker"
+  }
+ ],
+ "LazyMemmapStorage": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.storages",
+   "module_short": "torchrl.data",
+   "name": "LazyMemmapStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "LazyMemmapStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "LazyMemmapStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "LazyMemmapStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.storages",
+   "module_short": "torchrl.data",
+   "name": "LazyTensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "LazyTensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "LazyTensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "LazyTensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.storages",
+   "module_short": "torchrl.data",
+   "name": "TensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "TensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TensorStorage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.storages",
+   "module_short": "torchrl.data",
+   "name": "Storage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "Storage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "Storage"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Storage"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "LazyMemmapStorage"
+  }
+ ],
+ "LogValidationReward": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.trainers.trainers",
+   "module_short": "torchrl.trainers",
+   "name": "LogValidationReward"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.trainers",
+   "module_short": "torchrl.trainers",
+   "name": "LogValidationReward"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "LogValidationReward"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.trainers.trainers",
+   "module_short": "torchrl.trainers",
+   "name": "TrainerHookBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.trainers",
+   "module_short": "torchrl.trainers",
+   "name": "TrainerHookBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TrainerHookBase"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.trainers",
+   "module_short": "torchrl.trainers",
+   "name": "LogValidationReward"
+  }
+ ],
+ "LossModule": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.common",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "LossModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  }
+ ],
+ "ObservationNorm": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._normalization",
+   "module_short": "torchrl.envs",
+   "name": "ObservationNorm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "ObservationNorm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "ObservationNorm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ObservationNorm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "ObservationTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "ObservationTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "ObservationTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ObservationTransform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "ObservationNorm"
+  }
+ ],
+ "ObservationNorm.init_stats()": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "ObservationNorm",
+   "module_short": "ObservationNorm",
+   "name": "init_stats()"
+  }
+ ],
+ "OrnsteinUhlenbeckProcessModule": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.exploration",
+   "module_short": "torchrl.modules",
+   "name": "OrnsteinUhlenbeckProcessModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "OrnsteinUhlenbeckProcessModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "OrnsteinUhlenbeckProcessModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "OrnsteinUhlenbeckProcessModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "OrnsteinUhlenbeckProcessModule"
+  }
+ ],
+ "ParallelEnv": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.batched_envs",
+   "module_short": "torchrl.envs",
+   "name": "ParallelEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "ParallelEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ParallelEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.batched_envs",
+   "module_short": "torchrl.envs.batched_envs",
+   "name": "BatchedEnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "BatchedEnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "BatchedEnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "ParallelEnv"
+  }
+ ],
+ "PrioritizedSampler": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.samplers",
+   "module_short": "torchrl.data",
+   "name": "PrioritizedSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "PrioritizedSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "PrioritizedSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "PrioritizedSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.samplers",
+   "module_short": "torchrl.data.replay_buffers",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data.replay_buffers",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "PrioritizedSampler"
+  }
+ ],
+ "ProbabilisticActor": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.actors",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ProbabilisticActor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.probabilistic",
+   "module_short": "torchrl.modules",
+   "name": "SafeProbabilisticTensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeProbabilisticTensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeProbabilisticTensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeProbabilisticTensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.probabilistic",
+   "module_short": "tensordict.nn",
+   "name": "ProbabilisticTensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "ProbabilisticTensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "ProbabilisticTensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.sequence",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.sequence",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.common",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor"
+  }
+ ],
+ "RandomCropTensorDict": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._misc",
+   "module_short": "torchrl.envs",
+   "name": "RandomCropTensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "RandomCropTensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "RandomCropTensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RandomCropTensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "RandomCropTensorDict"
+  }
+ ],
+ "RandomSampler": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.samplers",
+   "module_short": "torchrl.data",
+   "name": "RandomSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "RandomSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "RandomSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RandomSampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.samplers",
+   "module_short": "torchrl.data.replay_buffers",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data.replay_buffers",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Sampler"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "RandomSampler"
+  }
+ ],
+ "RewardScaling": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._normalization",
+   "module_short": "torchrl.envs",
+   "name": "RewardScaling"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "RewardScaling"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "RewardScaling"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RewardScaling"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "RewardScaling"
+  }
+ ],
+ "SoftUpdate": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SoftUpdate"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "TargetNetUpdater"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "TargetNetUpdater"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TargetNetUpdater"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate"
+  }
+ ],
+ "StepCounter": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._env",
+   "module_short": "torchrl.envs",
+   "name": "StepCounter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "StepCounter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "StepCounter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "StepCounter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "Transform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "StepCounter"
+  }
+ ],
+ "TD0Estimator": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value.advantages",
+   "module_short": "torchrl.objectives.value",
+   "name": "TD0Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "TD0Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "TD0Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TD0Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value.advantages",
+   "module_short": "torchrl.objectives.value",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "TD0Estimator"
+  }
+ ],
+ "TD1Estimator": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value.advantages",
+   "module_short": "torchrl.objectives.value",
+   "name": "TD1Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "TD1Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "TD1Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TD1Estimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value.advantages",
+   "module_short": "torchrl.objectives.value",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "TD1Estimator"
+  }
+ ],
+ "TDLambdaEstimator": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value.advantages",
+   "module_short": "torchrl.objectives.value",
+   "name": "TDLambdaEstimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "TDLambdaEstimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "TDLambdaEstimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TDLambdaEstimator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value.advantages",
+   "module_short": "torchrl.objectives.value",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimatorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.value",
+   "module_short": "torchrl.objectives.value",
+   "name": "TDLambdaEstimator"
+  }
+ ],
+ "TanhDelta": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.distributions.continuous",
+   "module_short": "torchrl.modules",
+   "name": "TanhDelta"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.distributions",
+   "module_short": "torchrl.modules",
+   "name": "TanhDelta"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "TanhDelta"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TanhDelta"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.distributions.utils",
+   "module_short": "torchrl.modules.distributions.utils",
+   "name": "FasterTransformedDistribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.distributions",
+   "module_short": "torchrl.modules.distributions",
+   "name": "FasterTransformedDistribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "FasterTransformedDistribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "FasterTransformedDistribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.distributions.transformed_distribution",
+   "module_short": "torch.distributions",
+   "name": "TransformedDistribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.distributions",
+   "module_short": "torch.distributions",
+   "name": "TransformedDistribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "TransformedDistribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.distributions.distribution",
+   "module_short": "torch.distributions",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.distributions",
+   "module_short": "torch.distributions",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Distribution"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "TanhDelta"
+  }
+ ],
+ "TensorDict": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "TensorDictBase": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase"
+  }
+ ],
+ "TensorDictModule": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  }
+ ],
+ "TensorDictReplayBuffer": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TensorDictReplayBuffer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ReplayBuffer"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer"
+  }
+ ],
+ "TensorDictSequential": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.sequence",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  }
+ ],
+ "TransformedEnv": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TransformedEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  }
+ ],
+ "ValueEstimators": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "enum",
+   "module_short": "enum",
+   "name": "Enum"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  }
+ ],
+ "ValueEstimators.GAE": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils.ValueEstimators",
+   "module_short": "torchrl.objectives.utils.ValueEstimators",
+   "name": "GAE"
+  }
+ ],
+ "ValueEstimators.TD0": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils.ValueEstimators",
+   "module_short": "torchrl.objectives.utils.ValueEstimators",
+   "name": "TD0"
+  }
+ ],
+ "ValueEstimators.TD1": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils.ValueEstimators",
+   "module_short": "torchrl.objectives.utils.ValueEstimators",
+   "name": "TD1"
+  }
+ ],
+ "ValueEstimators.TDLambda": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils.ValueEstimators",
+   "module_short": "torchrl.objectives.utils.ValueEstimators",
+   "name": "TDLambda"
+  }
+ ],
+ "ValueOperator": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.actors",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueOperator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  }
+ ],
+ "_": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "_forward": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_init": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_loss_actor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_loss_value": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "actor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.actors",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ProbabilisticActor"
+  }
+ ],
+ "actor.spec.clone": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.actors",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ProbabilisticActor.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ProbabilisticActor.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.probabilistic",
+   "module_short": "torchrl.modules",
+   "name": "SafeProbabilisticTensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeProbabilisticTensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeProbabilisticTensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeProbabilisticTensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.probabilistic",
+   "module_short": "tensordict.nn.probabilistic",
+   "name": "ProbabilisticTensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "ProbabilisticTensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "ProbabilisticTensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.sequence",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.sequence",
+   "module_short": "tensordict.nn.sequence",
+   "name": "TensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictSequential.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.common",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "SafeModule.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SafeModule.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn.common",
+   "name": "TensorDictModule.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModule.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn.common",
+   "name": "TensorDictModuleBase.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn.modules.module",
+   "name": "Module.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn.modules",
+   "name": "Module.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module.spec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module.spec"
+  }
+ ],
+ "actor_model_explore": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.sequence",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictSequential"
+  }
+ ],
+ "actor_model_explore.share_memory": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.sequence",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictSequential.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModule.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module.share_memory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module.share_memory"
+  }
+ ],
+ "annealing_frames": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "backend": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "batch_size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "buffer_scratch_dir": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "buffer_size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "ceil_div": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "collected_frames": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "collector_device": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "device"
+  }
+ ],
+ "current_frames": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "default_value_estimator": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueEstimators"
+  }
+ ],
+ "default_value_kwargs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "default_value_kwargs"
+  }
+ ],
+ "device": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "device"
+  }
+ ],
+ "distance_loss": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "distance_loss"
+  }
+ ],
+ "env.step": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "env",
+   "module_short": "env",
+   "name": "step"
+  }
+ ],
+ "env.step()": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "env",
+   "module_short": "env",
+   "name": "step()"
+  }
+ ],
+ "env_library": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.gym",
+   "module_short": "torchrl.envs",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs",
+   "module_short": "torchrl.envs",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GymEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs.gym",
+   "module_short": "torchrl.envs",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.libs",
+   "module_short": "torchrl.envs",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GymWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.gym_like",
+   "module_short": "torchrl.envs",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "GymLikeEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs.common",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "_EnvWrapper"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  }
+ ],
+ "env_name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "env_per_collector": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "frames_per_batch": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "gamma": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "get_env_stats": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "gn": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "gn1": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "gn2": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "i": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "init_env_steps": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "init_random_frames": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "is_fork": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "bool"
+  }
+ ],
+ "lmbda": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "loss_actor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "loss_actor.mean": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "loss_dict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "loss_module": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "__main__",
+   "module_short": "__main__",
+   "name": "DDPGLoss"
+  }
+ ],
+ "loss_module.actor_network_params.values": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.params",
+   "module_short": "tensordict",
+   "name": "TensorDictParams.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict",
+   "name": "TensorDictParams.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictParams.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn.modules.module",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn.modules",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.values"
+  }
+ ],
+ "loss_module.make_value_estimator": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "__main__",
+   "module_short": "__main__",
+   "name": "DDPGLoss.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.common",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "LossModule.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.common",
+   "module_short": "tensordict.nn.common",
+   "name": "TensorDictModuleBase.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModuleBase.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictModuleBase.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn.modules.module",
+   "name": "Module.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn.modules",
+   "name": "Module.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module.make_value_estimator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module.make_value_estimator"
+  }
+ ],
+ "loss_module.value_network_params.values": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn.params",
+   "module_short": "tensordict",
+   "name": "TensorDictParams.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.nn",
+   "module_short": "tensordict",
+   "name": "TensorDictParams.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictParams.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn.modules.module",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn.modules",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.values"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.values"
+  }
+ ],
+ "loss_value": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "loss_value.mean": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "make_ddpg_actor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "make_env": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "make_env"
+  }
+ ],
+ "make_recorder": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "make_replay_buffer": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "make_transformed_env": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "make_value_estimator": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "max_frames_per_traj": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "multiprocessing.get_start_method": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "module.get_start_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.multiprocessing",
+   "module_short": "torch.multiprocessing",
+   "name": "get_start_method"
+  }
+ ],
+ "multiprocessing.set_start_method": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "module.set_start_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.multiprocessing",
+   "module_short": "torch.multiprocessing",
+   "name": "set_start_method"
+  }
+ ],
+ "num_collectors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "optim.Adam": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim.optimizer",
+   "module_short": "torch.optim",
+   "name": "Optimizer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Optimizer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Optimizer"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  }
+ ],
+ "optimizer_actor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam"
+  }
+ ],
+ "optimizer_actor.step": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.optimizer",
+   "module_short": "torch.optim",
+   "name": "Optimizer.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Optimizer.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Optimizer.step"
+  }
+ ],
+ "optimizer_actor.zero_grad": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.optimizer",
+   "module_short": "torch.optim",
+   "name": "Optimizer.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Optimizer.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Optimizer.zero_grad"
+  }
+ ],
+ "optimizer_value": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam"
+  }
+ ],
+ "optimizer_value.step": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.optimizer",
+   "module_short": "torch.optim",
+   "name": "Optimizer.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Optimizer.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Optimizer.step"
+  }
+ ],
+ "optimizer_value.zero_grad": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.adam",
+   "module_short": "torch.optim",
+   "name": "Adam.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Adam.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Adam.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim.optimizer",
+   "module_short": "torch.optim",
+   "name": "Optimizer.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.optim",
+   "module_short": "torch.optim",
+   "name": "Optimizer.zero_grad"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Optimizer.zero_grad"
+  }
+ ],
+ "parallel_env": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TransformedEnv"
+  }
+ ],
+ "parallel_env.close": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms._base",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TransformedEnv.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvBase.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn.modules.module",
+   "name": "Module.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn.modules",
+   "name": "Module.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module.close"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module.close"
+  }
+ ],
+ "parallel_env_constructor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "pbar": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm.std",
+   "module_short": "tqdm",
+   "name": "tqdm"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "tqdm"
+  }
+ ],
+ "pbar.set_description": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm.std",
+   "module_short": "tqdm",
+   "name": "tqdm.set_description"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "tqdm.set_description"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm.utils",
+   "module_short": "tqdm.utils",
+   "name": "Comparable.set_description"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "Comparable.set_description"
+  }
+ ],
+ "pbar.update": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm.std",
+   "module_short": "tqdm",
+   "name": "tqdm.update"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "tqdm.update"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm.utils",
+   "module_short": "tqdm.utils",
+   "name": "Comparable.update"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "Comparable.update"
+  }
+ ],
+ "plt.figure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "figure"
+  }
+ ],
+ "plt.legend": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "legend"
+  }
+ ],
+ "plt.plot": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "plot"
+  }
+ ],
+ "plt.tight_layout": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "tight_layout"
+  }
+ ],
+ "plt.xlabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "xlabel"
+  }
+ ],
+ "plt.ylabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "ylabel"
+  }
+ ],
+ "prb": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "bool"
+  }
+ ],
+ "qnet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module.actors",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules.tensordict_module",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ValueOperator"
+  }
+ ],
+ "r0": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "random_crop_len": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "record_interval": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "recorder": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.trainers.trainers",
+   "module_short": "torchrl.trainers",
+   "name": "LogValidationReward"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.trainers",
+   "module_short": "torchrl.trainers",
+   "name": "LogValidationReward"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "LogValidationReward"
+  }
+ ],
+ "replay_buffer": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TensorDictReplayBuffer"
+  }
+ ],
+ "replay_buffer.extend": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.extend"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.extend"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.extend"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TensorDictReplayBuffer.extend"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer.extend"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer.extend"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer.extend"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ReplayBuffer.extend"
+  }
+ ],
+ "replay_buffer.sample": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TensorDictReplayBuffer.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ReplayBuffer.sample"
+  }
+ ],
+ "replay_buffer.update_tensordict_priority": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.update_tensordict_priority"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.update_tensordict_priority"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "TensorDictReplayBuffer.update_tensordict_priority"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TensorDictReplayBuffer.update_tensordict_priority"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers.replay_buffers",
+   "module_short": "torchrl.data.replay_buffers.replay_buffers",
+   "name": "ReplayBuffer.update_tensordict_priority"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data.replay_buffers",
+   "module_short": "torchrl.data.replay_buffers",
+   "name": "ReplayBuffer.update_tensordict_priority"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.data",
+   "module_short": "torchrl.data",
+   "name": "ReplayBuffer.update_tensordict_priority"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "ReplayBuffer.update_tensordict_priority"
+  }
+ ],
+ "reward_scaling": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "rewards": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "rewards.append": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
+ "rewards_eval": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "rewards_eval.append": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
+ "rn": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "rs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "sampled_tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "shutil.rmtree": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "shutil",
+   "module_short": "shutil",
+   "name": "rmtree"
+  }
+ ],
+ "target_net_updater": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SoftUpdate"
+  }
+ ],
+ "target_net_updater.step": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "SoftUpdate.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "TargetNetUpdater.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "TargetNetUpdater.step"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "TargetNetUpdater.step"
+  }
+ ],
+ "target_value": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "target_value.max": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "target_value.mean": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "tau": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "td_record": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
+  }
+ ],
+ "tempfile.TemporaryDirectory": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  }
+ ],
+ "tensordict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "tensordict.TensorDict": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict"
+  }
+ ],
+ "tensordict.clone": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.clone"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.clone"
+  }
+ ],
+ "tensordict.cpu": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.cpu"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.cpu"
+  }
+ ],
+ "tensordict.nn.TensorDictModule": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModule"
+  }
+ ],
+ "tensordict.nn.TensorDictModules": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictModules"
+  }
+ ],
+ "tensordict.nn.TensorDictSequential": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "tensordict.nn",
+   "module_short": "tensordict.nn",
+   "name": "TensorDictSequential"
+  }
+ ],
+ "tensordict.numel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.numel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.numel"
+  }
+ ],
+ "tensordict.select": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._td",
+   "module_short": "tensordict",
+   "name": "TensorDict.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDict.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict.base",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorDictBase.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "MutableMapping.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "MutableMapping.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict._tensorcollection",
+   "module_short": "tensordict._tensorcollection",
+   "name": "TensorCollection.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tensordict",
+   "module_short": "tensordict",
+   "name": "TensorCollection.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Mapping.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Mapping.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Collection.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Collection.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Sized.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Sized.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Iterable.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Iterable.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections.abc",
+   "module_short": "collections.abc",
+   "name": "Container.select"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "Container.select"
+  }
+ ],
+ "tmpdir": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  }
+ ],
+ "tmpdir.name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "torch.Tensor": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch._C",
+   "module_short": "torch._C",
+   "name": "TensorBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "TensorBase"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "torch.cuda.is_available": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.cuda",
+   "module_short": "torch.cuda",
+   "name": "is_available"
+  }
+ ],
+ "torch.device": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "device"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "device"
+  }
+ ],
+ "torch.nn.Module": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  }
+ ],
+ "torch.nn.Module.forward": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torch.nn.Module",
+   "module_short": "torch.nn.Module",
+   "name": "forward"
+  }
+ ],
+ "torch.nn.utils.clip_grad_norm_": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.nn.utils",
+   "module_short": "torch.nn.utils",
+   "name": "clip_grad_norm_"
+  }
+ ],
+ "torchrl.collectors.Collector": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.collectors",
+   "module_short": "torchrl.collectors",
+   "name": "Collector"
+  }
+ ],
+ "torchrl.envs.transforms.CatTensors": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "CatTensors"
+  }
+ ],
+ "torchrl.envs.transforms.DoubleToFloat": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "DoubleToFloat"
+  }
+ ],
+ "torchrl.envs.transforms.StepCounter": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "StepCounter"
+  }
+ ],
+ "torchrl.envs.transforms.TransformedEnv": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "TransformedEnv"
+  }
+ ],
+ "torchrl.modules.DdpgMlpActor": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpActor"
+  }
+ ],
+ "torchrl.modules.DdpgMlpQNet": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "DdpgMlpQNet"
+  }
+ ],
+ "torchrl.modules.OrnsteinUhlenbeckProcessModule": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "OrnsteinUhlenbeckProcessModule"
+  }
+ ],
+ "torchrl.modules.ValueOperator": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.modules",
+   "module_short": "torchrl.modules",
+   "name": "ValueOperator"
+  }
+ ],
+ "torchrl.objectives.HardUpdate": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "HardUpdate"
+  }
+ ],
+ "torchrl.objectives.LossModule": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "LossModule"
+  }
+ ],
+ "torchrl.objectives.LossModule.__init__": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives.LossModule",
+   "module_short": "torchrl.objectives.LossModule",
+   "name": "__init__"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives.LossModule",
+   "module_short": "torchrl.objectives.LossModule",
+   "name": "__init__"
+  }
+ ],
+ "torchrl.objectives.LossModule.convert_to_functional": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives.LossModule",
+   "module_short": "torchrl.objectives.LossModule",
+   "name": "convert_to_functional"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives.LossModule",
+   "module_short": "torchrl.objectives.LossModule",
+   "name": "convert_to_functional"
+  }
+ ],
+ "torchrl.objectives.LossModule.forward": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives.LossModule",
+   "module_short": "torchrl.objectives.LossModule",
+   "name": "forward"
+  }
+ ],
+ "torchrl.objectives.SoftUpdate": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "SoftUpdate"
+  }
+ ],
+ "torchrl.objectives.ValueEstimators": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives",
+   "module_short": "torchrl.objectives",
+   "name": "ValueEstimators"
+  }
+ ],
+ "torchrl.objectives.utils.hold_out_params": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.objectives.utils",
+   "module_short": "torchrl.objectives",
+   "name": "hold_out_params"
+  }
+ ],
+ "total_collection_steps": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "total_frames": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "tqdm.tqdm": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tqdm.std",
+   "module_short": "tqdm",
+   "name": "tqdm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "tqdm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tqdm.utils",
+   "module_short": "tqdm.utils",
+   "name": "Comparable"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "Comparable"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tqdm",
+   "module_short": "tqdm",
+   "name": "tqdm"
+  }
+ ],
+ "traj_len": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "transform_state_dict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "OrderedDict"
+  }
+ ],
+ "update_to_data": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
+  }
+ ]
+}
