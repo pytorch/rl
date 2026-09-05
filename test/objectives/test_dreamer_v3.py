@@ -311,6 +311,28 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     # Utility tests
     # ------------------------------------------------------------------ #
 
+    def test_dreamer_v3_canonical_constructor_defaults(self, device):
+        model_loss = DreamerV3ModelLoss(
+            self._create_world_model(reward_two_hot=True).to(device),
+            num_reward_bins=self.num_reward_bins,
+        )
+        assert model_loss.kl_mode == "separate"
+        assert model_loss.unimix == 0.01
+
+        actor_loss = DreamerV3ActorLoss(
+            self._create_actor_model().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+        )
+        assert actor_loss.use_reinforce
+
+        value_loss = DreamerV3ValueLoss(
+            self._create_value_model(out_features=self.num_reward_bins).to(device),
+            num_value_bins=self.num_reward_bins,
+        )
+        assert value_loss.value_loss == "two_hot"
+        assert value_loss.slow_critic_regularization == 1.0
+
     def test_dreamer_v3_symlog_invertibility(self, device):
         x = torch.tensor([-1000.0, -10.0, -1.0, 0.0, 1.0, 10.0, 1000.0], device=device)
         reconstructed = symexp(symlog(x))
@@ -413,6 +435,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             lambda_kl=lambda_kl,
             lambda_reco=lambda_reco,
             lambda_reward=lambda_reward,
+            kl_mode="balanced",
             reward_two_hot=reward_two_hot,
             num_reward_bins=self.num_reward_bins,
         )
@@ -426,6 +449,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         world_model = self._create_world_model(reward_two_hot=True).to(device)
         loss_module = DreamerV3ModelLoss(
             world_model,
+            kl_mode="balanced",
             num_reward_bins=self.num_reward_bins,
         )
         loss_td, _ = loss_module(tensordict)
@@ -709,8 +733,10 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
         value_loss = DreamerV3ValueLoss(
             value_model,
+            value_loss="symlog_mse",
             discount_loss=True,
             actor_loss=loss_module,
+            slow_critic_regularization=0.0,
         )
         value_loss(fake_data.detach())
 
@@ -772,7 +798,10 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             [batch, time_steps],
         )
         value_loss = DreamerV3ValueLoss(
-            self._create_value_model().to(device), reduction=reduction
+            self._create_value_model().to(device),
+            value_loss="symlog_mse",
+            slow_critic_regularization=0.0,
+            reduction=reduction,
         ).to(device)
         value_loss.set_keys(
             reward=("replay", "reward"),
@@ -797,6 +826,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             value_loss="symlog_mse",
             discount_loss=discount_loss,
             reduction=reduction,
+            slow_critic_regularization=0.0,
         )
         loss_td, _ = loss_module(tensordict)
         assert "loss_value" in loss_td.keys()
@@ -824,6 +854,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             value_loss="two_hot",
             discount_loss=discount_loss,
             num_value_bins=self.num_reward_bins,
+            slow_critic_regularization=0.0,
         )
         loss_td, _ = loss_module(tensordict)
         assert "loss_value" in loss_td.keys()
@@ -885,6 +916,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             legacy_value,
             value_loss="two_hot",
             num_value_bins=self.num_reward_bins,
+            slow_critic_regularization=0.0,
         )
         with pytest.warns(DeprecationWarning, match="removed in v0.16"):
             value_loss(self._create_value_data().to(device))
@@ -926,6 +958,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             value_model,
             value_loss="two_hot",
             num_value_bins=self.num_reward_bins,
+            slow_critic_regularization=0.0,
         )
         value_loss.set_keys(
             value=("predictions", "value"),
@@ -1353,6 +1386,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         world_model = self._create_world_model(reward_two_hot=True).to(device)
         loss_module = DreamerV3ModelLoss(
             world_model,
+            kl_mode="balanced",
             num_reward_bins=self.num_reward_bins,
         )
         loss_td, _ = loss_module(tensordict)
@@ -1734,6 +1768,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
         loss_module = DreamerV3ModelLoss(
             world_model,
+            kl_mode="balanced",
             num_reward_bins=self.num_reward_bins,
         )
         loss_td, _ = loss_module(tensordict)

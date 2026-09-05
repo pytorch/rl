@@ -228,15 +228,15 @@ class DreamerV3ModelLoss(LossModule):
             non-terminal continuation targets, for encoding the finite-horizon
             discount in the continuation model. Defaults to 1.0.
         kl_mode ("balanced" or "separate", optional): KL formulation.
-            ``"balanced"`` preserves the historical weighted aggregate;
-            ``"separate"`` emits the reference dynamics and representation
-            losses. Defaults to ``"balanced"``.
+            ``"balanced"`` selects the historical weighted aggregate;
+            ``"separate"`` emits the paper's dynamics and representation
+            losses. Defaults to ``"separate"``.
         lambda_dynamic (float, optional): Dynamics KL weight in separate mode.
             Defaults to 1.0.
         lambda_representation (float, optional): Representation KL weight in
             separate mode. Defaults to 0.1.
         unimix (float, optional): Uniform mixture used by the categorical KL
-            distributions. Defaults to 0.0 for compatibility.
+            distributions. Defaults to 0.01.
         kl_alpha (float, optional): KL balancing factor (alpha in the paper).
             Default: 0.8.
         free_bits (float, optional): Minimum KL per categorical in nats.
@@ -349,10 +349,10 @@ class DreamerV3ModelLoss(LossModule):
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
         lambda_continue: float = 0.0,
-        kl_mode: Literal["balanced", "separate"] = "balanced",
+        kl_mode: Literal["balanced", "separate"] = "separate",
         lambda_dynamic: float = 1.0,
         lambda_representation: float = 0.1,
-        unimix: float = 0.0,
+        unimix: float = 0.01,
         continue_target_scale: float = 1.0,
         kl_alpha: float = 0.8,
         free_bits: float = 1.0,
@@ -553,7 +553,7 @@ class DreamerV3ActorLoss(LossModule):
         use_reinforce (bool, optional): If ``True``, uses REINFORCE (log-prob
             * stop-gradient advantage). If ``False``, uses the straight
             reparameterization gradient (suitable for continuous Gaussian
-            actors). Default: ``False``.
+            actors). Default: ``True``.
         return_normalization (bool, optional): Normalize the actor objective
             by an EMA return-percentile span: REINFORCE advantages and the
             reparameterization lambda-returns are divided by the clamped span
@@ -695,7 +695,7 @@ class DreamerV3ActorLoss(LossModule):
         imagination_horizon: int = 15,
         discount_loss: bool = True,
         entropy_bonus: float = 3e-4,
-        use_reinforce: bool = False,
+        use_reinforce: bool = True,
         return_normalization: bool = True,
         return_normalization_rate: float = 0.01,
         return_normalization_quantiles: tuple[float, float] = (0.05, 0.95),
@@ -1003,9 +1003,9 @@ class DreamerV3ValueLoss(LossModule):
     Trains the value network to predict the lambda-target computed by
     :class:`DreamerV3ActorLoss`. Supports two loss modes:
 
-    - ``"symlog_mse"`` (default): ``(symlog(v_pred) - symlog(target))^2``
-    - ``"two_hot"``: Two-hot cross-entropy over a fixed bin grid (matches the
-      full DreamerV3 distribution-valued critic).
+    - ``"two_hot"`` (default): Two-hot cross-entropy over a fixed bin grid,
+      matching the DreamerV3 distribution-valued critic.
+    - ``"symlog_mse"``: ``(symlog(v_pred) - symlog(target))^2``.
 
     The discount factor used here must match the one the actor used to compute
     ``lambda_target``. The recommended way to keep them in lock-step is to
@@ -1023,7 +1023,7 @@ class DreamerV3ValueLoss(LossModule):
     Args:
         value_model (TensorDictModule): The value network.
         value_loss ("symlog_mse" or "two_hot", optional): Loss type.
-            Default: ``"symlog_mse"``.
+            Default: ``"two_hot"``.
         discount_loss (bool, optional): If ``True``, discounts the loss with
             a cumulative gamma factor. Default: ``True``.
         gamma (float, optional): Discount factor used when ``discount_loss=True``.
@@ -1035,20 +1035,28 @@ class DreamerV3ValueLoss(LossModule):
             avoiding any chance of a mismatch. Default: ``None``.
         slow_critic_regularization (float, optional): Weight of the auxiliary
             loss that trains the online critic toward decoded target-critic
-            predictions. Default: ``0.0``.
+            predictions. Default: ``1.0``.
         reduction ("none", "mean" or "sum", optional): Reduction applied to
             the loss. Defaults to ``"mean"``.
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.modules import MLP
+        >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+        >>> from torchrl.modules import MLP, SymExpTwoHot
         >>> from torchrl.objectives import DreamerV3ValueLoss
         >>> value_model = TensorDictModule(
-        ...     MLP(out_features=1, depth=1, num_cells=8),
+        ...     MLP(out_features=255, depth=1, num_cells=8),
         ...     in_keys=["state"],
-        ...     out_keys=["state_value"],
+        ...     out_keys=["state_value_logits"],
+        ... )
+        >>> value_model = TensorDictSequential(
+        ...     value_model,
+        ...     TensorDictModule(
+        ...         SymExpTwoHot(255),
+        ...         in_keys=["state_value_logits"],
+        ...         out_keys=["state_value"],
+        ...     ),
         ... )
         >>> td = TensorDict({
         ...     "state": torch.randn(8, 4),
@@ -1099,12 +1107,12 @@ class DreamerV3ValueLoss(LossModule):
     def __init__(
         self,
         value_model: TensorDictModule,
-        value_loss: Literal["symlog_mse", "two_hot"] = "symlog_mse",
+        value_loss: Literal["symlog_mse", "two_hot"] = "two_hot",
         discount_loss: bool = True,
         gamma: float = 0.99,
         num_value_bins: int = _DEFAULT_NUM_BINS,
         actor_loss: DreamerV3ActorLoss | None = None,
-        slow_critic_regularization: float = 0.0,
+        slow_critic_regularization: float = 1.0,
         reduction: Literal["none", "mean", "sum"] | None = None,
     ):
         super().__init__()
