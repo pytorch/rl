@@ -308,6 +308,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | --- | --- |
 | [`NetworkConfig`](generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html#torchrl.trainers.algorithms.configs.modules.NetworkConfig)([_partial_]) | Parent class to configure a network. |
 | [`MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig)(_partial_, in_features, ...) | A class to configure a multi-layer perceptron. |
+| [`DreamerV3MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig)([_partial_, in_features, ...]) | A class to configure a DreamerV3 multilayer perceptron. |
 | [`ConvNetConfig`](generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html#torchrl.trainers.algorithms.configs.modules.ConvNetConfig)(_partial_, in_features, depth, ...) | A class to configure a convolutional network. |
 | [`TensorDictModuleConfig`](generated/torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html#torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig)([_partial_, in_keys, ...]) | A class to configure a TensorDictModule. |
 | [`TanhNormalModelConfig`](generated/torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html#torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig)([_partial_, in_keys, ...]) | A class to configure a TanhNormal model. |

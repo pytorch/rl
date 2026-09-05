@@ -752,6 +752,7 @@
 - [torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig](reference/generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.AdditiveGaussianModuleConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.AdditiveGaussianModuleConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.ConvNetConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.md)
+- [torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.MLPConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.ModelConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.ModelConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.NetworkConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.md)

@@ -27,6 +27,10 @@ Examples
 torch.Size([3, 4])
 ```
 
+See also
+
+[`DreamerV3MLPConfig`](torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig)
+
 forward(**inputs: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based.html#DreamerV3MLP.forward)
 
 Define the computation performed at every call.

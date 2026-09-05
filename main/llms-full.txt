@@ -3093,6 +3093,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | --- | --- |
 | [`NetworkConfig`](generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html#torchrl.trainers.algorithms.configs.modules.NetworkConfig)([_partial_]) | Parent class to configure a network. |
 | [`MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig)(_partial_, in_features, ...) | A class to configure a multi-layer perceptron. |
+| [`DreamerV3MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig)([_partial_, in_features, ...]) | A class to configure a DreamerV3 multilayer perceptron. |
 | [`ConvNetConfig`](generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html#torchrl.trainers.algorithms.configs.modules.ConvNetConfig)(_partial_, in_features, depth, ...) | A class to configure a convolutional network. |
 | [`TensorDictModuleConfig`](generated/torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html#torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig)([_partial_, in_keys, ...]) | A class to configure a TensorDictModule. |
 | [`TanhNormalModelConfig`](generated/torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html#torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig)([_partial_, in_keys, ...]) | A class to configure a TanhNormal model. |
@@ -33324,7 +33325,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f468858b8d0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f2513844220>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -45939,7 +45940,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f468b3e8540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f251655c540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -208524,6 +208525,10 @@ Examples
 torch.Size([3, 4])
 ```
 
+See also
+
+[`DreamerV3MLPConfig`](torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig)
+
 forward(**inputs: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based.html#DreamerV3MLP.forward)
 
 Define the computation performed at every call.
@@ -264349,6 +264354,32 @@ Example
 See also
 
 [`torchrl.modules.ConvNet`](torchrl.modules.ConvNet.html#torchrl.modules.ConvNet)
+
+---
+
+# torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig
+
+*class*torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig(*_partial_: bool = False*, *in_features: int = '???'*, *out_features: int | None = '???'*, *depth: int = 3*, *num_cells: int = 1024*, *outscale: float = 1.0*, *norm_eps: float = 0.0001*, *device: Any = None*, *_target_: str = 'torchrl.modules.DreamerV3MLP'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/modules.html#DreamerV3MLPConfig)
+
+A class to configure a DreamerV3 multilayer perceptron.
+
+Example
+
+```
+>>> import torch
+>>> from hydra.utils import instantiate
+>>> from torchrl.trainers.algorithms.configs import DreamerV3MLPConfig
+>>> cfg = DreamerV3MLPConfig(
+... in_features=6, out_features=4, depth=2, num_cells=8
+... )
+>>> net = instantiate(cfg)
+>>> y = net(torch.randn(3, 2), torch.randn(3, 4))
+>>> assert y.shape == (3, 4)
+```
+
+See also
+
+[`DreamerV3MLP`](torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP)
 
 ---
 
