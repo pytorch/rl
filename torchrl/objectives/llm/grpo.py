@@ -818,7 +818,26 @@ class GRPOLoss(LossModule):
     ) -> torch.Tensor | TensorDict:
         is_composite = isinstance(dist, CompositeDistribution)
         if is_composite:
-            entropy = composite_entropy(dist, self.samples_mc_entropy)
+            can_compute_component_entropy = all(
+                has_analytic_entropy(component) or component.has_rsample
+                for component in dist.dists.values()
+            )
+            if can_compute_component_entropy:
+                entropy = composite_entropy(dist, self.samples_mc_entropy)
+            else:
+                if not is_dynamo_compiling():
+                    _warn_mc_entropy(dist)
+                with set_composite_lp_aggregate(False):
+                    _, log_prob = sample_and_log_prob(
+                        dist,
+                        (self.samples_mc_entropy,),
+                        reparameterize=getattr(dist, "has_rsample", False),
+                    )
+                    if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
+                        log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
+                    else:
+                        log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
+                entropy = -log_prob.mean(0)
         else:
             analytic_entropy = has_analytic_entropy(dist)
             if analytic_entropy:
