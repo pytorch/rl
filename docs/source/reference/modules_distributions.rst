@@ -31,3 +31,5 @@ Sampling utilities
     sample_and_log_prob
     rsample_and_log_prob
     composite_entropy
+    has_analytic_entropy
+    has_analytic_kl

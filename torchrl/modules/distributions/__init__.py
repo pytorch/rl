@@ -23,6 +23,7 @@ from .discrete import (
     Ordinal,
     ReparamGradientStrategy,
 )
+from .utils import has_analytic_entropy, has_analytic_kl
 
 distributions_maps = {
     str(dist).lower(): dist
@@ -70,4 +71,6 @@ __all__ = [
     "LLMMaskedCategorical",
     "Ordinal",
     "ReparamGradientStrategy",
+    "has_analytic_entropy",
+    "has_analytic_kl",
 ]

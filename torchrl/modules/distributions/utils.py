@@ -2,6 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""Sampling, entropy and KL helpers for TorchRL distributions.
+
+``has_analytic_entropy`` and ``has_analytic_kl`` detect closed-form
+``entropy`` / ``kl_divergence`` implementations from the distribution
+class (or the torch KL registry) so objectives can avoid ``try/except``
+on the hot path.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -11,11 +19,19 @@ from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.nn import composite_lp_aggregate, CompositeDistribution
 from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
+from torch.distributions.kl import _KL_REGISTRY
+
+from torchrl._utils import logger as torchrl_logger, VERBOSE
 
 try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+_ANALYTIC_ENTROPY_CACHE: dict[type, bool] = {}
+_ANALYTIC_KL_CACHE: dict[tuple[type, type], bool] = {}
+_MC_ENTROPY_WARNED: set[type] = set()
+_MC_KL_WARNED: set[tuple[type, type]] = set()
 
 
 def sample_and_log_prob(
@@ -106,6 +122,126 @@ def rsample_and_log_prob(
     )
 
 
+def has_analytic_entropy(dist: d.Distribution) -> bool:
+    """Return whether ``dist`` implements a closed-form ``entropy()``.
+
+    The check is class-level: ``type(dist).entropy is not
+    torch.distributions.Distribution.entropy``. ``Independent`` is resolved
+    through its base distribution because ``Independent.entropy`` always
+    exists and only works when the base distribution implements entropy.
+    ``CompositeDistribution`` is treated as not having a closed-form
+    entropy: its ``entropy()`` may return a TensorDict and still relies on
+    ``try/except`` internally. Use :func:`composite_entropy` for composites.
+
+    Args:
+        dist (torch.distributions.Distribution): distribution to inspect.
+
+    Returns:
+        bool: ``True`` if a closed-form entropy method is available.
+
+    Examples:
+        >>> import torch
+        >>> from torch import distributions as d
+        >>> from torchrl.modules.distributions.utils import has_analytic_entropy
+        >>> has_analytic_entropy(d.Normal(torch.zeros(2), torch.ones(2)))
+        True
+        >>> has_analytic_entropy(d.Independent(d.Normal(torch.zeros(2), torch.ones(2)), 1))
+        True
+    """
+    if isinstance(dist, CompositeDistribution):
+        return False
+    if isinstance(dist, Independent):
+        return has_analytic_entropy(dist.base_dist)
+    cls = type(dist)
+    cached = _ANALYTIC_ENTROPY_CACHE.get(cls)
+    if cached is not None:
+        return cached
+    entropy_fn = getattr(cls, "entropy", None)
+    result = entropy_fn is not None and entropy_fn is not d.Distribution.entropy
+    _ANALYTIC_ENTROPY_CACHE[cls] = result
+    return result
+
+
+def has_analytic_kl(p: d.Distribution, q: d.Distribution) -> bool:
+    """Return whether ``kl_divergence(p, q)`` has a registered closed form.
+
+    ``Independent`` and ``TransformedDistribution`` pairs are resolved
+    through their bases, matching the registered torch KL implementations
+    without calling them (those wrappers raise ``NotImplementedError`` when
+    the inner pair is missing). Other pairs are looked up in
+    ``torch.distributions.kl._KL_REGISTRY``.
+
+    Args:
+        p (torch.distributions.Distribution): left argument of
+            ``kl_divergence(p, q)``.
+        q (torch.distributions.Distribution): right argument of
+            ``kl_divergence(p, q)``.
+
+    Returns:
+        bool: ``True`` if a closed-form KL is registered for this pair.
+
+    Examples:
+        >>> import torch
+        >>> from torch import distributions as d
+        >>> from torchrl.modules.distributions.utils import has_analytic_kl
+        >>> loc = torch.zeros(2)
+        >>> scale = torch.ones(2)
+        >>> has_analytic_kl(d.Normal(loc, scale), d.Normal(loc, scale))
+        True
+    """
+    if isinstance(p, Independent) and isinstance(q, Independent):
+        if p.reinterpreted_batch_ndims != q.reinterpreted_batch_ndims:
+            return False
+        return has_analytic_kl(p.base_dist, q.base_dist)
+    if isinstance(p, TransformedDistribution) and isinstance(
+        q, TransformedDistribution
+    ):
+        if p.transforms != q.transforms or p.event_shape != q.event_shape:
+            return False
+        return has_analytic_kl(p.base_dist, q.base_dist)
+    key = (type(p), type(q))
+    cached = _ANALYTIC_KL_CACHE.get(key)
+    if cached:
+        return True
+    result = False
+    type_p, type_q = key
+    for super_p, super_q in _KL_REGISTRY:
+        if super_p is Independent or super_q is Independent:
+            continue
+        if super_p is TransformedDistribution or super_q is TransformedDistribution:
+            continue
+        if issubclass(type_p, super_p) and issubclass(type_q, super_q):
+            result = True
+            break
+    if result:
+        _ANALYTIC_KL_CACHE[key] = True
+    return result
+
+
+def _warn_mc_entropy(dist: d.Distribution) -> None:
+    if not VERBOSE:
+        return
+    cls = type(dist)
+    if cls in _MC_ENTROPY_WARNED:
+        return
+    _MC_ENTROPY_WARNED.add(cls)
+    torchrl_logger.warning(
+        f"Entropy not implemented for {cls}. Using Monte Carlo sampling."
+    )
+
+
+def _warn_mc_kl(p: d.Distribution, q: d.Distribution) -> None:
+    if not VERBOSE:
+        return
+    key = (type(p), type(q))
+    if key in _MC_KL_WARNED:
+        return
+    _MC_KL_WARNED.add(key)
+    torchrl_logger.warning(
+        f"KL divergence not implemented for {key}. Using Monte Carlo sampling."
+    )
+
+
 def composite_entropy(
     distribution: CompositeDistribution,
     samples_mc: int = 1,
@@ -127,13 +263,34 @@ def composite_entropy(
     """
     entropies = {}
     for name, component in distribution.dists.items():
-        try:
+        analytic_entropy = has_analytic_entropy(component)
+        if analytic_entropy:
             entropy = component.entropy()
-        except NotImplementedError:
-            if not component.has_rsample:
-                raise
-            _, log_prob = rsample_and_log_prob(component, (samples_mc,))
-            entropy = -log_prob.mean(0)
+        compiling = is_dynamo_compiling()
+        needs_mc = not analytic_entropy or compiling
+        if analytic_entropy and not compiling and not entropy.isfinite().all():
+            needs_mc = True
+        if needs_mc:
+            if not analytic_entropy and not component.has_rsample:
+                raise NotImplementedError(
+                    f"Entropy is not implemented for {type(component)} and "
+                    "the component does not support reparameterized sampling."
+                )
+            if not compiling:
+                _warn_mc_entropy(component)
+            if analytic_entropy:
+                _, log_prob = sample_and_log_prob(
+                    component,
+                    (samples_mc,),
+                    reparameterize=component.has_rsample,
+                )
+            else:
+                _, log_prob = rsample_and_log_prob(component, (samples_mc,))
+            sampled_entropy = -log_prob.mean(0)
+            if analytic_entropy and compiling:
+                entropy = torch.where(entropy.isfinite(), entropy, sampled_entropy)
+            else:
+                entropy = sampled_entropy
         if isinstance(name, str):
             entropy_name = name + "_entropy"
         else:
