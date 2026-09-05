@@ -301,6 +301,44 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    def test_dqn_tdlambda_uses_greedy_next_action_value(self):
+        value_network = nn.Linear(2, 2, bias=False)
+        with torch.no_grad():
+            value_network.weight.copy_(torch.eye(2))
+        action_spec = OneHot(2)
+        actor = QValueActor(
+            value_network,
+            in_keys=["observation"],
+            spec=action_spec,
+            action_space="one-hot",
+        )
+        loss_fn = DQNLoss(actor, action_space=action_spec, delay_value=False)
+        loss_fn.make_value_estimator(ValueEstimators.TDLambda, gamma=1.0, lmbda=0.5)
+        td = TensorDict(
+            {
+                "observation": torch.zeros(1, 2, 2),
+                # The behavior action is deliberately non-greedy at both steps.
+                "action": torch.tensor([[[1, 0], [1, 0]]]),
+                "next": {
+                    "observation": torch.tensor([[[1.0, 4.0], [2.0, 8.0]]]),
+                    "reward": torch.tensor([[[0.0], [3.0]]]),
+                    "done": torch.tensor([[[False], [True]]]),
+                    "terminated": torch.tensor([[[False], [True]]]),
+                },
+            },
+            batch_size=[1, 2],
+            names=[None, "time"],
+        )
+
+        target = loss_fn.value_estimator.value_estimate(
+            td, target_params=loss_fn.target_value_network_params
+        )
+
+        greedy_target = torch.tensor([[[3.5], [3.0]]])
+        behavior_action_target = torch.tensor([[[2.0], [3.0]]])
+        torch.testing.assert_close(target, greedy_target)
+        assert not torch.allclose(target, behavior_action_target)
+
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
