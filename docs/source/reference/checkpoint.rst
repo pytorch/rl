@@ -268,6 +268,8 @@ is required; skip it in doctest environments that do not have it.
     policy, exploration, collector, replay_buffer, loss, optimizer = (
         make_agent()
     )  # doctest: +SKIP
+    batch = next(iter(collector))  # doctest: +SKIP
+    replay_buffer.extend(batch)  # doctest: +SKIP
 
     checkpoint = Checkpoint(  # doctest: +SKIP
         policy=policy,
