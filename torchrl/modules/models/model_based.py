@@ -1141,6 +1141,8 @@ class DreamerV3MLP(nn.Module):
         >>> module = DreamerV3MLP(6, 4, depth=2, num_cells=8)
         >>> module(torch.randn(3, 2), torch.randn(3, 4)).shape
         torch.Size([3, 4])
+
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig`
     """
 
     def __init__(
