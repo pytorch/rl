@@ -76,19 +76,18 @@ No extra copy-back is required.
     optim.step()
     assert not torch.equal(p_actor.detach(), before)
 
-Collectors are a separate question. In the common case the collector shares
-those same weights:
+Collectors are a separate question. Synchronization depends on whether the
+training and inference policies share parameter storage:
 
-- A CPU policy is moved to shared memory **in-place** when it is passed to the
-  collector. No extra sync is needed.
-- A CUDA policy is already shared. No extra sync is needed.
-- :meth:`~torchrl.collectors.Collector.update_policy_weights_` **is** required
-  when you passed ``policy_device`` or ``device``: a ``.to(...)`` copy of the
-  policy is then made.
+- A directly passed policy can retain the same storage when no device transfer
+  or other copy is needed. No extra sync is required in that case.
+- A worker-created policy, different-device copy, or remote policy has distinct
+  storage and requires a configured synchronization path.
+- Passing ``policy_device`` or ``device`` only creates a copy when the requested
+  device differs from the policy's current device.
 
 Calling :meth:`~torchrl.collectors.Collector.update_policy_weights_` anyway is
-good practice, but it is not load-bearing unless devices were remapped. See
-:ref:`ref_collectors_weightsync`.
+conservative good practice. See :ref:`ref_collectors_weightsync`.
 
 Documentation Sections
 ----------------------
