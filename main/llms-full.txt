@@ -3163,7 +3163,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`TokenizerConfig`](generated/torchrl.trainers.algorithms.configs.transforms.TokenizerConfig.html#torchrl.trainers.algorithms.configs.transforms.TokenizerConfig)([vocab_size, in_keys, ...]) | Configuration for Tokenizer transform. |
 | [`EndOfLifeTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.EndOfLifeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.EndOfLifeTransformConfig)([eol_key, ...]) | Configuration for EndOfLifeTransform. |
 | [`MultiStepTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.MultiStepTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.MultiStepTransformConfig)([n_steps, gamma, ...]) | Configuration for MultiStepTransform. |
-| [`KLRewardTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig)([in_keys, out_keys, ...]) | Configuration for KLRewardTransform. |
+| [`KLRewardTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig)([ref_model, ...]) | Hydra configuration for [`KLRewardTransform`](generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform). |
 | [`R3MTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.R3MTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.R3MTransformConfig)([in_keys, out_keys, ...]) | Configuration for R3MTransform. |
 | [`VC1TransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.VC1TransformConfig.html#torchrl.trainers.algorithms.configs.transforms.VC1TransformConfig)([in_keys, out_keys, ...]) | Configuration for VC1Transform. |
 | [`VIPTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.VIPTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.VIPTransformConfig)([in_keys, out_keys, ...]) | Configuration for VIPTransform. |
@@ -3196,7 +3196,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`LazyStackStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.LazyStackStorageConfig.html#torchrl.trainers.algorithms.configs.data.LazyStackStorageConfig)([_partial_, ...]) | Configuration for lazy stack storage. |
 | [`StorageEnsembleConfig`](generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig.html#torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig)([_partial_, _target_, ...]) | Configuration for storage ensemble. |
 | [`RoundRobinWriterConfig`](generated/torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html#torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig)([_target_, ...]) | Hydra configuration for `RoundRobinWriter`. |
-| [`StorageEnsembleWriterConfig`](generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html#torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig)([_partial_, ...]) | Configuration for storage ensemble writer. |
+| [`StorageEnsembleWriterConfig`](generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html#torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig)(_partial_, ...) | Hydra configuration for [`WriterEnsemble`](generated/torchrl.data.replay_buffers.WriterEnsemble.html#torchrl.data.replay_buffers.WriterEnsemble). |
 
 ### Training and Optimization Configurations
 
@@ -3251,7 +3251,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`AdagradConfig`](generated/torchrl.trainers.algorithms.configs.utils.AdagradConfig.html#torchrl.trainers.algorithms.configs.utils.AdagradConfig)([lr, lr_decay, weight_decay, ...]) | Hydra configuration for [`torch.optim.Adagrad`](https://docs.pytorch.org/docs/stable/generated/torch.optim.Adagrad.html#torch.optim.Adagrad). |
 | [`ASGDConfig`](generated/torchrl.trainers.algorithms.configs.utils.ASGDConfig.html#torchrl.trainers.algorithms.configs.utils.ASGDConfig)([lr, lambd, alpha, t0, ...]) | Hydra configuration for [`torch.optim.ASGD`](https://docs.pytorch.org/docs/stable/generated/torch.optim.ASGD.html#torch.optim.ASGD). |
 | [`LBFGSConfig`](generated/torchrl.trainers.algorithms.configs.utils.LBFGSConfig.html#torchrl.trainers.algorithms.configs.utils.LBFGSConfig)([lr, max_iter, max_eval, ...]) | Configuration for LBFGS optimizer. |
-| [`LionConfig`](generated/torchrl.trainers.algorithms.configs.utils.LionConfig.html#torchrl.trainers.algorithms.configs.utils.LionConfig)([lr, betas, weight_decay, ...]) | Configuration for Lion optimizer. |
+| [`LionConfig`](generated/torchrl.trainers.algorithms.configs.utils.LionConfig.html#torchrl.trainers.algorithms.configs.utils.LionConfig)([lr, betas, weight_decay, ...]) | Configuration for a Lion optimizer node. |
 | [`NAdamConfig`](generated/torchrl.trainers.algorithms.configs.utils.NAdamConfig.html#torchrl.trainers.algorithms.configs.utils.NAdamConfig)([lr, betas, eps, weight_decay, ...]) | Hydra configuration for [`torch.optim.NAdam`](https://docs.pytorch.org/docs/stable/generated/torch.optim.NAdam.html#torch.optim.NAdam). |
 | [`RAdamConfig`](generated/torchrl.trainers.algorithms.configs.utils.RAdamConfig.html#torchrl.trainers.algorithms.configs.utils.RAdamConfig)([lr, betas, eps, weight_decay, ...]) | Hydra configuration for [`torch.optim.RAdam`](https://docs.pytorch.org/docs/stable/generated/torch.optim.RAdam.html#torch.optim.RAdam). |
 | [`RMSpropConfig`](generated/torchrl.trainers.algorithms.configs.utils.RMSpropConfig.html#torchrl.trainers.algorithms.configs.utils.RMSpropConfig)([lr, alpha, eps, ...]) | Hydra configuration for [`torch.optim.RMSprop`](https://docs.pytorch.org/docs/stable/generated/torch.optim.RMSprop.html#torch.optim.RMSprop). |
@@ -33324,7 +33324,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4a395a04a0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fa8c5428090>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -45939,7 +45939,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f4a3be6c540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fa8c8140540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -175251,6 +175251,9 @@ See [`torch.optim.Optimizer.zero_grad()`](https://docs.pytorch.org/docs/stable/g
 
 A legacy transform for computing KL divergence-based rewards.
 
+See also `KLRewardTransformConfig`
+for the Hydra configuration counterpart.
+
 **Deprecated**: This transform is maintained for backward compatibility but is no longer
 the recommended approach. Use [`RetrieveKL`](torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL) instead,
 which provides better modularity and integration with the new wrapper design.
@@ -263809,9 +263812,18 @@ Configuration for storage ensemble.
 
 # torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig
 
-*class*torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig(*_partial_: bool = False*, *_target_: str = 'torchrl.data.replay_buffers.StorageEnsembleWriter'*, *writers: list[Any] = '???'*, *transforms: list[Any] = '???'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#StorageEnsembleWriterConfig)
+*class*torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig(*_partial_: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.configs.data._make_writer_ensemble'*, *writers: list[~typing.Any] = <factory>*, *p: ~typing.Any = None*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#StorageEnsembleWriterConfig)
 
-Configuration for storage ensemble writer.
+Hydra configuration for [`WriterEnsemble`](torchrl.data.replay_buffers.WriterEnsemble.html#torchrl.data.replay_buffers.WriterEnsemble).
+
+This name is a historical typo for
+`WriterEnsembleConfig`.
+The Config is kept so existing Hydra group references do not vanish
+without a deprecation cycle.
+
+Fields match `WriterEnsembleConfig`
+(`writers`, `p`). `WriterEnsemble.__init__` only accepts `*writers`;
+`p` is stored for Config parity and is not a constructor argument.
 
 ---
 
@@ -264975,9 +264987,13 @@ Configuration for InitTracker transform.
 
 # torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig
 
-*class*torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig(*in_keys: list[str] | None = None*, *out_keys: list[str] | None = None*, *_target_: str = 'torchrl.envs.transforms.llm.KLRewardTransform'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/transforms.html#KLRewardTransformConfig)
+*class*torchrl.trainers.algorithms.configs.transforms.KLRewardTransformConfig(*ref_model: Any = None*, *ref_model_factory: Any = None*, *coef: Any = 1.0*, *in_keys: list[str] | None = None*, *out_keys: list[str] | None = None*, *log_prob_key: Any = ('log_probs', 'full')*, *device: Any = None*, *add_to_reward: bool = True*, *tokenizer: Any = None*, *assistant_only: bool = True*, *padding_side: str = 'left'*, *use_ray_service: bool = False*, *_target_: str = 'torchrl.envs.llm.transforms.kl.KLRewardTransform'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/transforms.html#KLRewardTransformConfig)
 
-Configuration for KLRewardTransform.
+Hydra configuration for [`KLRewardTransform`](torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform).
+
+Every kwarg accepted by `KLRewardTransform.__init__` is exposed as a field
+here. Instantiating without `ref_model` or `ref_model_factory` still
+fails at runtime because the class requires one of them.
 
 ---
 
@@ -265349,7 +265365,12 @@ Configuration for LBFGS optimizer.
 
 *class*torchrl.trainers.algorithms.configs.utils.LionConfig(*lr: float = 0.0001*, *betas: tuple[float, float] = (0.9, 0.99)*, *weight_decay: float = 0.0*, *_target_: str = 'torch.optim.Lion'*, *_partial_: bool = True*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/utils.html#LionConfig)
 
-Configuration for Lion optimizer.
+Configuration for a Lion optimizer node.
+
+Lion is not available on the torch versions TorchRL currently supports
+(there is no `torch.optim.Lion`), so this node cannot be instantiated.
+The Config is kept so existing Hydra group references (`optimizer/lion`)
+do not vanish without a deprecation cycle.
 
 ---
 

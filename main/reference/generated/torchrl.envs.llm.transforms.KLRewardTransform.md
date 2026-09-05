@@ -4,6 +4,9 @@
 
 A legacy transform for computing KL divergence-based rewards.
 
+See also `KLRewardTransformConfig`
+for the Hydra configuration counterpart.
+
 **Deprecated**: This transform is maintained for backward compatibility but is no longer
 the recommended approach. Use [`RetrieveKL`](torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL) instead,
 which provides better modularity and integration with the new wrapper design.
