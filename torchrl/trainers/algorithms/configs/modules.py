@@ -313,6 +313,16 @@ class TanhNormalModelConfig(ModelConfig):
         >>> y = net(torch.randn(1, 10))
         >>> assert y.shape == (1, 5)
 
+    Args:
+        low: lower bound of the action support handed to
+            :class:`~torchrl.modules.TanhNormal` (a scalar or a per-dimension
+            sequence). Defaults to ``None``, i.e. the distribution default of ``-1``.
+        high: upper bound of the action support. Defaults to ``None``, i.e. ``1``.
+        tanh_loc: if ``True``, the location is squashed to ``[-upscale, upscale]``
+            before the tanh transform, which keeps the log-probability of actions
+            at the bounds finite (see :class:`~torchrl.modules.TanhNormal`).
+            Defaults to ``False``.
+
     .. seealso:: :class:`torchrl.modules.TanhNormal`
     """
 
@@ -322,6 +332,9 @@ class TanhNormalModelConfig(ModelConfig):
     extract_normal_params: bool = True
     scale_mapping: str = "biased_softplus_1.0"
     scale_lb: float = 1e-4
+    low: Any = None
+    high: Any = None
+    tanh_loc: bool = False
 
     param_keys: Any = None
 
@@ -517,6 +530,19 @@ def _make_tanh_normal_model(*args, **kwargs):
     eval_mode = kwargs.pop("eval_mode", False)
     exploration_type = kwargs.pop("exploration_type", "RANDOM")
     shared = kwargs.pop("shared", False)
+    distribution_kwargs = dict(kwargs.pop("distribution_kwargs", None) or {})
+    for bound in ("low", "high"):
+        value = kwargs.pop(bound, None)
+        if value is None:
+            continue
+        # omegaconf hands sequences over as ListConfig
+        if not isinstance(value, (int, float)):
+            value = torch.as_tensor(list(value), dtype=torch.get_default_dtype())
+        distribution_kwargs[bound] = value
+    if kwargs.pop("tanh_loc", False):
+        distribution_kwargs["tanh_loc"] = True
+    if distribution_kwargs:
+        kwargs["distribution_kwargs"] = distribution_kwargs
 
     # Now instantiate the network
     if hasattr(network, "_target_"):

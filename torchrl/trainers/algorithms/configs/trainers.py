@@ -427,6 +427,10 @@ class OnPolicyTrainerConfig(TrainerConfig):
         lr_scheduler: Learning-rate scheduler (or a partial configuration taking
             the optimizer as input), stepped once per collected batch via
             :class:`~torchrl.trainers.LRSchedulerHook`.
+        target_net_updater: Target-parameter updater (or a partial configuration
+            taking the loss module as input, e.g. ``SoftUpdateConfig``), stepped
+            after every optimizer step. Pair it with ``PPOLossConfig(delay_actor=True)``
+            for PPO-EWMA.
         weight_update_map: Mapping from collector destination paths to trainer source paths.
             Required if collector has weight_sync_schemes configured.
             Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
@@ -476,7 +480,10 @@ class OnPolicyTrainerConfig(TrainerConfig):
     add_gae: bool = True
     gae: Any = None
     lr_scheduler: Any = None
-    weight_update_map: dict[str, str] | None = None
+    target_net_updater: Any = None
+    # ``Any`` rather than ``dict[str, str] | None``: OmegaConf cannot merge a
+    # mapping into a typed optional-dict field whose default is ``None``
+    weight_update_map: Any = None
     log_timings: bool = False
     auto_log_optim_steps: bool = True
     batch_size: int | None = None
@@ -572,6 +579,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
     gae = kwargs.pop("gae", None)
     kwargs.pop("create_env_fn", None)
     lr_scheduler = kwargs.pop("lr_scheduler", None)
+    target_net_updater = kwargs.pop("target_net_updater", None)
     weight_update_map = kwargs.pop("weight_update_map", None)
     log_timings = kwargs.pop("log_timings", False)
     auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
@@ -636,6 +644,11 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
     ):
         # then it's a partial config taking the optimizer as input
         lr_scheduler = lr_scheduler(optimizer)
+    if target_net_updater is not None and not isinstance(
+        target_net_updater, TargetNetUpdater
+    ):
+        # then it's a partial config taking the loss module as input
+        target_net_updater = target_net_updater(loss_module)
 
     # Quick instance checks
     if not isinstance(collector, BaseCollector):
@@ -660,6 +673,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
         loss_module=loss_module,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
+        target_net_updater=target_net_updater,
         logger=logger,
         clip_grad_norm=clip_grad_norm,
         clip_norm=clip_norm,

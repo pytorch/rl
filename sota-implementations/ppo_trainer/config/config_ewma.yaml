@@ -1,0 +1,30 @@
+# PPO-EWMA Trainer Configuration for Pendulum-v1
+#
+# Extends config.yaml: the proximal policy of the clipped objective is an
+# exponentially-weighted moving average of the policy (Hilton et al., 2021,
+# https://arxiv.org/abs/2110.00641), maintained by a SoftUpdate that the
+# trainer steps after every optimizer step. Run with:
+#   python train.py --config-name config_ewma
+
+defaults:
+  - config
+  - target_net_updater@target_net_updater: soft
+  - _self_
+
+loss:
+  # keep a detached copy of the actor as the proximal policy
+  delay_actor: true
+  # cap on the behavior ratio pi_theta / pi_behav, for numerical stability
+  max_importance_ratio: 100.0
+
+target_net_updater:
+  # EWMA decay rate of the proximal policy (beta_prox in the paper). The paper
+  # keeps 1 / (1 - eps) - 1, the center of mass of the average in optimizer
+  # steps, of the order of the number of optimizer steps per collected batch
+  # (here 10 epochs x 16 minibatches = 160). On Pendulum, 0.99 (about 100
+  # steps) and 0.995 matched PPO, while 0.941 and 0.97 lagged behind.
+  eps: 0.99
+  tau: null
+
+trainer:
+  target_net_updater: ${target_net_updater}
