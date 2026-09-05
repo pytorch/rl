@@ -46,6 +46,7 @@ from torchrl.modules.distributions.discrete import (
 )
 from torchrl.modules.distributions.utils import (
     composite_entropy,
+    has_analytic_kl,
     rsample_and_log_prob,
     sample_and_log_prob,
 )
@@ -53,6 +54,24 @@ from torchrl.modules.distributions.utils import (
 from torchrl.testing import get_default_devices
 
 _has_scipy = importlib.util.find_spec("scipy", None) is not None
+
+
+def test_has_analytic_kl_observes_late_registration():
+    class FirstDistribution(torch.distributions.Distribution):
+        pass
+
+    class SecondDistribution(torch.distributions.Distribution):
+        pass
+
+    first = FirstDistribution()
+    second = SecondDistribution()
+    assert not has_analytic_kl(first, second)
+
+    @torch.distributions.register_kl(FirstDistribution, SecondDistribution)
+    def _registered_kl(first, second):
+        return torch.zeros(first.batch_shape)
+
+    assert has_analytic_kl(first, second)
 
 
 @pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")

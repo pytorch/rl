@@ -199,8 +199,8 @@ def has_analytic_kl(p: d.Distribution, q: d.Distribution) -> bool:
         return has_analytic_kl(p.base_dist, q.base_dist)
     key = (type(p), type(q))
     cached = _ANALYTIC_KL_CACHE.get(key)
-    if cached is not None:
-        return cached
+    if cached:
+        return True
     result = False
     type_p, type_q = key
     for super_p, super_q in _KL_REGISTRY:
@@ -211,7 +211,8 @@ def has_analytic_kl(p: d.Distribution, q: d.Distribution) -> bool:
         if issubclass(type_p, super_p) and issubclass(type_q, super_q):
             result = True
             break
-    _ANALYTIC_KL_CACHE[key] = result
+    if result:
+        _ANALYTIC_KL_CACHE[key] = True
     return result
 
 
