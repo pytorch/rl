@@ -24,14 +24,33 @@ from torch.distributions.kl import _KL_REGISTRY
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import assume_constant_result, is_dynamo_compiling
 except ImportError:
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import (
+        assume_constant_result,
+        is_compiling as is_dynamo_compiling,
+    )
 
 _ANALYTIC_ENTROPY_CACHE: dict[type, bool] = {}
 _ANALYTIC_KL_CACHE: dict[tuple[type, type], bool] = {}
 _MC_ENTROPY_WARNED: set[type] = set()
 _MC_KL_WARNED: set[tuple[type, type]] = set()
+
+
+@assume_constant_result
+def _class_has_analytic_entropy(cls: type) -> bool:
+    cached = _ANALYTIC_ENTROPY_CACHE.get(cls)
+    if cached is not None:
+        return cached
+    entropy_fn = getattr(cls, "entropy", None)
+    result = entropy_fn is not None and entropy_fn is not d.Distribution.entropy
+    _ANALYTIC_ENTROPY_CACHE[cls] = result
+    return result
+
+
+@assume_constant_result
+def _class_has_callable(cls: type, name: str) -> bool:
+    return callable(getattr(cls, name, None))
 
 
 def sample_and_log_prob(
@@ -90,10 +109,11 @@ def sample_and_log_prob(
             log_prob = log_prob + component_log_prob
         return sample, log_prob
 
-    method_name = "rsample_and_log_prob" if reparameterize else "sample_and_log_prob"
-    joint_sample = getattr(distribution, method_name, None)
-    if joint_sample is not None:
-        return joint_sample(sample_shape)
+    if reparameterize:
+        if _class_has_callable(distribution.__class__, "rsample_and_log_prob"):
+            return distribution.rsample_and_log_prob(sample_shape)
+    elif _class_has_callable(distribution.__class__, "sample_and_log_prob"):
+        return distribution.sample_and_log_prob(sample_shape)
     sample_fn = distribution.rsample if reparameterize else distribution.sample
     sample = sample_fn(sample_shape)
     if isinstance(sample, torch.Tensor) or is_tensor_collection(sample):
@@ -152,14 +172,9 @@ def has_analytic_entropy(dist: d.Distribution) -> bool:
         return False
     if isinstance(dist, Independent):
         return has_analytic_entropy(dist.base_dist)
-    cls = type(dist)
-    cached = _ANALYTIC_ENTROPY_CACHE.get(cls)
-    if cached is not None:
-        return cached
-    entropy_fn = getattr(cls, "entropy", None)
-    result = entropy_fn is not None and entropy_fn is not d.Distribution.entropy
-    _ANALYTIC_ENTROPY_CACHE[cls] = result
-    return result
+    # Passing the class keeps this reflection independent of the generated
+    # distribution object and lets older Dynamo treat the result as constant.
+    return _class_has_analytic_entropy(dist.__class__)
 
 
 def has_analytic_kl(p: d.Distribution, q: d.Distribution) -> bool:

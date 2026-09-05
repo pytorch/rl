@@ -1283,6 +1283,9 @@ class Trainer:
         elif _CKPT_BACKEND == "torch":
             for key, value in _torch_load_defaults().items():
                 kwargs.setdefault(key, value)
+            if isinstance(file, pathlib.Path):
+                # Older torch versions require a string path when mmap is set.
+                file = str(file)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
         elif _CKPT_BACKEND == "memmap":

@@ -186,8 +186,9 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
     of convex-hull edges, which makes the two roughly 10,000-edge soles
     prohibitively expensive to compile or step in a batch. Visual meshes stay
     untouched; only geoms in the ``collision`` or ``self_collision_only``
-    classes are replaced, and MuJoCo performs the box fitting so its mesh
-    centering and principal-axis transforms remain part of the geom pose.
+    classes are replaced. The boxes are fitted after MuJoCo has applied its
+    mesh centering and principal-axis transforms so the proxy pose matches the
+    rendered mesh across MuJoCo versions.
 
     Self-contained MJCF files without an ``<include>`` are yielded unchanged so
     small fixtures and custom MicroDuck-compatible files keep working.
@@ -205,16 +206,15 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
 
     robot_tree = ET.parse(robot_path)
     robot_root = robot_tree.getroot()
-    proxy_count = 0
+    proxy_geoms = []
     for geom in robot_root.iter("geom"):
         if geom.get("class") not in {"collision", "self_collision_only"}:
             continue
         if geom.get("mesh") is None:
             continue
-        geom.set("type", "box")
-        proxy_count += 1
+        proxy_geoms.append(geom)
 
-    if not proxy_count:
+    if not proxy_geoms:
         yield scene_path
         return
 
@@ -222,7 +222,6 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
     if compiler is None:
         compiler = ET.Element("compiler")
         robot_root.insert(0, compiler)
-    compiler.set("fitaabb", "true")
     for attribute in ("meshdir", "texturedir"):
         directory = compiler.get(attribute)
         if directory is not None and not Path(directory).is_absolute():
@@ -231,8 +230,56 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
     with TemporaryDirectory(prefix="torchrl-microduck-") as directory:
         patched_robot = Path(directory) / robot_path.name
         patched_scene = Path(directory) / scene_path.name
+        generated_names = []
+        for index, geom in enumerate(proxy_geoms):
+            if geom.get("name") is None:
+                geom.set("name", f"torchrl_collision_proxy_{index}")
+                generated_names.append(geom)
+
+        # Compile the mesh geoms once to obtain MuJoCo's canonicalized mesh
+        # vertices and body-local pose. Explicitly writing the fitted boxes
+        # avoids the incorrect unrotated center produced by ``fitaabb`` in
+        # MuJoCo 3.3 and earlier.
         robot_tree.write(patched_robot, encoding="unicode")
         scene_tree.write(patched_scene, encoding="unicode")
+        mujoco = importlib.import_module("mujoco")
+        model = mujoco.MjModel.from_xml_path(str(patched_scene))
+        for geom in proxy_geoms:
+            geom_id = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_GEOM, geom.get("name")
+            )
+            mesh_id = model.geom_dataid[geom_id]
+            start = model.mesh_vertadr[mesh_id]
+            stop = start + model.mesh_vertnum[mesh_id]
+            vertices = model.mesh_vert[start:stop]
+            center = (vertices.max(axis=0) + vertices.min(axis=0)) / 2
+            half_size = (vertices.max(axis=0) - vertices.min(axis=0)) / 2
+            rotated_center = model.geom_pos[geom_id].copy()
+            mujoco.mju_rotVecQuat(rotated_center, center, model.geom_quat[geom_id])
+
+            geom.set("type", "box")
+            geom.set(
+                "size", " ".join(format(float(value), ".17g") for value in half_size)
+            )
+            geom.set(
+                "pos",
+                " ".join(
+                    format(float(value), ".17g")
+                    for value in model.geom_pos[geom_id] + rotated_center
+                ),
+            )
+            for attribute in ("axisangle", "euler", "xyaxes", "zaxis"):
+                geom.attrib.pop(attribute, None)
+            geom.set(
+                "quat",
+                " ".join(
+                    format(float(value), ".17g") for value in model.geom_quat[geom_id]
+                ),
+            )
+            geom.attrib.pop("mesh", None)
+        for geom in generated_names:
+            geom.attrib.pop("name")
+        robot_tree.write(patched_robot, encoding="unicode")
         yield patched_scene
 
 
