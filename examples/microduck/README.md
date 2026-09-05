@@ -148,7 +148,12 @@ index; `env.task_id=2` pins one task at every reset (evaluation, rendering).
 Sidestep and jump tasks need the default end-to-end policy: the closed-form
 gait prior of `policy.from_prior=true` only walks along the forward command,
 so with it those tasks can do no better than stand. `smoke=true` runs a
-pipeline check. Checkpoints are unified TorchRL
+pipeline check. `evaluation.video.interval=4` logs, at every fourth
+evaluation, a 2x2 video of four tasks filmed in parallel (one native
+simulator per tile, each pinned to its task with `MicroDuckTaskSampler.fixed`,
+tiled by a `VideoRecorder` on the batched env);
+it is off by default because video storage on the logger side is not free,
+and W&B needs `moviepy` for it. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
 `policy.init_from` read directly.
 

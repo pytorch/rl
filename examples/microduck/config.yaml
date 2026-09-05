@@ -48,6 +48,12 @@ evaluation:
   steps: 500
   best_checkpoint_path: microduck_ppo_best.ckpt
   latest_checkpoint_path: null
+  video:                    # 2x2 grid of four tasks filmed in parallel, logged with the evaluation metrics
+    interval: null          # log at every N-th evaluation; null disables it (video storage is not free)
+    tasks: [1, 2, 3, 5]     # library indices of the four tiles, row-major
+    steps: 250              # frames at 50 Hz
+    width: 320
+    height: 240
 
 logger:
   backend: wandb            # wandb | csv | tensorboard | null

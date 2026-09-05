@@ -852,6 +852,31 @@ class TestMujoco:
         for weights in ([1.0, -1.0], [1.0, float("nan")], [1.0, float("inf")]):
             with pytest.raises(ValueError, match="finite.*non-negative"):
                 MicroDuckTaskSampler(weights)
+        # Fixed ids give every env its own task at every reset, including
+        # partial ones, which is how several tasks are filmed side by side.
+        env = TransformedEnv(
+            MicroDuckEnv(
+                scene,
+                backend="mujoco",
+                num_envs=2,
+                parallel=False,
+                tasks=library,
+                seed=0,
+            ),
+            MicroDuckTaskSampler.fixed([2, 0]),
+        )
+        rollout = env.rollout(3)
+        assert rollout["task_id"][..., 0].flatten(0, 1).tolist() == [[2] * 3, [0] * 3]
+        partial = env.reset(
+            TensorDict({"_reset": torch.tensor([[True], [False]])}, batch_size=(2, 1))
+        )
+        after = env.step(partial.set("action", env.action_spec.rand()))
+        assert after["next", "task_id"].flatten().tolist() == [2, 0]
+        with pytest.raises(ValueError, match="fixed task ids"):
+            TransformedEnv(env.base_env, MicroDuckTaskSampler.fixed([1])).reset()
+        env.close()
+        with pytest.raises(ValueError, match="exactly one"):
+            MicroDuckTaskSampler([1.0], task_ids=[0])
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")

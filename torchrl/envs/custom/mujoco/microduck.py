@@ -1889,10 +1889,15 @@ class MicroDuckTaskSampler(Transform):
     the envs being reset; the env checks the indices against its library.
 
     Args:
-        weights (Sequence[float] or torch.Tensor): one non-negative sampling
-            weight per task of the env's library, in library order.
+        weights (Sequence[float] or torch.Tensor, optional): one non-negative
+            sampling weight per task of the env's library, in library order.
+            Exactly one of ``weights`` and ``task_ids`` must be given.
 
     Keyword Args:
+        task_ids (Sequence[int] or torch.Tensor, optional): one fixed task
+            index per env instead of a draw, so env ``i`` runs ``task_ids[i]``
+            at every reset; the count must match the number of envs. See
+            :meth:`fixed`.
         task_id_key (NestedKey, optional): key written in the reset
             TensorDict. Defaults to ``"task_id"``.
         seed (int, optional): seed of the sampler's generator. Inside a
@@ -1911,31 +1916,57 @@ class MicroDuckTaskSampler(Transform):
         ... )
         >>> env.rollout(50)["task_id"][:, 0, 0]  # one task per env  # doctest: +SKIP
         >>> sampler.probabilities.copy_(torch.tensor([0.0, 0.0, 1.0]))  # doctest: +SKIP
+
+        One fixed task per env, for instance to film four tasks side by side:
+
+        >>> MicroDuckTaskSampler.fixed([1, 2, 0, 2]).sample(torch.Size([4]))[:, 0]
+        tensor([1, 2, 0, 2])
     """
 
     def __init__(
         self,
-        weights: Sequence[float] | torch.Tensor,
+        weights: Sequence[float] | torch.Tensor | None = None,
         *,
+        task_ids: Sequence[int] | torch.Tensor | None = None,
         task_id_key: NestedKey = "task_id",
         seed: int | None = None,
     ):
         super().__init__(in_keys=[], out_keys=[], in_keys_inv=[], out_keys_inv=[])
-        weights = torch.as_tensor(weights, dtype=torch.float32).reshape(-1)
-        if (
-            weights.numel() == 0
-            or not torch.isfinite(weights).all()
-            or (weights < 0).any()
-            or weights.sum() <= 0
-        ):
-            raise ValueError(
-                "weights must be a finite, non-empty sequence of non-negative "
-                "values that do not all vanish."
-            )
+        if (weights is None) == (task_ids is None):
+            raise ValueError("Give exactly one of weights and task_ids.")
         self.task_id_key = task_id_key
-        self.register_buffer("probabilities", weights / weights.sum())
+        if weights is not None:
+            weights = torch.as_tensor(weights, dtype=torch.float32).reshape(-1)
+            if (
+                weights.numel() == 0
+                or not torch.isfinite(weights).all()
+                or (weights < 0).any()
+                or weights.sum() <= 0
+            ):
+                raise ValueError(
+                    "weights must be a finite, non-empty sequence of non-negative "
+                    "values that do not all vanish."
+                )
+            self.register_buffer("probabilities", weights / weights.sum())
+            self.task_ids = None
+        else:
+            task_ids = torch.as_tensor(task_ids, dtype=torch.long).reshape(-1)
+            if task_ids.numel() == 0 or (task_ids < 0).any():
+                raise ValueError("task_ids must be a non-empty sequence of indices.")
+            self.register_buffer("task_ids", task_ids)
+            self.probabilities = None
         self.rng: torch.Generator | None = None
         self._set_seed(seed)
+
+    @classmethod
+    def fixed(
+        cls,
+        task_ids: Sequence[int] | torch.Tensor,
+        *,
+        task_id_key: NestedKey = "task_id",
+    ) -> MicroDuckTaskSampler:
+        """One fixed task per env: env ``i`` runs ``task_ids[i]`` at every reset."""
+        return cls(task_ids=task_ids, task_id_key=task_id_key)
 
     def _set_seed(self, seed: int | None) -> None:
         if seed is None:
@@ -1945,8 +1976,19 @@ class MicroDuckTaskSampler(Transform):
         self.rng.manual_seed(int(seed))
 
     def sample(self, batch_size: torch.Size) -> torch.Tensor:
-        """Draw one task index per element of ``batch_size``, shape ``(*batch_size, 1)``."""
-        n = int(torch.Size(batch_size).numel())
+        """Return one task index per element of ``batch_size``, shape ``(*batch_size, 1)``.
+
+        Fixed ids are laid out over the batch in order; weighted samplers draw.
+        """
+        batch_size = torch.Size(batch_size)
+        n = int(batch_size.numel())
+        if self.task_ids is not None:
+            if self.task_ids.numel() != n:
+                raise ValueError(
+                    f"{self.task_ids.numel()} fixed task ids cannot cover a batch of "
+                    f"{n} envs (batch shape {tuple(batch_size)})."
+                )
+            return self.task_ids.reshape(*batch_size, 1)
         index = torch.multinomial(
             self.probabilities.cpu(), n, replacement=True, generator=self.rng
         )
@@ -1956,10 +1998,9 @@ class MicroDuckTaskSampler(Transform):
         batch_size = (
             self.parent.batch_size if self.parent is not None else torch.Size([])
         )
+        buffer = self.task_ids if self.probabilities is None else self.probabilities
         if tensordict is None:
-            tensordict = TensorDict(
-                batch_size=batch_size, device=self.probabilities.device
-            )
+            tensordict = TensorDict(batch_size=batch_size, device=buffer.device)
         tensordict.set(self.task_id_key, self.sample(batch_size).to(tensordict.device))
         return tensordict
 

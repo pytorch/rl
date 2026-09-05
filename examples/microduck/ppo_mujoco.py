@@ -50,7 +50,7 @@ from __future__ import annotations
 
 import math
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, replace
 from functools import partial
@@ -75,6 +75,7 @@ from torchrl.envs import (
     MicroDuckTaskSampler,
     TransformedEnv,
 )
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     get_primers_from_module,
     GRUModule,
@@ -85,6 +86,7 @@ from torchrl.modules import (
 )
 from torchrl.objectives import ClipPPOLoss, KLAdaptiveLR
 from torchrl.objectives.value import GAE
+from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 from torchrl.render import load_checkpoint, save_render_checkpoint
 
@@ -126,6 +128,7 @@ def make_env(
     num_envs: int | None = None,
     parallel: bool | None = None,
     device: torch.device | str | None = None,
+    from_pixels: bool = False,
 ) -> TransformedEnv:
     """Build the batched env from the ``env`` section of ``config.yaml``.
 
@@ -140,6 +143,9 @@ def make_env(
     entries so a checkpoint renders with one env from a local asset path; other
     entries go through ``cfg``, e.g.
     ``--env-kwargs '{"cfg": {"backend": "mujoco", "task_id": 2}}'``.
+
+    ``from_pixels`` adds a rendered ``pixels`` observation at the config's
+    ``render_width`` and ``render_height`` (see :func:`make_video_env`).
 
     :class:`~torchrl.envs.InitTracker` marks episode starts. The primer that
     carries the GRU state between steps comes from the policy
@@ -201,6 +207,7 @@ def make_env(
         "camera_id": env_cfg["camera_id"],
         "render_width": env_cfg["render_width"],
         "render_height": env_cfg["render_height"],
+        "from_pixels": from_pixels,
     }
     if env_cfg["backend"] == "mujoco":
         kwargs["parallel"] = env_cfg["parallel"]
@@ -232,6 +239,54 @@ def make_tasks(entries: Sequence[Mapping[str, Any]]) -> list[MicroDuckTask]:
             )
         tasks.append(getattr(MicroDuckEnv, preset)(**kwargs))
     return tasks
+
+
+def make_video_env(
+    cfg: DictConfig | Mapping[str, Any],
+    task_ids: Sequence[int],
+    *,
+    recorder: VideoRecorder,
+    width: int,
+    height: int,
+) -> TransformedEnv:
+    """Build the env that films one task per tile of the evaluation video.
+
+    A batched native env with one simulator per entry of ``task_ids``, each
+    pinned to its task at every reset by
+    :meth:`~torchrl.envs.MicroDuckTaskSampler.fixed`, rendering ``pixels`` at
+    ``width`` x ``height`` into ``recorder``, whose ``make_grid`` tiles the
+    batch (2x2 for four tasks, row-major) into one video.
+    """
+    env = make_env(
+        OmegaConf.merge(
+            cfg,
+            {
+                "backend": "mujoco",
+                "task_id": None,
+                "render_width": width,
+                "render_height": height,
+            },
+        ),
+        num_envs=len(task_ids),
+        from_pixels=True,
+    )
+    env.append_transform(MicroDuckTaskSampler.fixed(task_ids))
+    env.append_transform(recorder)
+    return env
+
+
+def record_task_grid(
+    env: TransformedEnv,
+    recorder: VideoRecorder,
+    actor: ProbabilisticActor,
+    *,
+    steps: int,
+    step: int,
+) -> None:
+    """Roll the deterministic actor out on the video env and log the grid at ``step``."""
+    with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+        env.rollout(steps, actor, break_when_any_done=False)
+    recorder.dump(step=step)
 
 
 def task_labels(tasks: Sequence[MicroDuckTask]) -> list[str]:
@@ -697,6 +752,8 @@ def train_ppo(
     max_grad_norm: float = 1.0,
     per_task_advantage: bool = True,
     evaluators: Sequence[Evaluator] | None = None,
+    video_recorder: Callable[[int], None] | None = None,
+    video_interval: int | None = None,
     evaluation_interval: int | None = None,
     best_checkpoint_path: str | Path | None = None,
     latest_checkpoint_path: str | Path | None = None,
@@ -717,6 +774,11 @@ def train_ppo(
     loss over the whole minibatch, so the tasks whose rewards vary least
     (standing, a hop that has not happened yet) keep a learning signal next to
     the walking tasks.
+
+    Every ``video_interval`` evaluations, ``video_recorder`` is called with
+    the transition count, for a video logged alongside the metrics (see
+    :func:`record_task_grid`); it is off by default because video storage on
+    the logger side is not free.
 
     Every ``evaluation_interval`` iterations the ``evaluators`` (one per
     task of the library, see :func:`make_evaluator`) run the actor's current
@@ -745,6 +807,8 @@ def train_ppo(
         raise ValueError("evaluation_interval must be positive when provided.")
     if evaluation_interval is not None and not evaluators:
         raise ValueError("evaluation_interval requires evaluators.")
+    if video_recorder is not None and (video_interval is None or video_interval < 1):
+        raise ValueError("video_recorder requires a positive video_interval.")
     checkpointing = (
         best_checkpoint_path is not None or latest_checkpoint_path is not None
     )
@@ -824,11 +888,17 @@ def train_ppo(
             config=config,
         )
 
+    evaluations = 0
+
     def evaluate(step: int) -> dict[str, float]:
-        nonlocal best_score, best_state
+        nonlocal best_score, best_state, evaluations
         results = [
             evaluator.evaluate(weights=actor, step=step) for evaluator in evaluators
         ]
+        if video_recorder is not None and evaluations % video_interval == 0:
+            with timeit("video"):
+                video_recorder(step)
+        evaluations += 1
         metrics = evaluation_metrics(results)
         score = evaluation_score(results)
         checkpoint(latest_checkpoint_path, step, metrics, score)
@@ -1018,6 +1088,7 @@ def main(cfg: DictConfig) -> None:
     }
     env = make_env(cfg.env)
     evaluators: list[Evaluator] = []
+    video_env = None
     logger = None
     try:
         actor, critic = make_models(env, device=env.device, **policy_kwargs)
@@ -1058,6 +1129,32 @@ def main(cfg: DictConfig) -> None:
                 "config": config,
             },
         )
+        video_callback = None
+        if cfg.evaluation.video.interval is not None and logger is not None:
+            # A 2x2 grid of four tasks filmed in parallel, logged at every
+            # `video.interval`-th evaluation.
+            grid_recorder = VideoRecorder(
+                logger, tag="evaluation/task_grid", make_grid=True, fps=50
+            )
+            video_env = make_video_env(
+                cfg.env,
+                list(cfg.evaluation.video.tasks),
+                recorder=grid_recorder,
+                width=cfg.evaluation.video.width,
+                height=cfg.evaluation.video.height,
+            )
+
+            def _video_callback(step: int) -> None:
+                record_task_grid(
+                    video_env,
+                    grid_recorder,
+                    actor,
+                    steps=cfg.evaluation.video.steps,
+                    step=step,
+                )
+
+            video_callback = _video_callback
+
         train_ppo(
             env,
             actor,
@@ -1066,6 +1163,8 @@ def main(cfg: DictConfig) -> None:
             max_episode_steps=cfg.env.max_episode_steps,
             evaluators=evaluators,
             evaluation_interval=cfg.evaluation.interval,
+            video_recorder=video_callback,
+            video_interval=cfg.evaluation.video.interval,
             best_checkpoint_path=cfg.evaluation.best_checkpoint_path,
             latest_checkpoint_path=cfg.evaluation.latest_checkpoint_path,
             policy_kwargs=policy_kwargs,
@@ -1077,6 +1176,8 @@ def main(cfg: DictConfig) -> None:
             logger.experiment.finish()
         for evaluator in evaluators:
             evaluator.shutdown()
+        if video_env is not None and not video_env.is_closed:
+            video_env.close()
         if not env.is_closed:
             env.close()
 
