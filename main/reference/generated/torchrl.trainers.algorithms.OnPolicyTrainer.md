@@ -29,6 +29,12 @@ Parameters:
 - **optimizer** (*optim.Optimizer**,**optional*) - The optimizer for training.
 - **lr_scheduler** (*optim.lr_scheduler.LRScheduler**,**optional*) - Learning-rate scheduler,
 stepped once per collected batch via [`LRSchedulerHook`](torchrl.trainers.LRSchedulerHook.html#torchrl.trainers.LRSchedulerHook).
+- **target_net_updater** (*TargetNetUpdater**,**optional*) - Target-parameter updater, stepped
+after every optimizer step via [`TargetNetUpdaterHook`](torchrl.trainers.TargetNetUpdaterHook.html#torchrl.trainers.TargetNetUpdaterHook).
+Pair it with a loss built with `delay_actor=True` (see
+[`ClipPPOLoss`](torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss)) to maintain the proximal policy of
+PPO-EWMA: a `SoftUpdate` turns it into an
+exponentially-weighted moving average of the policy. Default: `None`.
 - **logger** (*Logger**,**optional*) - Logger for tracking training metrics.
 - **clip_grad_norm** (*bool**,**optional*) - Whether to clip gradient norms. Default: True.
 - **clip_norm** (*float**,**optional*) - Maximum gradient norm value.
