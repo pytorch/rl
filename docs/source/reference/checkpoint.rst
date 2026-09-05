@@ -262,12 +262,26 @@ is required; skip it in doctest environments that do not have it.
             delay_value=True,
         )
         optimizer = Adam(loss.parameters())
-        SoftUpdate(loss, eps=0.99)
-        return policy, exploration, collector, replay_buffer, loss, optimizer
+        target_updater = SoftUpdate(loss, eps=0.99)
+        return (
+            policy,
+            exploration,
+            collector,
+            replay_buffer,
+            loss,
+            optimizer,
+            target_updater,
+        )
 
-    policy, exploration, collector, replay_buffer, loss, optimizer = (
-        make_agent()
-    )  # doctest: +SKIP
+    (
+        policy,
+        exploration,
+        collector,
+        replay_buffer,
+        loss,
+        optimizer,
+        target_updater,
+    ) = make_agent()  # doctest: +SKIP
     batch = next(iter(collector))  # doctest: +SKIP
     replay_buffer.extend(batch)  # doctest: +SKIP
 
@@ -277,21 +291,29 @@ is required; skip it in doctest environments that do not have it.
         replay_buffer=replay_buffer,
         collector=collector,
         loss_module=loss,
+        target_updater=target_updater,
         exploration=exploration,
         rng=GlobalRNGState(),
     )
     checkpoint.save("run/checkpoint")  # doctest: +SKIP
 
     # Interrupt. Rebuild the same graph, then restore into those objects.
-    policy, exploration, collector, replay_buffer, loss, optimizer = (
-        make_agent()
-    )  # doctest: +SKIP
+    (
+        policy,
+        exploration,
+        collector,
+        replay_buffer,
+        loss,
+        optimizer,
+        target_updater,
+    ) = make_agent()  # doctest: +SKIP
     restored = Checkpoint(  # doctest: +SKIP
         policy=policy,
         optimizer=optimizer,
         replay_buffer=replay_buffer,
         collector=collector,
         loss_module=loss,
+        target_updater=target_updater,
         exploration=exploration,
         rng=GlobalRNGState(),
     )
@@ -303,13 +325,27 @@ is required; skip it in doctest environments that do not have it.
             "replay_buffer",
             "collector",
             "loss_module",
+            "target_updater",
             "exploration",
             "rng",
         },
         map_location="cpu",
     )
 
-Train as usual between construction and ``save``. A
+    # Resume each optimization iteration in this order.
+    training_batch = replay_buffer.sample(32)  # doctest: +SKIP
+    optimizer.zero_grad()  # doctest: +SKIP
+    loss_value = loss(training_batch)["loss"]  # doctest: +SKIP
+    loss_value.backward()  # doctest: +SKIP
+    optimizer.step()  # doctest: +SKIP
+    target_updater.step()  # doctest: +SKIP
+
+Train as usual between construction and ``save``.
+:class:`~torchrl.objectives.SoftUpdate` supports ``state_dict()`` and
+``load_state_dict()``, so it is registered directly. Its target tensors belong
+to ``loss_module``; the updater component stores only updater-local progress.
+Keep the updater alive and call ``target_updater.step()`` immediately after each
+``optimizer.step()``. A
 :class:`~torchrl.trainers.Trainer` can register the same names for you;
 see :ref:`Trainer integration <checkpoint-trainer>` below and the
 :doc:`checkpointing tutorial <../tutorials/checkpointing>`.
