@@ -506,6 +506,9 @@ trajectory-edge padding, while ``rebin``'s stack keeps a separate frame axis::
     ...     ),
     ... )  # doctest: +SKIP
 
+The same ``dim=-3`` convention, and the collector / ``extend`` / ``sample``
+wiring, is spelled out in :ref:`catframes-collector-replay`.
+
 **Multiple files.** A clip is often split across many small files (one per episode)
 rather than one large mp4. :meth:`VideoClipRef.from_files` addresses a list of files
 as a single logical sequence, so slicing, :meth:`rebin` and decoding work across
@@ -529,3 +532,228 @@ When camera and control loops run at different rates, prefer
     VideoClipRef
     clear_video_decoder_cache
     set_video_decoder_cache_size
+
+.. _catframes-collector-replay:
+
+Frame stacking images with CatFrames
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Visual off-policy training almost always stacks the last ``N`` frames so a
+CNN can see motion. :class:`~torchrl.envs.transforms.CatFrames` can do that
+in two places; pick **one** of them for the tensor that is stored.
+
+- **Env-side** (policy / inference): a stateful rolling buffer on the
+  :class:`~torchrl.envs.TransformedEnv`. Documented in
+  :ref:`CatFrames for visual RL <catframes-images>`.
+- **Buffer-side** (this section): store **unstacked** raw pixels and
+  rebuild the stack in ``rb.sample()``. A stack of ``N`` float32 frames
+  occupies ``N`` times the RAM of one uint8 image; putting
+  :class:`~torchrl.envs.transforms.CatFrames` on the sample path is how
+  you avoid paying that cost in the storage.
+
+The two placements share ``N`` and ``dim`` so the policy and the loss see
+the same layout. They must not both write the stacked key: env stacking
+**and** buffer stacking of the already-stacked tensor produces
+``[N * N * C, H, W]``.
+
+For CHW images the stack dimension is ``dim=-3`` (channel), not the
+vector default ``dim=-1``. After :class:`~torchrl.envs.transforms.ToTensorImage`
+(and optional :class:`~torchrl.envs.transforms.GrayScale`) a frame is
+``[C, H, W]``; concatenating along ``-3`` yields ``[N * C, H, W]``.
+
+Why the raw frame is what you store
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Keep the env transform and the stored tensor on **different keys**.
+:class:`~torchrl.envs.transforms.ToTensorImage` should write a processed
+copy (``out_keys=["pixels_trsf"]``) and leave the env's ``"pixels"``
+untouched. :class:`~torchrl.envs.transforms.CatFrames` then stacks
+``pixels_trsf`` for the policy. On ``rb.extend(...)`` you drop
+``pixels_trsf`` (and its ``("next", ...)`` counterpart) so the storage
+holds only the uint8 frame. The buffer transform recreates
+``pixels_trsf`` from ``"pixels"`` at sample time.
+
+:meth:`~torchrl.envs.transforms.CatFrames.make_rb_transform_and_sampler`
+builds the sample-time half of that pipeline: a
+:class:`~torchrl.data.replay_buffers.SliceSampler` with ``slice_len=N``,
+and a transform that reshapes each sampled slice to ``[B, N]``, unfolds
+:class:`~torchrl.envs.transforms.CatFrames` along time, keeps the last
+step of every window, and -- on the inverse / write path -- excludes the
+stacked ``out_keys``. Offline :class:`~torchrl.envs.transforms.CatFrames`
+(``forward`` / ``unfolding``) needs a time dimension and
+``("next", "done")`` to stop stacks at episode boundaries; the helper
+sampler is what provides that time axis. Sampling independent transitions
+and then unfolding treats the batch index as time and mixes unrelated
+frames.
+
+Collector, ``extend`` and ``sample``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A :class:`~torchrl.collectors.Collector` writes ``("collector", "traj_ids")``
+on every batch. Pass that key to the helper so the
+:class:`~torchrl.data.replay_buffers.SliceSampler` agrees with the
+collector on trajectory boundaries. Then ``extend`` each collected batch
+and ``sample`` as usual:
+
+.. code-block:: python
+
+    from torchrl.collectors import Collector, RandomPolicy
+    from torchrl.data import LazyTensorStorage, ReplayBuffer
+    from torchrl.envs import (
+        CatFrames,
+        Compose,
+        GrayScale,
+        GymEnv,
+        InitTracker,
+        Resize,
+        StepCounter,
+        ToTensorImage,
+        TransformedEnv,
+    )
+
+    frame_stack = 4
+    batch_size = 32
+
+    catframes = CatFrames(
+        N=frame_stack,
+        dim=-3,
+        in_keys=["pixels_trsf"],
+        out_keys=["pixels_trsf"],
+    )
+    env = TransformedEnv(
+        GymEnv("CartPole-v1", from_pixels=True, pixels_only=True),
+        Compose(
+            InitTracker(),
+            ToTensorImage(in_keys=["pixels"], out_keys=["pixels_trsf"]),
+            GrayScale(in_keys=["pixels_trsf"]),
+            Resize(84, 84, in_keys=["pixels_trsf"]),
+            catframes,
+            StepCounter(),
+        ),
+    )  # doctest: +SKIP
+
+    rb_catframes, sampler = catframes.make_rb_transform_and_sampler(
+        batch_size=batch_size,
+        traj_key=("collector", "traj_ids"),
+    )
+    # Sample-path processing must match the env: same ToTensorImage /
+    # GrayScale / Resize, but applied to both the root and the "next"
+    # pixels so CatFrames sees the layout it saw during collection.
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(100_000),
+        sampler=sampler,
+        batch_size=batch_size,
+        transform=Compose(
+            ToTensorImage(
+                in_keys=["pixels", ("next", "pixels")],
+                out_keys=["pixels_trsf", ("next", "pixels_trsf")],
+            ),
+            GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+            Resize(84, 84, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+            rb_catframes,
+        ),
+    )  # doctest: +SKIP
+
+    collector = Collector(
+        env,
+        RandomPolicy(env.action_spec),
+        frames_per_batch=64,
+        total_frames=10_000,
+    )  # doctest: +SKIP
+    for data in collector:
+        # Inverse ExcludeTransform on rb_catframes already drops the
+        # stacked keys on write; excluding them here is equivalent and
+        # makes the stored tensordict obvious.
+        rb.extend(data.exclude("pixels_trsf", ("next", "pixels_trsf")))
+    batch = rb.sample()
+    # batch["pixels_trsf"] has shape [32, 4, 84, 84] (grayscale, dim=-3)
+
+``rb.extend(data)`` is the only write API you need: the collector yields
+a tensordict of shape ``[frames_per_batch]`` (or
+``[batch, time]`` for a batched env -- then give the storage
+``ndim=2``, see :ref:`collectors and replay buffers <ref_collectors>`).
+Do not flatten away ``("collector", "traj_ids")`` or ``("next", "done")``
+before extending; the sampler uses them to keep each slice inside one
+episode.
+
+The same ``extend`` / ``sample`` pairing without the helper looks like
+this. The extra ``SliceSampler(slice_len=N)`` is not optional: without
+it, :meth:`~torchrl.envs.transforms.CatFrames.unfolding` has no time
+dimension.
+
+.. code-block:: python
+
+    from torchrl.data import SliceSampler
+    from torchrl.envs import ExcludeTransform
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(100_000),
+        sampler=SliceSampler(
+            slice_len=frame_stack,
+            traj_key=("collector", "traj_ids"),
+        ),
+        batch_size=batch_size * frame_stack,  # B windows of length N
+        transform=Compose(
+            ToTensorImage(
+                in_keys=["pixels", ("next", "pixels")],
+                out_keys=["pixels_trsf", ("next", "pixels_trsf")],
+            ),
+            GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+            Resize(84, 84, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+            CatFrames(
+                N=frame_stack,
+                dim=-3,
+                in_keys=["pixels_trsf", ("next", "pixels_trsf")],
+                out_keys=["pixels_trsf", ("next", "pixels_trsf")],
+            ),
+            ExcludeTransform("pixels_trsf", ("next", "pixels_trsf"), inverse=True),
+        ),
+    )  # doctest: +SKIP
+    rb.extend(data)          # stores raw "pixels" only
+    batch = rb.sample()      # rebuilds the N-frame stack
+
+The helper is the preferred form: it multiplies the requested
+``batch_size`` by ``N`` internally, reshapes to ``[B, N]``, and keeps
+``batch[:, -1]``, so ``rb.sample()`` returns ``batch_size`` stacked
+transitions rather than a flat ``batch_size * N`` window.
+
+Common pitfalls
+^^^^^^^^^^^^^^^
+
+- **Stacking twice.** Env :class:`~torchrl.envs.transforms.CatFrames`
+  writing ``pixels_trsf`` **and** a buffer
+  :class:`~torchrl.envs.transforms.CatFrames` that reads that same
+  already-stacked key. Store raw ``"pixels"`` and rebuild, or store the
+  stack and do not attach :class:`~torchrl.envs.transforms.CatFrames` to
+  the buffer -- not both.
+- **Wrong ``dim``.** Images after
+  :class:`~torchrl.envs.transforms.ToTensorImage` are CHW: use
+  ``dim=-3``. ``dim=-1`` is for vector observations. ``dim=-4`` is only
+  correct after an
+  :class:`~torchrl.envs.transforms.UnsqueezeTransform` that inserted that
+  axis (the ``[N, C, H, W]`` variant in
+  ``examples/replay-buffers/catframes-in-buffer.py``).
+- **No time axis.** Offline :class:`~torchrl.envs.transforms.CatFrames`
+  unfolds along time. A uniform random sample of transitions has no
+  time axis, so the stack is assembled from unrelated steps. Always pair
+  the buffer transform with a
+  :class:`~torchrl.data.replay_buffers.SliceSampler` (or
+  :meth:`~torchrl.envs.transforms.CatFrames.make_rb_transform_and_sampler`).
+- **Missing ``("next", ...)`` keys.** A buffer transform does not walk
+  into ``"next"`` on its own. List both ``"pixels"`` and
+  ``("next", "pixels")`` on every sample-path transform that should
+  apply to both.
+- **Same in/out key on**
+  :class:`~torchrl.envs.transforms.ToTensorImage`. If the processed
+  tensor overwrites ``"pixels"``, there is no cheap raw frame left to
+  store and you cannot drop the stack on ``extend``.
+
+.. seealso::
+
+    :ref:`CatFrames for visual RL <catframes-images>` for the env-side
+    placement, reset / :class:`~torchrl.envs.transforms.InitTracker`
+    behaviour, and the ``dim=-3`` convention.
+    :ref:`Collectors and replay buffers <ref_collectors>` for
+    ``ndim`` / ``traj_key`` when the collector is batched or
+    multi-process. A runnable script of the extra-axis (``dim=-4``)
+    variant is ``examples/replay-buffers/catframes-in-buffer.py``.
