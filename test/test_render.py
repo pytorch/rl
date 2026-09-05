@@ -1030,7 +1030,7 @@ class TestSotaCheckpointFactories:
     )
     def test_dqn_cartpole_checkpoint_render_factories(self, tmp_path, monkeypatch):
         OmegaConf = pytest.importorskip("omegaconf").OmegaConf
-        dqn_dir = Path("sota-implementations/dqn").resolve()
+        dqn_dir = (Path(__file__).resolve().parents[1] / "sota-implementations/dqn").resolve()
         utils_path = dqn_dir / "utils_cartpole.py"
         make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
         checkpoint_path = tmp_path / "dqn_cartpole.pt"
@@ -1155,7 +1155,7 @@ class TestSotaCheckpointFactories:
         reason="Gymnasium and pygame are required for CartPole pixel rendering",
     )
     def test_dqn_cartpole_pixel_render_factory(self, tmp_path):
-        dqn_dir = Path("sota-implementations/dqn").resolve()
+        dqn_dir = (Path(__file__).resolve().parents[1] / "sota-implementations/dqn").resolve()
         utils_path = dqn_dir / "utils_cartpole.py"
         make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
         checkpoint_path = tmp_path / "dqn_cartpole.pt"
@@ -1198,7 +1198,7 @@ class TestSotaCheckpointFactories:
         self, tmp_path, monkeypatch
     ):
         OmegaConf = pytest.importorskip("omegaconf").OmegaConf
-        ppo_dir = Path("sota-implementations/ppo").resolve()
+        ppo_dir = (Path(__file__).resolve().parents[1] / "sota-implementations/ppo").resolve()
         utils_path = ppo_dir / "utils_mujoco.py"
         make_ppo_models = import_from_string(f"{utils_path}:make_ppo_models")
         checkpoint_path = tmp_path / "ppo_inverted_pendulum.pt"
@@ -1334,7 +1334,7 @@ class TestSotaCheckpointFactories:
         reason="A Gymnasium MuJoCo environment with v4/v5 IDs is required",
     )
     def test_inverted_double_pendulum_qpos_uses_physics_state(self):
-        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        utils_path = (Path(__file__).resolve().parents[1] / "sota-implementations/ppo/utils_mujoco.py").resolve()
         make_env = import_from_string(f"{utils_path}:make_env")
         env = make_env(
             "InvertedDoublePendulum-v4",
@@ -1357,7 +1357,7 @@ class TestSotaCheckpointFactories:
             env.close()
 
     def test_mujoco_playground_ppo_factory(self, monkeypatch):
-        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        utils_path = (Path(__file__).resolve().parents[1] / "sota-implementations/ppo/utils_mujoco.py").resolve()
         make_env = import_from_string(f"{utils_path}:make_env")
         module_globals = make_env.__globals__
 
@@ -1394,7 +1394,7 @@ class TestSotaCheckpointFactories:
         assert len(env.transforms) == 2
 
     def test_mujoco_playground_ppo_batch_modes(self, monkeypatch):
-        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        utils_path = (Path(__file__).resolve().parents[1] / "sota-implementations/ppo/utils_mujoco.py").resolve()
         make_env = import_from_string(f"{utils_path}:make_env")
         module_globals = make_env.__globals__
 
@@ -1452,7 +1452,7 @@ class TestSotaCheckpointFactories:
 
     def test_mujoco_playground_ppo_uses_scalar_proof_and_eval_envs(self, monkeypatch):
         OmegaConf = pytest.importorskip("omegaconf").OmegaConf
-        ppo_dir = Path("sota-implementations/ppo").resolve()
+        ppo_dir = (Path(__file__).resolve().parents[1] / "sota-implementations/ppo").resolve()
         utils_path = ppo_dir / "utils_mujoco.py"
         make_ppo_models = import_from_string(f"{utils_path}:make_ppo_models")
         module_globals = make_ppo_models.__globals__
@@ -1511,7 +1511,7 @@ class TestSotaCheckpointFactories:
         reason="gym or gymnasium is required to build the CartPole PPO env",
     )
     def test_ppo_vecnorm_checkpoint_roundtrip(self, tmp_path):
-        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        utils_path = (Path(__file__).resolve().parents[1] / "sota-implementations/ppo/utils_mujoco.py").resolve()
         ppo_make_env = import_from_string(f"{utils_path}:make_env")
         get_vecnorm_state = import_from_string(f"{utils_path}:get_vecnorm_state")
         train_env = ppo_make_env("CartPole-v1", normalize_observation=True)
