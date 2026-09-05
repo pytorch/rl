@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
+
+from torchrl.data.replay_buffers import WriterEnsemble
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 if TYPE_CHECKING:
@@ -75,11 +77,17 @@ class ConsumingSamplerConfig(SamplerConfig):
     max_sample_count: int = 1
 
 
+def _make_writer_ensemble(writers: list[Any], p: Any = None) -> WriterEnsemble:
+    """Build a writer ensemble from Hydra's keyword-based representation."""
+    del p  # Kept for compatibility with the historical Config schema.
+    return WriterEnsemble(*writers)
+
+
 @dataclass
 class WriterEnsembleConfig(WriterConfig):
     """Configuration for ensemble writer that combines multiple writers."""
 
-    _target_: str = "torchrl.data.replay_buffers.WriterEnsemble"
+    _target_: str = "torchrl.trainers.algorithms.configs.data._make_writer_ensemble"
     writers: list[Any] = field(default_factory=list)
     p: Any = None
 
@@ -301,7 +309,7 @@ class StorageEnsembleWriterConfig(StorageConfig):
     ``p`` is stored for Config parity and is not a constructor argument.
     """
 
-    _target_: str = "torchrl.data.replay_buffers.WriterEnsemble"
+    _target_: str = "torchrl.trainers.algorithms.configs.data._make_writer_ensemble"
     writers: list[Any] = field(default_factory=list)
     p: Any = None
 
