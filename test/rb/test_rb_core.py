@@ -1273,7 +1273,7 @@ def test_replay_buffer_prefetch_state_dict_roundtrip():
     restored.sample()
     restored.load_state_dict(state)
 
-    for _ in range(4):
+    for _ in range(source._prefetch_cap):
         _assert_prefetch_samples_equal(
             source.sample(return_info=True), restored.sample(return_info=True)
         )
@@ -1297,7 +1297,7 @@ def test_replay_buffer_prefetch_state_dict_waits_for_in_flight_samples():
 
     restored = _make_prefetch_replay_buffer(seed=1)
     restored.load_state_dict(state)
-    for _ in range(4):
+    for _ in range(source._prefetch_cap):
         _assert_prefetch_samples_equal(
             source.sample(return_info=True), restored.sample(return_info=True)
         )
@@ -1323,7 +1323,7 @@ def test_replay_buffer_load_state_dict_waits_for_in_flight_samples():
     assert not release_thread.is_alive()
     assert not release_errors
 
-    for _ in range(4):
+    for _ in range(source._prefetch_cap):
         _assert_prefetch_samples_equal(
             source.sample(return_info=True), restored.sample(return_info=True)
         )
@@ -1377,7 +1377,7 @@ def test_replay_buffer_prefetch_dumps_roundtrip(tmp_path):
     restored.sample()
     restored.loads(tmp_path)
 
-    for _ in range(4):
+    for _ in range(source._prefetch_cap):
         _assert_prefetch_samples_equal(
             source.sample(return_info=True), restored.sample(return_info=True)
         )
@@ -1389,7 +1389,7 @@ def test_replay_buffer_prefetch_pickle_roundtrip():
 
     restored = pickle.loads(pickle.dumps(source))
 
-    for _ in range(4):
+    for _ in range(source._prefetch_cap):
         _assert_prefetch_samples_equal(
             source.sample(return_info=True), restored.sample(return_info=True)
         )
