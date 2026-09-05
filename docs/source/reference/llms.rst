@@ -544,6 +544,19 @@ SFT
     SFTLoss
     SFTLossOutput
 
+Reward Model Training
+~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.objectives.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    reward_model_loss
+    RewardModelLoss
+    RewardModelLossOutput
+
 Distillation
 ~~~~~~~~~~~~
 
