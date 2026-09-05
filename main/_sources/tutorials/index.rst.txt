@@ -257,6 +257,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: TorchRL contributors">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_microduck_thumb.gif
+    :alt:
+
+  :doc:`/tutorials/microduck`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">MicroDuck: tasks as data, rewards as a registry, one policy for all of them</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
 
 .. only:: html
@@ -534,6 +551,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/vla
    /tutorials/checkpointing
    /tutorials/trl_interop
+   /tutorials/microduck
    /tutorials/dqn_with_rnn
    /tutorials/memory_efficient_rl
    /tutorials/recurrent_sequence_training

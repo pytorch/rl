@@ -97,6 +97,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html)
 - [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html)
 - [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html)
+- [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](tutorials/microduck.html)
 - [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html)
 - [Using the Evaluator](tutorials/evaluator.html)
 - [Render policy rollouts with rlrender](tutorials/rlrender.html)

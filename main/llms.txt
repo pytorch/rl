@@ -964,6 +964,7 @@
 - [README Tutos](tutorials/index.md)
 - [LLM Wrappers in TorchRL](tutorials/llm_wrappers.md)
 - [Memory-Efficient RL Training](tutorials/memory_efficient_rl.md)
+- [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](tutorials/microduck.md)
 - [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.md)
 - [Task-specific policy in multi-task environments](tutorials/multi_task.md)
 - [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.md)

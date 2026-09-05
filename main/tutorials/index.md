@@ -72,6 +72,11 @@ Unified checkpointing in TorchRL
 [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](trl_interop.html)
 
 TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
+![](../_images/sphx_glr_microduck_thumb.gif)
+
+[MicroDuck: tasks as data, rewards as a registry, one policy for all of them](microduck.html)
+
+MicroDuck: tasks as data, rewards as a registry, one policy for all of them
 ![](../_images/sphx_glr_dqn_with_rnn_thumb.png)
 
 [Recurrent DQN: Training recurrent policies](dqn_with_rnn.html)

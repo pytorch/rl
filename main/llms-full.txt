@@ -104,6 +104,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html)
 - [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html)
 - [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html)
+- [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](tutorials/microduck.html)
 - [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html)
 - [Using the Evaluator](tutorials/evaluator.html)
 - [Render policy rollouts with rlrender](tutorials/rlrender.html)
@@ -33323,7 +33324,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f0ee41506d0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f9dcf27e250>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -45938,7 +45939,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0ee6dc8540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f9dd240c540>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -90598,11 +90599,11 @@ RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 Background color for the `mujoco-torch` ray-cast renderer.
 Subclasses (e.g. satellite) override to a deep-space tone.
 
-REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
+REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'heading_std': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
 
 Default value of every term parameter a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) carries.
 
-REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
+REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'heading': _RegisteredTerm(fn=<function heading>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
 
 Registered reward terms by name, in weight-vector order.
 
@@ -275083,16 +275084,17 @@ loss.set_keys(
 
 # Computation times
 
-**00:05.724** total execution time for 29 files **from all galleries**:
+**00:53.783** total execution time for 30 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`reference/generated/tutorials/dqn_with_rnn.py`) | 00:05.724 | 0.0 |
+| [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](tutorials/microduck.html#sphx-glr-tutorials-microduck-py) (`reference/generated/tutorials/microduck.py`) | 00:53.783 | 0.0 |
 | [Unified checkpointing in TorchRL](tutorials/checkpointing.html#sphx-glr-tutorials-checkpointing-py) (`reference/generated/tutorials/checkpointing.py`) | 00:00.000 | 0.0 |
 | [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:00.000 | 0.0 |
 | [TorchRL trainer: A DQN example](tutorials/coding_dqn.html#sphx-glr-tutorials-coding-dqn-py) (`reference/generated/tutorials/coding_dqn.py`) | 00:00.000 | 0.0 |
 | [Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/coding_ppo.html#sphx-glr-tutorials-coding-ppo-py) (`reference/generated/tutorials/coding_ppo.py`) | 00:00.000 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.000 | 0.0 |
+| [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`reference/generated/tutorials/dqn_with_rnn.py`) | 00:00.000 | 0.0 |
 | [Using the Evaluator](tutorials/evaluator.html#sphx-glr-tutorials-evaluator-py) (`reference/generated/tutorials/evaluator.py`) | 00:00.000 | 0.0 |
 | [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.000 | 0.0 |
 | [Get started with Environments, TED and transforms](tutorials/getting-started-0.html#sphx-glr-tutorials-getting-started-0-py) (`reference/generated/tutorials/getting-started-0.py`) | 00:00.000 | 0.0 |
@@ -282971,6 +282973,11 @@ Unified checkpointing in TorchRL
 [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](trl_interop.html)
 
 TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
+![](../_images/sphx_glr_microduck_thumb.gif)
+
+[MicroDuck: tasks as data, rewards as a registry, one policy for all of them](microduck.html)
+
+MicroDuck: tasks as data, rewards as a registry, one policy for all of them
 ![](../_images/sphx_glr_dqn_with_rnn_thumb.png)
 
 [Recurrent DQN: Training recurrent policies](dqn_with_rnn.html)
@@ -284365,6 +284372,452 @@ sampling sequences for the loss.
 [`Download Python source code: memory_efficient_rl.py`](../_downloads/b363ef53772040edf80fe12ff68e0710/memory_efficient_rl.py)
 
 [`Download zipped: memory_efficient_rl.zip`](../_downloads/fb25c8a4208142263170e88cc1bdeff4/memory_efficient_rl.zip)
+
+[Gallery generated by Sphinx-Gallery](https://sphinx-gallery.github.io)
+
+---
+
+Note
+
+Go to the end
+to download the full example code.
+
+# MicroDuck: tasks as data, rewards as a registry, one policy for all of them
+
+**Author**: [TorchRL contributors](https://github.com/pytorch/rl)
+
+MicroDuck is a small open-hardware biped by Pollen Robotics. TorchRL ships it
+as [`MicroDuckEnv`](../reference/generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv), a MuJoCo locomotion environment whose
+tasks (standing, walking at a commanded speed, sidestepping, hopping) are rows
+of a tensorclass rather than subclasses or flags. Every simulator of a batch
+holds one row, picked at reset, and the reward is a registry of terms that
+each row weights. This tutorial walks through that design and the tools
+around it: how to select tasks, how to add a reward term, how to standardize
+advantages within each task, how to switch simulation backends, how to run
+the closed-form gait controller that ships with the example, and how to film
+it.
+
+## What you will learn
+
+- how a [`MicroDuckTask`](../reference/generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) library is built from presets and
+stacked with [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack);
+- how the env picks one task per simulator at reset, and how
+[`MicroDuckTaskSampler`](../reference/generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler) pins or mixes tasks;
+- how the same task code runs on the native MuJoCo bindings, on MJX and on
+`mujoco-torch`;
+- how to run the closed-form gait policy of the MicroDuck example and record
+it with [`VideoRecorder`](../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder);
+- how to standardize advantages within each task with
+[`GAE`](../reference/generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE) and its `group_key`;
+- how to register a reward term of your own with
+[`register_reward()`](../reference/generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.register_reward);
+- where the end-to-end PPO recipe that learns all of this lives.
+
+```
+from __future__ import annotations
+
+import importlib.util
+import os
+import sys
+from pathlib import Path
+
+import torch
+
+import torchrl
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
+from torchrl.envs import MicroDuckEnv, MicroDuckTaskSampler, TransformedEnv
+from torchrl.modules import MLP
+from torchrl.objectives.value import GAE
+from torchrl.record import VideoRecorder
+
+if importlib.util.find_spec("mujoco") is None:
+ raise ImportError("This tutorial requires the `mujoco` Python package.")
+```
+
+## Assets and a fast mode
+
+The walking MJCF and its meshes live in the `microduck_rl` repository and
+are not vendored in TorchRL. `download=True` fetches the pinned commit into
+`~/.cache/torchrl/microduck` the first time (or set `MICRODUCK_RL_ROOT`
+to a checkout). `TORCHRL_TUTORIALS_FAST=1` shortens the rollouts for the
+docs build.
+
+```
+TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
+ROLLOUT_STEPS = 100 if TUTORIAL_FAST else 300
+RENDER_WIDTH, RENDER_HEIGHT = (320, 240) if TUTORIAL_FAST else (480, 360)
+```
+
+## A task is data
+
+[`MicroDuckTask`](../reference/generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) is a tensorclass: the planar command box
+`(vx, vy)` to track, the warm start and reset noise, the gait clock, one
+weight per registered reward term, the term parameters, a sampling weight
+and a name. The presets on [`MicroDuckEnv`](../reference/generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) fill every
+field and accept overrides by name, so a task is one call.
+
+```
+library = [
+ MicroDuckEnv.standing_task(),
+ MicroDuckEnv.tracking_task(
+ 0.2, warm_start_velocity=(0.05, 0.25), warm_start_fraction=0.5
+ ),
+ MicroDuckEnv.sidestep_task(0.15),
+ MicroDuckEnv.jump_task(weight=2.0),
+]
+tasks = torch.stack(library)
+print(tasks.shape, list(tasks.name))
+print("command boxes:", tasks.command_low.tolist(), tasks.command_high.tolist())
+```
+
+```
+torch.Size([4]) ['standing', 'tracking+0.20', 'sidestep+0.15', 'jump']
+command boxes: [[0.0, 0.0], [0.20000000298023224, 0.0], [0.0, 0.15000000596046448], [0.0, 0.0]] [[0.0, 0.0], [0.20000000298023224, 0.0], [0.0, 0.15000000596046448], [0.0, 0.0]]
+```
+
+Stacking is the structural validation: every task carries the full weight
+vector over [`REWARD_TERMS`](../reference/generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.REWARD_TERMS), so the presets
+differ only in which terms they switch on. The standing row zeroes the gait
+terms; the jump row turns the hop terms on and the vertical-velocity cost
+off.
+
+```
+terms = list(MicroDuckEnv.REWARD_TERMS)
+for name, weights in zip(tasks.name, tasks.reward_weights):
+ active = {term: round(float(w), 2) for term, w in zip(terms, weights) if w != 0}
+ print(f"{name:14s} {active}")
+```
+
+```
+standing {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
+tracking+0.20 {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'air_time': 3.0, 'swing_height': 2.0, 'phase_contact': 3.0, 'double_support': -1.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
+sidestep+0.15 {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'air_time': 3.0, 'swing_height': 2.0, 'phase_contact': 3.0, 'double_support': -1.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
+jump {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'ang_vel_xy': -0.05, 'action_rate': -0.1, 'joint_velocity': -0.0, 'drift': -5.0, 'hop_rhythm': 1.0, 'launch': 30.0, 'jump': 10.0, 'termination': -4.0}
+```
+
+## One row per simulator
+
+The env takes the library and every simulator of the batch holds one row for
+the duration of an episode. At reset, the rows being reset read `task_id`
+from the reset TensorDict when it is there, and otherwise draw one with the
+tasks' `weight` field. The observation carries the command and the task id
+(`task_id` is also in the `state_spec`, which is what lets a
+`TransformedEnv` forward it at reset).
+
+```
+env = MicroDuckEnv(
+ download=True, backend="mujoco", tasks=tasks, action_scale=1.0, seed=0
+)
+print(env.observation_spec["task_id"], env.observation_spec["command"])
+
+reset = env.reset(TensorDict(task_id=torch.tensor([[2]]), batch_size=[1]))
+print("pinned task:", reset["task_id"].item(), reset["command"].tolist())
+
+rollout = env.rollout(20, tensordict=reset, auto_reset=False)
+print("held for the episode:", rollout["task_id"].unique().tolist())
+```
+
+```
+Categorical(
+ shape=torch.Size([1, 1]),
+ space=CategoricalBox(n=4),
+ device=cpu,
+ dtype=torch.int64,
+ domain=discrete) UnboundedContinuous(
+ shape=torch.Size([1, 2]),
+ space=ContinuousBox(
+ low=Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
+ high=Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
+ device=cpu,
+ dtype=torch.float32,
+ domain=continuous)
+/pytorch/rl/torchrl/envs/common.py:3156: FutureWarning: A reset tensordict carrying state was passed to `reset()` without specifying `set_state`. The state is honored for now, but from v0.15 it will be ignored unless you pass `set_state=True` explicitly (pass `set_state=False` to opt into the future behavior and silence this warning).
+ set_state = self._resolve_set_state(set_state, tensordict, select_reset_only)
+pinned task: 2 [[0.0, 0.15000000596046448]]
+held for the episode: [2]
+```
+
+[`MicroDuckTaskSampler`](../reference/generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler) writes `task_id` at reset for
+you: with weights when the mixture should differ from the library's (a
+curriculum), or with [`fixed()`](../reference/generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler.fixed) to give
+every simulator its own task, which is how the example films four tasks side
+by side.
+
+```
+mixed = TransformedEnv(env, MicroDuckTaskSampler([0.0, 1.0, 1.0, 0.0], seed=0))
+drawn = [mixed.reset()["task_id"].item() for _ in range(6)]
+print("drawn from the walking rows only:", drawn)
+mixed.close()
+```
+
+```
+drawn from the walking rows only: [2, 2, 1, 2, 1, 2]
+```
+
+## Backends
+
+The task is written once against [`MujocoEnv`](../reference/generated/torchrl.envs.MujocoEnv.html#torchrl.envs.MujocoEnv), so the
+backend is a constructor argument. `"mujoco"` runs the official C bindings,
+one simulator per process with [`ParallelEnv`](../reference/generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) when
+`num_envs > 1` (the CPU fallback used here); `"mjx"` and
+`"mujoco-torch"` vectorize `num_envs` simulators inside the simulator and
+are how the env is meant to run at scale on an accelerator, with
+`compile_step=True` compiling the `mujoco-torch` physics step. The
+observation, action, reward and termination are identical on all three.
+
+```
+MicroDuckEnv(download=True, backend="mujoco", num_envs=16, parallel=True)
+MicroDuckEnv(download=True, backend="mjx", num_envs=1024, device="cuda")
+MicroDuckEnv(download=True, num_envs=1024, device="cuda", compile_step=True)
+```
+
+MicroDuck's upstream training environments are written for `mjlab`;
+[`MJLabWrapper`](../reference/generated/torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper) runs those directly, which is a
+different task definition from the one in this tutorial.
+
+```
+for backend in ("mjx", "mujoco-torch"):
+ module = {"mjx": "mujoco.mjx", "mujoco-torch": "mujoco_torch"}[backend]
+ print(backend, "available" if importlib.util.find_spec(module) else "not installed")
+```
+
+```
+mjx not installed
+mujoco-torch not installed
+```
+
+## The closed-form gait
+
+The MicroDuck example ships a hand-written walking controller,
+`MicroDuckGaitActor`: a bilateral phase oscillator on the env's gait clock
+drives the hip, knee, ankle and lateral targets while a proportional
+controller on the torso pitch keeps the robot upright, all read from the
+observation. It is a [`TensorDictModuleBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase), so it is a
+policy like any other: `env.rollout(steps, gait)` walks. It lives in
+`examples/microduck/heuristic_gait.py`, next to the PPO script that can
+use it as a prior (`policy.from_prior=true`).
+
+```
+EXAMPLES_DIR = Path(torchrl.__file__).resolve().parents[1] / "examples" / "microduck"
+sys.path.insert(0, str(EXAMPLES_DIR))
+from heuristic_gait import gait_metrics, MicroDuckGaitActor # noqa: E402
+
+gait = MicroDuckGaitActor()
+gait_env = MicroDuckEnv(
+ download=True,
+ backend="mujoco",
+ tasks=MicroDuckEnv.tracking_task(0.03, **gait.config.task_kwargs()),
+ diagnostics=True,
+ seed=0,
+)
+gait_rollout = gait_env.rollout(ROLLOUT_STEPS, gait, break_when_any_done=True)
+metrics = gait_metrics(gait_rollout)
+print(
+ f"survived={bool(metrics['survived'])} forward_speed={float(metrics['forward_speed']):+.3f} m/s "
+ f"swing phases: left={int(metrics['left_swing_phases'])} right={int(metrics['right_swing_phases'])}"
+)
+gait_env.close()
+```
+
+```
+survived=True forward_speed=+0.027 m/s swing phases: left=0 right=1
+```
+
+## Film it
+
+`from_pixels=True` adds a rendered `pixels` observation, and a
+[`VideoRecorder`](../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder) appended to the env collects the
+frames of every step. With a logger it writes the video where the logger
+lives (W&B, TensorBoard, an mp4 through `CSVLogger`);
+here `to_animation()` turns the frames
+into an animation that Sphinx-Gallery embeds below.
+
+```
+recorder = VideoRecorder(logger=None, tag="microduck_gait", skip=2, make_grid=False)
+video_env = TransformedEnv(
+ MicroDuckEnv(
+ download=True,
+ backend="mujoco",
+ tasks=MicroDuckEnv.tracking_task(0.03, **gait.config.task_kwargs()),
+ from_pixels=True,
+ render_width=RENDER_WIDTH,
+ render_height=RENDER_HEIGHT,
+ camera_id=-1,
+ seed=0,
+ ),
+ recorder,
+)
+video_env.rollout(ROLLOUT_STEPS, gait, break_when_any_done=True)
+gait_animation = recorder.to_animation(
+ title="Closed-form MicroDuck gait", interval=40, clear=True
+)
+video_env.close()
+```
+
+## Advantages standardized within each task
+
+A multi-task batch mixes rewards of very different scales: a walking row
+collects the gait terms, the standing row does not. Standardizing the
+advantages over the whole batch lets the high-variance tasks set the scale
+and shrinks the others' learning signal. [`GAE`](../reference/generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE)
+(and the TD estimators) take `group_key`, the tensordict entry of an
+integer id per batch element, and standardize within its groups instead.
+Here two pinned episodes, one per task, form the batch.
+
+```
+value_net = TensorDictModule(
+ MLP(in_features=MicroDuckEnv.OBSERVATION_DIM, out_features=1, num_cells=[64]),
+ in_keys=["observation"],
+ out_keys=["state_value"],
+)
+episodes = []
+for task_id in (0, 1):
+ start = env.reset(TensorDict(task_id=torch.tensor([[task_id]]), batch_size=[1]))
+ episodes.append(
+ env.rollout(
+ ROLLOUT_STEPS, tensordict=start, auto_reset=False, break_when_any_done=False
+ )[0]
+ )
+batch = torch.stack(episodes) # (2 tasks, T)
+
+per_task = GAE(
+ gamma=0.99,
+ lmbda=0.95,
+ value_network=value_net,
+ average_gae=True,
+ group_key="task_id",
+)
+global_norm = GAE(gamma=0.99, lmbda=0.95, value_network=value_net, average_gae=True)
+with torch.no_grad():
+ grouped = per_task(batch.clone())["advantage"]
+ pooled = global_norm(batch.clone())["advantage"]
+for task_id, name in enumerate(tasks.name[:2]):
+ print(
+ f"{name:14s} per-task: mean={grouped[task_id].mean():+.3f} std={grouped[task_id].std():.3f} | "
+ f"pooled: mean={pooled[task_id].mean():+.3f} std={pooled[task_id].std():.3f}"
+ )
+```
+
+```
+/pytorch/rl/torchrl/envs/common.py:3156: FutureWarning: A reset tensordict carrying state was passed to `reset()` without specifying `set_state`. The state is honored for now, but from v0.15 it will be ignored unless you pass `set_state=True` explicitly (pass `set_state=False` to opt into the future behavior and silence this warning).
+ set_state = self._resolve_set_state(set_state, tensordict, select_reset_only)
+standing per-task: mean=+0.000 std=0.995 | pooled: mean=-0.553 std=0.776
+tracking+0.20 per-task: mean=-0.000 std=1.000 | pooled: mean=+0.553 std=0.889
+```
+
+The example's `ppo.per_task_advantage` option is exactly
+`GAE(average_gae=True, group_key="task_id")` with the loss's own
+normalization switched off.
+
+## Designing a reward term
+
+Every step the env computes one features TensorDict (body-frame velocity,
+uprightness, joint errors, contacts, foot heights, base height, gait phase,
+command, previous action). A reward term is a function of those features and
+of the per-env task parameters, registered once on the class; from then on
+every task carries a weight for it (zero by default) and any parameters it
+declared. Here a term that rewards keeping the heading, with a task that
+switches it on.
+
+```
+@MicroDuckEnv.register_reward("heading", weight=0.0, heading_std=0.5)
+def heading(features, params):
+ yaw_rate = features["angular_velocity"][..., 2]
+ return torch.exp(-yaw_rate.square() / params["heading_std"].square())
+
+steady = MicroDuckEnv.tracking_task(
+ 0.2, reward_weights={"heading": 1.0}, heading_std=0.3
+)
+print(
+ "heading weight:",
+ float(steady.reward_weights[-1]),
+ "(the newest term is the last entry)",
+)
+print("params:", sorted(steady.params.keys()))
+```
+
+```
+heading weight: 1.0 (the newest term is the last entry)
+params: ['air_time_max', 'air_time_min', 'drift_speed_scale', 'gait_progress_floor', 'heading_std', 'hop_velocity_amplitude', 'jump_target_height', 'launch_velocity_scale', 'pose_std', 'swing_target_height', 'tracking_off_axis_std', 'tracking_std', 'upright_std', 'yaw_rate_std']
+```
+
+Tasks built before a registration have a shorter weight vector and are
+rejected by the env, so register terms first; `diagnostics=True` then
+exposes every weighted term under `diagnostic_reward_<name>`.
+
+```
+env.close()
+diag_env = MicroDuckEnv(
+ download=True,
+ backend="mujoco",
+ tasks=steady,
+ diagnostics=True,
+ action_scale=1.0,
+ seed=0,
+)
+diag_rollout = diag_env.rollout(20)
+print(
+ "heading term per step:",
+ diag_rollout["next", "diagnostic_reward_heading"].mean().item(),
+ "| total reward:",
+ diag_rollout["next", "reward"].mean().item(),
+)
+diag_env.close()
+```
+
+```
+heading term per step: 0.004025031812489033 | total reward: 0.057020556181669235
+```
+
+## Training end to end
+
+`examples/microduck/ppo_mujoco.py` trains a recurrent PPO policy on a task
+library from scratch: a GRU actor-critic conditioned on the task id, whole
+episodes replayed from a [`TensorDictReplayBuffer`](../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer), one
+[`Evaluator`](../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator) per task, the per-task GAE above, and
+unified checkpoints that `rlrender` reads. The library is the Hydra list
+`env.tasks`, one preset per entry:
+
+```
+python examples/microduck/ppo_mujoco.py env.download=true \
+ 'env.tasks=[{preset:standing_task},{preset:tracking_task,speed:0.2},{preset:tracking_task,speed:-0.2},{preset:sidestep_task,speed:0.15},{preset:sidestep_task,speed:-0.15},{preset:jump_task,weight:3.0}]' \
+ evaluation.video.interval=4 logger.entity=YOUR_ENTITY
+```
+
+`evaluation.video.interval` logs, every fourth evaluation, a 2x2 video of
+four tasks filmed in parallel, one simulator per tile pinned with
+[`fixed()`](../reference/generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler.fixed). With the shipped defaults
+the policy walks both ways within a few million transitions, sidesteps by
+about six million and hops shortly after; `policy.from_prior=true` starts
+from the closed-form gait instead, a quick debugging start that only knows
+forward walking.
+
+## Conclusion and further reading
+
+Keeping the task as data buys three things: a batch of simulators can run
+different tasks with no code path per task, a new behaviour is a new row
+(weights, parameters, command box) rather than a new environment, and the
+tools around the env (samplers, per-task advantages, evaluators, videos)
+only ever need the task id.
+
+See also
+
+- [`MicroDuckEnv`](../reference/generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) and [`MicroDuckTask`](../reference/generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)
+for every field and preset.
+- [`MujocoEnv`](../reference/generated/torchrl.envs.MujocoEnv.html#torchrl.envs.MujocoEnv) for the base class and its backends.
+- [`GAE`](../reference/generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE) for `group_key`.
+- rlrender_tuto for rendering checkpoints outside training.
+- `examples/microduck/README.md` for the training recipe and the results
+of the multi-task runs.
+
+**Total running time of the script:** (0 minutes 53.783 seconds)
+
+[`Download Jupyter notebook: microduck.ipynb`](../_downloads/87abf301cfa889a7c2c1c1bbc88875ef/microduck.ipynb)
+
+[`Download Python source code: microduck.py`](../_downloads/a599438bedef7cbf6b8409c9bdc2f081/microduck.py)
+
+[`Download zipped: microduck.zip`](../_downloads/0b60528c8ac32bc53e7cce9ec7e67c3a/microduck.zip)
 
 [Gallery generated by Sphinx-Gallery](https://sphinx-gallery.github.io)
 
@@ -291345,16 +291798,17 @@ separate from policy observations. For API details, see
 
 # Computation times
 
-**00:05.724** total execution time for 29 files **from tutorials**:
+**00:53.783** total execution time for 30 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Recurrent DQN: Training recurrent policies](dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`dqn_with_rnn.py`) | 00:05.724 | 0.0 |
+| [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](microduck.html#sphx-glr-tutorials-microduck-py) (`microduck.py`) | 00:53.783 | 0.0 |
 | [Unified checkpointing in TorchRL](checkpointing.html#sphx-glr-tutorials-checkpointing-py) (`checkpointing.py`) | 00:00.000 | 0.0 |
 | [TorchRL objectives: Coding a DDPG loss](coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`coding_ddpg.py`) | 00:00.000 | 0.0 |
 | [TorchRL trainer: A DQN example](coding_dqn.html#sphx-glr-tutorials-coding-dqn-py) (`coding_dqn.py`) | 00:00.000 | 0.0 |
 | [Reinforcement Learning (PPO) with TorchRL Tutorial](coding_ppo.html#sphx-glr-tutorials-coding-ppo-py) (`coding_ppo.py`) | 00:00.000 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`collector_trajectory_assembly.py`) | 00:00.000 | 0.0 |
+| [Recurrent DQN: Training recurrent policies](dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`dqn_with_rnn.py`) | 00:00.000 | 0.0 |
 | [Using the Evaluator](evaluator.html#sphx-glr-tutorials-evaluator-py) (`evaluator.py`) | 00:00.000 | 0.0 |
 | [Exporting TorchRL modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.000 | 0.0 |
 | [Get started with Environments, TED and transforms](getting-started-0.html#sphx-glr-tutorials-getting-started-0-py) (`getting-started-0.py`) | 00:00.000 | 0.0 |

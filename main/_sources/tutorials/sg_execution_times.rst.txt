@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.724** total execution time for 29 files **from tutorials**:
+**00:53.783** total execution time for 30 files **from tutorials**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_tutorials_dqn_with_rnn.py` (``dqn_with_rnn.py``)
-     - 00:05.724
+   * - :ref:`sphx_glr_tutorials_microduck.py` (``microduck.py``)
+     - 00:53.783
      - 0.0
    * - :ref:`sphx_glr_tutorials_checkpointing.py` (``checkpointing.py``)
      - 00:00.000
@@ -48,6 +48,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_collector_trajectory_assembly.py` (``collector_trajectory_assembly.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_dqn_with_rnn.py` (``dqn_with_rnn.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_evaluator.py` (``evaluator.py``)
