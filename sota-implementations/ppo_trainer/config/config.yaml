@@ -50,6 +50,9 @@ models:
     param_keys: ["loc", "scale"]
     out_keys: ["action"]
     network: ${networks.policy_network}
+    # Pendulum-v1 accepts torques in [-2, 2]; TanhNormal defaults to [-1, 1]
+    low: -2.0
+    high: 2.0
 
   value_model:
     in_keys: ["observation"]

@@ -1271,6 +1271,28 @@ class TestModuleConfigs:
         assert cfg.exploration_type == "RANDOM"
         instantiate(cfg)
 
+    @pytest.mark.parametrize("bounds", [(-2.0, 2.0), ([-2.0], [2.0])])
+    def test_tanh_normal_model_config_bounds(self, bounds):
+        # low/high must reach the TanhNormal support; the default stays [-1, 1]
+        from hydra.utils import instantiate
+        from tensordict import TensorDict
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+        )
+
+        low, high = bounds
+        network_cfg = MLPConfig(in_features=3, out_features=2, depth=1, num_cells=8)
+        td = TensorDict({"observation": torch.randn(4, 3)}, [4])
+        dist = instantiate(TanhNormalModelConfig(network=network_cfg)).get_dist(td)
+        assert dist.low == -1.0 and dist.high == 1.0
+        dist = instantiate(
+            TanhNormalModelConfig(network=network_cfg, low=low, high=high)
+        ).get_dist(td)
+        torch.testing.assert_close(dist.low, torch.as_tensor(low))
+        torch.testing.assert_close(dist.high, torch.as_tensor(high))
+        assert dist.sample((256,)).abs().max() <= 2.0
+
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensordict_sequential_config(self):
         """Test TensorDictSequentialConfig."""
