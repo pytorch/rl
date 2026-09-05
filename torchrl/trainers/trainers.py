@@ -27,7 +27,10 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-from torch.amp import GradScaler
+try:
+    from torch.amp import GradScaler
+except ImportError:  # torch < 2.3
+    from torch.cuda.amp import GradScaler
 from torchrl._utils import (
     _CKPT_BACKEND,
     implement_for,
