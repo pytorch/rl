@@ -19,3 +19,5 @@ Custom distribution classes for RL, extending PyTorch distributions.
 | --- | --- |
 | [`rsample_and_log_prob`](generated/torchrl.modules.distributions.utils.rsample_and_log_prob.html#torchrl.modules.distributions.utils.rsample_and_log_prob)(distribution[, ...]) | Reparameterize once and score the same draw atomically when supported. |
 | [`composite_entropy`](generated/torchrl.modules.distributions.utils.composite_entropy.html#torchrl.modules.distributions.utils.composite_entropy)(distribution[, samples_mc]) | Compute component entropy without inverse-scoring Monte Carlo samples. |
+| [`has_analytic_entropy`](generated/torchrl.modules.distributions.utils.has_analytic_entropy.html#torchrl.modules.distributions.utils.has_analytic_entropy)(dist) | Return whether `dist` implements a closed-form `entropy()`. |
+| [`has_analytic_kl`](generated/torchrl.modules.distributions.utils.has_analytic_kl.html#torchrl.modules.distributions.utils.has_analytic_kl)(p, q) | Return whether `kl_divergence(p, q)` has a registered closed form. |

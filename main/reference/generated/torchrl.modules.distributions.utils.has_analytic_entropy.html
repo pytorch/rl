@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>composite_entropy &#8212; torchrl main documentation</title>
+    <title>has_analytic_entropy &#8212; torchrl main documentation</title>
   
   
   
@@ -48,12 +48,12 @@
     <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
     <script src="../../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.modules.distributions.utils.composite_entropy';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/torchrl.modules.distributions.utils.has_analytic_entropy';</script>
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="has_analytic_entropy" href="torchrl.modules.distributions.utils.has_analytic_entropy.html" />
-    <link rel="prev" title="rsample_and_log_prob" href="torchrl.modules.distributions.utils.rsample_and_log_prob.html" />
+    <link rel="next" title="has_analytic_kl" href="torchrl.modules.distributions.utils.has_analytic_kl.html" />
+    <link rel="prev" title="composite_entropy" href="torchrl.modules.distributions.utils.composite_entropy.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -63,7 +63,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="composite_entropy - Documentation for torchrl, part of the PyTorch ecosystem.">
+<meta name="llm:description" content="has_analytic_entropy - Documentation for torchrl, part of the PyTorch ecosystem.">
 
 
 
@@ -2456,7 +2456,7 @@ document.write(`
     
     <li class="breadcrumb-item"><a href="../modules_distributions.html" class="nav-link">Distribution Classes</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">composite_entropy</li>
+    <li class="breadcrumb-item active" aria-current="page">has_analytic_entropy</li>
   </ul>
 </nav>
 </div>
@@ -2516,7 +2516,7 @@ document.write(`
     </div>
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="composite_entropy">
+      <meta itemprop="name" content="has_analytic_entropy">
       <meta itemprop="position" content="4">
     </div>
   </div>
@@ -2524,7 +2524,7 @@ document.write(`
   
   
   <div class="pytorch-call-to-action-links">
-    <div id="tutorial-type">reference/generated/torchrl.modules.distributions.utils.composite_entropy</div>
+    <div id="tutorial-type">reference/generated/torchrl.modules.distributions.utils.has_analytic_entropy</div>
     <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
       <div id="google-colab-link">
         <img class="call-to-action-img" src="../../_static/img/pytorch-colab.svg" />
@@ -2555,28 +2555,40 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="composite-entropy">
-<h1>composite_entropy<a class="headerlink" href="#composite-entropy" title="Link to this heading">#</a></h1>
+  <section id="has-analytic-entropy">
+<h1>has_analytic_entropy<a class="headerlink" href="#has-analytic-entropy" title="Link to this heading">#</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrl.modules.distributions.utils.composite_entropy">
-<span class="sig-prename descclassname"><span class="pre">torchrl.modules.distributions.utils.</span></span><span class="sig-name descname"><span class="pre">composite_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">distribution</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="(in tensordict v0.14)"><span class="pre">CompositeDistribution</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples_mc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.14)"><span class="pre">TensorDictBase</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/distributions/utils.html#composite_entropy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.distributions.utils.composite_entropy" title="Link to this definition">#</a></dt>
-<dd><p>Compute component entropy without inverse-scoring Monte Carlo samples.</p>
-<p>Analytic component entropies are used when available. Components without
-analytic entropy are estimated from atomic reparameterized samples.</p>
+<dt class="sig sig-object py" id="torchrl.modules.distributions.utils.has_analytic_entropy">
+<span class="sig-prename descclassname"><span class="pre">torchrl.modules.distributions.utils.</span></span><span class="sig-name descname"><span class="pre">has_analytic_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.14)"><span class="pre">Distribution</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/distributions/utils.html#has_analytic_entropy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.distributions.utils.has_analytic_entropy" title="Link to this definition">#</a></dt>
+<dd><p>Return whether <code class="docutils literal notranslate"><span class="pre">dist</span></code> implements a closed-form <code class="docutils literal notranslate"><span class="pre">entropy()</span></code>.</p>
+<p>The check is class-level: <code class="docutils literal notranslate"><span class="pre">type(dist).entropy</span> <span class="pre">is</span> <span class="pre">not</span>
+<span class="pre">torch.distributions.Distribution.entropy</span></code>. <code class="docutils literal notranslate"><span class="pre">Independent</span></code> is resolved
+through its base distribution because <code class="docutils literal notranslate"><span class="pre">Independent.entropy</span></code> always
+exists and only works when the base distribution implements entropy.
+<code class="docutils literal notranslate"><span class="pre">CompositeDistribution</span></code> is treated as not having a closed-form
+entropy: its <code class="docutils literal notranslate"><span class="pre">entropy()</span></code> may return a TensorDict and still relies on
+<code class="docutils literal notranslate"><span class="pre">try/except</span></code> internally. Use <a class="reference internal" href="torchrl.modules.distributions.utils.composite_entropy.html#torchrl.modules.distributions.utils.composite_entropy" title="torchrl.modules.distributions.utils.composite_entropy"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_entropy()</span></code></a> for composites.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>distribution</strong> (<em>CompositeDistribution</em>) – distribution whose component
-entropies are computed.</p></li>
-<li><p><strong>samples_mc</strong> (<em>int</em><em>, </em><em>optional</em>) – number of Monte Carlo samples used for
-components without analytic entropy. Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>dist</strong> (<em>torch.distributions.Distribution</em>) – distribution to inspect.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The aggregated entropy, or a TensorDict of component entropies when
-composite log-probability aggregation is disabled.</p>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">True</span></code> if a closed-form entropy method is available.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">d</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.distributions.utils</span> <span class="kn">import</span> <span class="n">has_analytic_entropy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">has_analytic_entropy</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">)))</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">has_analytic_entropy</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">Independent</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span> <span class="mi">1</span><span class="p">))</span>
+<span class="go">True</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2624,20 +2636,20 @@ composite log-probability aggregation is disabled.</p>
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.modules.distributions.utils.rsample_and_log_prob.html"
+       href="torchrl.modules.distributions.utils.composite_entropy.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">rsample_and_log_prob</p>
+        <p class="prev-next-title">composite_entropy</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.modules.distributions.utils.has_analytic_entropy.html"
+       href="torchrl.modules.distributions.utils.has_analytic_kl.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">has_analytic_entropy</p>
+        <p class="prev-next-title">has_analytic_kl</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2663,20 +2675,20 @@ composite log-probability aggregation is disabled.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.modules.distributions.utils.rsample_and_log_prob.html"
+       href="torchrl.modules.distributions.utils.composite_entropy.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">rsample_and_log_prob</p>
+        <p class="prev-next-title">composite_entropy</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.modules.distributions.utils.has_analytic_entropy.html"
+       href="torchrl.modules.distributions.utils.has_analytic_kl.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">has_analytic_entropy</p>
+        <p class="prev-next-title">has_analytic_kl</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2698,7 +2710,7 @@ composite log-probability aggregation is disabled.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.modules.distributions.utils.composite_entropy"><code class="docutils literal notranslate"><span class="pre">composite_entropy()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.modules.distributions.utils.has_analytic_entropy"><code class="docutils literal notranslate"><span class="pre">has_analytic_entropy()</span></code></a></li>
 </ul>
   </nav></div>
     
@@ -2706,7 +2718,7 @@ composite log-probability aggregation is disabled.</p>
 
   
   <div class="tocsection editthispage">
-    <a href="https://github.com/pytorch/rl/edit/main/docs/source/reference/generated/torchrl.modules.distributions.utils.composite_entropy.rst">
+    <a href="https://github.com/pytorch/rl/edit/main/docs/source/reference/generated/torchrl.modules.distributions.utils.has_analytic_entropy.rst">
       <i class="fa-solid fa-pencil"></i>
       
       
@@ -2720,7 +2732,7 @@ composite log-probability aggregation is disabled.</p>
     
        <div class="sidebar-secondary-item">
     <div class="tocsection sourcelink">
-      <a href="../../_sources/reference/generated/torchrl.modules.distributions.utils.composite_entropy.rst.txt">
+      <a href="../../_sources/reference/generated/torchrl.modules.distributions.utils.has_analytic_entropy.rst.txt">
         <i class="fa-solid fa-file-lines"></i> Show Source
       </a>
     </div>
@@ -2947,11 +2959,11 @@ composite log-probability aggregation is disabled.</p>
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "composite_entropy",
-       "headline": "composite_entropy",
+       "name": "has_analytic_entropy",
+       "headline": "has_analytic_entropy",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
-       "url": "/reference/generated/torchrl.modules.distributions.utils.composite_entropy.html",
-       "articleBody": "composite_entropy# torchrl.modules.distributions.utils.composite_entropy(distribution: CompositeDistribution, samples_mc: int = 1) \u2192 Tensor | TensorDictBase[source]# Compute component entropy without inverse-scoring Monte Carlo samples. Analytic component entropies are used when available. Components without analytic entropy are estimated from atomic reparameterized samples. Parameters: distribution (CompositeDistribution) \u2013 distribution whose component entropies are computed. samples_mc (int, optional) \u2013 number of Monte Carlo samples used for components without analytic entropy. Defaults to 1. Returns: The aggregated entropy, or a TensorDict of component entropies when composite log-probability aggregation is disabled.",
+       "url": "/reference/generated/torchrl.modules.distributions.utils.has_analytic_entropy.html",
+       "articleBody": "has_analytic_entropy# torchrl.modules.distributions.utils.has_analytic_entropy(dist: Distribution) \u2192 bool[source]# Return whether dist implements a closed-form entropy(). The check is class-level: type(dist).entropy is not torch.distributions.Distribution.entropy. Independent is resolved through its base distribution because Independent.entropy always exists and only works when the base distribution implements entropy. CompositeDistribution is treated as not having a closed-form entropy: its entropy() may return a TensorDict and still relies on try/except internally. Use composite_entropy() for composites. Parameters: dist (torch.distributions.Distribution) \u2013 distribution to inspect. Returns: True if a closed-form entropy method is available. Return type: bool Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import distributions as d \u003e\u003e\u003e from torchrl.modules.distributions.utils import has_analytic_entropy \u003e\u003e\u003e has_analytic_entropy(d.Normal(torch.zeros(2), torch.ones(2))) True \u003e\u003e\u003e has_analytic_entropy(d.Independent(d.Normal(torch.zeros(2), torch.ones(2)), 1)) True",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
@@ -2960,7 +2972,7 @@ composite log-probability aggregation is disabled.</p>
        "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
        "mainEntityOfPage": {
          "@type": "WebPage",
-         "@id": "/reference/generated/torchrl.modules.distributions.utils.composite_entropy.html"
+         "@id": "/reference/generated/torchrl.modules.distributions.utils.has_analytic_entropy.html"
        },
        "datePublished": "2023-01-01T00:00:00Z",
        "dateModified": "2023-01-01T00:00:00Z"

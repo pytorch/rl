@@ -463,6 +463,8 @@
 - [WorldModelWrapper](reference/generated/torchrl.modules.WorldModelWrapper.md)
 - [canonicalize_rnn_subset](reference/generated/torchrl.modules.canonicalize_rnn_subset.md)
 - [composite_entropy](reference/generated/torchrl.modules.distributions.utils.composite_entropy.md)
+- [has_analytic_entropy](reference/generated/torchrl.modules.distributions.utils.has_analytic_entropy.md)
+- [has_analytic_kl](reference/generated/torchrl.modules.distributions.utils.has_analytic_kl.md)
 - [rsample_and_log_prob](reference/generated/torchrl.modules.distributions.utils.rsample_and_log_prob.md)
 - [sample_and_log_prob](reference/generated/torchrl.modules.distributions.utils.sample_and_log_prob.md)
 - [signed_hyperbolic](reference/generated/torchrl.modules.functional.signed_hyperbolic.md)
