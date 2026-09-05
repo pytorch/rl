@@ -123,6 +123,16 @@ class _SharedSlotExchange:
                     "Shared slot exchange requires identical TensorDict keys across "
                     f"workers; worker {index} differs from worker 0."
                 )
+            # Leaves-only iteration silently skips non-tensor entries, so walk
+            # every key explicitly: a NonTensorData leaf must reject the
+            # exchange rather than end up in a shared slot.
+            for key in tensordict.keys(True):
+                value = tensordict.get(key)
+                if isinstance(value, (NonTensorData, NonTensorStack)):
+                    raise TypeError(
+                        "Shared slot exchange only supports tensor leaves, "
+                        f"got {type(value).__name__} at key {key!r}."
+                    )
             for key, value in tensordict.items(True, True):
                 if not isinstance(value, torch.Tensor):
                     raise TypeError(

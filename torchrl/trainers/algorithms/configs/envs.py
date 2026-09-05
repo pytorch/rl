@@ -64,7 +64,7 @@ def make_batched_env(
     device: str | None = None,
     backend: Literal["threading", "multiprocessing", "asyncio"] = "threading",
     stack: Literal["dense", "maybe_dense", "lazy"] = "dense",
-    exchange: Literal["queue", "shm"] = "queue",
+    exchange: Literal["queue", "shm", "auto"] = "queue",
     **kwargs: Any,
 ) -> EnvBase:
     """Create a batched environment.
@@ -104,8 +104,10 @@ def make_batched_env(
         raise ValueError(
             "stack must be 'dense', 'maybe_dense', or 'lazy', " f"got {stack!r}."
         )
-    if exchange not in ("queue", "shm"):
-        raise ValueError(f"exchange must be 'queue' or 'shm', got {exchange!r}.")
+    if exchange not in ("queue", "shm", "auto"):
+        raise ValueError(
+            f"exchange must be 'queue', 'shm' or 'auto', got {exchange!r}."
+        )
 
     # If create_env_fn is a config object, create a lambda that instantiates it each time
     if isinstance(create_env_fn, EnvBase):

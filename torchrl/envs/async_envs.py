@@ -8,6 +8,7 @@ import abc
 import multiprocessing
 import queue
 import threading
+import warnings
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import as_completed, FIRST_COMPLETED, ThreadPoolExecutor, wait
 from multiprocessing import Queue
@@ -74,10 +75,19 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             The backend to use for parallel execution. Defaults to `"threading"`.
         stack (Literal["dense", "maybe_dense", "lazy"], optional):
             The method to use for stacking environment outputs. Defaults to `"dense"`.
-        exchange (Literal["queue", "shm"], optional): Data exchange used by the
-            multiprocessing backend. ``"shm"`` stores fixed-shape tensor data in
-            shared slots and sends only readiness descriptors through queues.
-            Defaults to ``"queue"``.
+        exchange (Literal["queue", "shm", "auto"], optional): Data exchange
+            used by the multiprocessing backend. ``"shm"`` stores fixed-shape
+            tensor data in shared slots and sends only readiness descriptors
+            through queues; it requires identical, fixed-shape, CPU, tensor-only
+            schemas across workers. ``"auto"`` selects ``"shm"`` when the env
+            schema supports it and falls back to ``"queue"`` otherwise (the
+            resolution is reported by :attr:`resolved_exchange` and logged on
+            fallback). Defaults to ``"queue"``.
+
+            .. warning::
+                The default will change from ``"queue"`` to ``"auto"`` in
+                v0.15 for the multiprocessing backend. A ``FutureWarning`` is
+                emitted when the default is relied upon.
         create_env_kwargs (dict, optional):
             Keyword arguments to pass to the environment maker. Defaults to `{}`.
 
@@ -205,7 +215,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         *,
         backend: Literal["threading", "multiprocessing", "asyncio"] = "threading",
         stack: Literal["dense", "maybe_dense", "lazy"] = "dense",
-        exchange: Literal["queue", "shm"] = "queue",
+        exchange: Literal["queue", "shm", "auto"] | None = None,
         create_env_kwargs: dict | list[dict] | None = None,
     ) -> None:
         if not isinstance(env_makers, Sequence):
@@ -214,9 +224,22 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         self.env_makers = env_makers
         self.num_envs = len(env_makers)
         self.backend = backend
-        if exchange not in ("queue", "shm"):
-            raise ValueError(f"exchange must be 'queue' or 'shm', got {exchange!r}.")
-        if backend != "multiprocessing" and exchange != "queue":
+        if exchange is None:
+            if backend == "multiprocessing":
+                warnings.warn(
+                    "The default exchange of AsyncEnvPool with the "
+                    "multiprocessing backend will change from 'queue' to "
+                    "'auto' in v0.15. Pass exchange='queue' to keep the "
+                    "current behavior, or exchange='auto' to adopt the "
+                    "future default now.",
+                    FutureWarning,
+                )
+            exchange = "queue"
+        if exchange not in ("queue", "shm", "auto"):
+            raise ValueError(
+                f"exchange must be 'queue', 'shm' or 'auto', got {exchange!r}."
+            )
+        if backend != "multiprocessing" and exchange == "shm":
             raise ValueError(
                 "exchange='shm' is only supported with backend='multiprocessing'."
             )
@@ -568,6 +591,16 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         """
         raise NotImplementedError
 
+    @property
+    def resolved_exchange(self) -> Literal["queue", "shm"]:
+        """The data exchange actually in use, after resolving ``exchange="auto"``.
+
+        ``"shm"`` when the shared-memory slot exchange is active, ``"queue"``
+        otherwise (including the threading backend, which has no shared-memory
+        exchange).
+        """
+        return "shm" if getattr(self, "_slot_exchange", None) is not None else "queue"
+
     def stats(self, *, reset: bool = False) -> dict[str, float | int]:
         """Return shared-memory exchange statistics.
 
@@ -675,17 +708,27 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         output_spec = specs["output_spec"]
         input_spec = specs["input_spec"]
         self._slot_exchange = None
-        if self.exchange == "shm":
+        if self.exchange in ("shm", "auto"):
             for i in range(num_threads):
                 self.input_queue[i].put(("get_fake_tensordict", None))
             fake_tensordicts = [self.output_queue[i].get() for i in range(num_threads)]
-            self._slot_exchange = _SharedSlotExchange(fake_tensordicts)
-            for i in range(num_threads):
-                self.input_queue[i].put(
-                    ("init_shm", self._slot_exchange.worker_slots(i))
+            try:
+                self._slot_exchange = _SharedSlotExchange(fake_tensordicts)
+            except (TypeError, ValueError, RuntimeError) as err:
+                if self.exchange == "shm":
+                    raise
+                torchrl_logger.info(
+                    "AsyncEnvPool(exchange='auto'): the env schema does not "
+                    f"support the shared-memory exchange, falling back to "
+                    f"the queue exchange. Reason: {err}"
                 )
-            for i in range(num_threads):
-                self.output_queue[i].get()
+            if self._slot_exchange is not None:
+                for i in range(num_threads):
+                    self.input_queue[i].put(
+                        ("init_shm", self._slot_exchange.worker_slots(i))
+                    )
+                for i in range(num_threads):
+                    self.output_queue[i].get()
         return output_spec, input_spec
 
     def _get_child_specs(self) -> list:

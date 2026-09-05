@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import warnings
 from functools import partial
 
 import numpy as np
@@ -46,6 +47,7 @@ from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvWithString,
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
@@ -1075,6 +1077,62 @@ class TestAsyncEnvPool:
             for proc in env.threads:
                 if proc.is_alive():
                     proc.terminate()
+
+    @set_capture_non_tensor_stack(False)
+    def test_exchange_auto_resolves_to_shm(self, make_envs):
+        env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="auto")
+        try:
+            assert env.resolved_exchange == "shm"
+            assert env._slot_exchange is not None
+            reset = env.reset()
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            step, next_step = env.step_and_maybe_reset(reset)
+            assert step.shape == env.shape
+            assert next_step.shape == env.shape
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_exchange_auto_falls_back_to_queue(self):
+        # CountingEnvWithString has a non-tensor leaf, which the shared-memory
+        # exchange rejects; "auto" must fall back to the queue exchange and
+        # still produce a working pool.
+        env = AsyncEnvPool(
+            [partial(CountingEnvWithString) for _ in range(2)],
+            backend="multiprocessing",
+            exchange="auto",
+        )
+        try:
+            assert env.resolved_exchange == "queue"
+            assert env._slot_exchange is None
+            reset = env.reset()
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            step, next_step = env.step_and_maybe_reset(reset)
+            assert step.shape == env.shape
+        finally:
+            env._maybe_shutdown()
+
+    def test_exchange_auto_threading(self, make_envs):
+        env = AsyncEnvPool(make_envs, backend="threading", exchange="auto")
+        try:
+            assert env.resolved_exchange == "queue"
+        finally:
+            env._maybe_shutdown()
+
+    def test_exchange_default_future_warning(self, make_envs):
+        with pytest.warns(FutureWarning, match="default exchange"):
+            env = AsyncEnvPool(make_envs, backend="multiprocessing")
+        env._maybe_shutdown()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="queue")
+        env._maybe_shutdown()
+        assert not any("default exchange" in str(w.message) for w in caught)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            env = AsyncEnvPool(make_envs, backend="threading")
+        env._maybe_shutdown()
+        assert not any("default exchange" in str(w.message) for w in caught)
 
     @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
     def test_deadline_batch_validation(self, make_envs, backend):
