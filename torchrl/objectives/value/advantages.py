@@ -1864,6 +1864,311 @@ class TDLambdaEstimator(ValueEstimatorBase):
         return val
 
 
+class QLambdaEstimator(TDLambdaEstimator):
+    r"""Q(:math:`\lambda`) estimate of the action-value advantage.
+
+    Drop-in analogue of :class:`~torchrl.objectives.value.TDLambdaEstimator` for
+    action-value (Q) functions. The :math:`\lambda`-return is the same
+    Peng Q(:math:`\lambda`) / SARSA(:math:`\lambda`) recursion used by
+    :class:`TDLambdaEstimator`, but the bootstrap is
+    :math:`Q(s_{t+1}, a_{t+1})` rather than :math:`V(s_{t+1})`.
+
+    The next action is the **behaviour** action stored at the next step
+    (Peng Q(:math:`\lambda`)), which is the quantity available in an online
+    DQN-without-replay / Parallel Q-Networks setting. This class does **not**
+    implement Watkins Q(:math:`\lambda`) (greedy cutoff when the behaviour
+    action is suboptimal).
+
+    Next-action resolution:
+
+    - If ``("next", action)`` is present in the input tensordict, that tensor
+      is used as :math:`a_{t+1}`.
+    - Otherwise the action is taken from the standard time-shift used by the
+      other estimators: :math:`a_{t+1}` is ``action[..., t+1]`` along
+      ``time_dim``, and the last step repeats the last action (the bootstrap
+      is masked on terminated steps).
+
+    The default value key is ``"action_value"``. The value network must be a
+    :class:`~tensordict.nn.TensorDictModule` that reads an observation and an
+    action and writes ``action_value``. Keys remain configurable through
+    :meth:`~.set_keys`.
+
+    The advantage is the usual residual
+
+    .. math::
+
+        A_t = G_t^{\lambda} - Q(s_t, a_t)
+
+    where :math:`G_t^{\lambda}` is the :math:`\lambda`-return built from
+    :math:`Q(s_{t+k}, a_{t+k})`.
+
+    Refer to Peng and Williams, "Incremental Multi-Step Q-Learning",
+    Machine Learning 22:283–290, 1996
+    (`Springer <https://link.springer.com/article/10.1007/BF00114731>`__).
+
+    Keyword Args:
+        gamma (float or torch.Tensor): exponential mean discount.
+        lmbda (float or torch.Tensor): trajectory discount.
+        value_network (TensorDictModule): Q-operator used to retrieve the
+            action-value estimates. Must read the observation **and** the
+            action and write the value key (default ``"action_value"``).
+        average_rewards (bool, optional): if ``True``, rewards will be standardized
+            before the TD is computed. Defaults to ``False``.
+        differentiable (bool, optional): if ``True``, gradients are propagated through
+            the computation of the value function. Defaults to ``False``.
+
+            .. note::
+              The proper way to make the function call non-differentiable is to
+              decorate it in a `torch.no_grad()` context manager/decorator or
+              pass detached parameters for functional modules.
+
+        vectorized (bool, optional): whether to use the vectorized version of the
+            lambda return. Defaults to ``True``.
+        skip_existing (bool, optional): if ``True``, the value network will skip
+            modules which outputs are already present in the tensordict.
+            Defaults to ``None``, i.e., the value of :func:`tensordict.nn.skip_existing()`
+            is not affected.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"action_value"``.
+        shifted (bool, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``True``: fixed-budget single-call path. Inserts the true
+              ``("next", <in_key>)`` entry after every internal truncation
+              (``done & ~terminated``), shifts subsequent samples to the
+              right inside a sequence of length ``T + shifted_budget`` and
+              masks the displaced suffix via ``"shifted_valid"``. Terminal
+              steps (``done & terminated``) do not consume budget. Retained
+              samples use exact next observations.
+
+            .. note::
+              **Single-step rollout assumption.** ``shifted=True`` relies
+              on the standard one-step rollout layout produced by
+              ``env.step`` + auto-reset: at every position where
+              ``done[t] = False``, the value-net inputs in
+              ``("next", <in_key>)[t]`` are expected to equal
+              ``<in_key>[t+1]``. The backend uses this invariant to
+              evaluate :math:`Q` once over a fused
+              ``[T + shifted_budget]`` sequence instead of twice over
+              ``[T]`` streams.
+
+              The canonical pipeline that breaks the invariant is
+              **multi-step return processing** (``MultiStep`` / n-step
+              bootstrapping), which rewrites ``("next", obs)[t]`` to
+              ``obs[t+n]`` with ``n > 1``. ``shifted=True`` is unsupported
+              with multi-step returns — use ``shifted=False`` instead.
+
+              Single-call paths also require that the parameters at time
+              ``t`` and ``t+1`` are identical (i.e. ``target_params`` is
+              not used).
+
+            Defaults to ``False``.
+        device (torch.device, optional): the device where the buffers will be instantiated.
+            Defaults to ``torch.get_default_device()``.
+        time_dim (int, optional): the dimension corresponding to the time
+            in the input tensordict. If not provided, defaults to the dimension
+            marked with the ``"time"`` name if any, and to the last dimension
+            otherwise. Can be overridden during a call to
+            :meth:`~.value_estimate`.
+            Negative dimensions are considered with respect to the input
+            tensordict.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along ``value_chunk_dim``.
+            Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along ``value_chunk_dim``. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
+        value_chunk_dim (int, optional): dimension used for chunked value-network
+            calls. Defaults to ``0``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` uses a ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> class QNet(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(4, 1)
+        ...     def forward(self, obs, action):
+        ...         return self.linear(torch.cat([obs, action], -1))
+        >>> q_net = TensorDictModule(
+        ...     QNet(), in_keys=["obs", "action"], out_keys=["action_value"]
+        ... )
+        >>> module = QLambdaEstimator(
+        ...     gamma=0.98,
+        ...     lmbda=0.94,
+        ...     value_network=q_net,
+        ... )
+        >>> obs, next_obs = torch.randn(2, 1, 10, 3)
+        >>> action, next_action = torch.randn(2, 1, 10, 1)
+        >>> reward = torch.randn(1, 10, 1)
+        >>> done = torch.zeros(1, 10, 1, dtype=torch.bool)
+        >>> terminated = torch.zeros(1, 10, 1, dtype=torch.bool)
+        >>> tensordict = TensorDict({
+        ...     "obs": obs,
+        ...     "action": action,
+        ...     "next": {
+        ...         "obs": next_obs,
+        ...         "action": next_action,
+        ...         "done": done,
+        ...         "reward": reward,
+        ...         "terminated": terminated,
+        ...     },
+        ... }, [1, 10])
+        >>> _ = module(tensordict)
+        >>> assert "advantage" in tensordict.keys()
+        >>> assert tensordict["advantage"].shape == torch.Size([1, 10, 1])
+
+    """
+
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        Attributes:
+            advantage (NestedKey): The input tensordict key where the advantage is written to.
+                Defaults to ``"advantage"``.
+            value_target (NestedKey): The input tensordict key where the target action
+                value is written to. Defaults to ``"value_target"``.
+            value (NestedKey): The input tensordict key where the action value is expected.
+                Defaults to ``"action_value"``.
+            reward (NestedKey): The input tensordict key where the reward is written to.
+                Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done.  Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated.  Defaults to ``"terminated"``.
+            steps_to_next_obs (NestedKey): The key in the input tensordict
+                that indicates the number of steps to the next observation.
+                Defaults to ``"steps_to_next_obs"``.
+            sample_log_prob (NestedKey): The key in the input tensordict that
+                indicates the log probability of the sampled action.
+                Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                ``"action_log_prob"`` otherwise.
+            action (NestedKey): The input tensordict key where the behaviour action
+                is expected. Used to form :math:`Q(s_{t+1}, a_{t+1})` when
+                ``("next", action)`` is absent. Defaults to ``"action"``.
+        """
+
+        advantage: NestedKey = "advantage"
+        value_target: NestedKey = "value_target"
+        value: NestedKey = "action_value"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
+        steps_to_next_obs: NestedKey = "steps_to_next_obs"
+        sample_log_prob: NestedKey | None = None
+        action: NestedKey = "action"
+
+        def __post_init__(self):
+            if self.sample_log_prob is None:
+                if composite_lp_aggregate(nowarn=True):
+                    self.sample_log_prob = "sample_log_prob"
+                else:
+                    self.sample_log_prob = "action_log_prob"
+
+    default_keys = _AcceptedKeys
+
+    def _ensure_next_action(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Populate missing ``("next", action)`` with a time-shift of ``action``.
+
+        Leaves an already-present next action untouched so callers can pass the
+        behaviour action at :math:`t+1` explicitly.
+        """
+        action_keys = self.tensor_keys.action
+        if isinstance(action_keys, (str, tuple)):
+            action_keys = [action_keys]
+        time_dim = None
+        for action_key in action_keys:
+            next_action_key = unravel_key(("next", action_key))
+            if tensordict.get(next_action_key, default=None) is not None:
+                continue
+            action = tensordict.get(action_key, default=None)
+            if action is None or not isinstance(action, torch.Tensor):
+                continue
+            if time_dim is None:
+                time_dim = self._get_time_dim(None, tensordict)
+            t_size = action.shape[time_dim]
+            if t_size == 0:
+                next_action = action
+            else:
+                rest = action.narrow(time_dim, 1, t_size - 1)
+                last = action.narrow(time_dim, t_size - 1, 1)
+                next_action = torch.cat([rest, last], dim=time_dim)
+            tensordict.set(next_action_key, next_action)
+        return tensordict
+
+    @dispatch
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        *,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
+    ) -> TensorDictBase:
+        r"""Computes the Q(:math:`\lambda`) advantage given the data in tensordict.
+
+        If a functional module is provided, a nested TensorDict containing the parameters
+        (and if relevant the target parameters) can be passed to the module.
+
+        Args:
+            tensordict (TensorDictBase): A TensorDict containing the data
+                (an observation key, ``"action"``, ``("next", "reward")``,
+                ``("next", "done")``, ``("next", "terminated")``,
+                and ``"next"`` tensordict state as returned by the environment)
+                necessary to compute the action-value estimates and the
+                Q-lambda return. ``("next", "action")`` is used as
+                :math:`a_{t+1}` when present; otherwise ``action`` is shifted
+                along the time dimension.
+                The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
+                the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                The tensordict must have shape ``[*B, T]``.
+
+        Keyword Args:
+            params (TensorDictBase, optional): A nested TensorDict containing the params
+                to be passed to the functional value network module.
+            target_params (TensorDictBase, optional): A nested TensorDict containing the
+                target params to be passed to the functional value network module.
+
+        Returns:
+            An updated TensorDict with an advantage and a value_target keys as defined in the constructor.
+        """
+        tensordict = self._ensure_next_action(tensordict)
+        return super().forward(tensordict, params=params, target_params=target_params)
+
+    def value_estimate(
+        self,
+        tensordict,
+        target_params: TensorDictBase | None = None,
+        next_value: torch.Tensor | None = None,
+        time_dim: int | None = None,
+        **kwargs,
+    ):
+        tensordict = self._ensure_next_action(tensordict)
+        return super().value_estimate(
+            tensordict,
+            target_params=target_params,
+            next_value=next_value,
+            time_dim=time_dim,
+            **kwargs,
+        )
+
+
 @register_value_estimator(
     ValueEstimators.GAE,
     default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},

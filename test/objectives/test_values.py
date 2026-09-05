@@ -31,6 +31,7 @@ from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.value.advantages import (
     GAE,
+    QLambdaEstimator,
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
@@ -3186,6 +3187,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [QLambdaEstimator, {"lmbda": 0.95}],
             [VTrace, {}],
         ],
     )
@@ -3227,6 +3229,7 @@ class TestAdv:
             [GAE, {"lmbda": 0.95}],
             [TD1Estimator, {}],
             [TDLambdaEstimator, {"lmbda": 0.95}],
+            [QLambdaEstimator, {"lmbda": 0.95}],
             [VTrace, {}],
         ],
     )
@@ -3268,3 +3271,150 @@ class TestAdv:
             assert module.tensor_keys.value == "test_value"
             assert module.tensor_keys.advantage == "advantage_test"
             assert module.tensor_keys.value_target == "value_target_test"
+
+
+class _ActionIndependentQ(nn.Module):
+    """Q-network that ignores the action and matches a V-network."""
+
+    def __init__(self, linear: nn.Linear):
+        super().__init__()
+        self.linear = linear
+
+    def forward(self, obs, action):
+        return self.linear(obs)
+
+
+class _AdditiveQ(nn.Module):
+    """Q-network that depends on both observation and action."""
+
+    def __init__(self):
+        super().__init__()
+        self.obs = nn.Linear(3, 1, bias=False)
+        self.act = nn.Linear(1, 1, bias=False)
+
+    def forward(self, obs, action):
+        return self.obs(obs) + self.act(action)
+
+
+class TestQLambda:
+    def _rollout(self, *, nested_action: bool = False, with_next_action: bool = True):
+        torch.manual_seed(0)
+        B, T = 2, 5
+        action_root = (
+            {"agents": {"action": torch.randn(B, T, 1)}}
+            if nested_action
+            else {"action": torch.randn(B, T, 1)}
+        )
+        next_action = {}
+        if with_next_action:
+            next_action = (
+                {"agents": {"action": torch.randn(B, T, 1)}}
+                if nested_action
+                else {"action": torch.randn(B, T, 1)}
+            )
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, -1] = True
+        return TensorDict(
+            {
+                "obs": torch.randn(B, T, 3),
+                **action_root,
+                "next": {
+                    "obs": torch.randn(B, T, 3),
+                    **next_action,
+                    "reward": torch.randn(B, T, 1),
+                    "done": done,
+                    "terminated": done.clone(),
+                },
+            },
+            [B, T],
+        )
+
+    def test_keys_and_shapes(self):
+        q_net = TensorDictModule(
+            _AdditiveQ(),
+            in_keys=["obs", "action"],
+            out_keys=["action_value"],
+        )
+        estimator = QLambdaEstimator(gamma=0.9, lmbda=0.95, value_network=q_net)
+        assert estimator.tensor_keys.value == "action_value"
+        td = self._rollout()
+        out = estimator(td.clone())
+        assert "advantage" in out.keys()
+        assert "value_target" in out.keys()
+        assert out["advantage"].shape == torch.Size([2, 5, 1])
+        assert out["value_target"].shape == torch.Size([2, 5, 1])
+        assert torch.isfinite(out["advantage"]).all()
+        assert torch.isfinite(out["value_target"]).all()
+
+    def test_nested_action_key(self):
+        action_key = ("agents", "action")
+        q_net = TensorDictModule(
+            _AdditiveQ(),
+            in_keys=["obs", action_key],
+            out_keys=["action_value"],
+        )
+        estimator = QLambdaEstimator(gamma=0.9, lmbda=0.95, value_network=q_net)
+        estimator.set_keys(action=action_key)
+        assert estimator.tensor_keys.action == action_key
+        td = self._rollout(nested_action=True, with_next_action=False)
+        out = estimator(td.clone())
+        assert out["advantage"].shape == torch.Size([2, 5, 1])
+        assert out["value_target"].shape == torch.Size([2, 5, 1])
+        # Missing ("next", agents, action) is filled from the time-shift of the root action.
+        torch.testing.assert_close(
+            out["next", "agents", "action"][:, :-1],
+            td["agents", "action"][:, 1:],
+        )
+
+    @pytest.mark.parametrize("shifted", [False, True])
+    @pytest.mark.parametrize("vectorized", [False, True])
+    def test_matches_tdlambda_when_q_ignores_action(self, shifted, vectorized):
+        torch.manual_seed(0)
+        linear = nn.Linear(3, 1)
+        v_net = TensorDictModule(linear, in_keys=["obs"], out_keys=["state_value"])
+        q_net = TensorDictModule(
+            _ActionIndependentQ(linear),
+            in_keys=["obs", "action"],
+            out_keys=["action_value"],
+        )
+        td = self._rollout()
+        td_lambda = TDLambdaEstimator(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=v_net,
+            shifted=shifted,
+            vectorized=vectorized,
+        )
+        q_lambda = QLambdaEstimator(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=q_net,
+            shifted=shifted,
+            vectorized=vectorized,
+        )
+        v_out = td_lambda(td.clone())
+        q_out = q_lambda(td.clone())
+        torch.testing.assert_close(q_out["advantage"], v_out["advantage"])
+        torch.testing.assert_close(q_out["value_target"], v_out["value_target"])
+
+    def test_uses_explicit_next_action(self):
+        q_net = TensorDictModule(
+            _AdditiveQ(),
+            in_keys=["obs", "action"],
+            out_keys=["action_value"],
+        )
+        estimator = QLambdaEstimator(gamma=0.9, lmbda=0.95, value_network=q_net)
+        td_explicit = self._rollout(with_next_action=True)
+        td_shifted = td_explicit.clone()
+        del td_shifted["next", "action"]
+        explicit = estimator(td_explicit.clone())
+        shifted_out = estimator(td_shifted)
+        assert not torch.allclose(explicit["advantage"], shifted_out["advantage"])
+        torch.testing.assert_close(
+            td_shifted["next", "action"][:, :-1],
+            td_shifted["action"][:, 1:],
+        )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
