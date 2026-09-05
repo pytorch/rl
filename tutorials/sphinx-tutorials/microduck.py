@@ -217,6 +217,7 @@ video_env = TransformedEnv(
         from_pixels=True,
         render_width=RENDER_WIDTH,
         render_height=RENDER_HEIGHT,
+        camera_id=-1,
         seed=0,
     ),
     recorder,
