@@ -1579,3 +1579,69 @@ class TestTokenizer(TransformBase):
             return td
 
         env.check_env_specs()
+
+    @pytest.mark.parametrize(
+        "in_key,out_key",
+        [
+            ("observation", "tokens"),
+            (("nested", "text"), ("nested", "tokens")),
+        ],
+    )
+    def test_single_string_attention_mask_padding(self, in_key, out_key):
+        # Pad tokens on a single string must not be attended (issue #4223).
+        text = "hi"
+        max_length = 8
+        t = Tokenizer(
+            in_keys=[in_key],
+            out_keys=[out_key],
+            max_length=max_length,
+            return_attention_mask=True,
+        )
+        td_out = t(TensorDict({in_key: text}))
+        tokens = td_out.get(out_key)
+        mask_key = (
+            (*out_key[:-1], "attention_mask")
+            if isinstance(out_key, tuple)
+            else "attention_mask"
+        )
+        mask = td_out.get(mask_key)
+
+        assert tokens.ndim == 1
+        assert mask.ndim == 1
+        assert tokens.shape == mask.shape == (max_length,)
+
+        expected = t.tokenizer(
+            [text],
+            return_tensors="pt",
+            add_special_tokens=False,
+            padding="max_length",
+            max_length=max_length,
+            return_attention_mask=True,
+        )
+        torch.testing.assert_close(tokens, expected["input_ids"][0])
+        torch.testing.assert_close(mask, expected["attention_mask"][0])
+        assert (mask == 0).any()
+        assert (mask == 1).any()
+        pad_id = t.tokenizer.pad_token_id
+        assert (mask[tokens == pad_id] == 0).all()
+        assert (mask[tokens != pad_id] == 1).all()
+
+    def test_single_string_without_attention_mask(self):
+        text = "hi"
+        max_length = 8
+        t = Tokenizer(
+            in_keys=["observation"],
+            out_keys=["tokens"],
+            max_length=max_length,
+            return_attention_mask=False,
+        )
+        td_out = t(TensorDict({"observation": text}))
+        expected = t.tokenizer.encode(
+            text,
+            return_tensors="pt",
+            add_special_tokens=False,
+            padding="max_length",
+            max_length=max_length,
+        )[0]
+        torch.testing.assert_close(td_out["tokens"], expected)
+        assert "attention_mask" not in td_out.keys()

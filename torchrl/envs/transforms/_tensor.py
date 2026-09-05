@@ -837,10 +837,16 @@ class Tokenizer(UnaryTransform):
             kwargs["padding"] = "max_length"
             kwargs["max_length"] = self.max_length
         if isinstance(value, str):
-            out = self.tokenizer.encode(value, return_tensors="pt", **kwargs)[0]
-            # TODO: incorporate attention mask
             if self.return_attention_mask:
-                attention_mask = torch.ones_like(out, dtype=torch.int64)
+                # Use the same tokenizer call as the batch path so pad tokens
+                # are not attended. Squeeze the batch dim to keep the public
+                # 1D rank of encode()[0].
+                kwargs["return_attention_mask"] = True
+                out = self.tokenizer(value, return_tensors="pt", **kwargs)
+                attention_mask = out["attention_mask"][0]
+                out = out["input_ids"][0]
+            else:
+                out = self.tokenizer.encode(value, return_tensors="pt", **kwargs)[0]
         else:
             kwargs["padding"] = (
                 self.padding if self.max_length is None else "max_length"
