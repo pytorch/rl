@@ -146,8 +146,8 @@ the whole mixture, with one evaluator per task (logged under the task's
 index; `env.task_id=2` pins one task at every reset (evaluation, rendering).
 Sidestep and jump tasks need the from-scratch recipe, `policy.head=gaussian
 env.action_scale=1.0`: the closed-form gait prior of the default
-`gait-residual` head only walks along the forward command and the script
-refuses those tasks with it. `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
+`gait-residual` head only walks along the forward command, so with it those
+tasks can do no better than stand. `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
 `policy.init_from` read directly.
 

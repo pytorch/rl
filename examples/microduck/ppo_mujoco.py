@@ -65,12 +65,7 @@ from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictSequ
 from torch import nn
 from torchrl import timeit, torchrl_logger
 from torchrl.collectors import Collector, Evaluator
-from torchrl.data import (
-    LazyTensorStorage,
-    SliceSampler,
-    TensorDictReplayBuffer,
-    Unbounded,
-)
+from torchrl.data import LazyTensorStorage, SliceSampler, TensorDictReplayBuffer
 from torchrl.envs import (
     Compose,
     EnvBase,
@@ -78,10 +73,10 @@ from torchrl.envs import (
     MicroDuckEnv,
     MicroDuckTask,
     MicroDuckTaskSampler,
-    TensorDictPrimer,
     TransformedEnv,
 )
 from torchrl.modules import (
+    get_primers_from_module,
     GRUModule,
     ProbabilisticActor,
     set_recurrent_mode,
@@ -125,7 +120,6 @@ def make_env(
     cfg: DictConfig | Mapping[str, Any] | None = None,
     *,
     checkpoint: Mapping[str, Any] | None = None,
-    hidden_size: int | None = None,
     microduck_root: str | Path | None = None,
     root: str | Path | None = None,
     download: bool | str | None = None,
@@ -142,15 +136,16 @@ def make_env(
     :class:`~torchrl.envs.MicroDuckTaskSampler` (the evaluators and
     ``rlrender`` use it). ``rlrender`` passes the training checkpoint, whose
     recorded config (minus the asset location, which is machine specific) sits
-    between those defaults and ``cfg``, and whose policy kwargs supply
-    ``hidden_size``. The keyword arguments override single entries so a
-    checkpoint renders with one env from a local asset path; other entries go
-    through ``cfg``, e.g.
+    between those defaults and ``cfg``. The keyword arguments override single
+    entries so a checkpoint renders with one env from a local asset path; other
+    entries go through ``cfg``, e.g.
     ``--env-kwargs '{"cfg": {"backend": "mujoco", "task_id": 2}}'``.
 
-    :class:`~torchrl.envs.InitTracker` marks episode starts and a
-    :class:`~torchrl.envs.TensorDictPrimer` carries the GRU state between steps,
-    so the same env serves the collector, the evaluators and ``rlrender``.
+    :class:`~torchrl.envs.InitTracker` marks episode starts. The primer that
+    carries the GRU state between steps comes from the policy
+    (:func:`~torchrl.modules.get_primers_from_module`) and is appended where
+    a policy meets an env: :func:`make_models`, :func:`make_evaluator` and
+    :func:`make_render_policy`.
     """
     recorded = checkpoint if isinstance(checkpoint, Mapping) else {}
     recorded_env = {
@@ -176,15 +171,7 @@ def make_env(
         ),
         resolve=True,
     )
-    if hidden_size is None:
-        hidden_size = (recorded.get("policy_kwargs") or {}).get("hidden_size", 128)
-    transforms = [
-        InitTracker(),
-        TensorDictPrimer(
-            {RECURRENT_STATE_KEY: Unbounded(shape=(1, hidden_size))},
-            expand_specs=True,
-        ),
-    ]
+    transforms = [InitTracker()]
     tasks = make_tasks(env_cfg["tasks"])
     if env_cfg["task_id"] is not None:
         task_id = int(env_cfg["task_id"])
@@ -247,31 +234,6 @@ def make_tasks(entries: Sequence[Mapping[str, Any]]) -> list[MicroDuckTask]:
     return tasks
 
 
-def check_gait_prior(tasks: Sequence[MicroDuckTask], labels: Sequence[str]) -> None:
-    """Refuse tasks the closed-form gait prior cannot express.
-
-    The gait of ``heuristic_gait.py`` walks along the body x axis with a
-    direction read from the sign of the forward command, so a task with a
-    lateral command and no forward one, or a jump task, leaves the
-    ``gait-residual`` head with a balance-only prior and a bounded residual.
-    Those tasks need ``policy.head=gaussian`` (and ``env.action_scale=1.0``).
-    """
-    threshold = MicroDuckEnv.COMMAND_THRESHOLD
-    jump_index = list(MicroDuckEnv.REWARD_TERMS).index("jump")
-    for task, label in zip(tasks, labels):
-        box = torch.stack((task.command_low, task.command_high))
-        forward = bool((box[:, 0].abs() > threshold).any())
-        lateral = bool((box[:, 1].abs() > threshold).any())
-        jumping = bool(task.reward_weights[jump_index] > 0)
-        if (lateral and not forward) or jumping:
-            raise ValueError(
-                f"policy.head=gait-residual cannot express task {label!r}: the "
-                "closed-form gait only walks along the forward command. Use "
-                "policy.head=gaussian env.action_scale=1.0 for sidestep and jump "
-                "tasks."
-            )
-
-
 def task_labels(tasks: Sequence[MicroDuckTask]) -> list[str]:
     """Metric group of every task of the library: its name, made unique.
 
@@ -296,10 +258,17 @@ class TaskConditionedEncoder(nn.Module):
     library the env is in (for instance jumping, whose command is zero).
     """
 
-    def __init__(self, observation_dim: int, num_tasks: int, hidden_size: int):
+    def __init__(
+        self,
+        observation_dim: int,
+        num_tasks: int,
+        hidden_size: int,
+        *,
+        device: torch.device | str = "cpu",
+    ):
         super().__init__()
-        self.observation = nn.Linear(observation_dim, hidden_size)
-        self.task = nn.Embedding(num_tasks, hidden_size)
+        self.observation = nn.Linear(observation_dim, hidden_size, device=device)
+        self.task = nn.Embedding(num_tasks, hidden_size, device=device)
 
     def forward(self, observation: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
         return torch.tanh(
@@ -322,14 +291,15 @@ class GaitResidualHead(nn.Module):
         *,
         residual_scale: float,
         initial_policy_scale: float,
+        device: torch.device | str = "cpu",
     ):
         super().__init__()
         self.gait = MicroDuckGaitActor(gait)
         self.residual_scale = float(residual_scale)
-        self.residual = nn.Linear(hidden_size, MicroDuckEnv.NUM_JOINTS)
+        self.residual = nn.Linear(hidden_size, MicroDuckEnv.NUM_JOINTS, device=device)
         nn.init.zeros_(self.residual.weight)
         nn.init.zeros_(self.residual.bias)
-        self.scale = nn.Parameter(torch.zeros(MicroDuckEnv.NUM_JOINTS))
+        self.scale = nn.Parameter(torch.zeros(MicroDuckEnv.NUM_JOINTS, device=device))
         self.param_extractor = NormalParamExtractor(
             scale_mapping=f"biased_softplus_{initial_policy_scale}"
         )
@@ -351,12 +321,18 @@ class GaussianHead(nn.Module):
     state-independent exploration scale starts at ``initial_policy_scale``.
     """
 
-    def __init__(self, hidden_size: int, *, initial_policy_scale: float):
+    def __init__(
+        self,
+        hidden_size: int,
+        *,
+        initial_policy_scale: float,
+        device: torch.device | str = "cpu",
+    ):
         super().__init__()
-        self.loc = nn.Linear(hidden_size, MicroDuckEnv.NUM_JOINTS)
+        self.loc = nn.Linear(hidden_size, MicroDuckEnv.NUM_JOINTS, device=device)
         nn.init.orthogonal_(self.loc.weight, gain=0.01)
         nn.init.zeros_(self.loc.bias)
-        self.scale = nn.Parameter(torch.zeros(MicroDuckEnv.NUM_JOINTS))
+        self.scale = nn.Parameter(torch.zeros(MicroDuckEnv.NUM_JOINTS, device=device))
         self.param_extractor = NormalParamExtractor(
             scale_mapping=f"biased_softplus_{initial_policy_scale}"
         )
@@ -378,6 +354,9 @@ def make_models(
 ) -> tuple[ProbabilisticActor, TensorDictSequential]:
     """Create the GRU actor and the critic that shares its backbone.
 
+    Every network is built on ``device``, and the GRU's recurrent-state primer
+    is appended to ``env`` so its rollouts carry the state between steps.
+
     ``policy_head="gait-residual"`` wraps the closed-form gait with a learned
     residual; ``policy_head="gaussian"`` is a plain Gaussian head trained from
     scratch. Returns the actor and the full value network (backbone plus value
@@ -392,7 +371,10 @@ def make_models(
     observation_dim = env.observation_spec["observation"].shape[-1]
     embed = TensorDictModule(
         TaskConditionedEncoder(
-            observation_dim, env.observation_spec["task_id"].n, hidden_size
+            observation_dim,
+            env.observation_spec["task_id"].n,
+            hidden_size,
+            device=device,
         ),
         in_keys=["observation", "task_id"],
         out_keys=["embed"],
@@ -413,13 +395,16 @@ def make_models(
                 gait,
                 residual_scale=residual_scale,
                 initial_policy_scale=initial_policy_scale,
+                device=device,
             ),
             in_keys=["features", "observation"],
             out_keys=["loc", "scale"],
         )
     elif policy_head == "gaussian":
         actor_head = TensorDictModule(
-            GaussianHead(hidden_size, initial_policy_scale=initial_policy_scale),
+            GaussianHead(
+                hidden_size, initial_policy_scale=initial_policy_scale, device=device
+            ),
             in_keys=["features"],
             out_keys=["loc", "scale"],
         )
@@ -432,16 +417,17 @@ def make_models(
         distribution_class=TanhNormal,
         distribution_kwargs={"low": -1.0, "high": 1.0},
         return_log_prob=True,
-    ).to(device)
+    )
     value_head = ValueOperator(
         nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(hidden_size, hidden_size, device=device),
             nn.Tanh(),
-            nn.Linear(hidden_size, 1),
+            nn.Linear(hidden_size, 1, device=device),
         ),
         in_keys=["features"],
     )
-    critic = TensorDictSequential(backbone, value_head).to(device)
+    critic = TensorDictSequential(backbone, value_head)
+    env.append_transform(get_primers_from_module(actor))
     return actor, critic
 
 
@@ -598,8 +584,10 @@ def make_evaluator(
 
     Metrics are logged under ``evaluation/<label>/``; the evaluator adds
     ``reward`` and ``episode_length`` to :func:`microduck_metrics`, whose
-    ``task_score`` measures airborne time when ``jumping`` is set.
+    ``task_score`` measures airborne time when ``jumping`` is set. The actor's
+    recurrent-state primer is appended to ``env``.
     """
+    env.append_transform(get_primers_from_module(actor))
     return Evaluator(
         env,
         actor,
@@ -1033,8 +1021,6 @@ def main(cfg: DictConfig) -> None:
     config = OmegaConf.to_container(cfg, resolve=True)
     tasks = make_tasks(config["env"]["tasks"])
     labels = task_labels(tasks)
-    if cfg.policy.head == "gait-residual":
-        check_gait_prior(tasks, labels)
     # The closed-form gait follows the clock the tasks expose in the
     # observation; its frequency is the first task's.
     gait = replace(
@@ -1048,7 +1034,7 @@ def main(cfg: DictConfig) -> None:
         "initial_policy_scale": cfg.policy.initial_policy_scale
         or (0.05 if cfg.policy.head == "gait-residual" else 0.3),
     }
-    env = make_env(cfg.env, hidden_size=cfg.policy.hidden_size)
+    env = make_env(cfg.env)
     evaluators: list[Evaluator] = []
     logger = None
     try:
@@ -1070,12 +1056,7 @@ def main(cfg: DictConfig) -> None:
                 )
                 evaluators.append(
                     make_evaluator(
-                        make_env(
-                            evaluation_cfg,
-                            hidden_size=cfg.policy.hidden_size,
-                            num_envs=1,
-                            parallel=False,
-                        ),
+                        make_env(evaluation_cfg, num_envs=1, parallel=False),
                         actor,
                         label=label,
                         jumping=bool(task.reward_weights[jump_index] > 0),

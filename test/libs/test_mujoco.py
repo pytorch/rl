@@ -1040,19 +1040,10 @@ class TestMujoco:
         ) == ["jump", "sidestep-0.15", "hop"]
         with pytest.raises(ValueError, match="preset"):
             ppo.make_tasks([{"preset": "fly_task"}])
-        # The gait-residual head cannot express a sidestep or a jump.
-        library = ppo.make_tasks(
-            [{"preset": "tracking_task", "speed": 0.2}, {"preset": "sidestep_task"}]
-        )
-        with pytest.raises(ValueError, match="gait-residual"):
-            ppo.check_gait_prior(library, ppo.task_labels(library))
-        ppo.check_gait_prior(library[:1], ppo.task_labels(library[:1]))
-        env = ppo.make_env(env_cfg, hidden_size=16)
+        env = ppo.make_env(env_cfg)
         actor, critic = ppo.make_models(env, hidden_size=16)
         evaluator = ppo.make_evaluator(
-            ppo.make_env(
-                {**env_cfg, "seed": 1, "task_id": 0}, hidden_size=16, num_envs=1
-            ),
+            ppo.make_env({**env_cfg, "seed": 1, "task_id": 0}, num_envs=1),
             actor,
             label="tracking+0.03",
             num_episodes=1,
