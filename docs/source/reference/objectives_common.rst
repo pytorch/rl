@@ -58,7 +58,6 @@ Value Estimators
     TD0Estimator
     TD1Estimator
     TDLambdaEstimator
-    QLambdaEstimator
     GAE
     VTrace
     MultiAgentGAE
