@@ -758,10 +758,11 @@ class TestMujoco:
         # the clock, nothing for standing still and negatively off the beat.
         phase, _ = env._gait_clock()
         beat = phase.cos().sign()
+        amplitude = MicroDuckEnv.REWARD_PARAMS["hop_velocity_amplitude"]
         on_beat, still, off_beat = (env.get_state().clone() for _ in range(3))
-        on_beat["qvel"][..., 2] = 0.1 * beat
+        on_beat["qvel"][..., 2] = 0.5 * amplitude * beat
         still["qvel"][..., 2] = 0.0
-        off_beat["qvel"][..., 2] = -0.1 * beat
+        off_beat["qvel"][..., 2] = -0.5 * amplitude * beat
 
         def rhythm(state):
             return env._reward_components(state, action)["diagnostic_reward_hop_rhythm"]

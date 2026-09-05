@@ -559,10 +559,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     """Duration over which the gait ramp feature grows from zero to one after a reset."""
     POSE_STD_STANDING: ClassVar[float] = 0.1
     POSE_STD_MOVING: ClassVar[float] = 0.5
-    JUMP_WEIGHT: ClassVar[float] = 5.0
-    LAUNCH_WEIGHT: ClassVar[float] = 2.0
-    HOP_RHYTHM_WEIGHT: ClassVar[float] = 2.0
-    HOP_FREQUENCY_HZ: ClassVar[float] = 1.5
+    JUMP_WEIGHT: ClassVar[float] = 10.0
+    LAUNCH_WEIGHT: ClassVar[float] = 30.0
+    HOP_RHYTHM_WEIGHT: ClassVar[float] = 1.0
+    HOP_FREQUENCY_HZ: ClassVar[float] = 2.0
     GAIT_TERMS: ClassVar[tuple[str, ...]] = (
         "air_time",
         "swing_height",
@@ -1025,23 +1025,28 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
 
     @classmethod
     def jump_task(cls, *, weight: float = 1.0, **overrides: Any) -> MicroDuckTask:
-        """Hop in place under a zero command (experimental).
+        """Hop in place under a zero command.
 
-        Three terms shape the hop. ``hop_rhythm`` pays, linearly up to the
-        ``hop_velocity_amplitude`` of 0.2 m/s, for vertical base velocity in
-        phase with the task clock (1.5 Hz: a crouch and extension of about
-        2 cm), so the rhythm is learned before any flight; ``launch`` pays for
-        upward base velocity while both feet are planted, linearly up to
-        ``launch_velocity_scale`` (0.5 m/s, take-off speed); ``jump`` pays for
-        base height gained above the standing height while both feet are off
-        the ground, up to the ``jump_target_height`` parameter (2 cm). The gait terms and the
+        Three terms shape the hop, in the order a policy discovers it.
+        ``hop_rhythm`` (weight 1) pays, linearly up to the
+        ``hop_velocity_amplitude`` of 0.1 m/s, for vertical base velocity in
+        phase with the task clock (2 Hz), which starts a crouch-and-extend
+        cycle from standing; ``launch`` (weight 30) pays for upward base
+        velocity while both feet are planted, linearly up to
+        ``launch_velocity_scale`` (0.5 m/s, take-off speed), which speeds the
+        extension up until the feet leave the ground; ``jump`` (weight 10)
+        pays for base height gained above the standing height while both feet
+        are off the ground, in full from ``jump_target_height`` (5 mm) on, so
+        the first real hop is reinforced hard. The gait terms and the
         vertical-velocity cost are off and the pose term is loose so the robot
         can crouch and extend.
 
         The MicroDuck servos (0.55 N m/rad, clipped at 0.96 N m, 0.74 kg
-        robot) allow only a small hop: an open-loop crouch and extension with
-        ``action_scale=1.0`` leaves the ground for about 0.1 s and gains 1 to
-        2 cm. No policy has learned the hop yet.
+        robot) allow only a small hop. With these weights, a policy resumed
+        from a walking one learned 2 Hz hops of about 2 cm, airborne 15% of
+        the time, within 6M transitions with the jump row sampled three times
+        as often as the others (``weight=3.0``); a dominant rhythm term
+        instead produced a bob with the feet never leaving the ground.
         """
         reward_weights = dict.fromkeys(cls.GAIT_TERMS, 0.0)
         reward_weights.update(
@@ -1810,7 +1815,7 @@ def _joint_velocity(features: TensorDictBase, params: TensorDictBase) -> torch.T
     return features["joint_velocity"].square().sum(-1)
 
 
-@MicroDuckEnv.register_reward("hop_rhythm", weight=0.0, hop_velocity_amplitude=0.2)
+@MicroDuckEnv.register_reward("hop_rhythm", weight=0.0, hop_velocity_amplitude=0.1)
 def _hop_rhythm(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     # Vertical base velocity in phase with the task clock (up on the positive
     # half of the cosine, down on the negative half), linear in the speed as a
@@ -1838,7 +1843,7 @@ def _launch(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     return upward * planted * _gait_gate(features)
 
 
-@MicroDuckEnv.register_reward("jump", weight=0.0, jump_target_height=0.02)
+@MicroDuckEnv.register_reward("jump", weight=0.0, jump_target_height=0.005)
 def _jump(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     # Height gained with both feet in the air, so hopping in place beats
     # standing tall on the toes.
