@@ -787,11 +787,26 @@ class ConditionalPolicySwitchConfig(TransformConfig):
 
 @dataclass
 class KLRewardTransformConfig(TransformConfig):
-    """Configuration for KLRewardTransform."""
+    """Hydra configuration for :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`.
 
+    Every kwarg accepted by ``KLRewardTransform.__init__`` is exposed as a field
+    here. Instantiating without ``ref_model`` or ``ref_model_factory`` still
+    fails at runtime because the class requires one of them.
+    """
+
+    ref_model: Any = None
+    ref_model_factory: Any = None
+    coef: Any = 1.0
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
-    _target_: str = "torchrl.envs.transforms.llm.KLRewardTransform"
+    log_prob_key: Any = ("log_probs", "full")
+    device: Any = None
+    add_to_reward: bool = True
+    tokenizer: Any = None
+    assistant_only: bool = True
+    padding_side: str = "left"
+    use_ray_service: bool = False
+    _target_: str = "torchrl.envs.llm.transforms.kl.KLRewardTransform"
 
     def __post_init__(self) -> None:
         """Post-initialization hook for KLRewardTransform configuration."""
