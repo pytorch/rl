@@ -134,6 +134,7 @@ Advanced
    :maxdepth: 1
 
    tutorials/multiagent_competitive_ddpg
+   tutorials/multiagent_coma
    tutorials/multi_task
    tutorials/coding_ddpg
    tutorials/coding_dqn
