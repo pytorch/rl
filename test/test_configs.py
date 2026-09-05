@@ -1647,12 +1647,22 @@ class TestCollectorsConfig:
 )
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestLossConfigs:
-    def test_gae_config_value_chunk_dim(self):
+    def test_gae_config_instantiates_nested_group_key(self):
+        from hydra.utils import instantiate
+
+        from torchrl.objectives.value import GAE
         from torchrl.trainers.algorithms.configs.objectives import GAEConfig
 
-        cfg = GAEConfig(value_chunk_dim=1)
-        assert cfg._target_ == "torchrl.objectives.value.GAE"
-        assert cfg.value_chunk_dim == 1
+        cfg = GAEConfig(
+            gamma=0.99,
+            lmbda=0.95,
+            value_chunk_dim=1,
+            group_key=["metadata", "task_id"],
+        )
+        module = instantiate(cfg)
+        assert isinstance(module, GAE)
+        assert module.value_chunk_dim == 1
+        assert module.group_key == ("metadata", "task_id")
 
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")

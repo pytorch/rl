@@ -1008,7 +1008,7 @@ class TestValues:
         td = TensorDict(
             {
                 "observation": torch.randn(B, T, obs_dim),
-                "task_id": task.clone(),
+                "metadata": TensorDict({"task_id": task.clone()}, [B, T]),
                 "next": TensorDict(
                     {
                         "observation": torch.randn(B, T, obs_dim),
@@ -1025,7 +1025,10 @@ class TestValues:
             nn.Linear(obs_dim, 1), in_keys=["observation"], out_keys=["state_value"]
         )
         kwargs = {"gamma": 0.9, "lmbda": 0.95, "value_network": value_net}
-        grouped = GAE(**kwargs, average_gae=True, group_key="task_id")(td.clone())
+        group_key = ("metadata", "task_id")
+        grouped_module = GAE(**kwargs, average_gae=True, group_key=group_key)
+        assert group_key in grouped_module.in_keys
+        grouped = grouped_module(td.clone())
         for group in (0, 1):
             adv = grouped["advantage"][task == group]
             torch.testing.assert_close(adv.mean(), torch.zeros(()), atol=1e-5, rtol=0)
@@ -1034,45 +1037,60 @@ class TestValues:
         global_adv = GAE(**kwargs, average_gae=True)(td.clone())["advantage"]
         assert global_adv[task == 0].std() < 0.5 < global_adv[task == 1].std()
         # A single group matches the global standardization.
-        td["task_id"].fill_(3)
+        td[group_key].fill_(3)
         torch.testing.assert_close(
-            GAE(**kwargs, average_gae=True, group_key="task_id")(td.clone())[
+            GAE(**kwargs, average_gae=True, group_key=group_key)(td.clone())[
                 "advantage"
             ],
             global_adv,
         )
         with pytest.raises(KeyError, match="group_key"):
-            GAE(**kwargs, average_gae=True, group_key="missing")(td.clone())
+            GAE(
+                **kwargs,
+                average_gae=True,
+                group_key=("metadata", "missing"),
+            )(td.clone())
 
-    def test_td0_group_key_standardizes_rewards_within_groups(self):
+    @pytest.mark.parametrize(
+        "estimator_cls,estimator_kwargs",
+        [
+            (TD0Estimator, {}),
+            (TD1Estimator, {}),
+            (TDLambdaEstimator, {"lmbda": 0.95}),
+        ],
+    )
+    def test_td_group_key_standardizes_rewards_within_groups(
+        self, estimator_cls, estimator_kwargs
+    ):
         torch.manual_seed(0)
-        B, obs_dim = 8, 3
-        task = torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]).view(B, 1)
-        reward = torch.where(task == 1, 100.0, 0.0) + torch.randn(B, 1)
+        B, T, obs_dim = 4, 5, 3
+        task = torch.tensor([0, 0, 1, 1]).view(B, 1, 1).expand(B, T, 1)
+        reward = torch.where(task == 1, 100.0, 0.0) + torch.randn(B, T, 1)
         td = TensorDict(
             {
-                "observation": torch.randn(B, obs_dim),
+                "observation": torch.randn(B, T, obs_dim),
                 "task_id": task.clone(),
                 "next": TensorDict(
                     {
-                        "observation": torch.randn(B, obs_dim),
+                        "observation": torch.randn(B, T, obs_dim),
                         "reward": reward,
-                        "done": torch.zeros(B, 1, dtype=torch.bool),
-                        "terminated": torch.zeros(B, 1, dtype=torch.bool),
+                        "done": torch.zeros(B, T, 1, dtype=torch.bool),
+                        "terminated": torch.zeros(B, T, 1, dtype=torch.bool),
                     },
-                    [B],
+                    [B, T],
                 ),
             },
-            [B],
+            [B, T],
         )
         value_net = TensorDictModule(
             nn.Linear(obs_dim, 1), in_keys=["observation"], out_keys=["state_value"]
         )
-        out = TD0Estimator(
+        out = estimator_cls(
             gamma=0.9,
             value_network=value_net,
             average_rewards=True,
             group_key="task_id",
+            **estimator_kwargs,
         )(td)
         standardized = out["next", "reward"]
         for group in (0, 1):
@@ -2931,6 +2949,52 @@ class TestAdv:
         advantage, value_target = module(**kwargs)
         assert advantage.shape == torch.Size([1, 10, 1])
         assert value_target.shape == torch.Size([1, 10, 1])
+
+    def test_vtrace_group_key_standardizes_within_groups(self):
+        torch.manual_seed(0)
+        B, T, obs_dim = 4, 5, 3
+        task = torch.tensor([0, 0, 1, 1]).view(B, 1, 1).expand(B, T, 1)
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        actor_net = ProbabilisticActor(
+            module=TensorDictModule(
+                nn.Linear(obs_dim, 4), in_keys=["obs"], out_keys=["logits"]
+            ),
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=OneHotCategorical,
+            return_log_prob=True,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(B, T, obs_dim),
+                "task_id": task,
+                "action_log_prob": torch.randn(B, T, 1),
+                "next": {
+                    "obs": torch.randn(B, T, obs_dim),
+                    "reward": torch.randn(B, T, 1),
+                    "done": torch.zeros(B, T, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(B, T, 1, dtype=torch.bool),
+                },
+            },
+            [B, T],
+        )
+        out = VTrace(
+            gamma=0.98,
+            actor_network=actor_net,
+            value_network=value_net,
+            average_adv=True,
+            group_key="task_id",
+        )(td)
+        for group in (0, 1):
+            advantage = out["advantage"][task == group]
+            torch.testing.assert_close(
+                advantage.mean(), torch.zeros(()), atol=1e-5, rtol=0
+            )
+            torch.testing.assert_close(
+                advantage.std(), torch.ones(()), atol=1e-5, rtol=0
+            )
 
     @pytest.mark.parametrize(
         "adv,kwargs",

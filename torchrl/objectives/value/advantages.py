@@ -468,6 +468,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
         except AttributeError:
             # value network does not have an `in_keys` attribute
             in_keys = []
+        if self.group_key is not None and self.group_key not in in_keys:
+            in_keys.append(self.group_key)
         return in_keys
 
     @property
@@ -1914,7 +1916,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             else:
                 reward = _standardize_by_group(reward, groups)
             tensordict.set(
-                ("next", self.tensor_keys.steps_to_next_obs), reward
+                ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
 
         if next_value is None:
