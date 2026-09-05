@@ -20,9 +20,11 @@ receives and keeps each communicator single-threaded.
 """
 from __future__ import annotations
 
+import os
 import pickle
 import queue
 import socket
+import sys
 import threading
 import time
 from datetime import timedelta
@@ -71,6 +73,13 @@ _OP_TIMEOUT_S = 86_400.0
 # Poll period for peer-liveness / receiver-health checks while a client
 # waits for a reply (mirrors torchrl._comm.mailbox._PEER_CHECK_INTERVAL).
 _HEALTH_CHECK_INTERVAL_S = 0.1
+
+# Some Windows torch wheels are built without libuv. Respect the documented
+# environment override elsewhere and default to the legacy TCPStore backend on
+# Windows so direct TCPStore construction remains usable there.
+_TCP_STORE_USE_LIBUV = (
+    sys.platform != "win32" and os.environ.get("USE_LIBUV", "1") != "0"
+)
 
 
 def _send_sentinel_async(
@@ -317,7 +326,11 @@ class _DistributedClient:
             return
         host, port = self._store_info
         store = dist.TCPStore(
-            host, port, is_master=False, timeout=timedelta(seconds=self._timeout)
+            host,
+            port,
+            is_master=False,
+            timeout=timedelta(seconds=self._timeout),
+            use_libuv=_TCP_STORE_USE_LIBUV,
         )
         self._store = store
         # Reservation and process-group connection are separate. A domain
@@ -636,6 +649,7 @@ class TorchDistributedTransport(RequestReplyTransport):
                 is_master=True,
                 timeout=timedelta(seconds=timeout),
                 wait_for_workers=False,
+                use_libuv=_TCP_STORE_USE_LIBUV,
             )
             port = int(_store.port)
         elif port is None:
@@ -685,6 +699,7 @@ class TorchDistributedTransport(RequestReplyTransport):
                 port,
                 is_master=False,
                 timeout=timedelta(seconds=self._timeout),
+                use_libuv=_TCP_STORE_USE_LIBUV,
             )
         return self._store
 
