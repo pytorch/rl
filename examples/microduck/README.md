@@ -107,11 +107,12 @@ uv run --with mujoco python examples/microduck/heuristic_gait.py \
 
 ## Recurrent PPO
 
-The policy is a GRU backbone shared by the actor and the critic. With
-`policy.head=gaussian` the actor is a plain Gaussian head trained from
-scratch; with `policy.head=gait-residual` it adds a bounded, zero-initialized
-residual to the closed-form gait, so training starts from a walking
-controller. Data flows through standard TorchRL components:
+The policy is a GRU backbone shared by the actor and the critic, with a
+Gaussian head trained end to end from scratch. `policy.from_prior=true` is a
+quick debugging start: the head then adds a bounded, zero-initialized residual
+to the closed-form gait, so training starts from a walking controller, but
+that prior only knows forward walking. Data flows through standard TorchRL
+components:
 
 1. a `Collector` with `trajs_per_batch=1` writes every finished episode as a
    whole, unpadded sequence into a `TensorDictReplayBuffer`;
@@ -144,10 +145,10 @@ trains a command distribution and
 the whole mixture, with one evaluator per task (logged under the task's
 `name`, e.g. `evaluation/sidestep+0.15/`) and a policy conditioned on the task
 index; `env.task_id=2` pins one task at every reset (evaluation, rendering).
-Sidestep and jump tasks need the from-scratch recipe, `policy.head=gaussian
-env.action_scale=1.0`: the closed-form gait prior of the default
-`gait-residual` head only walks along the forward command, so with it those
-tasks can do no better than stand. `smoke=true` runs a pipeline check. Checkpoints are unified TorchRL
+Sidestep and jump tasks need the default end-to-end policy: the closed-form
+gait prior of `policy.from_prior=true` only walks along the forward command,
+so with it those tasks can do no better than stand. `smoke=true` runs a
+pipeline check. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
 `policy.init_from` read directly.
 
@@ -183,9 +184,9 @@ compiled `mujoco-torch` are the right choice on a GPU host.
 
 ## Results of the validation runs
 
-The following runs used the gait-residual head with the earlier directional
-reward at 125 Hz control, before the reward redesign described above. They
-validated the pipeline rather than the task.
+The following runs used the gait prior (`policy.from_prior=true`) with the
+earlier directional reward at 125 Hz control, before the reward redesign
+described above. They validated the pipeline rather than the task.
 
 Three CPU runs (8 parallel native envs, Apple silicon) on the personal W&B
 project
@@ -256,8 +257,6 @@ WANDB_BASE_URL=https://api.wandb.ai \
 uv run --extra utils --with mujoco --with wandb python examples/microduck/ppo_mujoco.py \
   env.microduck_root="$MICRODUCK_RL_ROOT" \
   env.backend=mujoco env.parallel=true env.num_envs=16 \
-  policy.head=gaussian policy.initial_policy_scale=1.0 \
-  env.action_scale=1.0 \
   'env.tasks=[{preset:speed_range_task,low:0.1,high:0.3,warm_start_velocity:[0.05,0.25],warm_start_fraction:0.5,joint_reset_noise_scale:0.25}]' \
   ppo.transitions_per_update=32768 ppo.epochs=5 ppo.minibatch_trajectories=64 \
   ppo.learning_rate=3e-4 ppo.target_kl=0.01 ppo.entropy_coeff=0.01 \

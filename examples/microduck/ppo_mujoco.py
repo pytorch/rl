@@ -4,13 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 """Recurrent PPO on :class:`~torchrl.envs.MicroDuckEnv` with whole-episode replay.
 
-The policy is a GRU backbone shared by the actor and the critic. With
-``policy.head=gait-residual`` the actor head adds a bounded residual to the
-closed-form gait from ``heuristic_gait.py``, so the first policy is already a
-walking controller; with ``policy.head=gaussian`` the actor is a plain Gaussian
-head trained from scratch, relying on the contact-based gait terms of the
-:class:`~torchrl.envs.MicroDuckEnv` reward, a command range, an optional
-forward warm start and a larger exploration scale.
+The policy is a GRU backbone shared by the actor and the critic, with a
+Gaussian head trained end to end from scratch: it relies on the contact-based
+gait terms of the :class:`~torchrl.envs.MicroDuckEnv` reward, the task
+library's warm start and a unit exploration scale. ``policy.from_prior=true``
+is the quick debugging start: the head then adds a bounded residual to the
+closed-form gait from ``heuristic_gait.py``, so the first policy already walks
+forward, but that prior only knows forward walking and never learns to
+sidestep or hop.
 
 Data flows through the standard TorchRL pieces: a
 :class:`~torchrl.collectors.Collector` writes every finished episode as a
@@ -28,11 +29,10 @@ from a TorchRL checkout::
 
     python examples/microduck/ppo_mujoco.py env.download=true smoke=true
 
-and train from scratch over a speed range with::
+and train over a speed range with::
 
-    python examples/microduck/ppo_mujoco.py env.download=true policy.head=gaussian \\
-        'env.tasks=[{preset:speed_range_task,low:0.1,high:0.3}]' env.action_scale=1.0 \\
-        logger.entity=YOUR_ENTITY
+    python examples/microduck/ppo_mujoco.py env.download=true \\
+        'env.tasks=[{preset:speed_range_task,low:0.1,high:0.3}]' logger.entity=YOUR_ENTITY
 
 ``env.tasks`` is the task library: one :class:`~torchrl.envs.MicroDuckEnv`
 preset per entry with its arguments, e.g. ``{preset: sidestep_task, speed: 0.15,
@@ -347,7 +347,7 @@ def make_models(
     *,
     device: torch.device | str = "cpu",
     hidden_size: int = 128,
-    policy_head: PolicyHead = "gait-residual",
+    policy_head: PolicyHead = "gaussian",
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
     residual_scale: float = 0.2,
     initial_policy_scale: float = 0.05,
@@ -357,9 +357,9 @@ def make_models(
     Every network is built on ``device``, and the GRU's recurrent-state primer
     is appended to ``env`` so its rollouts carry the state between steps.
 
-    ``policy_head="gait-residual"`` wraps the closed-form gait with a learned
-    residual; ``policy_head="gaussian"`` is a plain Gaussian head trained from
-    scratch. Returns the actor and the full value network (backbone plus value
+    ``policy_head="gaussian"`` (default) is a plain Gaussian head trained from
+    scratch; ``policy_head="gait-residual"`` wraps the closed-form gait with a
+    learned residual. Returns the actor and the full value network (backbone plus value
     head) expected by :class:`~torchrl.objectives.value.GAE` and
     :class:`~torchrl.objectives.ClipPPOLoss`.
     """
@@ -1007,13 +1007,14 @@ def main(cfg: DictConfig) -> None:
     gait = replace(
         MicroDuckGaitConfig(), frequency_hz=float(tasks[0].gait_frequency_hz)
     )
+    policy_head = "gait-residual" if cfg.policy.from_prior else "gaussian"
     policy_kwargs = {
         "hidden_size": cfg.policy.hidden_size,
-        "policy_head": cfg.policy.head,
+        "policy_head": policy_head,
         "gait": asdict(gait),
         "residual_scale": cfg.policy.residual_scale,
         "initial_policy_scale": cfg.policy.initial_policy_scale
-        or (0.05 if cfg.policy.head == "gait-residual" else 0.3),
+        or (0.05 if cfg.policy.from_prior else 1.0),
     }
     env = make_env(cfg.env)
     evaluators: list[Evaluator] = []
@@ -1049,7 +1050,7 @@ def main(cfg: DictConfig) -> None:
             cfg.logger.backend,
             logger_name="microduck_ppo",
             experiment_name=cfg.logger.exp_name
-            or generate_exp_name("microduck", f"{cfg.policy.head}-{cfg.env.backend}"),
+            or generate_exp_name("microduck", f"{policy_head}-{cfg.env.backend}"),
             wandb_kwargs={
                 "project": cfg.logger.project,
                 "entity": cfg.logger.entity,

@@ -1041,7 +1041,11 @@ class TestMujoco:
         with pytest.raises(ValueError, match="preset"):
             ppo.make_tasks([{"preset": "fly_task"}])
         env = ppo.make_env(env_cfg)
-        actor, critic = ppo.make_models(env, hidden_size=16)
+        # The prior head: its zero-initialized residual makes the first policy
+        # the closed-form gait, which the assertion below checks.
+        actor, critic = ppo.make_models(
+            env, hidden_size=16, policy_head="gait-residual"
+        )
         evaluator = ppo.make_evaluator(
             ppo.make_env({**env_cfg, "seed": 1, "task_id": 0}, num_envs=1),
             actor,
@@ -1103,7 +1107,7 @@ class TestMujoco:
             evaluation_interval=1,
             best_checkpoint_path=checkpoint,
             latest_checkpoint_path=tmp_path / "latest.ckpt",
-            policy_kwargs={"hidden_size": 16},
+            policy_kwargs={"hidden_size": 16, "policy_head": "gait-residual"},
             config={"env": env_cfg},
         )
         assert history[0]["evaluation/tracking+0.03/num_episodes"] == 1
@@ -1125,7 +1129,9 @@ class TestMujoco:
         ).all()
         render_env.close()
         # policy.init_from restores the trained parameters into fresh models.
-        fresh_actor, fresh_critic = ppo.make_models(env, hidden_size=16)
+        fresh_actor, fresh_critic = ppo.make_models(
+            env, hidden_size=16, policy_head="gait-residual"
+        )
         assert (
             ppo.load_parameters(tmp_path / "latest.ckpt", fresh_actor, fresh_critic)
             >= 100
