@@ -563,6 +563,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     LAUNCH_WEIGHT: ClassVar[float] = 30.0
     HOP_RHYTHM_WEIGHT: ClassVar[float] = 1.0
     HOP_FREQUENCY_HZ: ClassVar[float] = 2.0
+    DRIFT_WEIGHT: ClassVar[float] = -5.0
     GAIT_TERMS: ClassVar[tuple[str, ...]] = (
         "air_time",
         "swing_height",
@@ -1039,7 +1040,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         are off the ground, in full from ``jump_target_height`` (5 mm) on, so
         the first real hop is reinforced hard. The gait terms and the
         vertical-velocity cost are off and the pose term is loose so the robot
-        can crouch and extend.
+        can crouch and extend. A linear ``drift`` penalty (weight -5) on the planar speed keeps
+        the hop in place: the zero-command tracking Gaussian saturates a few
+        tenths of a m/s away from standing still and would let a hopping
+        policy travel unpunished.
 
         The MicroDuck servos (0.55 N m/rad, clipped at 0.96 N m, 0.74 kg
         robot) allow only a small hop. With these weights, a policy resumed
@@ -1054,6 +1058,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 "jump": cls.JUMP_WEIGHT,
                 "launch": cls.LAUNCH_WEIGHT,
                 "hop_rhythm": cls.HOP_RHYTHM_WEIGHT,
+                "drift": cls.DRIFT_WEIGHT,
                 "lin_vel_z": 0.0,
             }
         )
@@ -1813,6 +1818,15 @@ def _action_rate(features: TensorDictBase, params: TensorDictBase) -> torch.Tens
 @MicroDuckEnv.register_reward("joint_velocity", weight=-0.001)
 def _joint_velocity(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     return features["joint_velocity"].square().sum(-1)
+
+
+@MicroDuckEnv.register_reward("drift", weight=0.0, drift_speed_scale=0.3)
+def _drift(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    # Planar speed as a fraction of ``drift_speed_scale``, clipped at one: a
+    # linear penalty that keeps paying where the tracking Gaussian has
+    # saturated, for tasks that must stay in place.
+    speed = features["body_velocity"][..., :2].norm(dim=-1)
+    return (speed / params["drift_speed_scale"]).clamp(max=1.0)
 
 
 @MicroDuckEnv.register_reward("hop_rhythm", weight=0.0, hop_velocity_amplitude=0.1)

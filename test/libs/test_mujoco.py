@@ -784,12 +784,24 @@ class TestMujoco:
         assert (components["diagnostic_reward_lin_vel_z"] == 0).all()
         for name in MicroDuckEnv.GAIT_TERMS:
             assert (components[f"diagnostic_reward_{name}"] == 0).all()
+        # The jump row pays a linear drift penalty for planar speed, which the
+        # standing row does not use.
+        drifting = env.get_state().clone()
+        drifting["qvel"][..., 0] = 0.15
+        components = env._reward_components(drifting, action)
+        torch.testing.assert_close(
+            components["diagnostic_reward_drift"],
+            torch.full((1, 1), MicroDuckEnv.DRIFT_WEIGHT * 0.5 * 0.02),
+        )
         # Under the standing row the same motion earns no jump reward and pays
         # the vertical-velocity cost.
         env.reset(TensorDict({"task_id": torch.tensor([[3]])}, batch_size=(1,)))
         components = env._reward_components(risen, action)
         assert (components["diagnostic_reward_jump"] == 0).all()
         assert (components["diagnostic_reward_lin_vel_z"] < 0).all()
+        assert (
+            env._reward_components(drifting, action)["diagnostic_reward_drift"] == 0
+        ).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
