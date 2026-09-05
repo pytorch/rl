@@ -303,7 +303,13 @@ class SparseAdamConfig(ConfigBase):
 
 @dataclass
 class LionConfig(ConfigBase):
-    """Configuration for Lion optimizer."""
+    """Configuration for a Lion optimizer node.
+
+    Lion is not available on the torch versions TorchRL currently supports
+    (there is no ``torch.optim.Lion``), so this node cannot be instantiated.
+    The Config is kept so existing Hydra group references (``optimizer/lion``)
+    do not vanish without a deprecation cycle.
+    """
 
     lr: float = 1e-4
     betas: tuple[float, float] = (0.9, 0.99)

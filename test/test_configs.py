@@ -140,11 +140,6 @@ _CONFIG_PARITY_UNRESOLVED = {
     "TanhNormalModelConfig": "_make_tanh_normal_model composes a TensorDictModule "
     "and a ProbabilisticTensorDictModule into a ProbabilisticTensorDictSequential; "
     "there is no single wrapped class whose __init__ the Config fields mirror.",
-    "StorageEnsembleWriterConfig": "_target_ references torchrl.data.replay_buffers."
-    "StorageEnsembleWriter, which does not exist in the current codebase.",
-    "KLRewardTransformConfig": "_target_ references torchrl.envs.transforms.llm, "
-    "which does not exist; KLRewardTransform now lives in "
-    "torchrl.envs.llm.transforms.kl.",
     "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
     "the torch versions TorchRL currently supports.",
 }
@@ -939,15 +934,11 @@ class TestDataConfigs:
         )
 
         cfg = StorageEnsembleWriterConfig(
-            writers=[RoundRobinWriterConfig(), RoundRobinWriterConfig()], transforms=[]
+            writers=[RoundRobinWriterConfig(), RoundRobinWriterConfig()], p=[0.5, 0.5]
         )
-        assert cfg._target_ == "torchrl.data.replay_buffers.StorageEnsembleWriter"
+        assert cfg._target_ == "torchrl.data.replay_buffers.WriterEnsemble"
         assert len(cfg.writers) == 2
-        assert len(cfg.transforms) == 0
-
-        # Note: StorageEnsembleWriter doesn't exist in the actual codebase
-        # This test will fail until the class is implemented
-        # For now, we just test the config creation
+        assert cfg.p == [0.5, 0.5]
         assert cfg.writers[0]._target_ == "torchrl.data.replay_buffers.RoundRobinWriter"
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")

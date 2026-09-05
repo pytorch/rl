@@ -289,11 +289,21 @@ class ListStorageConfig(StorageConfig):
 
 @dataclass
 class StorageEnsembleWriterConfig(StorageConfig):
-    """Configuration for storage ensemble writer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.WriterEnsemble`.
 
-    _target_: str = "torchrl.data.replay_buffers.StorageEnsembleWriter"
-    writers: list[Any] = MISSING
-    transforms: list[Any] = MISSING
+    This name is a historical typo for
+    :class:`~torchrl.trainers.algorithms.configs.data.WriterEnsembleConfig`.
+    The Config is kept so existing Hydra group references do not vanish
+    without a deprecation cycle.
+
+    Fields match :class:`~torchrl.trainers.algorithms.configs.data.WriterEnsembleConfig`
+    (``writers``, ``p``). ``WriterEnsemble.__init__`` only accepts ``*writers``;
+    ``p`` is stored for Config parity and is not a constructor argument.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.WriterEnsemble"
+    writers: list[Any] = field(default_factory=list)
+    p: Any = None
 
 
 @dataclass

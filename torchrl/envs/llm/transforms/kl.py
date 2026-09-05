@@ -159,6 +159,9 @@ class RayKLRewardTransform(RayTransform):
 class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     """A legacy transform for computing KL divergence-based rewards.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.KLRewardTransformConfig`
+    for the Hydra configuration counterpart.
+
     **Deprecated**: This transform is maintained for backward compatibility but is no longer
     the recommended approach. Use :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL` instead,
     which provides better modularity and integration with the new wrapper design.
