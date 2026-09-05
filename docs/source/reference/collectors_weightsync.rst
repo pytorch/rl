@@ -3,6 +3,8 @@
 Weight Synchronization
 ======================
 
+.. _ref_collectors_weightsync:
+
 RL pipelines are typically split in two big computational buckets: training, and inference.
 While the inference pipeline sends data to the training one, the training pipeline needs to occasionally
 synchronize its weights with the inference one.
@@ -63,6 +65,28 @@ Each of these classes is detailed below.
     - Implement custom weight sync schemes for specialized use cases (e.g., new distributed backends, custom serialization)
     - Debug synchronization issues in complex distributed setups
     - Use weight sync schemes outside of collectors for custom multiprocessing scenarios
+
+When is ``update_policy_weights_`` required?
+--------------------------------------------
+
+:class:`~torchrl.objectives.LossModule` does not copy the policy (see
+:ref:`ref_lossmodule_weight_sharing`). Whether the collector needs an explicit
+sync after an optimizer step depends on how the policy was placed:
+
+- **CPU policy, no device remap.** Weights are moved to shared memory
+  **in-place** when the policy is passed to the collector. Workers see the
+  same storage; no extra sync is needed in the common case.
+- **CUDA policy, no device remap.** Parameters are already shared. No extra
+  sync is needed.
+- **``policy_device`` or ``device`` was passed.** The collector makes a
+  ``.to(...)`` copy. :meth:`~torchrl.collectors.Collector.update_policy_weights_`
+  is **required** after training so the collector's copy matches the trained
+  weights.
+
+Calling :meth:`~torchrl.collectors.Collector.update_policy_weights_` anyway
+is good practice, but it is not load-bearing unless devices were remapped.
+Use it also to push weights through a :class:`~torchrl.weight_update.WeightSyncScheme`
+(the rest of this page).
 
 Lifecycle of Weight Synchronization
 -----------------------------------

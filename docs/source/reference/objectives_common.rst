@@ -5,6 +5,13 @@ Common Components
 
 Base classes and common utilities for all loss modules.
 
+:class:`LossModule` does **not** copy the module you pass in. The same
+parameters are used in-place, so an optimizer step on the loss updates the
+original network. :meth:`~torchrl.collectors.Collector.update_policy_weights_`
+is required only when a collector remapped the policy via ``policy_device`` or
+``device``. See :ref:`ref_lossmodule_weight_sharing` and
+:ref:`ref_collectors_weightsync`.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
