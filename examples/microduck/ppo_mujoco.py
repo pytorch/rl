@@ -86,6 +86,7 @@ from torchrl.modules import (
 )
 from torchrl.objectives import ClipPPOLoss, KLAdaptiveLR
 from torchrl.objectives.value import GAE
+from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 from torchrl.render import load_checkpoint, save_render_checkpoint
 
@@ -244,6 +245,7 @@ def make_video_env(
     cfg: DictConfig | Mapping[str, Any],
     task_ids: Sequence[int],
     *,
+    recorder: VideoRecorder,
     width: int,
     height: int,
 ) -> TransformedEnv:
@@ -252,8 +254,8 @@ def make_video_env(
     A batched native env with one simulator per entry of ``task_ids``, each
     pinned to its task at every reset by
     :meth:`~torchrl.envs.MicroDuckTaskSampler.fixed`, rendering ``pixels`` at
-    ``width`` x ``height``. Four tasks make the 2x2 grid of
-    :func:`tile_task_grid`.
+    ``width`` x ``height`` into ``recorder``, whose ``make_grid`` tiles the
+    batch (2x2 for four tasks, row-major) into one video.
     """
     env = make_env(
         OmegaConf.merge(
@@ -269,41 +271,22 @@ def make_video_env(
         from_pixels=True,
     )
     env.append_transform(MicroDuckTaskSampler.fixed(task_ids))
+    env.append_transform(recorder)
     return env
 
 
-def tile_task_grid(pixels: torch.Tensor) -> torch.Tensor:
-    """Tile the per-env frames of a rollout into one video, row-major.
-
-    ``pixels`` has shape ``(*batch, T, H, W, 3)`` with a batch of ``n`` envs;
-    the result has shape ``(T, 3, rows * H, cols * W)`` with ``cols`` the
-    ceiling of ``sqrt(n)`` (2x2 for four envs), in the ``uint8`` layout that
-    :meth:`~torchrl.record.loggers.Logger.log_video` expects.
-    """
-    frames = pixels.reshape(-1, *pixels.shape[-4:])
-    n, cols = frames.shape[0], math.ceil(math.sqrt(frames.shape[0]))
-    rows = math.ceil(n / cols)
-    if rows * cols != n:
-        frames = torch.cat(
-            (frames, frames.new_zeros(rows * cols - n, *frames.shape[1:]))
-        )
-    grid = torch.cat(
-        [
-            torch.cat(list(frames[r * cols : (r + 1) * cols]), dim=-2)
-            for r in range(rows)
-        ],
-        dim=-3,
-    )
-    return grid.permute(0, 3, 1, 2).contiguous()
-
-
 def record_task_grid(
-    env: TransformedEnv, actor: ProbabilisticActor, steps: int
-) -> torch.Tensor:
-    """Roll the deterministic actor out on the video env and return the tiled video."""
+    env: TransformedEnv,
+    recorder: VideoRecorder,
+    actor: ProbabilisticActor,
+    *,
+    steps: int,
+    step: int,
+) -> None:
+    """Roll the deterministic actor out on the video env and log the grid at ``step``."""
     with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
-        rollout = env.rollout(steps, actor, break_when_any_done=False)
-    return tile_task_grid(rollout["pixels"])
+        env.rollout(steps, actor, break_when_any_done=False)
+    recorder.dump(step=step)
 
 
 def task_labels(tasks: Sequence[MicroDuckTask]) -> list[str]:
@@ -794,8 +777,8 @@ def train_ppo(
 
     Every ``video_interval`` evaluations, ``video_recorder`` is called with
     the transition count, for a video logged alongside the metrics (see
-    :func:`record_task_grid`); it is off by default because video storage is
-    not free.
+    :func:`record_task_grid`); it is off by default because video storage on
+    the logger side is not free.
 
     Every ``evaluation_interval`` iterations the ``evaluators`` (one per
     task of the library, see :func:`make_evaluator`) run the actor's current
@@ -1150,19 +1133,24 @@ def main(cfg: DictConfig) -> None:
         if cfg.evaluation.video.interval is not None and logger is not None:
             # A 2x2 grid of four tasks filmed in parallel, logged at every
             # `video.interval`-th evaluation.
+            grid_recorder = VideoRecorder(
+                logger, tag="evaluation/task_grid", make_grid=True, fps=50
+            )
             video_env = make_video_env(
                 cfg.env,
                 list(cfg.evaluation.video.tasks),
+                recorder=grid_recorder,
                 width=cfg.evaluation.video.width,
                 height=cfg.evaluation.video.height,
             )
 
             def video_recorder(step: int) -> None:
-                logger.log_video(
-                    "evaluation/task_grid",
-                    record_task_grid(video_env, actor, cfg.evaluation.video.steps),
+                record_task_grid(
+                    video_env,
+                    grid_recorder,
+                    actor,
+                    steps=cfg.evaluation.video.steps,
                     step=step,
-                    fps=50,
                 )
 
         train_ppo(

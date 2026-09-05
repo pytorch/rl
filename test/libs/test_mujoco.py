@@ -1085,17 +1085,6 @@ class TestMujoco:
             "action_scale": 0.5,
             "tasks": [{"preset": "tracking_task", "speed": 0.03}],
         }
-        # The evaluation video tiles one env per cell, row-major, in the
-        # (T, C, H, W) layout loggers expect.
-        frames = (
-            torch.arange(4).view(4, 1, 1, 1, 1).expand(4, 2, 3, 5, 3).to(torch.uint8)
-        )
-        grid = ppo.tile_task_grid(frames)
-        assert grid.shape == (2, 3, 6, 10)
-        assert grid[0, 0, :3, :5].unique().tolist() == [0]
-        assert grid[0, 0, :3, 5:].unique().tolist() == [1]
-        assert grid[0, 0, 3:, :5].unique().tolist() == [2]
-        assert grid[0, 0, 3:, 5:].unique().tolist() == [3]
         assert ppo.task_labels(
             ppo.make_tasks(
                 [

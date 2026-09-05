@@ -150,7 +150,8 @@ gait prior of `policy.from_prior=true` only walks along the forward command,
 so with it those tasks can do no better than stand. `smoke=true` runs a
 pipeline check. `evaluation.video.interval=4` logs, at every fourth
 evaluation, a 2x2 video of four tasks filmed in parallel (one native
-simulator per tile, each pinned to its task with `MicroDuckTaskSampler.fixed`);
+simulator per tile, each pinned to its task with `MicroDuckTaskSampler.fixed`,
+tiled by a `VideoRecorder` on the batched env);
 it is off by default because video storage on the logger side is not free,
 and W&B needs `moviepy` for it. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
