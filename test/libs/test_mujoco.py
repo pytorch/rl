@@ -414,6 +414,14 @@ class TestMujoco:
         )
         after = env.step(partial.set("action", env.action_spec.zero()))
         assert after["next", "task_id"].flatten().tolist() == [0, 2]
+        assert [list(task.name)[0] for task in env._task] == [
+            "standing",
+            "sidestep-0.15",
+        ]
+        assert all(
+            list(library.name) == ["standing", "tracking+0.20", "sidestep-0.15"]
+            for library in env.tasks
+        )
         torch.testing.assert_close(
             after["next", "command"].flatten(0, 1),
             torch.tensor([[0.0, 0.0], [0.0, -0.15]]),
@@ -841,8 +849,19 @@ class TestMujoco:
         first = MicroDuckTaskSampler([1.0, 2.0, 1.0], seed=3).sample(torch.Size([8]))
         second = MicroDuckTaskSampler([1.0, 2.0, 1.0], seed=3).sample(torch.Size([8]))
         assert first.shape == (8, 1) and torch.equal(first, second)
-        with pytest.raises(ValueError, match="non-negative"):
-            MicroDuckTaskSampler([1.0, -1.0])
+        for weights in ([1.0, -1.0], [1.0, float("nan")], [1.0, float("inf")]):
+            with pytest.raises(ValueError, match="finite.*non-negative"):
+                MicroDuckTaskSampler(weights)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_microduck_task_sampler_seeded_cuda(self):
+        first = MicroDuckTaskSampler([1.0, 2.0, 1.0], seed=3).cuda()
+        second = MicroDuckTaskSampler([1.0, 2.0, 1.0], seed=3).cuda()
+        first_sample = first.sample(torch.Size([8]))
+        second_sample = second.sample(torch.Size([8]))
+        assert first_sample.device.type == "cuda"
+        assert torch.equal(first_sample, second_sample)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_register_reward_adds_a_weighted_term(
