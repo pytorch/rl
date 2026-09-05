@@ -135,6 +135,10 @@ trainer:
   optim_steps_per_batch: null
   num_epochs: 2
   async_collection: false
+  # the multi-process collector syncs weights through weight-sync schemes;
+  # map its "policy" destination to the trainer's actor
+  weight_update_map:
+    policy: loss_module.actor_network
 
 hydra:
   job:

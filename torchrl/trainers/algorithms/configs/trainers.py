@@ -481,7 +481,9 @@ class OnPolicyTrainerConfig(TrainerConfig):
     gae: Any = None
     lr_scheduler: Any = None
     target_net_updater: Any = None
-    weight_update_map: dict[str, str] | None = None
+    # ``Any`` rather than ``dict[str, str] | None``: OmegaConf cannot merge a
+    # mapping into a typed optional-dict field whose default is ``None``
+    weight_update_map: Any = None
     log_timings: bool = False
     auto_log_optim_steps: bool = True
     batch_size: int | None = None
