@@ -244,9 +244,9 @@ class MicroDuckTask:
     distribution, the gait clock, the reward weights and parameters, and a
     label. A library is a stack of tasks, and every env of a
     :class:`MicroDuckEnv` batch holds one row of the library for the duration
-    of an episode. The env gathers tensor fields and labels independently so
-    selecting rows does not depend on non-tensor advanced-indexing semantics.
-    Build tasks with the presets
+    of an episode. Gathering rows with ``library[task_id]`` copies the name
+    entries like the tensors, which needs ``tensordict>=0.14.1``. Build tasks
+    with the presets
     (:meth:`MicroDuckEnv.tracking_task`, :meth:`MicroDuckEnv.standing_task`,
     :meth:`MicroDuckEnv.speed_range_task`, :meth:`MicroDuckEnv.sidestep_task`,
     :meth:`MicroDuckEnv.jump_task`), which fill every field and accept
@@ -642,7 +642,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self.tasks = self.tasks.to(self.device).to(self.dtype)
         # Per-env task rows, task ids and commands; refreshed at reset.
         self._task_id = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
-        self._task = self._gather_tasks(self._task_id)
+        self._task = self.tasks[self._task_id]
         self._command = torch.zeros(
             self.num_envs, 2, dtype=self.dtype, device=self.device
         )
@@ -1293,7 +1293,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         tensordict: TensorDictBase | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         task_id = self._sample_task_id(tensordict)
-        task = self._gather_tasks(task_id)
+        task = self.tasks[task_id]
         command = self._sample_command(task, tensordict)
         self._pending = (task_id, task, command)
         qpos = self._home_qpos.unsqueeze(0).expand(n, -1).clone()
@@ -1363,27 +1363,6 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             self.tasks.weight, self.num_envs, replacement=True, generator=self.rng
         )
 
-    def _gather_tasks(self, task_id: torch.Tensor) -> MicroDuckTask:
-        """Gather tensor rows while copying non-tensor labels explicitly."""
-        names = self.tasks.name
-        selected_names = [
-            str(names[index]) for index in task_id.detach().reshape(-1).cpu().tolist()
-        ]
-        return MicroDuckTask(
-            command_low=self.tasks.command_low[task_id],
-            command_high=self.tasks.command_high[task_id],
-            warm_start_velocity=self.tasks.warm_start_velocity[task_id],
-            warm_start_fraction=self.tasks.warm_start_fraction[task_id],
-            joint_reset_noise_scale=self.tasks.joint_reset_noise_scale[task_id],
-            gait_frequency_hz=self.tasks.gait_frequency_hz[task_id],
-            gait_frequency_per_mps=self.tasks.gait_frequency_per_mps[task_id],
-            reward_weights=self.tasks.reward_weights[task_id],
-            params=self.tasks.params[task_id],
-            weight=self.tasks.weight[task_id],
-            name=selected_names,
-            batch_size=task_id.shape,
-        )
-
     def _sample_command(
         self, task: MicroDuckTask, tensordict: TensorDictBase | None
     ) -> torch.Tensor:
@@ -1416,7 +1395,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         if pending is not None:
             return pending
         task_id = self._sample_task_id(tensordict)
-        task = self._gather_tasks(task_id)
+        task = self.tasks[task_id]
         return task_id, task, self._sample_command(task, tensordict)
 
     def _on_reset_all(self, tensordict: TensorDictBase | None = None) -> None:
@@ -1646,7 +1625,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self._previous_action = state["previous_action"].clone()
         self._observation_action = self._previous_action.clone()
         self._task_id = state["task_id"].clone()
-        self._task = self._gather_tasks(self._task_id)
+        self._task = self.tasks[self._task_id]
         self._command = state["command"].clone()
         self._feet_air_time = state["feet_air_time"].clone()
         self._touchdown_air_time = torch.zeros_like(self._feet_air_time)
@@ -1664,7 +1643,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self._previous_action[index] = source._previous_action.to(self.device)
         self._observation_action[index] = source._observation_action.to(self.device)
         self._task_id[index] = source._task_id.to(self.device)
-        self._task = self._gather_tasks(self._task_id)
+        self._task = self.tasks[self._task_id]
         self._command[index] = source._command.to(self.device)
         self._feet_air_time[index] = source._feet_air_time.to(self.device)
         self._refresh_contacts()
