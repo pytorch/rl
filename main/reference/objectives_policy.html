@@ -2551,6 +2551,37 @@ document.write(`
 </tbody>
 </table>
 </div>
+<section id="decoupled-proximal-policy-ppo-ewma">
+<h2>Decoupled proximal policy (PPO-EWMA)<a class="headerlink" href="#decoupled-proximal-policy-ppo-ewma" title="Link to this heading">#</a></h2>
+<p>PPO uses the policy that collected the data (the <code class="docutils literal notranslate"><span class="pre">sample_log_prob</span></code> entry)
+for two distinct purposes: as the denominator of the importance-sampling
+ratio, and as the reference the trust region (clipping or KL penalty) pulls
+the updated policy towards. <a class="reference external" href="https://arxiv.org/abs/2110.00641">Hilton et al. (2021)</a> observe that only the first role requires
+the <em>behavior</em> policy; the second can use any recent <em>proximal</em> policy.</p>
+<p>Passing <code class="docutils literal notranslate"><span class="pre">delay_actor=True</span></code> to <a class="reference internal" href="generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss" title="torchrl.objectives.ClipPPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ClipPPOLoss</span></code></a> or <a class="reference internal" href="generated/torchrl.objectives.KLPENPPOLoss.html#torchrl.objectives.KLPENPPOLoss" title="torchrl.objectives.KLPENPPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">KLPENPPOLoss</span></code></a>
+keeps a detached copy of the actor parameters under
+<code class="docutils literal notranslate"><span class="pre">target_actor_network_params</span></code> and uses it as the proximal policy: the ratio
+being clipped (or the KL reference) becomes <code class="docutils literal notranslate"><span class="pre">pi_theta</span> <span class="pre">/</span> <span class="pre">pi_prox</span></code> and the
+surrogate is re-weighted by <code class="docutils literal notranslate"><span class="pre">pi_prox</span> <span class="pre">/</span> <span class="pre">pi_behav</span></code> so that the gradient
+estimate stays unbiased for the data at hand. Stepping a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code> after every optimizer step turns the
+proximal policy into an exponentially-weighted moving average of the policy,
+which is PPO-EWMA; a <code class="xref py py-class docutils literal notranslate"><span class="pre">HardUpdate</span></code> freezes it for a
+fixed number of steps instead. <code class="docutils literal notranslate"><span class="pre">max_importance_ratio</span></code> caps the behavior
+ratio for numerical stability with stale data. This decouples the strength of
+the trust region from how, and how recently, the data was collected.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">loss_module</span> <span class="o">=</span> <span class="n">ClipPPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">,</span> <span class="n">delay_actor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">max_importance_ratio</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">updater</span> <span class="o">=</span> <span class="n">SoftUpdate</span><span class="p">(</span><span class="n">loss_module</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">0.889</span><span class="p">)</span>  <span class="c1"># eps is the EWMA decay rate beta_prox</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">replay_buffer</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">losses</span> <span class="o">=</span> <span class="n">loss_module</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">loss</span> <span class="o">=</span> <span class="n">losses</span><span class="p">[</span><span class="s2">&quot;loss_objective&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">losses</span><span class="p">[</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">losses</span><span class="p">[</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="n">updater</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
 </section>
 
 
@@ -2661,6 +2692,18 @@ document.write(`
               
                 <div class="bd-sidebar-secondary bd-toc">
 <div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#decoupled-proximal-policy-ppo-ewma">Decoupled proximal policy (PPO-EWMA)</a></li>
+</ul>
+  </nav></div>
     
        <div class="sidebar-secondary-item">
 
@@ -2911,7 +2954,7 @@ document.write(`
        "headline": "Policy Gradient Methods",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/objectives_policy.html",
-       "articleBody": "Policy Gradient Methods# Loss modules for policy gradient algorithms. PPOLoss(*args, **kwargs) A parent PPO loss class. ClipPPOLoss(*args, **kwargs) Clipped PPO loss. KLPENPPOLoss(*args, **kwargs) KL Penalty PPO loss. A2CLoss(*args, **kwargs) TorchRL implementation of the A2C loss. ReinforceLoss(*args, **kwargs) Reinforce loss module.",
+       "articleBody": "Policy Gradient Methods# Loss modules for policy gradient algorithms. PPOLoss(*args, **kwargs) A parent PPO loss class. ClipPPOLoss(*args, **kwargs) Clipped PPO loss. KLPENPPOLoss(*args, **kwargs) KL Penalty PPO loss. A2CLoss(*args, **kwargs) TorchRL implementation of the A2C loss. ReinforceLoss(*args, **kwargs) Reinforce loss module. Decoupled proximal policy (PPO-EWMA)# PPO uses the policy that collected the data (the sample_log_prob entry) for two distinct purposes: as the denominator of the importance-sampling ratio, and as the reference the trust region (clipping or KL penalty) pulls the updated policy towards. Hilton et al. (2021) observe that only the first role requires the behavior policy; the second can use any recent proximal policy. Passing delay_actor=True to ClipPPOLoss or KLPENPPOLoss keeps a detached copy of the actor parameters under target_actor_network_params and uses it as the proximal policy: the ratio being clipped (or the KL reference) becomes pi_theta / pi_prox and the surrogate is re-weighted by pi_prox / pi_behav so that the gradient estimate stays unbiased for the data at hand. Stepping a SoftUpdate after every optimizer step turns the proximal policy into an exponentially-weighted moving average of the policy, which is PPO-EWMA; a HardUpdate freezes it for a fixed number of steps instead. max_importance_ratio caps the behavior ratio for numerical stability with stale data. This decouples the strength of the trust region from how, and how recently, the data was collected. \u003e\u003e\u003e loss_module = ClipPPOLoss(actor, critic, delay_actor=True, max_importance_ratio=100.0) \u003e\u003e\u003e updater = SoftUpdate(loss_module, eps=0.889) # eps is the EWMA decay rate beta_prox \u003e\u003e\u003e for batch in replay_buffer: ... losses = loss_module(batch) ... loss = losses[\"loss_objective\"] + losses[\"loss_critic\"] + losses[\"loss_entropy\"] ... loss.backward() ... optimizer.step() ... optimizer.zero_grad() ... updater.step()",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -115,6 +115,21 @@ estimate was done by the current version of the value estimator. If instead `Tru
 `clip_epsilon` parameter will be used as the clipping threshold (this is only compatible with a
 scalar `clip_epsilon`; with an asymmetric `(low, high)` tuple, pass an explicit float threshold
 instead). If not provided or `False`, no clipping will be performed. Defaults to `False`.
+- **delay_actor** (*bool**,**optional*) - if `True`, a detached copy of the actor parameters is kept under
+`target_actor_network_params` and used as the *proximal policy*: the clipping acts on
+`pi_theta / pi_prox` while the surrogate is re-weighted by `pi_prox / pi_behav`, where
+`pi_behav` is the *behavior policy* that collected the data (`sample_log_prob` entry), so the
+gradient estimate remains unbiased for the data at hand. This decouples the strength of the trust
+region from how (and how recently) the data was collected. Updating the target parameters with
+`SoftUpdate` after every optimizer step makes the proximal policy an
+exponentially-weighted moving average of the policy, i.e. PPO-EWMA ("Batch size-invariance for
+policy optimization", Hilton et al., 2021, [https://arxiv.org/abs/2110.00641](https://arxiv.org/abs/2110.00641)); see the note below.
+Requires `functional=True`. Defaults to `False`.
+- **max_importance_ratio** (`float`, optional) - if provided, the behavior ratio `pi_theta / pi_behav` is
+capped at this value. Stale data, or a proximal policy that drifted away from the behavior policy,
+can otherwise produce arbitrarily large ratios. The cap lifts the (gradient-free) behavior
+log-probability rather than clamping the ratio, so capped samples keep a rescaled policy gradient,
+as in the reference PPO-EWMA implementation (which uses `100.0`). Defaults to `None` (no cap).
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) -
 
 device of the buffers. Defaults to `None`.
@@ -142,6 +157,34 @@ value network to the PPO loss module:
 ```
 
 This will work regardless of whether separate_losses is activated or not.
+
+Note
+
+**Decoupled proximal policy (PPO-EWMA).** With `delay_actor=True` the loss follows the decoupled
+clipped objective of Hilton et al. (2021),
+
+> loss = -(pi_prox / pi_behav) * min(r * advantage, clip(r, 1 - eps, 1 + eps) * advantage),
+> r = pi_theta / pi_prox,
+
+where `pi_prox` runs on `target_actor_network_params`. Any `TargetNetUpdater`
+controls how old the proximal policy is: a `SoftUpdate` stepped after every
+optimizer step gives the EWMA of the paper (`eps` being the decay rate `beta_prox`), a
+`HardUpdate` refreshes it every `value_network_update_interval` steps.
+`clip_fraction` and `kl_approx` then describe `r`, the ratio the trust region acts on, whereas
+`ESS`, `max_ratio` and `mean_ratio` describe the behavior ratio `pi_theta / pi_behav` the data
+is actually weighted by.
+
+```
+>>> loss_module = ClipPPOLoss(actor, critic, delay_actor=True, max_importance_ratio=100.0)
+>>> updater = SoftUpdate(loss_module, eps=0.889)
+>>> for batch in replay_buffer:
+... losses = loss_module(batch)
+... loss = losses["loss_objective"] + losses["loss_critic"] + losses["loss_entropy"]
+... loss.backward()
+... optimizer.step()
+... optimizer.zero_grad()
+... updater.step()
+```
 
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/objectives/ppo.html#ClipPPOLoss.forward)
 

@@ -94,6 +94,22 @@ prediction with respect to the input tensordict value estimate and use it to cal
 The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
 and preventing large updates. However, it will have no impact if the value estimate was done by the current
 version of the value estimator. Defaults to `None`.
+- **delay_actor** (*bool**,**optional*) - if `True`, a detached copy of the actor parameters is kept under
+`target_actor_network_params` and used as the *proximal policy* of the objective, decoupled from
+the *behavior policy* that collected the data (whose log-probabilities are read from the
+`sample_log_prob` entry). The surrogate stays weighted by the behavior ratio `pi_theta / pi_behav`
+(so the gradient estimate remains unbiased for the data at hand) while the proximal policy is used
+by the trust-region term of the subclasses (clipping in [`ClipPPOLoss`](torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss),
+KL penalty in `KLPENPPOLoss`) and by the `kl_approx` diagnostic.
+Updating the target parameters with `SoftUpdate` after every optimizer
+step makes the proximal policy an exponentially-weighted moving average of the policy, i.e. PPO-EWMA
+("Batch size-invariance for policy optimization", Hilton et al., 2021,
+[https://arxiv.org/abs/2110.00641](https://arxiv.org/abs/2110.00641)). Requires `functional=True`. Defaults to `False`.
+- **max_importance_ratio** (`float`, optional) - if provided, the behavior ratio `pi_theta / pi_behav` is
+capped at this value. Stale data, or a proximal policy that drifted away from the behavior policy,
+can otherwise produce arbitrarily large ratios. The cap lifts the (gradient-free) behavior
+log-probability rather than clamping the ratio, so capped samples keep a rescaled policy gradient,
+as in the reference PPO-EWMA implementation (which uses `100.0`). Defaults to `None` (no cap).
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) -
 
 device of the buffers. Defaults to `None`.

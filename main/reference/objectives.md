@@ -56,6 +56,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [KLPENPPOLoss](generated/torchrl.objectives.KLPENPPOLoss.html)
 - [A2CLoss](generated/torchrl.objectives.A2CLoss.html)
 - [ReinforceLoss](generated/torchrl.objectives.ReinforceLoss.html)
+- [Decoupled proximal policy (PPO-EWMA)](objectives_policy.html#decoupled-proximal-policy-ppo-ewma)
 - [Actor-Critic Methods](objectives_actorcritic.html)
 
 - [DDPGLoss](generated/torchrl.objectives.DDPGLoss.html)
