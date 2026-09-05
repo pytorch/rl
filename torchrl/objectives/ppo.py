@@ -35,6 +35,7 @@ from torchrl.modules.distributions.utils import (
     composite_entropy,
     has_analytic_entropy,
     has_analytic_kl,
+    is_dynamo_compiling,
     sample_and_log_prob,
 )
 from torchrl.modules.value_norm import ValueNorm
@@ -698,29 +699,29 @@ class PPOLoss(LossModule):
         is_composite = isinstance(dist, CompositeDistribution)
         if is_composite:
             entropy = composite_entropy(dist, self.samples_mc_entropy)
-        elif has_analytic_entropy(dist):
-            entropy = dist.entropy()
         else:
-            _warn_mc_entropy(dist)
-            with (
-                set_composite_lp_aggregate(False)
-                if is_composite
-                else contextlib.nullcontext()
-            ):
+            analytic_entropy = has_analytic_entropy(dist)
+            if analytic_entropy:
+                entropy = dist.entropy()
+            compiling = is_dynamo_compiling()
+            needs_mc = not analytic_entropy or compiling
+            if analytic_entropy and not compiling and not entropy.isfinite().all():
+                needs_mc = True
+            if needs_mc:
+                if not compiling:
+                    _warn_mc_entropy(dist)
                 _, log_prob = sample_and_log_prob(
                     dist,
                     (self.samples_mc_entropy,),
                     reparameterize=getattr(dist, "has_rsample", False),
                 )
-                if is_tensor_collection(log_prob):
-                    if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
-                        log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
-                    else:
-                        log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
-
-            entropy = -log_prob.mean(0)
-            if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
-                entropy.batch_size = adv_shape
+                sampled_entropy = -log_prob.mean(0)
+                if analytic_entropy and compiling:
+                    entropy = torch.where(
+                        entropy.isfinite(), entropy, sampled_entropy
+                    )
+                else:
+                    entropy = sampled_entropy
         return entropy.unsqueeze(-1)
 
     def _get_cur_log_prob(self, tensordict):

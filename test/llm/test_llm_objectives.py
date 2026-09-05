@@ -50,6 +50,11 @@ prompts = [
 ]
 
 
+class _NormalWithNonfiniteEntropy(torch.distributions.Normal):
+    def entropy(self):
+        return torch.full_like(self.loc, float("nan"))
+
+
 @pytest.fixture(autouse=True, scope="module")
 def set_list_to_stack():
     with tensordict.set_list_to_stack(True):
@@ -695,6 +700,16 @@ def _policy_loss_data(current_log_prob, sample_log_prob, advantage):
 
 
 class TestLosses:
+    def test_grpo_entropy_mc_when_analytic_is_nonfinite(self):
+        loss_fn = GRPOLoss(actor_network=None)
+        loc = torch.zeros(3, 4)
+        dist = _NormalWithNonfiniteEntropy(loc, torch.ones_like(loc))
+
+        entropy = loss_fn._get_entropy(dist, adv_shape=loc.shape)
+
+        assert torch.isfinite(entropy).all()
+        assert entropy.shape == (3, 4, 1)
+
     def test_grpo_token_mean_expands_token_mask(self):
         """Test token_mean aggregation with per-token values and masks."""
         loss_fn = GRPOLoss(actor_network=None, aggregation="token_mean")

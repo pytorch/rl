@@ -260,17 +260,36 @@ def composite_entropy(
     """
     entropies = {}
     for name, component in distribution.dists.items():
-        if has_analytic_entropy(component):
+        analytic_entropy = has_analytic_entropy(component)
+        if analytic_entropy:
             entropy = component.entropy()
-        else:
-            if not component.has_rsample:
+        compiling = is_dynamo_compiling()
+        needs_mc = not analytic_entropy or compiling
+        if analytic_entropy and not compiling and not entropy.isfinite().all():
+            needs_mc = True
+        if needs_mc:
+            if not analytic_entropy and not component.has_rsample:
                 raise NotImplementedError(
                     f"Entropy is not implemented for {type(component)} and "
                     "the component does not support reparameterized sampling."
                 )
-            _warn_mc_entropy(component)
-            _, log_prob = rsample_and_log_prob(component, (samples_mc,))
-            entropy = -log_prob.mean(0)
+            if not compiling:
+                _warn_mc_entropy(component)
+            if analytic_entropy:
+                _, log_prob = sample_and_log_prob(
+                    component,
+                    (samples_mc,),
+                    reparameterize=component.has_rsample,
+                )
+            else:
+                _, log_prob = rsample_and_log_prob(component, (samples_mc,))
+            sampled_entropy = -log_prob.mean(0)
+            if analytic_entropy and compiling:
+                entropy = torch.where(
+                    entropy.isfinite(), entropy, sampled_entropy
+                )
+            else:
+                entropy = sampled_entropy
         if isinstance(name, str):
             entropy_name = name + "_entropy"
         else:

@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import itertools
+import sys
 from dataclasses import asdict
 
 import pytest
@@ -71,6 +72,13 @@ class _NormalWithoutEntropy(d.Normal):
     """Normal that keeps the base ``Distribution.entropy`` stub."""
 
     entropy = d.Distribution.entropy
+
+
+class _NormalWithNonfiniteEntropy(d.Normal):
+    """Normal with an unusable analytic entropy implementation."""
+
+    def entropy(self):
+        return torch.full_like(self.loc, float("nan"))
 
 
 def _analytic_entropy_case(kind: str) -> tuple[d.Distribution, torch.Tensor]:
@@ -1913,6 +1921,22 @@ class TestObjectiveEntropy:
         assert torch.isfinite(entropy).all()
         assert entropy.shape == loc.shape + (1,)
 
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_ppo_entropy_mc_when_analytic_is_nonfinite(self, compiled):
+        if compiled and sys.version_info >= (3, 14):
+            pytest.skip("torch.compile requires Python < 3.14")
+        loss = self._ppo_loss()
+
+        def get_entropy(loc, scale):
+            dist = _NormalWithNonfiniteEntropy(loc, scale)
+            return loss._get_entropy(dist, adv_shape=loc.shape)
+
+        if compiled:
+            get_entropy = torch.compile(get_entropy, backend="eager", fullgraph=True)
+        entropy = get_entropy(torch.zeros(3, 4), torch.ones(3, 4))
+        assert torch.isfinite(entropy).all()
+        assert entropy.shape == (3, 4, 1)
+
     @pytest.mark.parametrize("kind", ["normal", "independent", "categorical"])
     def test_ppo_entropy_matches_analytic(self, kind):
         loss = self._ppo_loss()
@@ -1920,7 +1944,10 @@ class TestObjectiveEntropy:
         entropy = loss._get_entropy(dist, adv_shape=expected.shape)
         torch.testing.assert_close(entropy, expected.unsqueeze(-1))
 
-    def test_ppo_entropy_composite_matches_analytic(self):
+    @pytest.mark.parametrize(
+        "distribution_class", [d.Normal, _NormalWithNonfiniteEntropy]
+    )
+    def test_ppo_entropy_composite_matches_analytic(self, distribution_class):
         loss = self._ppo_loss()
         loc = torch.zeros(3, 2)
         scale = torch.ones(3, 2)
@@ -1930,13 +1957,16 @@ class TestObjectiveEntropy:
         )
         dist = CompositeDistribution(
             params,
-            distribution_map={"action": d.Normal},
+            distribution_map={"action": distribution_class},
             name_map={"action": "action"},
         )
         expected = d.Normal(loc, scale).entropy().sum(-1).unsqueeze(-1)
         with set_composite_lp_aggregate(True):
             entropy = loss._get_entropy(dist, adv_shape=torch.Size([3]))
-        torch.testing.assert_close(entropy, expected)
+        if distribution_class is d.Normal:
+            torch.testing.assert_close(entropy, expected)
+        else:
+            assert torch.isfinite(entropy).all()
 
     def test_a2c_entropy_mc_without_analytic(self):
         loss = self._a2c_loss()
