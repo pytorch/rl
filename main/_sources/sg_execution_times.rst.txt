@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:53.783** total execution time for 30 files **from all galleries**:
+**00:00.000** total execution time for 30 files **from all galleries**:
 
 .. container::
 
@@ -32,9 +32,6 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_tutorials_microduck.py` (``reference/generated/tutorials/microduck.py``)
-     - 00:53.783
-     - 0.0
    * - :ref:`sphx_glr_tutorials_checkpointing.py` (``reference/generated/tutorials/checkpointing.py``)
      - 00:00.000
      - 0.0
@@ -81,6 +78,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_memory_efficient_rl.py` (``reference/generated/tutorials/memory_efficient_rl.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_microduck.py` (``reference/generated/tutorials/microduck.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_mujoco_cube_bowl_macros.py` (``reference/generated/tutorials/mujoco_cube_bowl_macros.py``)
