@@ -203,6 +203,8 @@ primers automatically.
 
 - [Data layout: contiguous trajectories](data_layout.html#data-layout) for the contiguous trajectory layout and replay-buffer
 handoff.
+- [Recurrent state lifecycle](recurrent_state_lifecycle.html#ref-recurrent-state-lifecycle) for
+the primer / `auto_register_policy_transforms` collection path.
 - [`LSTMModule`](generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule) and [`GRUModule`](generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule) for constructor arguments and
 examples.
 - [`set_recurrent_mode`](generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode) for switching between single-step and recurrent

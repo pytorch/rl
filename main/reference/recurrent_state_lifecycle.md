@@ -354,6 +354,9 @@ keys) through its transforms.
 a runnable tutorial that walks through this lifecycle end to end:
 collection, [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) replay, and
 a full-sequence `set_recurrent_mode(True)` forward.
+- [Recurrent DQN](../tutorials/dqn_with_rnn.html#rnn-tuto) -- builds the primer explicitly with
+[`make_tensordict_primer()`](generated/torchrl.modules.LSTMModule.html#id0) (the
+collector-side alternative is `auto_register_policy_transforms=True`).
 - `examples/replay-buffers/recurrent_slice_sampler_pipeline.py` -- a
 minimal, runnable script version (GRU policy, the collector writing
 directly into the buffer, `SliceSampler` auto-detecting the trajectory

@@ -121,22 +121,26 @@ Two transforms are important for the purpose of this tutorial:
 calls to [`reset()`](../reference/generated/torchrl.envs.EnvBase.html#id1) by adding a `"is_init"`
 boolean mask in the TensorDict that will track which steps require a reset
 of the RNN hidden states.
-- The [`TensorDictPrimer`](../reference/generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer) transform is a bit more
-technical. It is not required to use RNN policies. However, it
-instructs the environment (and subsequently the collector) that some extra
-keys are to be expected. Once added, a call to env.reset() will populate
-the entries indicated in the primer with zeroed tensors. Knowing that
-these tensors are expected by the policy, the collector will pass them on
-during collection. Eventually, we'll be storing our hidden states in the
-replay buffer, which will help us bootstrap the computation of the
-RNN operations in the loss module (which would otherwise be initiated
-with 0s). In summary: not including this transform will not impact hugely
-the training of our policy, but it will make the recurrent keys disappear
-from the collected data and the replay buffer, which will in turn lead to
-a slightly less optimal training.
-Fortunately, the [`LSTMModule`](../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule) we propose is
-equipped with a helper method to build just that transform for us, so
-we can wait until we build it!
+- The [`TensorDictPrimer`](../reference/generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer) transform is
+required on this tutorial's collector path if you want hidden states
+to travel through `env.reset` → collector → policy → replay.
+It instructs the environment (and subsequently the collector) that
+some extra keys are to be expected. Once added, a call to
+`env.reset()` will populate the entries indicated in the primer
+with zeroed tensors. Knowing that these tensors are expected by the
+policy, the collector will pass them on during collection, and we
+will store them in the replay buffer so the loss can bootstrap the
+RNN from a real carry instead of zeros. Omitting the primer does
+not crash: the collector drops the recurrent keys, the policy
+zeros its hidden state at every step, and recurrency silently
+dies. Training still runs, but it is worse.
+`auto_register_policy_transforms=True` on the collector is the
+equivalent automatic path: it can attach
+[`InitTracker`](../reference/generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker) and the primer for you
+(see [Recurrent state lifecycle](../reference/recurrent_state_lifecycle.html#ref-recurrent-state-lifecycle)). This tutorial builds
+the primer explicitly via
+[`make_tensordict_primer()`](../reference/generated/torchrl.modules.LSTMModule.html#id0), so we
+wait until the LSTM is constructed before appending it.
 
 ```
 env = TransformedEnv(
@@ -246,10 +250,16 @@ arguments) to make sure that a call to [`step_mdp()`](../reference/generated/tor
 move the recurrent state to the root TensorDict, making it available to the
 RNN during the following call (see figure in the intro).
 
-As mentioned earlier, we have one more optional transform to add to our
-environment to make sure that the recurrent states are passed to the buffer.
-The [`make_tensordict_primer()`](../reference/generated/torchrl.modules.LSTMModule.html#id0) method does
-exactly that:
+As mentioned earlier, we still need a
+[`TensorDictPrimer`](../reference/generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer) so that hidden
+states travel through `env.reset` → collector → policy → replay.
+Without it the collector does not feed recurrent state to the
+policy; the LSTM zeros or drops that state and recurrency silently
+dies. `auto_register_policy_transforms=True` on the collector
+is the equivalent automatic path (see
+[Recurrent state lifecycle](../reference/recurrent_state_lifecycle.html#ref-recurrent-state-lifecycle)). This tutorial builds the
+primer explicitly via
+[`make_tensordict_primer()`](../reference/generated/torchrl.modules.LSTMModule.html#id0):
 
 ```
 env.append_transform(lstm.make_tensordict_primer())
@@ -566,10 +576,10 @@ for i, _ in enumerate(collector):
 
 ```
 0%| | 0/200 [00:00<?, ?it/s]
- 25%|██▌ | 50/200 [00:00<00:01, 121.87it/s]
- 50%|█████ | 100/200 [00:00<00:00, 124.37it/s]
- 75%|███████▌ | 150/200 [00:01<00:00, 125.27it/s]
-100%|██████████| 200/200 [00:01<00:00, 125.74it/s]
+ 25%|██▌ | 50/200 [00:00<00:01, 118.00it/s]
+ 50%|█████ | 100/200 [00:00<00:00, 119.01it/s]
+ 75%|███████▌ | 150/200 [00:01<00:00, 121.79it/s]
+100%|██████████| 200/200 [00:01<00:00, 122.74it/s]
 ```
 
 Let's plot our results:
@@ -592,15 +602,19 @@ You should now be able:
 - Indicate to the LSTM module that a reset is needed via an [`InitTracker`](../reference/generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker)
 transform
 - Incorporate this module in a policy and in a loss module
-- Make sure that the collector is made aware of the recurrent state entries
-such that they can be stored in the replay buffer along with the rest of
-the data
+- Append a [`TensorDictPrimer`](../reference/generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer) (or enable
+`auto_register_policy_transforms=True` on the collector) so hidden
+states travel through collection and into the replay buffer. Omitting
+it does not crash; recurrency just dies silently
 
 ## Further Reading
 
+- [Recurrent state lifecycle](../reference/recurrent_state_lifecycle.html#ref-recurrent-state-lifecycle) --
+how hidden states move through `env.reset`, collection, replay,
+and the loss.
 - The TorchRL documentation can be found [here](https://pytorch.org/rl/).
 
-**Total running time of the script:** (0 minutes 5.615 seconds)
+**Total running time of the script:** (0 minutes 5.770 seconds)
 
 [`Download Jupyter notebook: dqn_with_rnn.ipynb`](../_downloads/28be785bad9a380ed2a853d865b074b9/dqn_with_rnn.ipynb)
 

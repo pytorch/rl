@@ -150,7 +150,7 @@ Setup
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 125-162
+.. GENERATED FROM PYTHON SOURCE LINES 125-166
 
 Environment
 -----------
@@ -172,25 +172,29 @@ Two transforms are important for the purpose of this tutorial:
   calls to :meth:`~torchrl.envs.EnvBase.reset` by adding a ``"is_init"``
   boolean mask in the TensorDict that will track which steps require a reset
   of the RNN hidden states.
-- The :class:`~torchrl.envs.transforms.TensorDictPrimer` transform is a bit more
-  technical. It is not required to use RNN policies. However, it
-  instructs the environment (and subsequently the collector) that some extra
-  keys are to be expected. Once added, a call to `env.reset()` will populate
-  the entries indicated in the primer with zeroed tensors. Knowing that
-  these tensors are expected by the policy, the collector will pass them on
-  during collection. Eventually, we'll be storing our hidden states in the
-  replay buffer, which will help us bootstrap the computation of the
-  RNN operations in the loss module (which would otherwise be initiated
-  with 0s). In summary: not including this transform will not impact hugely
-  the training of our policy, but it will make the recurrent keys disappear
-  from the collected data and the replay buffer, which will in turn lead to
-  a slightly less optimal training.
-  Fortunately, the :class:`~torchrl.modules.LSTMModule` we propose is
-  equipped with a helper method to build just that transform for us, so
-  we can wait until we build it!
+- The :class:`~torchrl.envs.transforms.TensorDictPrimer` transform is
+  required on this tutorial's collector path if you want hidden states
+  to travel through ``env.reset`` → collector → policy → replay.
+  It instructs the environment (and subsequently the collector) that
+  some extra keys are to be expected. Once added, a call to
+  ``env.reset()`` will populate the entries indicated in the primer
+  with zeroed tensors. Knowing that these tensors are expected by the
+  policy, the collector will pass them on during collection, and we
+  will store them in the replay buffer so the loss can bootstrap the
+  RNN from a real carry instead of zeros. Omitting the primer does
+  not crash: the collector drops the recurrent keys, the policy
+  zeros its hidden state at every step, and recurrency silently
+  dies. Training still runs, but it is worse.
+  ``auto_register_policy_transforms=True`` on the collector is the
+  equivalent automatic path: it can attach
+  :class:`~torchrl.envs.transforms.InitTracker` and the primer for you
+  (see :ref:`ref_recurrent_state_lifecycle`). This tutorial builds
+  the primer explicitly via
+  :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer`, so we
+  wait until the LSTM is constructed before appending it.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 162-176
+.. GENERATED FROM PYTHON SOURCE LINES 166-180
 
 .. code-block:: Python
 
@@ -215,12 +219,12 @@ Two transforms are important for the purpose of this tutorial:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-179
+.. GENERATED FROM PYTHON SOURCE LINES 181-183
 
 As always, we need to initialize manually our normalization constants:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 179-182
+.. GENERATED FROM PYTHON SOURCE LINES 183-186
 
 .. code-block:: Python
 
@@ -234,7 +238,7 @@ As always, we need to initialize manually our normalization constants:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 183-198
+.. GENERATED FROM PYTHON SOURCE LINES 187-202
 
 Policy
 ------
@@ -252,7 +256,7 @@ that will squash the output in a vector of size 64. The :class:`~torchrl.modules
 can assist us with this:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 198-210
+.. GENERATED FROM PYTHON SOURCE LINES 202-214
 
 .. code-block:: Python
 
@@ -275,13 +279,13 @@ can assist us with this:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 211-214
+.. GENERATED FROM PYTHON SOURCE LINES 215-218
 
 we execute the first module on a batch of data to gather the size of the
 output vector:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 214-216
+.. GENERATED FROM PYTHON SOURCE LINES 218-220
 
 .. code-block:: Python
 
@@ -294,7 +298,7 @@ output vector:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-239
+.. GENERATED FROM PYTHON SOURCE LINES 221-243
 
 LSTM Module
 ~~~~~~~~~~~
@@ -319,7 +323,7 @@ values for these attributes to facilitate its construction.
   is the correct one.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 239-248
+.. GENERATED FROM PYTHON SOURCE LINES 243-252
 
 .. code-block:: Python
 
@@ -339,11 +343,11 @@ values for these attributes to facilitate its construction.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 249-250
+.. GENERATED FROM PYTHON SOURCE LINES 253-254
 
 Let us look at the LSTM Module class, specifically its in and out_keys:
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-253
+.. GENERATED FROM PYTHON SOURCE LINES 254-257
 
 .. code-block:: Python
 
@@ -364,7 +368,7 @@ Let us look at the LSTM Module class, specifically its in and out_keys:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-267
+.. GENERATED FROM PYTHON SOURCE LINES 258-277
 
 We can see that these values contain the key we indicated as the in_key (and out_key)
 as well as recurrent key names. The out_keys are preceded by a "next" prefix
@@ -374,13 +378,19 @@ arguments) to make sure that a call to :func:`~torchrl.envs.step_mdp` will
 move the recurrent state to the root TensorDict, making it available to the
 RNN during the following call (see figure in the intro).
 
-As mentioned earlier, we have one more optional transform to add to our
-environment to make sure that the recurrent states are passed to the buffer.
-The :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer` method does
-exactly that:
+As mentioned earlier, we still need a
+:class:`~torchrl.envs.transforms.TensorDictPrimer` so that hidden
+states travel through ``env.reset`` → collector → policy → replay.
+Without it the collector does not feed recurrent state to the
+policy; the LSTM zeros or drops that state and recurrency silently
+dies. ``auto_register_policy_transforms=True`` on the collector
+is the equivalent automatic path (see
+:ref:`ref_recurrent_state_lifecycle`). This tutorial builds the
+primer explicitly via
+:meth:`~torchrl.modules.LSTMModule.make_tensordict_primer`:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 267-269
+.. GENERATED FROM PYTHON SOURCE LINES 277-279
 
 .. code-block:: Python
 
@@ -428,12 +438,12 @@ exactly that:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 270-272
+.. GENERATED FROM PYTHON SOURCE LINES 280-282
 
 and that's it! We can print the environment to check that everything looks good now
 that we have added the primer:
 
-.. GENERATED FROM PYTHON SOURCE LINES 272-274
+.. GENERATED FROM PYTHON SOURCE LINES 282-284
 
 .. code-block:: Python
 
@@ -481,7 +491,7 @@ that we have added the primer:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 275-281
+.. GENERATED FROM PYTHON SOURCE LINES 285-291
 
 MLP
 ~~~
@@ -490,7 +500,7 @@ We use a single-layer MLP to represent the action values we'll be using for
 our policy.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 281-288
+.. GENERATED FROM PYTHON SOURCE LINES 291-298
 
 .. code-block:: Python
 
@@ -508,11 +518,11 @@ our policy.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 289-290
+.. GENERATED FROM PYTHON SOURCE LINES 299-300
 
 and fill the bias with zeros:
 
-.. GENERATED FROM PYTHON SOURCE LINES 290-294
+.. GENERATED FROM PYTHON SOURCE LINES 300-304
 
 .. code-block:: Python
 
@@ -527,7 +537,7 @@ and fill the bias with zeros:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 295-306
+.. GENERATED FROM PYTHON SOURCE LINES 305-316
 
 Using the Q-Values to select an action
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -541,7 +551,7 @@ either by passing a string or an action-spec. This allows us to use
 Categorical (sometimes called "sparse") encoding or the one-hot version of it.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 306-308
+.. GENERATED FROM PYTHON SOURCE LINES 316-318
 
 .. code-block:: Python
 
@@ -554,7 +564,7 @@ Categorical (sometimes called "sparse") encoding or the one-hot version of it.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 309-318
+.. GENERATED FROM PYTHON SOURCE LINES 319-328
 
 .. note::
   TorchRL also provides a wrapper class :class:`torchrl.modules.QValueActor` that
@@ -566,7 +576,7 @@ Categorical (sometimes called "sparse") encoding or the one-hot version of it.
 We can now put things together in a :class:`~tensordict.nn.TensorDictSequential`
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 318-320
+.. GENERATED FROM PYTHON SOURCE LINES 328-330
 
 .. code-block:: Python
 
@@ -579,7 +589,7 @@ We can now put things together in a :class:`~tensordict.nn.TensorDictSequential`
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 321-327
+.. GENERATED FROM PYTHON SOURCE LINES 331-337
 
 DQN being a deterministic algorithm, exploration is a crucial part of it.
 We'll be using an :math:`\epsilon`-greedy policy with an epsilon of 0.2 decaying
@@ -588,7 +598,7 @@ This decay is achieved via a call to :meth:`~torchrl.modules.EGreedyModule.step`
 (see training loop below).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 327-335
+.. GENERATED FROM PYTHON SOURCE LINES 337-345
 
 .. code-block:: Python
 
@@ -607,7 +617,7 @@ This decay is achieved via a call to :meth:`~torchrl.modules.EGreedyModule.step`
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 336-353
+.. GENERATED FROM PYTHON SOURCE LINES 346-363
 
 Using the model for the loss
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -627,7 +637,7 @@ Because we still have a couple of uninitialized parameters we should
 initialize them before creating an optimizer and such.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 353-355
+.. GENERATED FROM PYTHON SOURCE LINES 363-365
 
 .. code-block:: Python
 
@@ -669,7 +679,7 @@ initialize them before creating an optimizer and such.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 356-367
+.. GENERATED FROM PYTHON SOURCE LINES 366-377
 
 DQN Loss
 --------
@@ -683,7 +693,7 @@ To use the Double-DQN, we ask for a ``delay_value`` argument that will
 create a non-differentiable copy of the network parameters to be used
 as a target network.
 
-.. GENERATED FROM PYTHON SOURCE LINES 367-369
+.. GENERATED FROM PYTHON SOURCE LINES 377-379
 
 .. code-block:: Python
 
@@ -696,14 +706,14 @@ as a target network.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 370-374
+.. GENERATED FROM PYTHON SOURCE LINES 380-384
 
 Since we are using a double DQN, we need to update the target parameters.
 We'll use a  :class:`~torchrl.objectives.SoftUpdate` instance to carry out
 this work.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 374-378
+.. GENERATED FROM PYTHON SOURCE LINES 384-388
 
 .. code-block:: Python
 
@@ -718,7 +728,7 @@ this work.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 379-407
+.. GENERATED FROM PYTHON SOURCE LINES 389-417
 
 Collector and replay buffer
 ---------------------------
@@ -749,7 +759,7 @@ automatically populate the buffer as data is collected.
   here. In a real setting, the total number of frames should be set to 1M.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 407-428
+.. GENERATED FROM PYTHON SOURCE LINES 417-438
 
 .. code-block:: Python
 
@@ -781,7 +791,7 @@ automatically populate the buffer as data is collected.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 429-438
+.. GENERATED FROM PYTHON SOURCE LINES 439-448
 
 Training loop
 -------------
@@ -793,7 +803,7 @@ To keep track of the progress, we will run the policy in the environment once
 every 50 data collection iterations, and plot the results after training.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 438-475
+.. GENERATED FROM PYTHON SOURCE LINES 448-485
 
 .. code-block:: Python
 
@@ -842,16 +852,16 @@ every 50 data collection iterations, and plot the results after training.
 
  .. code-block:: none
 
-      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 121.87it/s]     50%|█████     | 100/200 [00:00<00:00, 124.37it/s]     75%|███████▌  | 150/200 [00:01<00:00, 125.27it/s]    100%|██████████| 200/200 [00:01<00:00, 125.74it/s]
+      0%|          | 0/200 [00:00<?, ?it/s]     25%|██▌       | 50/200 [00:00<00:01, 118.00it/s]     50%|█████     | 100/200 [00:00<00:00, 119.01it/s]     75%|███████▌  | 150/200 [00:01<00:00, 121.79it/s]    100%|██████████| 200/200 [00:01<00:00, 122.74it/s]
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 476-478
+.. GENERATED FROM PYTHON SOURCE LINES 486-488
 
 Let's plot our results:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 478-485
+.. GENERATED FROM PYTHON SOURCE LINES 488-495
 
 .. code-block:: Python
 
@@ -869,7 +879,7 @@ Let's plot our results:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 486-504
+.. GENERATED FROM PYTHON SOURCE LINES 496-518
 
 Conclusion
 ----------
@@ -881,19 +891,23 @@ You should now be able:
 - Indicate to the LSTM module that a reset is needed via an :class:`~torchrl.envs.transforms.InitTracker`
   transform
 - Incorporate this module in a policy and in a loss module
-- Make sure that the collector is made aware of the recurrent state entries
-  such that they can be stored in the replay buffer along with the rest of
-  the data
+- Append a :class:`~torchrl.envs.transforms.TensorDictPrimer` (or enable
+  ``auto_register_policy_transforms=True`` on the collector) so hidden
+  states travel through collection and into the replay buffer. Omitting
+  it does not crash; recurrency just dies silently
 
 Further Reading
 ---------------
 
+- :ref:`Recurrent state lifecycle <ref_recurrent_state_lifecycle>` —
+  how hidden states move through ``env.reset``, collection, replay,
+  and the loss.
 - The TorchRL documentation can be found `here <https://pytorch.org/rl/>`_.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.615 seconds)
+   **Total running time of the script:** (0 minutes 5.770 seconds)
 
 
 .. _sphx_glr_download_tutorials_dqn_with_rnn.py:
