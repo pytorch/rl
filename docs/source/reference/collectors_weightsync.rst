@@ -71,22 +71,25 @@ When is ``update_policy_weights_`` required?
 
 :class:`~torchrl.objectives.LossModule` does not copy the policy (see
 :ref:`ref_lossmodule_weight_sharing`). Whether the collector needs an explicit
-sync after an optimizer step depends on how the policy was placed:
+sync after an optimizer step depends on whether its inference policy shares
+parameter storage with the training policy:
 
-- **CPU policy, no device remap.** Weights are moved to shared memory
-  **in-place** when the policy is passed to the collector. Workers see the
-  same storage; no extra sync is needed in the common case.
-- **CUDA policy, no device remap.** Parameters are already shared. No extra
-  sync is needed.
-- **``policy_device`` or ``device`` was passed.** The collector makes a
-  ``.to(...)`` copy. :meth:`~torchrl.collectors.Collector.update_policy_weights_`
-  is **required** after training so the collector's copy matches the trained
-  weights.
+- **Shared storage.** A policy passed directly can retain its parameter storage
+  when no device transfer or other copy is needed. No extra sync is required.
+- **Distinct storage.** Worker policies created by ``policy_factory``, copies
+  placed on another device, and remote policies have independent storage and
+  require a configured synchronization path.
+
+Passing ``policy_device`` or ``device`` is not by itself evidence of a copy. If
+the policy is already on the requested device, the collector can keep the same
+object and storage. If a move is needed, it creates a separate policy and
+:meth:`~torchrl.collectors.Collector.update_policy_weights_` must propagate the
+trained weights.
 
 Calling :meth:`~torchrl.collectors.Collector.update_policy_weights_` anyway
-is good practice, but it is not load-bearing unless devices were remapped.
-Use it also to push weights through a :class:`~torchrl.weight_update.WeightSyncScheme`
-(the rest of this page).
+is conservative good practice. Use it to push weights through a
+:class:`~torchrl.weight_update.WeightSyncScheme` or another configured transport
+whenever the policies do not share storage (the rest of this page).
 
 Lifecycle of Weight Synchronization
 -----------------------------------

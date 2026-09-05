@@ -1107,9 +1107,10 @@ pbar = tqdm.tqdm(total=total_frames)
 r0 = None
 for i, tensordict in enumerate(collector):
 
-    # Good practice. Required if the collector remapped the policy via
-    # ``policy_device`` / ``device``; a no-op when weights are already shared.
-    # See :ref:`ref_collectors_weightsync`.
+    # Conservative good practice. Required when the training and inference
+    # policies do not share parameter storage; a no-op when they do. Passing a
+    # same-device ``policy_device`` / ``device`` need not create a copy. See
+    # :ref:`ref_collectors_weightsync`.
     collector.update_policy_weights_()
 
     if r0 is None:
