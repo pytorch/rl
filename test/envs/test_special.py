@@ -555,19 +555,10 @@ class TestChessEnv:
             # `mask_actions == False`, because `rand_action` can pick illegal
             # actions in that case.
             if mask_actions:
-                # TODO: Something is wrong in `ChessEnv.rand_action` which makes
-                # it fail to work properly for stateless mode. It doesn't know
-                # how to correctly reset the board state to what is given in the
-                # tensordict before picking an action. When this is fixed, we
-                # can get rid of the two `reset`s below
-                if not stateful:
-                    env.reset(td.clone())
                 td_act = td.clone()
                 for _ in range(10):
                     rand_action = env.rand_action(td_act)
                     assert (rand_action["action"] == all_actions["action"]).sum() == 1
-                if not stateful:
-                    env.reset()
 
             action_idx = torch.randint(0, all_actions.shape[0], ()).item()
             chosen_action = all_actions[action_idx]
@@ -575,6 +566,18 @@ class TestChessEnv:
 
             if td["done"]:
                 td = env.reset()
+
+    def test_rand_action_honors_input_state(self):
+        # Mid-game FEN whose only legal move is not legal at the start
+        # position. A stale ActionMask would sample from the start mask
+        # and fail the membership check.
+        fen = "5R1k/8/8/8/6R1/8/8/5K2 b - - 0 1"
+        env = ChessEnv(stateful=False, include_fen=True, mask_actions=True)
+        env.reset()
+        td = TensorDict({"fen": fen})
+        rand_action = env.rand_action(td.clone())
+        all_actions = env.all_actions(td.clone())
+        assert (rand_action["action"] == all_actions["action"]).sum() == 1
 
 
 @pytest.mark.parametrize("device", [None, *get_default_devices()])

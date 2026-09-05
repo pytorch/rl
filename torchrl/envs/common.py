@@ -3387,12 +3387,33 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         Args:
             tensordict (TensorDictBase, optional): tensordict where the resulting action should be written.
+                If given, the action spec is synchronized with the state
+                encoded in the tensordict before sampling (same contract as
+                :meth:`~.all_actions`): an ``"action_mask"`` entry updates the
+                spec in place; otherwise, if this env supports deterministic
+                resets, :meth:`~.reset` is called with ``set_state=True`` on a
+                clone so a raw FEN/PGN (or other state) is honored without
+                rewriting the caller's tensordict.
 
         Returns:
             a tensordict object with the "action" entry updated with a random
             sample from the action-spec.
 
         """
+        if tensordict is not None:
+            # Sample from this tensordict's state, not leftover env state
+            # (same contract as all_actions). Apply a provided action_mask
+            # directly; otherwise reset a clone when set_state is supported.
+            mask = tensordict.get("action_mask", None)
+            if mask is not None:
+                action_spec = self.input_spec["full_action_spec"]
+                if self.action_key in action_spec.keys(True, True):
+                    leaf = action_spec[self.action_key]
+                    update_mask = getattr(leaf, "update_mask", None)
+                    if update_mask is not None:
+                        update_mask(mask.to(leaf.device))
+            elif self._supports_set_state and self._input_td_has_state(tensordict):
+                self.reset(tensordict.clone(), set_state=True)
         shape = torch.Size([])
         if not self.batch_locked:
             if not self.batch_size and tensordict is not None:
