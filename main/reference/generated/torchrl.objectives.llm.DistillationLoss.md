@@ -78,8 +78,10 @@ log-probabilities of non-assistant tokens and can only be paired
 with `DistillationLoss(assistant_only=True)`; use
 `RetrieveLogProb(assistant_only=False)` when distilling on all
 attended tokens.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device to use when tokenizing
-the input and running the student. Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*|**None**,**optional*) - fallback device used when neither
+the input nor the student parameters and buffers provide one. This
+does not move the student network; move the complete loss with
+[`to()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to). Defaults to `None`.
 
 Note
 

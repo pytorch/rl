@@ -23,7 +23,10 @@ Higher values of beta make the loss more aggressive (pushes the model to generat
 \[\text{loss} = -\log\sigma(\beta \cdot (\text{log_probs} - \text{ref_log_probs}))\]
 
 Defaults to 0.1.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*|**None**,**optional*) - the device to use for the loss, when tokenizing the input. Defaults to None.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*|**None**,**optional*) - fallback device used when neither
+the input nor the actor parameters and buffers provide one. This does
+not move the actor network; move the complete loss with
+[`to()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to). Defaults to None.
 
 Note
 
