@@ -166,6 +166,8 @@ class PPOLossConfig(LossConfig):
     critic: Any = None
     reduction: str | None = None
     clip_value: float | None = None
+    delay_actor: bool = False
+    max_importance_ratio: float | None = None
     # float for symmetric clipping or a (low, high) pair for DAPO-style
     # asymmetric clipping (ClipPPOLoss only)
     clip_epsilon: Any = 0.2

@@ -1692,6 +1692,41 @@ class TestLossConfigs:
         elif loss_type == "kl":
             assert isinstance(loss, KLPENPPOLoss)
 
+    @pytest.mark.parametrize("loss_type", ["clip", "kl"])
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ppo_loss_config_delay_actor(self, loss_type):
+        # the PPO-EWMA fields reach the loss: a proximal copy of the actor is
+        # created and the behavior-ratio cap is registered
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import PPOLossConfig
+
+        cfg = PPOLossConfig(
+            actor_network=TanhNormalModelConfig(
+                network=MLPConfig(
+                    in_features=10, out_features=10, depth=2, num_cells=32
+                ),
+                in_keys=["observation"],
+                out_keys=["action"],
+            ),
+            critic_network=TensorDictModuleConfig(
+                module=MLPConfig(in_features=10, out_features=1, depth=2, num_cells=32),
+                in_keys=["observation"],
+                out_keys=["state_value"],
+            ),
+            loss_type=loss_type,
+            delay_actor=True,
+            max_importance_ratio=100.0,
+        )
+        loss = instantiate(cfg)
+        assert loss.delay_actor
+        assert "target_actor_network_params" in dict(loss.named_children())
+        assert loss.max_importance_ratio == 100.0
+
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_loss_config(self):
         from torchrl.trainers.algorithms.configs.objectives import DQNLossConfig

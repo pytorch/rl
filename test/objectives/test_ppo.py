@@ -20,7 +20,7 @@ from _objectives_common import (
     MARLEnv,
 )
 
-from tensordict import assert_allclose_td, TensorDict
+from tensordict import assert_allclose_td, is_tensor_collection, TensorDict
 from tensordict.nn import (
     composite_lp_aggregate,
     CompositeDistribution,
@@ -48,7 +48,14 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 from torchrl.modules.value_norm import PercentileValueNorm
-from torchrl.objectives import A2CLoss, ClipPPOLoss, KLAdaptiveLR, KLPENPPOLoss, PPOLoss
+from torchrl.objectives import (
+    A2CLoss,
+    ClipPPOLoss,
+    KLAdaptiveLR,
+    KLPENPPOLoss,
+    PPOLoss,
+    SoftUpdate,
+)
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import _sum_td_features, ValueEstimators
 from torchrl.objectives.value.advantages import (
@@ -1377,6 +1384,213 @@ class TestPPO(LossModuleTestBase):
             ClipPPOLoss(actor, value, clip_epsilon=(1.0, 0.2))
         with pytest.raises(ValueError, match="clip_value=True"):
             ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.28), clip_value=True)
+
+    @pytest.mark.parametrize("composite_action_dist", [False, True])
+    def test_ppo_decoupled_proximal_policy(self, composite_action_dist):
+        # delay_actor=True: the clipping acts on r = pi_theta / pi_prox, with
+        # pi_prox running on the target params, and the surrogate is
+        # re-weighted by pi_prox / pi_behav (decoupled clipped objective of
+        # Hilton et al. 2021, https://arxiv.org/abs/2110.00641)
+        torch.manual_seed(self.seed)
+        batch = 16
+        td = self._create_mock_data_ppo(
+            batch=batch, composite_action_dist=composite_action_dist
+        )
+        actor = self._create_mock_actor(composite_action_dist=composite_action_dist)
+        value = self._create_mock_value()
+        advantage = torch.randn(batch, 1)
+        td["advantage"] = advantage
+        td["value_target"] = torch.randn(batch, 1)
+        if composite_action_dist:
+            action = td.select(("action", "action1"))
+            lp_key = ("action", "action1_log_prob")
+        else:
+            action = td["action"]
+            lp_key = "action_log_prob"
+
+        def make_loss(**kwargs):
+            loss = ClipPPOLoss(
+                actor, value, clip_epsilon=0.2, entropy_bonus=False, **kwargs
+            )
+            if composite_action_dist:
+                loss.set_keys(action=("action", "action1"), sample_log_prob=[lp_key])
+            return loss
+
+        def log_prob_with(params):
+            with torch.no_grad(), params.to_module(actor, preserve_module_state=False):
+                lp = actor.get_dist(td.clone()).log_prob(action)
+            return _sum_td_features(lp) if is_tensor_collection(lp) else lp
+
+        def decoupled_objective(lp_cur, lp_prox, lp_behav):
+            ratio = (lp_cur - lp_prox).exp().unsqueeze(-1)
+            weight = (lp_prox - lp_behav).exp().unsqueeze(-1)
+            gain = torch.minimum(ratio * advantage, ratio.clamp(0.8, 1.2) * advantage)
+            return -(weight * gain).mean()
+
+        loss_fn = make_loss(delay_actor=True)
+        # only the actor gets a proximal copy
+        assert "target_actor_network_params" in dict(loss_fn.named_children())
+        assert "target_critic_network_params" not in dict(loss_fn.named_children())
+        updater = SoftUpdate(loss_fn, eps=0.5)
+        # move the policy away from the proximal snapshot taken at construction
+        with torch.no_grad():
+            for p in actor.parameters():
+                p.add_(0.5 * torch.randn_like(p))
+        lp_cur = log_prob_with(loss_fn.actor_network_params)
+        lp_prox = log_prob_with(loss_fn.target_actor_network_params)
+        assert not torch.allclose(lp_cur, lp_prox)
+
+        # proximal == behavior policy: the decoupled loss is the standard one
+        td[lp_key] = lp_prox
+        out = loss_fn(td.clone())
+        out_std = make_loss()(td.clone())
+        for key in (
+            "loss_objective",
+            "clip_fraction",
+            "ESS",
+            "kl_approx",
+            "max_ratio",
+            "mean_ratio",
+        ):
+            torch.testing.assert_close(out[key], out_std[key], msg=key)
+
+        # proximal != behavior policy: hand-computed decoupled objective
+        lp_behav = lp_prox - 0.3 * torch.randn(batch)
+        td[lp_key] = lp_behav
+        out = loss_fn(td.clone())
+        torch.testing.assert_close(
+            out["loss_objective"], decoupled_objective(lp_cur, lp_prox, lp_behav)
+        )
+        ratio = (lp_cur - lp_prox).exp()
+        torch.testing.assert_close(
+            out["clip_fraction"], ((ratio < 0.8) | (ratio > 1.2)).float().mean()
+        )
+        torch.testing.assert_close(out["kl_approx"], (lp_prox - lp_cur).mean())
+        # the ratio statistics describe the weights the data is multiplied by
+        torch.testing.assert_close(out["mean_ratio"], (lp_cur - lp_behav).exp().mean())
+
+        # stepping the updater moves the proximal policy and the loss follows
+        updater.step()
+        lp_prox_new = log_prob_with(loss_fn.target_actor_network_params)
+        assert not torch.allclose(lp_prox_new, lp_prox)
+        torch.testing.assert_close(
+            loss_fn(td.clone())["loss_objective"],
+            decoupled_objective(lp_cur, lp_prox_new, lp_behav),
+        )
+
+    def test_ppo_max_importance_ratio(self):
+        # the behavior ratio pi_theta / pi_behav is capped at max_importance_ratio
+        # by lifting the detached behavior log-prob: a capped sample keeps a
+        # policy gradient (scaled by the cap) rather than the zero gradient a
+        # clamp on the ratio would give
+        torch.manual_seed(self.seed)
+        batch = 4
+        td = self._create_mock_data_ppo(batch=batch)
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        td["value_target"] = torch.randn(batch, 1)
+        with torch.no_grad():
+            lp_orig = actor.get_dist(td.clone()).log_prob(td["action"])
+        td["action_log_prob"] = lp_orig - torch.tensor(10.0).log()  # ratio = 10
+        with pytest.raises(ValueError, match="max_importance_ratio"):
+            ClipPPOLoss(actor, value, max_importance_ratio=0.0)
+        loss_capped = ClipPPOLoss(
+            actor, value, entropy_bonus=False, max_importance_ratio=4.0
+        )
+        loss_plain = ClipPPOLoss(actor, value, entropy_bonus=False)
+        tol = {"rtol": 1e-4, "atol": 1e-4}
+
+        # negative advantage: the unclipped branch is selected
+        td["advantage"] = -torch.ones(batch, 1)
+        torch.testing.assert_close(
+            loss_plain(td.clone())["loss_objective"], torch.tensor(10.0), **tol
+        )
+        out = loss_capped(td.clone())
+        torch.testing.assert_close(out["loss_objective"], torch.tensor(4.0), **tol)
+        torch.testing.assert_close(out["max_ratio"], torch.tensor(4.0), **tol)
+        out["loss_objective"].backward()
+        assert any(
+            p.grad is not None and p.grad.abs().sum() > 0 for p in actor.parameters()
+        )
+        # positive advantage: the clipped branch is selected, 1.2 * 4 / 10
+        td["advantage"] = torch.ones(batch, 1)
+        torch.testing.assert_close(
+            loss_plain(td.clone())["loss_objective"], torch.tensor(-1.2), **tol
+        )
+        torch.testing.assert_close(
+            loss_capped(td.clone())["loss_objective"], torch.tensor(-0.48), **tol
+        )
+
+        # with a decoupled proximal policy the cap acts on the total ratio
+        # pi_theta / pi_behav = r * (pi_prox / pi_behav)
+        loss_dec = ClipPPOLoss(
+            actor,
+            value,
+            entropy_bonus=False,
+            delay_actor=True,
+            max_importance_ratio=4.0,
+        )
+        SoftUpdate(loss_dec, eps=0.9)
+        with torch.no_grad():
+            for p in actor.parameters():
+                p.add_(0.5 * torch.randn_like(p))
+            lp_cur = actor.get_dist(td.clone()).log_prob(td["action"])
+        advantage = torch.randn(batch, 1)
+        td["advantage"] = advantage
+        ratio = (lp_cur - lp_orig).exp().unsqueeze(-1)
+        weight = torch.minimum(torch.tensor(10.0), 4.0 / ratio)
+        gain = torch.minimum(
+            ratio * weight * advantage, ratio.clamp(0.8, 1.2) * weight * advantage
+        )
+        torch.testing.assert_close(
+            loss_dec(td.clone())["loss_objective"], -gain.mean(), **tol
+        )
+
+    def test_ppo_kl_pen_decoupled_proximal_policy(self):
+        # delay_actor=True: the KL penalty is measured against the proximal
+        # policy held in the target params rather than against the behavior
+        # distribution parameters stored in the data, while the surrogate keeps
+        # the behavior ratio pi_theta / pi_behav
+        torch.manual_seed(self.seed)
+        batch = 16
+        td = self._create_mock_data_ppo(batch=batch)
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        advantage = torch.randn(batch, 1)
+        td["advantage"] = advantage
+        td["value_target"] = torch.randn(batch, 1)
+        loss_fn = KLPENPPOLoss(
+            actor, value, entropy_bonus=False, beta=1.0, delay_actor=True
+        )
+        SoftUpdate(loss_fn, eps=0.9)
+        with torch.no_grad():
+            for p in actor.parameters():
+                p.add_(0.5 * torch.randn_like(p))
+            dist_cur = actor.get_dist(td.clone())
+            lp_cur = dist_cur.log_prob(td["action"])
+            with loss_fn.target_actor_network_params.to_module(
+                actor, preserve_module_state=False
+            ):
+                dist_prox = actor.get_dist(td.clone())
+            lp_prox = dist_prox.log_prob(td["action"])
+            kl = torch.distributions.kl.kl_divergence(dist_prox, dist_cur)
+        lp_behav = lp_prox - 0.3 * torch.randn(batch)
+        td["action_log_prob"] = lp_behav
+        # the behavior distribution parameters stored in the data are far off
+        # and must not enter the penalty
+        td["loc"] = td["loc"] + 100.0
+        out = loss_fn(td.clone())
+        torch.testing.assert_close(out["kl"], kl.unsqueeze(-1))
+        ratio_behav = (lp_cur - lp_behav).exp().unsqueeze(-1)
+        torch.testing.assert_close(
+            out["loss_objective"], -(ratio_behav * advantage - kl.unsqueeze(-1)).mean()
+        )
+
+    def test_ppo_delay_actor_requires_functional(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        with pytest.raises(ValueError, match="functional=True"):
+            ClipPPOLoss(actor, value, delay_actor=True, functional=False)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     def test_ppo_flat_advantage_raises(self, loss_class):
