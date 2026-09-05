@@ -176,8 +176,13 @@ class DistillationLoss(LossModule):
             with ``DistillationLoss(assistant_only=True)``; use
             ``RetrieveLogProb(assistant_only=False)`` when distilling on all
             attended tokens.
-        device (torch.device, optional): the device to use when tokenizing
-            the input and running the student. Defaults to ``None``.
+        device (torch.device | None, optional): device used to place the
+            student network at construction time. The value is not stored
+            on the module; after construction, move the loss with
+            :meth:`~torch.nn.Module.to`. Tokenization and student calls
+            derive their device from the actor parameters (or buffers), or
+            from a history/mask tensor if the actor has none. Defaults to
+            ``None``.
 
     .. note::
         The input tensordict is expected to contain the following keys by
@@ -342,7 +347,32 @@ class DistillationLoss(LossModule):
         self.normalize_by_seq_length = normalize_by_seq_length
         self.assistant_only = assistant_only
         self._set_in_keys()
-        self.device = device
+        if device is not None and actor_network is not None:
+            self.actor_network.to(device)
+
+    def _runtime_device(self, *values: object) -> torch.device | None:
+        """Device for tokenizer / student contexts, derived at call time.
+
+        Parameters and buffers move with ``.to()`` / ``.cpu()`` / ``.cuda()``;
+        a cached constructor device would not.
+        """
+        actor = self.actor_network
+        if actor is not None:
+            try:
+                return next(actor.parameters()).device
+            except (StopIteration, AttributeError):
+                try:
+                    return next(actor.buffers()).device
+                except (StopIteration, AttributeError):
+                    pass
+        for value in values:
+            if isinstance(value, torch.Tensor):
+                return value.device
+            if isinstance(value, (list, tuple)):
+                for tensor in value:
+                    if isinstance(tensor, torch.Tensor):
+                        return tensor.device
+        return None
 
     def _set_in_keys(self) -> None:
         """Sets the input keys for the loss module."""
@@ -355,6 +385,7 @@ class DistillationLoss(LossModule):
         """Returns the loss masks, the attention masks and, when recoverable, the assistant masks."""
         assistant_masks = tensordict.get(("masks", "all_assistant_mask"), as_list=True)
         attention_mask = tensordict.get(("masks", "all_attention_mask"), as_list=True)
+        device = self._runtime_device(assistant_masks, attention_mask)
         if (self.assistant_only and assistant_masks is None) or attention_mask is None:
             if self.tokenizer is None:
                 raise ValueError(
@@ -363,8 +394,8 @@ class DistillationLoss(LossModule):
                     "to the loss constructor or provide the masks in the input."
                 )
             with torch.device(
-                self.device
-            ) if self.device is not None else contextlib.nullcontext():
+                device
+            ) if device is not None else contextlib.nullcontext():
                 token_struct = history.apply_chat_template(
                     tokenizer=self.tokenizer, **self.tokenizer_kwargs
                 )
@@ -436,9 +467,10 @@ class DistillationLoss(LossModule):
             )
 
         input_loss = tensordict.select(self.tensor_keys.history)
+        device = self._runtime_device(masks, attention_masks)
         with torch.device(
-            self.device
-        ) if self.device is not None else contextlib.nullcontext():
+            device
+        ) if device is not None else contextlib.nullcontext():
             output_loss = self.actor_network(input_loss)
         log_probs = output_loss.get(self.tensor_keys.log_probs, as_list=True)
 
