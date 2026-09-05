@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-04T06:29:37.886658+00:00",
+  "generated_at": "2026-09-05T06:21:38.037958+00:00",
   "analysis_period": {
-    "start": "2026-08-28",
-    "end": "2026-09-02",
+    "start": "2026-08-31",
+    "end": "2026-09-04",
     "runs_analyzed": 60
   },
   "summary": {
-    "total_tests": 30723,
+    "total_tests": 30705,
     "flaky_count": 1,
     "new_flaky_count": 1,
     "resolved_count": 0
@@ -14,23 +14,23 @@
   "flaky_tests": [
     {
       "nodeid": "test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity[SiLU-4-1-2-3-dtype4-48]",
-      "executions": 60,
+      "executions": 54,
       "failures": 14,
-      "failure_rate": 0.2333,
-      "flaky_score": 0.4667,
-      "passed": 46,
+      "failure_rate": 0.2593,
+      "flaky_score": 0.5185,
+      "passed": 40,
       "failed": 14,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 9.095,
+      "avg_duration": 9.172,
       "recent_failures": [
-        "2026-08-28T20:27:57Z",
-        "2026-08-30T14:04:52Z",
-        "2026-08-30T14:04:52Z",
-        "2026-08-30T14:04:52Z",
-        "2026-08-30T14:04:52Z"
+        "2026-09-04T10:00:35Z",
+        "2026-09-04T10:06:30Z",
+        "2026-09-04T10:06:30Z",
+        "2026-09-04T10:08:53Z",
+        "2026-09-04T10:08:53Z"
       ],
-      "first_seen_flaky": "2026-08-28T20:25:27Z",
+      "first_seen_flaky": "2026-09-04T09:37:56Z",
       "is_new": true
     }
   ],
