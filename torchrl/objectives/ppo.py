@@ -28,8 +28,15 @@ from tensordict.nn import (
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
-from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
+from torchrl._utils import _standardize
+from torchrl.modules.distributions.utils import (
+    _warn_mc_entropy,
+    _warn_mc_kl,
+    composite_entropy,
+    has_analytic_entropy,
+    has_analytic_kl,
+    sample_and_log_prob,
+)
 from torchrl.modules.value_norm import ValueNorm
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -688,27 +695,16 @@ class PPOLoss(LossModule):
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size
     ) -> torch.Tensor | TensorDict:
-        try:
-            entropy = (
-                composite_entropy(dist, self.samples_mc_entropy)
-                if isinstance(dist, CompositeDistribution)
-                else dist.entropy()
-            )
-            if not entropy.isfinite().all():
-                del entropy
-                if VERBOSE:
-                    torchrl_logger.info(
-                        "Entropy is not finite. Using Monte Carlo sampling."
-                    )
-                raise NotImplementedError
-        except NotImplementedError:
-            if VERBOSE:
-                torchrl_logger.warning(
-                    f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
-                )
+        is_composite = isinstance(dist, CompositeDistribution)
+        if is_composite:
+            entropy = composite_entropy(dist, self.samples_mc_entropy)
+        elif has_analytic_entropy(dist):
+            entropy = dist.entropy()
+        else:
+            _warn_mc_entropy(dist)
             with (
                 set_composite_lp_aggregate(False)
-                if isinstance(dist, CompositeDistribution)
+                if is_composite
                 else contextlib.nullcontext()
             ):
                 _, log_prob = sample_and_log_prob(
@@ -1827,9 +1823,10 @@ class KLPENPPOLoss(PPOLoss):
         ):
             current_dist = self.actor_network.get_dist(tensordict_copy)
         is_composite = isinstance(current_dist, CompositeDistribution)
-        try:
+        if has_analytic_kl(previous_dist, current_dist):
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
-        except NotImplementedError:
+        else:
+            _warn_mc_kl(previous_dist, current_dist)
             with (
                 set_composite_lp_aggregate(False)
                 if is_composite

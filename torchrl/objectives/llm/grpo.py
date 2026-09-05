@@ -34,10 +34,15 @@ from tensordict.nn import (
 )
 from tensordict.utils import expand_as_right
 from torch import distributions as d
-from torchrl._utils import logger as torchrl_logger, VERBOSE
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms.ray_service import _maybe_clear_device, _maybe_to_device
 from torchrl.envs.transforms.transforms import Transform
-from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
+from torchrl.modules.distributions.utils import (
+    _warn_mc_entropy,
+    composite_entropy,
+    has_analytic_entropy,
+    sample_and_log_prob,
+)
 from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _sum_td_features, _validate_clip_epsilon
@@ -810,27 +815,18 @@ class GRPOLoss(LossModule):
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size
     ) -> torch.Tensor | TensorDict:
-        try:
-            entropy = (
-                composite_entropy(dist, self.samples_mc_entropy)
-                if isinstance(dist, CompositeDistribution)
-                else dist.entropy()
-            )
-            if not entropy.isfinite().all():
-                del entropy
-                if VERBOSE:
-                    torchrl_logger.info(
-                        "Entropy is not finite. Using Monte Carlo sampling."
-                    )
-                raise NotImplementedError
-        except NotImplementedError:
-            if VERBOSE:
-                torchrl_logger.warning(
-                    f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
-                )
-            with set_composite_lp_aggregate(False) if isinstance(
-                dist, CompositeDistribution
-            ) else contextlib.nullcontext():
+        is_composite = isinstance(dist, CompositeDistribution)
+        if is_composite:
+            entropy = composite_entropy(dist, self.samples_mc_entropy)
+        elif has_analytic_entropy(dist):
+            entropy = dist.entropy()
+        else:
+            _warn_mc_entropy(dist)
+            with (
+                set_composite_lp_aggregate(False)
+                if is_composite
+                else contextlib.nullcontext()
+            ):
                 _, log_prob = sample_and_log_prob(
                     dist,
                     (self.samples_mc_entropy,),

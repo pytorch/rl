@@ -36,7 +36,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
     WrapModule,
 )
-from torch import autograd, nn
+from torch import autograd, distributions as d, nn
 
 from torchrl._utils import rl_warnings
 from torchrl.data import Bounded, Composite, Unbounded
@@ -65,6 +65,29 @@ from torchrl.testing import (  # noqa
     get_default_devices,
     PENDULUM_VERSIONED,
 )
+
+
+class _NormalWithoutEntropy(d.Normal):
+    """Normal that keeps the base ``Distribution.entropy`` stub."""
+
+    entropy = d.Distribution.entropy
+
+
+def _analytic_entropy_case(kind: str) -> tuple[d.Distribution, torch.Tensor]:
+    if kind == "normal":
+        loc = torch.zeros(3, 4)
+        scale = torch.ones(3, 4)
+        dist = d.Normal(loc, scale)
+        return dist, dist.entropy()
+    if kind == "independent":
+        loc = torch.zeros(3, 4)
+        scale = torch.ones(3, 4)
+        dist = d.Independent(d.Normal(loc, scale), 1)
+        return dist, dist.entropy()
+    if kind == "categorical":
+        dist = d.Categorical(logits=torch.zeros(3, 5))
+        return dist, dist.entropy()
+    raise ValueError(kind)
 
 
 @pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
@@ -1869,6 +1892,86 @@ def test_ppo_ess_preserves_feature_shape_for_singleton_batch():
         ess.append(output["ESS"])
 
     assert torch.stack(ess).shape == (2, chunk_size, action_dim)
+
+
+class TestObjectiveEntropy:
+    """Closed-form vs Monte Carlo entropy without try/except (issue #2403)."""
+
+    def _ppo_loss(self):
+        return TestPPO()._make_entropy_loss(entropy_coeff=0.01)
+
+    def _a2c_loss(self):
+        helper = TestA2C()
+        return A2CLoss(helper._create_mock_actor(), helper._create_mock_value())
+
+    def test_ppo_entropy_mc_without_analytic(self):
+        loss = self._ppo_loss()
+        loc = torch.zeros(3, 4)
+        scale = torch.ones(3, 4)
+        dist = _NormalWithoutEntropy(loc, scale)
+        entropy = loss._get_entropy(dist, adv_shape=loc.shape)
+        assert torch.isfinite(entropy).all()
+        assert entropy.shape == loc.shape + (1,)
+
+    @pytest.mark.parametrize("kind", ["normal", "independent", "categorical"])
+    def test_ppo_entropy_matches_analytic(self, kind):
+        loss = self._ppo_loss()
+        dist, expected = _analytic_entropy_case(kind)
+        entropy = loss._get_entropy(dist, adv_shape=expected.shape)
+        torch.testing.assert_close(entropy, expected.unsqueeze(-1))
+
+    def test_ppo_entropy_composite_matches_analytic(self):
+        loss = self._ppo_loss()
+        loc = torch.zeros(3, 2)
+        scale = torch.ones(3, 2)
+        params = TensorDict(
+            {"action": TensorDict({"loc": loc, "scale": scale}, [3])},
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"action": d.Normal},
+            name_map={"action": "action"},
+        )
+        expected = d.Normal(loc, scale).entropy().sum(-1).unsqueeze(-1)
+        with set_composite_lp_aggregate(True):
+            entropy = loss._get_entropy(dist, adv_shape=torch.Size([3]))
+        torch.testing.assert_close(entropy, expected)
+
+    def test_a2c_entropy_mc_without_analytic(self):
+        loss = self._a2c_loss()
+        loc = torch.zeros(3, 4)
+        scale = torch.ones(3, 4)
+        dist = _NormalWithoutEntropy(loc, scale)
+        entropy = loss.get_entropy_bonus(dist)
+        assert torch.isfinite(entropy).all()
+        assert entropy.shape == loc.shape + (1,)
+
+    @pytest.mark.parametrize("kind", ["normal", "independent", "categorical"])
+    def test_a2c_entropy_matches_analytic(self, kind):
+        loss = self._a2c_loss()
+        dist, expected = _analytic_entropy_case(kind)
+        entropy = loss.get_entropy_bonus(dist)
+        torch.testing.assert_close(entropy, expected.unsqueeze(-1))
+
+    def test_a2c_entropy_composite_is_finite(self):
+        # CompositeDistribution.entropy() is not a closed-form tensor; A2C
+        # must take the MC path and still return a finite entropy tensor.
+        loss = self._a2c_loss()
+        loc = torch.zeros(3, 2)
+        scale = torch.ones(3, 2)
+        params = TensorDict(
+            {"action": TensorDict({"loc": loc, "scale": scale}, [3])},
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"action": TanhNormal},
+            name_map={"action": "action"},
+        )
+        entropy = loss.get_entropy_bonus(dist)
+        assert torch.isfinite(entropy).all()
+        assert not isinstance(entropy, TensorDict)
 
 
 class TestA2C(LossModuleTestBase):

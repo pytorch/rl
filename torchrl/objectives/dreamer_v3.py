@@ -29,8 +29,10 @@ from tensordict.utils import NestedKey, unravel_key
 from torchrl._utils import _maybe_record_function_decorator
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.modules.distributions import HAS_ENTROPY
-from torchrl.modules.distributions.utils import rsample_and_log_prob
+from torchrl.modules.distributions.utils import (
+    has_analytic_entropy,
+    rsample_and_log_prob,
+)
 from torchrl.modules.functional import symexp as _symexp, symlog as symlog
 from torchrl.modules.models.model_based import (  # noqa: F401
     _default_bins,
@@ -835,7 +837,7 @@ class DreamerV3ActorLoss(LossModule):
             actor_loss = -(discount * lambda_target / return_scale).mean()
 
         if self.entropy_bonus > 0:
-            if HAS_ENTROPY.get(type(policy_distribution), False):
+            if has_analytic_entropy(policy_distribution):
                 entropy = policy_distribution.entropy()
             else:
                 _, entropy_log_prob = rsample_and_log_prob(policy_distribution)
