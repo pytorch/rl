@@ -1129,7 +1129,7 @@ def main(cfg: DictConfig) -> None:
                 "config": config,
             },
         )
-        video_recorder = None
+        video_callback = None
         if cfg.evaluation.video.interval is not None and logger is not None:
             # A 2x2 grid of four tasks filmed in parallel, logged at every
             # `video.interval`-th evaluation.
@@ -1144,7 +1144,7 @@ def main(cfg: DictConfig) -> None:
                 height=cfg.evaluation.video.height,
             )
 
-            def video_recorder(step: int) -> None:
+            def _video_callback(step: int) -> None:
                 record_task_grid(
                     video_env,
                     grid_recorder,
@@ -1152,6 +1152,8 @@ def main(cfg: DictConfig) -> None:
                     steps=cfg.evaluation.video.steps,
                     step=step,
                 )
+
+            video_callback = _video_callback
 
         train_ppo(
             env,
@@ -1161,7 +1163,7 @@ def main(cfg: DictConfig) -> None:
             max_episode_steps=cfg.env.max_episode_steps,
             evaluators=evaluators,
             evaluation_interval=cfg.evaluation.interval,
-            video_recorder=video_recorder,
+            video_recorder=video_callback,
             video_interval=cfg.evaluation.video.interval,
             best_checkpoint_path=cfg.evaluation.best_checkpoint_path,
             latest_checkpoint_path=cfg.evaluation.latest_checkpoint_path,
