@@ -678,24 +678,6 @@ def _collection_metrics(data: TensorDictBase) -> tuple[dict[str, float], int]:
     return metrics, int(unique_ids.numel())
 
 
-def _standardize_per_task(
-    advantage: torch.Tensor, task_id: torch.Tensor, num_tasks: int
-) -> torch.Tensor:
-    """Standardize advantages within each task id (zero mean, unit variance)."""
-    flat = advantage.reshape(-1)
-    index = task_id.reshape(-1).long()
-    count = torch.zeros(num_tasks, device=flat.device).index_add_(
-        0, index, torch.ones_like(flat)
-    )
-    mean = torch.zeros_like(count).index_add_(0, index, flat) / count.clamp_min(1)
-    centered = flat - mean[index]
-    variance = torch.zeros_like(count).index_add_(
-        0, index, centered.square()
-    ) / count.clamp_min(1)
-    scale = variance.sqrt().clamp_min(torch.finfo(flat.dtype).eps)
-    return (centered / scale[index]).reshape(advantage.shape)
-
-
 def train_ppo(
     env: TransformedEnv,
     actor: ProbabilisticActor,
@@ -730,10 +712,11 @@ def train_ppo(
     empties the buffer and drops the collector's in-flight episodes so the next
     collection only contains data from the updated policy.
 
-    With ``per_task_advantage`` the advantages are standardized within each
-    task of the library rather than over the whole batch, so the tasks whose
-    rewards vary least (standing, a hop that has not happened yet) keep a
-    learning signal next to the walking tasks.
+    With ``per_task_advantage`` the GAE standardizes advantages within each
+    task of the library (its ``group_key`` is the ``task_id``) rather than the
+    loss over the whole minibatch, so the tasks whose rewards vary least
+    (standing, a hop that has not happened yet) keep a learning signal next to
+    the walking tasks.
 
     Every ``evaluation_interval`` iterations the ``evaluators`` (one per
     task of the library, see :func:`make_evaluator`) run the actor's current
@@ -795,11 +778,14 @@ def train_ppo(
         trajs_per_write=1,
         storing_device="cpu",
     )
+    # Advantages standardized within each task of the library, so tasks whose
+    # rewards vary least keep a learning signal next to the walking tasks.
     advantage = GAE(
         gamma=gamma,
         lmbda=gae_lambda,
         value_network=critic,
-        average_gae=False,
+        average_gae=per_task_advantage,
+        group_key="task_id" if per_task_advantage else None,
         shifted=True,
         deactivate_vmap=True,
         device=device,
@@ -814,7 +800,6 @@ def train_ppo(
         loss_critic_type="smooth_l1",
         normalize_advantage=not per_task_advantage,
     )
-    num_tasks = env.observation_spec["task_id"].n
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=learning_rate)
     scheduler = (
         KLAdaptiveLR(optimizer, target_kl=target_kl) if target_kl is not None else None
@@ -888,10 +873,6 @@ def train_ppo(
             with timeit("advantage"), torch.no_grad(), set_recurrent_mode(True):
                 processed = data.to(device)
                 advantage(processed)
-                if per_task_advantage:
-                    processed["advantage"] = _standardize_per_task(
-                        processed["advantage"], processed["task_id"], num_tasks
-                    )
                 replay_buffer[:num_transitions] = processed.to("cpu")
             value_target = processed["value_target"]
             metrics["value/explained_variance"] = float(
