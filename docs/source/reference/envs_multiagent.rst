@@ -475,10 +475,16 @@ transition. In ``_step``, take devices from the action tensors.
     # env.reward_keys == [("blue", "reward"), ("red", "reward")]
     # env.done_keys   == ["done", "terminated", "truncated"]
 
-Pass ``env.action_keys``, ``env.reward_keys`` and ``env.done_keys`` (the
-plural forms) into collectors, replay buffers and ``loss.set_keys()``. A
-full training loop that does this for two groups is the
-:doc:`competitive MADDPG tutorial <../tutorials/multiagent_competitive_ddpg>`.
+Collectors and replay buffers transport these nested keys automatically; they
+do not take ``env.action_keys``, ``env.reward_keys`` or ``env.done_keys`` as
+configuration arguments. Compose the group policies so that each reads and
+writes its group's nested keys, then use one loss per group. Configure each loss
+with the individual :class:`~tensordict.NestedKey` values accepted by its
+``set_keys()`` method. For example, a loss for the red group in the environment
+above can use ``reward=("red", "reward")`` together with the root
+``done="done"`` and ``terminated="terminated"`` keys. The
+:doc:`competitive MADDPG tutorial <../tutorials/multiagent_competitive_ddpg>`
+shows a full two-group training loop.
 
 
 .. autosummary::
