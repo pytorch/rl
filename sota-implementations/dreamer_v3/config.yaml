@@ -27,6 +27,8 @@ networks:
   num_classes: 4
   unimix: 0.01
   recurrent_model: block_gru
+  # Block-GRU execution backend: "reference" or CUDA-only "triton".
+  recurrent_backend: reference
   num_blocks: 8
   dynamics_layers: 1
   prior_layers: 2
@@ -56,6 +58,8 @@ optimization:
   compile_rssm: null
   # Number of RSSM steps traced per higher-order scan iteration.
   rssm_scan_unroll: 8
+  # Capture the fixed-shape learner forward/backward on CUDA after warmup.
+  cudagraph_train_step: false
   lr: 4.0e-5
   optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3

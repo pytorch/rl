@@ -475,6 +475,7 @@ def build_world_model(
         action_dim=action_dim,
         unimix=cfg.networks.unimix,
         recurrent_model=cfg.networks.recurrent_model,
+        recurrent_backend=cfg.networks.recurrent_backend,
         num_blocks=cfg.networks.num_blocks,
         num_layers=cfg.networks.dynamics_layers,
         prior_num_layers=cfg.networks.prior_layers,

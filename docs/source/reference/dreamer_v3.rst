@@ -110,6 +110,16 @@ latent state. The actor and prediction heads consume both ``state`` and
 blocks used by the example's encoder, decoder, actor, critic, and prediction
 heads.
 
+The block-GRU prior also accepts ``recurrent_backend="triton"``. This
+CUDA-only option routes each recurrent update through the fused Triton
+block-GRU kernel and requires Triton 3.3 or newer. It can be combined with
+``RSSMRolloutV3.compile_rollout("scan", unroll=8)`` and CUDA graphs. The
+Triton kernel only fuses the recurrent update: the prior and posterior heads,
+categorical sampling, and sequential RSSM dependency remain in the rollout.
+Whether it improves end-to-end speed therefore depends on the workload and
+capture mode; compare it with the default ``"reference"`` backend on the
+target hardware.
+
 For recurrent features outside an RSSM, :class:`~torchrl.modules.DreamerV3BlockGRUCell`
 exposes the same block-diagonal update as a single-step module, while
 :class:`~torchrl.modules.DreamerV3BlockGRU` executes batch-major sequences with
@@ -169,6 +179,13 @@ developer benchmark from a source checkout:
         --backends reference,scan,triton --batches 16 --seq-lens 64,512 \
         --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
         --dtype bfloat16 --warmup 10 --iters 30
+
+For the complete prior/posterior RSSM update used by the maintained example,
+including compiled scan and CUDA-graph variants, run:
+
+.. code-block:: bash
+
+    python benchmarks/ad_hoc/bench_dreamer_v3_rssm.py
 
 Use the batch size, sequence length, widths, block count, dtype, and compile
 modes from the intended workload: backend performance is hardware- and

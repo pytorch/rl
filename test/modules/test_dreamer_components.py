@@ -302,7 +302,7 @@ class TestDreamerV3Components:
         assert ratio.item() == pytest.approx(1.0, rel=0.05)
 
     @staticmethod
-    def _make_rollout(device):
+    def _make_rollout(device, recurrent_backend="reference"):
         prior = RSSMPriorV3(
             action_shape=(2,),
             hidden_dim=8,
@@ -311,6 +311,7 @@ class TestDreamerV3Components:
             num_classes=4,
             action_dim=2,
             recurrent_model="block_gru",
+            recurrent_backend=recurrent_backend,
             num_blocks=2,
             device=device,
         )
@@ -842,19 +843,21 @@ class TestDreamerV3Components:
             )
 
     @implement_for("torch", None, "2.6.0", compilable=True)
-    @pytest.mark.parametrize("scope", ["step"])
-    def test_rssm_rollout_compile(self, scope):
-        self._test_rssm_rollout_compile(scope)
+    @pytest.mark.parametrize(("scope", "unroll"), [("step", 1)])
+    def test_rssm_rollout_compile(self, scope, unroll):
+        self._test_rssm_rollout_compile(scope, unroll)
 
     @implement_for("torch", "2.6.0", compilable=True)
-    @pytest.mark.parametrize("scope", ["step", "scan"])
-    def test_rssm_rollout_compile(self, scope):  # noqa: F811
-        self._test_rssm_rollout_compile(scope)
+    @pytest.mark.parametrize(
+        ("scope", "unroll"), [("step", 1), ("scan", 1), ("scan", 3)]
+    )
+    def test_rssm_rollout_compile(self, scope, unroll):  # noqa: F811
+        self._test_rssm_rollout_compile(scope, unroll)
 
-    def _test_rssm_rollout_compile(self, scope):
+    def _test_rssm_rollout_compile(self, scope, unroll):
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
-        rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)
+        rollout.compile_rollout(scope, unroll=unroll)
 
         output = rollout(data)
         (
@@ -863,11 +866,74 @@ class TestDreamerV3Components:
         ).backward()
         assert all(parameter.grad is not None for parameter in rollout.parameters())
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(
+        not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+        reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+    )
+    def test_rssm_rollout_triton_gradient_parity(self):
+        torch.manual_seed(0)
+        reference = self._make_rollout(torch.device("cuda"))
+        triton_rollout = self._make_rollout(
+            torch.device("cuda"), recurrent_backend="triton"
+        )
+        triton_rollout.load_state_dict(reference.state_dict())
+        reference_core = reference.rssm_prior.module.rnn
+        triton_core = triton_rollout.rssm_prior.module.rnn
+        state = torch.randn(2, 8, device="cuda")
+        belief = torch.randn(2, 8, device="cuda")
+        action = torch.randn(2, 2, device="cuda")
+        cotangent = torch.randn(2, 8, device="cuda")
+
+        def run(core):
+            core.zero_grad(set_to_none=True)
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                output = core(state, belief, action)
+            (output.float() * cotangent).sum().backward()
+            return output, {
+                name: parameter.grad for name, parameter in core.named_parameters()
+            }
+
+        expected_output, expected_gradients = run(reference_core)
+        actual_output, actual_gradients = run(triton_core)
+        torch.testing.assert_close(actual_output, expected_output, atol=5e-2, rtol=5e-2)
+        assert actual_gradients.keys() == expected_gradients.keys()
+        for name in expected_gradients:
+            torch.testing.assert_close(
+                actual_gradients[name],
+                expected_gradients[name],
+                atol=5e-2,
+                rtol=5e-2,
+                msg=f"RSSM gradient mismatch for {name}",
+            )
+
+        triton_rollout.zero_grad(set_to_none=True)
+        triton_rollout.compile_rollout("scan", unroll=3)
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            output = triton_rollout(self._make_rollout_data(torch.device("cuda")))
+        sum(output[key].square().mean() for key in triton_rollout.out_keys).backward()
+        assert all(
+            parameter.grad is not None and parameter.grad.isfinite().all()
+            for parameter in triton_rollout.parameters()
+        )
+
 
 def test_public_block_gru_triton_errors():
     with mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", False):
         with pytest.raises(RuntimeError, match="requires Triton"):
             DreamerV3BlockGRU(6, 8, recurrent_backend="triton")
+        with pytest.raises(RuntimeError, match="requires Triton"):
+            RSSMPriorV3(
+                action_shape=(2,),
+                hidden_dim=8,
+                rnn_hidden_dim=8,
+                num_categoricals=4,
+                num_classes=4,
+                action_dim=2,
+                recurrent_model="block_gru",
+                recurrent_backend="triton",
+                num_blocks=2,
+            )
 
     class CustomActivation(torch.nn.Module):
         def forward(self, value):

@@ -60,7 +60,7 @@ from dreamer_v3_utils import (
 )
 from omegaconf import DictConfig
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase
+from tensordict.nn import CudaGraphModule, TensorDictModuleBase
 
 from torchrl import timeit
 from torchrl._utils import get_available_device, logger as torchrl_logger
@@ -442,16 +442,19 @@ def main(cfg: DictConfig):
     use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
     torchrl_logger.info(
         "DreamerV3 execution: device=%s, replay_device=%s, rssm_backend=%s, "
-        "rssm_scan_unroll=%s, mixed_precision=%s",
+        "rssm_recurrent_backend=%s, rssm_scan_unroll=%s, mixed_precision=%s, "
+        "cudagraph_train_step=%s",
         device,
         replay_device,
         cfg.optimization.compile_rssm or "eager",
+        cfg.networks.recurrent_backend,
         (
             cfg.optimization.rssm_scan_unroll
             if cfg.optimization.compile_rssm == "scan"
             else "n/a"
         ),
         use_bfloat16,
+        cfg.optimization.cudagraph_train_step,
     )
     num_envs = cfg.collector.num_envs
     count_reset_records = cfg.collector.count_reset_records
@@ -580,8 +583,6 @@ def main(cfg: DictConfig):
 
         optimizer.zero_grad(set_to_none=True)
         total_loss.backward()
-        optimizer.step()
-        value_target_updater.step()
         metrics = torch.stack(
             (
                 model_kl.detach().reshape(()),
@@ -597,6 +598,13 @@ def main(cfg: DictConfig):
             model_out.get(("next", "state")).detach(),
             model_out.get(("next", "belief")).detach(),
         )
+
+    if cfg.optimization.cudagraph_train_step:
+        if device.type != "cuda":
+            raise RuntimeError(
+                "optimization.cudagraph_train_step requires a CUDA training device."
+            )
+        train_step = CudaGraphModule(train_step, warmup=5, device=device)
 
     if cfg.optimization.separate_policy_rng:
         # Keep the learner draws in a range apart from the policy stream.
@@ -664,6 +672,8 @@ def main(cfg: DictConfig):
                     refreshed_state,
                     refreshed_belief,
                 ) = train_step(sample)
+                optimizer.step()
+                value_target_updater.step()
                 batch_losses[update_index].copy_(update_losses)
                 loss_window_sum += update_losses
                 loss_window_updates += 1
