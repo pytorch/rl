@@ -105,9 +105,11 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #
 # The main characteristics of TorchRL losses are:
 #
-# - They are stateful objects: they contain a copy of the trainable parameters
+# - They are stateful objects: they expose the trainable parameters
 #   such that ``loss_module.parameters()`` gives whatever is needed to train the
-#   algorithm.
+#   algorithm. The module you pass in is **not** copied -- the same parameters
+#   are used in-place, so an optimizer step on the loss updates the original
+#   network. See :ref:`ref_lossmodule_weight_sharing`.
 # - They follow the ``TensorDict`` convention: the :meth:`torch.nn.Module.forward`
 #   method will receive a TensorDict as input that contains all the necessary
 #   information to return a loss value.
@@ -1105,7 +1107,9 @@ pbar = tqdm.tqdm(total=total_frames)
 r0 = None
 for i, tensordict in enumerate(collector):
 
-    # update weights of the inference policy
+    # Good practice. Required if the collector remapped the policy via
+    # ``policy_device`` / ``device``; a no-op when weights are already shared.
+    # See :ref:`ref_collectors_weightsync`.
     collector.update_policy_weights_()
 
     if r0 is None:

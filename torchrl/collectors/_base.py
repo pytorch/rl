@@ -989,6 +989,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         trained weights. It supports both local and remote weight updates, depending on
         the collector configuration.
 
+        In the common case this call is good practice but not required: a CPU
+        policy is moved to shared memory in-place, and a CUDA policy is already
+        shared. It **is** required when the collector was constructed with
+        ``policy_device`` or ``device``, because a ``.to(...)`` copy of the
+        policy is then made. :class:`~torchrl.objectives.LossModule` does not
+        copy the policy either (see :ref:`ref_lossmodule_weight_sharing` and
+        :ref:`ref_collectors_weightsync`).
+
         The method accepts weights in multiple forms for convenience:
 
         Examples:
