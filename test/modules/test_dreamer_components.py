@@ -810,6 +810,7 @@ class TestDreamerV3Components:
         version.parse(torch.__version__) < version.parse("2.6.0"),
         reason="the higher-order scan backend requires Torch >= 2.6.0",
     )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
     def test_rssm_rollout_higher_order_scan_matches_loop(self, device, unroll):
         scan_rollout = self._make_rollout(device)
         loop_rollout = copy.deepcopy(scan_rollout)
