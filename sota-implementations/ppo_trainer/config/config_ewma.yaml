@@ -18,8 +18,12 @@ loss:
   max_importance_ratio: 100.0
 
 target_net_updater:
-  # EWMA decay rate of the proximal policy (beta_prox in the paper)
-  eps: 0.889
+  # EWMA decay rate of the proximal policy (beta_prox in the paper). The paper
+  # sets 1 / (1 - eps) - 1, the center of mass of the average in optimizer
+  # steps, to about one epoch of minibatches; with 10 epochs of 16 minibatches
+  # a center of mass of two epochs (32 steps, eps 0.97) trained stably while
+  # one epoch (eps 0.941) collapsed.
+  eps: 0.97
   tau: null
 
 trainer:

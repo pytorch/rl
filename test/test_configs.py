@@ -1292,6 +1292,11 @@ class TestModuleConfigs:
         torch.testing.assert_close(dist.low, torch.as_tensor(low))
         torch.testing.assert_close(dist.high, torch.as_tensor(high))
         assert dist.sample((256,)).abs().max() <= 2.0
+        assert dist.tanh_loc is False
+        dist = instantiate(
+            TanhNormalModelConfig(network=network_cfg, tanh_loc=True)
+        ).get_dist(td)
+        assert dist.tanh_loc is True
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensordict_sequential_config(self):
