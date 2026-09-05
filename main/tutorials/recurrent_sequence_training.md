@@ -150,7 +150,7 @@ TensorDictSequential(
  in_keys=['features'],
  out_keys=['logits'])
  (2): TensorDictModule(
- module=<function make_policy.<locals>.<lambda> at 0x7fdf94093240>,
+ module=<function make_policy.<locals>.<lambda> at 0x7f6d3f9e6c00>,
  in_keys=['logits'],
  out_keys=['action'])
  ),
@@ -479,7 +479,7 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 ```
 
 ```
-Training loss trajectory: [0.4133, 0.4051, 0.4056, 0.407]
+Training loss trajectory: [0.4135, 0.41, 0.4055, 0.406]
 ```
 
 ## Conclusion
@@ -519,7 +519,7 @@ recurrent state.
 `TensorDictPrimer`, `recurrent mode`, `set_keys`, and other
 shorthand that appears throughout the recurrent code paths.
 
-**Total running time of the script:** (0 minutes 0.153 seconds)
+**Total running time of the script:** (0 minutes 0.154 seconds)
 
 [`Download Jupyter notebook: recurrent_sequence_training.ipynb`](../_downloads/70bdaea647addd62eb8379f8c256e50b/recurrent_sequence_training.ipynb)
 

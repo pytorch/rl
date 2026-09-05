@@ -315,6 +315,18 @@ internal singular configurations of the gimbal Jacobian.
 [`CubeBowlEnv`](generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv) is a compact
 manipulation task for scripted MuJoCo macro-control examples. It composes a
 local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
+[`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) is a commanded-velocity locomotion task
+for Pollen Robotics' MicroDuck biped. It loads the walking MJCF from a local
+`microduck_rl` checkout (`MICRODUCK_RL_ROOT`), an installed
+`mjlab_microduck` package, or a pinned upstream commit downloaded on demand
+with `download=True`, replaces the heavy collision meshes with box
+proxies so the accelerated backends fit in memory, and exposes foot contacts
+and foot heights for gait metrics through
+[`geom_contacts()`](generated/torchrl.envs.MujocoEnv.html#torchrl.envs.MujocoEnv.geom_contacts) and
+[`site_positions()`](generated/torchrl.envs.MujocoEnv.html#torchrl.envs.MujocoEnv.site_positions).
+Its commands, reset distribution, gait clock and reward options form a
+[`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask), with presets such as
+[`speed_range_task()`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.speed_range_task).
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -328,6 +340,8 @@ state into the parent batch. Boolean masks are not supported.
 | [`CubeBowlEnv`](generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv)(*args[, num_workers, parallel]) | UR-style cube-to-bowl manipulation scene. |
 | [`HopperEnv`](generated/torchrl.envs.HopperEnv.html#torchrl.envs.HopperEnv)(*args[, num_workers, parallel]) | Single-legged hopping task (6-DoF, 3 actuators). |
 | [`HumanoidEnv`](generated/torchrl.envs.HumanoidEnv.html#torchrl.envs.HumanoidEnv)(*args[, num_workers, parallel]) | Bipedal humanoid locomotion task (28 DoF, 21 actuators). |
+| [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv)([microduck_root, root, download]) | Commanded longitudinal-velocity locomotion task for the MicroDuck biped. |
+| [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)(commanded_x_velocity, ...) | Task parameters of [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv). |
 | [`SatelliteEnv`](generated/torchrl.envs.SatelliteEnv.html#torchrl.envs.SatelliteEnv)(*args[, num_workers, parallel]) | Attitude-control task with 4 or 6 CMGs. |
 | [`Walker2dEnv`](generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv)(*args[, num_workers, parallel]) | Planar bipedal walker (9-DoF, 6 actuators). |
 

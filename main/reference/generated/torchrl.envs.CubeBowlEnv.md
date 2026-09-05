@@ -868,6 +868,22 @@ Composite(
 
 Returns the state spec of the env as if it had no batch dimensions.
 
+geom_contacts(*geom_names: Sequence[str]*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
+Report which of the named geoms currently touch another geom.
+
+A geom counts as touching when it takes part in an active contact
+whose distance is non-positive. Useful for contact-based gait metrics
+such as foot-strike detection.
+
+Parameters:
+
+**geom_names** - MuJoCo geom names to query.
+
+Returns:
+
+A `(num_envs, len(geom_names))` boolean tensor.
+
 get_buffer(*target: str*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
 Return the buffer given by `target` if it exists, otherwise throw an error.
@@ -2755,6 +2771,18 @@ Equivalent to `batch_size`.
 share_memory() → Self
 
 See [`torch.Tensor.share_memory_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.share_memory_.html#torch.Tensor.share_memory_).
+
+site_positions(*site_names: Sequence[str]*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
+Return the world-frame positions of the named sites.
+
+Parameters:
+
+**site_names** - MuJoCo site names to query.
+
+Returns:
+
+A `(num_envs, len(site_names), 3)` tensor of xyz positions.
 
 *property*specs*: [Composite](torchrl.data.Composite.html#torchrl.data.Composite)*
 

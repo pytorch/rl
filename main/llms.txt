@@ -217,6 +217,8 @@
 - [MarlGroupMapType](reference/generated/torchrl.envs.MarlGroupMapType.md)
 - [MeltingpotEnv](reference/generated/torchrl.envs.MeltingpotEnv.md)
 - [MeltingpotWrapper](reference/generated/torchrl.envs.MeltingpotWrapper.md)
+- [MicroDuckEnv](reference/generated/torchrl.envs.MicroDuckEnv.md)
+- [MicroDuckTask](reference/generated/torchrl.envs.MicroDuckTask.md)
 - [ModelBasedEnvBase](reference/generated/torchrl.envs.ModelBasedEnvBase.md)
 - [MujocoEnv](reference/generated/torchrl.envs.MujocoEnv.md)
 - [MujocoPlaygroundAgentMapping](reference/generated/torchrl.envs.MujocoPlaygroundAgentMapping.md)
