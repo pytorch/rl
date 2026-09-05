@@ -736,9 +736,7 @@ class PPOLoss(LossModule):
                 )
                 sampled_entropy = -log_prob.mean(0)
                 if analytic_entropy and compiling:
-                    entropy = torch.where(
-                        entropy.isfinite(), entropy, sampled_entropy
-                    )
+                    entropy = torch.where(entropy.isfinite(), entropy, sampled_entropy)
                 else:
                     entropy = sampled_entropy
         if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:

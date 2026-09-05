@@ -193,7 +193,9 @@ def has_analytic_kl(p: d.Distribution, q: d.Distribution) -> bool:
         if p.reinterpreted_batch_ndims != q.reinterpreted_batch_ndims:
             return False
         return has_analytic_kl(p.base_dist, q.base_dist)
-    if isinstance(p, TransformedDistribution) and isinstance(q, TransformedDistribution):
+    if isinstance(p, TransformedDistribution) and isinstance(
+        q, TransformedDistribution
+    ):
         if p.transforms != q.transforms or p.event_shape != q.event_shape:
             return False
         return has_analytic_kl(p.base_dist, q.base_dist)
@@ -286,9 +288,7 @@ def composite_entropy(
                 _, log_prob = rsample_and_log_prob(component, (samples_mc,))
             sampled_entropy = -log_prob.mean(0)
             if analytic_entropy and compiling:
-                entropy = torch.where(
-                    entropy.isfinite(), entropy, sampled_entropy
-                )
+                entropy = torch.where(entropy.isfinite(), entropy, sampled_entropy)
             else:
                 entropy = sampled_entropy
         if isinstance(name, str):
