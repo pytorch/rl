@@ -842,19 +842,21 @@ class TestDreamerV3Components:
             )
 
     @implement_for("torch", None, "2.6.0", compilable=True)
-    @pytest.mark.parametrize("scope", ["step"])
-    def test_rssm_rollout_compile(self, scope):
-        self._test_rssm_rollout_compile(scope)
+    @pytest.mark.parametrize(("scope", "unroll"), [("step", 1)])
+    def test_rssm_rollout_compile(self, scope, unroll):
+        self._test_rssm_rollout_compile(scope, unroll)
 
     @implement_for("torch", "2.6.0", compilable=True)
-    @pytest.mark.parametrize("scope", ["step", "scan"])
-    def test_rssm_rollout_compile(self, scope):  # noqa: F811
-        self._test_rssm_rollout_compile(scope)
+    @pytest.mark.parametrize(
+        ("scope", "unroll"), [("step", 1), ("scan", 1), ("scan", 3)]
+    )
+    def test_rssm_rollout_compile(self, scope, unroll):  # noqa: F811
+        self._test_rssm_rollout_compile(scope, unroll)
 
-    def _test_rssm_rollout_compile(self, scope):
+    def _test_rssm_rollout_compile(self, scope, unroll):
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
-        rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)
+        rollout.compile_rollout(scope, unroll=unroll)
 
         output = rollout(data)
         (
@@ -959,6 +961,7 @@ def test_public_block_gru_triton_gradient_parity(
     hidden_cotangent = torch.randn(batch, 32, device="cuda", dtype=dtype) / (batch * 32)
 
     def run(module):
+        module.zero_grad(set_to_none=True)
         value = value_source.detach().clone().requires_grad_()
         hidden = hidden_source.detach().clone().requires_grad_()
         output, final_hidden = module(value, hidden, is_init)
@@ -975,17 +978,18 @@ def test_public_block_gru_triton_gradient_parity(
         )
 
     expected = run(reference)
-    actual = run(triton_module)
     tolerance = (
         {"atol": 4e-2, "rtol": 6e-2}
         if dtype is torch.bfloat16
         else {"atol": 3e-4, "rtol": 3e-4}
     )
-    for expected_value, actual_value in zip(expected[:4], actual[:4]):
-        torch.testing.assert_close(actual_value, expected_value, **tolerance)
-    assert actual[4].keys() == expected[4].keys()
-    for name in expected[4]:
-        torch.testing.assert_close(actual[4][name], expected[4][name], **tolerance)
+    for _ in range(3):
+        actual = run(triton_module)
+        for expected_value, actual_value in zip(expected[:4], actual[:4]):
+            torch.testing.assert_close(actual_value, expected_value, **tolerance)
+        assert actual[4].keys() == expected[4].keys()
+        for name in expected[4]:
+            torch.testing.assert_close(actual[4][name], expected[4][name], **tolerance)
 
 
 @pytest.mark.gpu

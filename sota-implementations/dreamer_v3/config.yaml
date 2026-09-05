@@ -56,6 +56,8 @@ optimization:
   compile_rssm: null
   # Number of RSSM steps traced per higher-order scan iteration.
   rssm_scan_unroll: 8
+  # Capture the fixed-shape learner forward/backward on CUDA after warmup.
+  cudagraph_train_step: false
   lr: 4.0e-5
   optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3

@@ -33,7 +33,7 @@ from torchrl.data import Unbounded
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
-from torchrl.modules.distributions.continuous import TanhNormal
+from torchrl.modules.distributions.continuous import IndependentNormal, TanhNormal
 from torchrl.modules.models.model_based import (
     DreamerActor,
     RSSMPosteriorV3,
@@ -64,6 +64,10 @@ from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+_has_gym = (
+    importlib.util.find_spec("gymnasium") is not None
+    or importlib.util.find_spec("gym") is not None
+)
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -644,6 +648,50 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         assert grad_total > 0, "All gradients are zero after actor backward"
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_dreamer_v3_actor_loss_cuda_graph(self, device):
+        device = torch.device(device)
+        if device.type != "cuda":
+            pytest.skip("CUDA graph test only runs for the CUDA parametrization")
+
+        tensordict = self._create_actor_data().to(device).reshape(-1)
+        actor_model = self._create_actor_model().to(device)
+        # The DMC reproduction uses IndependentNormal, whose constructor does
+        # not materialize action bounds from the host during graph capture.
+        actor_model[-1].distribution_class = IndependentNormal
+        continuation_model = TensorDictModule(
+            nn.Sequential(nn.Linear(self.state_dim, 1), nn.Sigmoid()).to(device),
+            in_keys=["state"],
+            out_keys=["continuation"],
+        )
+        loss_module = DreamerV3ActorLoss(
+            actor_model,
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            continuation_model=continuation_model,
+            imagination_horizon=3,
+        )
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_module.to(device)
+
+        warmup_stream = torch.cuda.Stream(device)
+        warmup_stream.wait_stream(torch.cuda.current_stream(device))
+        with torch.cuda.stream(warmup_stream):
+            for _ in range(3):
+                loss_module(tensordict)
+        torch.cuda.current_stream(device).wait_stream(warmup_stream)
+        torch.cuda.synchronize(device)
+
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            loss_td, fake_data = loss_module(tensordict)
+        graph.replay()
+        torch.cuda.synchronize(device)
+
+        assert torch.isfinite(loss_td["loss_actor"])
+        assert fake_data.shape == (tensordict.shape[0], 3)
+
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
         class _ConstantContinuation(nn.Module):
             def forward(self_, state, belief):
@@ -736,6 +784,35 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             horizon=2.0,
             lmbda=0.5,
         )
+        torch.testing.assert_close(
+            target, torch.tensor([[9.8125, 15.25, 23.0]], device=device)
+        )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_dreamer_v3_replay_value_target_cuda_graph(self, device):
+        device = torch.device(device)
+        if device.type != "cuda":
+            pytest.skip("CUDA graph test only runs for the CUDA parametrization")
+
+        reward = torch.tensor([[0.0, 1.0, 2.0, 3.0]], device=device)
+        bootstrap = torch.tensor([[10.0, 20.0, 30.0, 40.0]], device=device)
+        done = torch.zeros_like(reward, dtype=torch.bool)
+        terminated = torch.zeros_like(done)
+
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            target = _replay_value_target(
+                reward,
+                done,
+                terminated,
+                bootstrap,
+                horizon=2.0,
+                lmbda=0.5,
+            )
+        graph.replay()
+        torch.cuda.synchronize(device)
+
         torch.testing.assert_close(
             target, torch.tensor([[9.8125, 15.25, 23.0]], device=device)
         )
@@ -1042,6 +1119,140 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert reward_td["reward"].shape == (2, 1)
         continuation_model(reward_td)
         assert reward_td["continuation"].shape == (2, 1)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.skipif(
+        not (_has_hydra and _has_omegaconf and _has_gym),
+        reason="requires hydra, omegaconf, and gym",
+    )
+    def test_dreamer_v3_full_learner_cuda_graph_matches_eager(
+        self, device, monkeypatch
+    ):
+        from omegaconf import OmegaConf
+
+        device = torch.device(device)
+        if device.type != "cuda":
+            pytest.skip("CUDA graph test only runs for the CUDA parametrization")
+
+        repo_root = Path(__file__).parents[2]
+        example_dir = repo_root / "sota-implementations/dreamer_v3"
+        monkeypatch.syspath_prepend(str(example_dir))
+        example = runpy.run_path(
+            example_dir / "train.py",
+            run_name="dreamer_v3_learner_cuda_graph_test",
+        )
+
+        def make_config(cudagraph: bool):
+            cfg = OmegaConf.load(example_dir / "config.yaml")
+            cfg.networks.rnn_hidden_dim = 8
+            cfg.networks.num_categoricals = 2
+            cfg.networks.num_classes = 2
+            cfg.networks.num_blocks = 2
+            cfg.networks.hidden_dim = 8
+            cfg.networks.num_reward_bins = 16
+            cfg.networks.num_value_bins = 16
+            cfg.networks.encoder_layers = 1
+            cfg.networks.decoder_layers = 1
+            cfg.networks.reward_layers = 1
+            cfg.networks.actor_layers = 1
+            cfg.networks.value_layers = 1
+            cfg.replay_buffer.batch_size = 2
+            cfg.replay_buffer.seq_len = 3
+            cfg.optimization.imagination_horizon = 3
+            cfg.optimization.continuation_horizon = 3
+            cfg.optimization.warmup_steps = 0
+            cfg.optimization.mixed_precision = True
+            cfg.optimization.compile_rssm = "scan"
+            cfg.optimization.rssm_scan_unroll = 1
+            cfg.optimization.cudagraph_train_step = cudagraph
+            return cfg
+
+        state_dim = 4
+        torch.manual_seed(1)
+        data = TensorDict(
+            {
+                "state": torch.zeros(2, 3, state_dim, device=device),
+                "belief": torch.zeros(2, 3, 8, device=device),
+                "action": torch.randn(2, 3, 1, device=device),
+                "is_init": torch.zeros(2, 3, 1, dtype=torch.bool, device=device),
+                "next": {
+                    "observation": torch.randn(2, 3, 3, device=device),
+                    "reward": torch.randn(2, 3, 1, device=device),
+                    "done": torch.zeros(2, 3, 1, dtype=torch.bool, device=device),
+                    "terminated": torch.zeros(2, 3, 1, dtype=torch.bool, device=device),
+                },
+            },
+            [2, 3],
+            device=device,
+        )
+
+        updates = []
+        modules = []
+        learners = []
+        for cudagraph in (False, True):
+            cfg = make_config(cudagraph)
+            torch.manual_seed(0)
+            learner = example["_build_learner"](cfg, device, 3, 1)
+            learners.append(learner)
+            modules.append(
+                nn.ModuleList(
+                    [learner.model_loss, learner.actor_loss, learner.value_loss]
+                )
+            )
+            updates.append(
+                example["_LearnerUpdate"](
+                    cfg,
+                    device,
+                    learner,
+                    cudagraph_warmup=5,
+                )
+            )
+
+        initial_state = {
+            key: value.detach().clone()
+            for key, value in modules[0].state_dict().items()
+        }
+        torch.testing.assert_close(modules[1].state_dict(), initial_state)
+
+        # Compile both paths and finish graph capture without applying updates.
+        for update, sample in zip(updates, (data.clone(), data.clone())):
+            for _ in range(5):
+                update.train_step(sample)
+        for module in modules:
+            module.load_state_dict(initial_state)
+
+        eager_data = data.clone()
+        graph_data = data.clone()
+        for seed in (10, 11):
+            torch.manual_seed(seed)
+            expected = updates[0](eager_data)
+            torch.manual_seed(seed)
+            actual = updates[1](graph_data)
+            torch.testing.assert_close(actual, expected, atol=2e-3, rtol=2e-3)
+
+        torch.testing.assert_close(
+            modules[1].state_dict(),
+            modules[0].state_dict(),
+            atol=2e-4,
+            rtol=2e-3,
+        )
+        torch.testing.assert_close(
+            learners[1].optimizer.state_dict(),
+            learners[0].optimizer.state_dict(),
+            atol=2e-3,
+            rtol=2e-3,
+        )
+        assert learners[0].optimizer.state
+        assert learners[1].optimizer.state
+        assert learners[0].optimizer.param_groups[0]["step"] == 2
+        assert learners[1].optimizer.param_groups[0]["step"] == 2
+        target_prefix = "2.target_value_model_params"
+        assert any(
+            not torch.equal(value, initial_state[key])
+            for key, value in modules[0].state_dict().items()
+            if key.startswith(target_prefix)
+        )
 
     @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
     def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
@@ -1785,6 +1996,7 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
         "dmc_walker_runs",
         "optimization.compile_rssm=scan",
         "optimization.rssm_scan_unroll=8",
+        "optimization.cudagraph_train_step=true",
         "benchmark.seeds=[0]",
     ]
 
