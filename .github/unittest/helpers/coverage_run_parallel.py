@@ -28,6 +28,11 @@ def write_config(config_path: Path, argv: list[str]) -> None:
     """
     assert not config_path.exists(), "Temporary coverage config exists already"
     cmdline = shlex.join(argv[1:])
+    thread_concurrency = (
+        "    thread\n"
+        if os.environ.get("TORCHRL_COV_TRACE_THREADS", "1") != "0"
+        else ""
+    )
     with open(str(config_path), "w", encoding="utf-8") as fh:
         fh.write(
             f"""# .coveragerc to control coverage.py
@@ -35,8 +40,7 @@ def write_config(config_path: Path, argv: list[str]) -> None:
 parallel=True
 concurrency=
     multiprocessing
-    thread
-command_line={cmdline}
+{thread_concurrency}command_line={cmdline}
 """
         )
 

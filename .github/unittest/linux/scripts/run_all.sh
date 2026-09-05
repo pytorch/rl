@@ -500,7 +500,10 @@ run_non_distributed_tests() {
       ;;
     collectors)
       echo "Running shard collectors: ${collector_tests} (serial)"
-      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${collector_tests} \
+      # Coverage's thread hook can crash multiprocessing.Queue feeder threads
+      # on Python 3.10. Process coverage remains enabled for this shard.
+      TORCHRL_COV_TRACE_THREADS=0 \
+        python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${collector_tests} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args} ${serial_timeout}
