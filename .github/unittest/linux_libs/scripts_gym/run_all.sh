@@ -145,6 +145,7 @@ printf "* Setting up Atari ROMs\n"
 if ! find Roms -type f -iname '*pong*' -print -quit 2>/dev/null | grep -q .; then
     mkdir -p Roms
     if ! wget --tries=5 --retry-connrefused --waitretry=5 \
+        --user-agent='Mozilla/5.0' \
         -O Roms.rar https://www.atarimania.com/roms/Roms.rar; then
         printf "Failed to download Atari ROM archive\n" >&2
         exit 1
