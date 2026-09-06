@@ -15,10 +15,12 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 if TYPE_CHECKING:
     _ReplayServiceBackend = Literal["direct", "ray"]
+    _ReplayTransport = Literal["auto", "direct", "ray", "distributed"]
 else:
-    # OmegaConf structured configs resolve this alias at runtime and do not
+    # OmegaConf structured configs resolve these aliases at runtime and do not
     # support Literal on all TorchRL-supported versions.
     _ReplayServiceBackend = str
+    _ReplayTransport = str
 
 
 @dataclass
@@ -440,3 +442,5 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     delayed_init: bool | None = None
     service_backend: _ReplayServiceBackend = "direct"
     service_backend_options: dict[str, Any] = field(default_factory=dict)
+    transport: _ReplayTransport = "auto"
+    transport_options: dict[str, Any] | None = None
