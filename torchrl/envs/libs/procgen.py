@@ -192,6 +192,15 @@ class ProcgenWrapper(_EnvWrapper):
         except Exception:
             warnings.warn("ProcgenWrapper: seeding failed (best-effort).")
 
+    def close(self, *, raise_if_closed: bool = True) -> None:
+        # procgen.ProcgenEnv returns a gym3 ToBaselinesVecEnv whose close method
+        # is a no-op. Close the nested CEnv explicitly so its worker threads and
+        # native resources are released.
+        nested_env = getattr(self._env, "env", None)
+        if nested_env is not None:
+            nested_env.close()
+        super().close(raise_if_closed=raise_if_closed)
+
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         obs = self._env.reset()
         if isinstance(obs, (tuple, list)):
