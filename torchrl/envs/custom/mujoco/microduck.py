@@ -58,7 +58,7 @@ from typing import Any, ClassVar
 
 import torch
 from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import Binary, Bounded, Categorical, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
 from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
@@ -177,6 +177,80 @@ def _body_forward_vector(quaternion: torch.Tensor) -> torch.Tensor:
     )
 
 
+@implement_for("mujoco")
+def _write_collision_proxy_scene(
+    proxy_geoms: list[ET.Element],
+    compiler: ET.Element,
+    robot_tree: ET.ElementTree,
+    scene_tree: ET.ElementTree,
+    patched_robot: Path,
+    patched_scene: Path,
+) -> None:
+    """Write box proxies using MuJoCo's native mesh fitting."""
+    for geom in proxy_geoms:
+        geom.set("type", "box")
+    compiler.set("fitaabb", "true")
+    robot_tree.write(patched_robot, encoding="unicode")
+    scene_tree.write(patched_scene, encoding="unicode")
+
+
+@_write_collision_proxy_scene.register(to_version="3.3.7")
+def _(
+    proxy_geoms: list[ET.Element],
+    compiler: ET.Element,
+    robot_tree: ET.ElementTree,
+    scene_tree: ET.ElementTree,
+    patched_robot: Path,
+    patched_scene: Path,
+) -> None:
+    """Write explicit box proxies when ``fitaabb`` does not preserve their pose."""
+    generated_names = []
+    for index, geom in enumerate(proxy_geoms):
+        if geom.get("name") is None:
+            geom.set("name", f"torchrl_collision_proxy_{index}")
+            generated_names.append(geom)
+
+    # Compile the mesh geoms once to obtain MuJoCo's canonicalized mesh
+    # vertices and body-local pose. Before MuJoCo 3.3.7, ``fitaabb`` does not
+    # produce the same fitted pose as the current AABB containment semantics.
+    robot_tree.write(patched_robot, encoding="unicode")
+    scene_tree.write(patched_scene, encoding="unicode")
+    mujoco = importlib.import_module("mujoco")
+    model = mujoco.MjModel.from_xml_path(str(patched_scene))
+    for geom in proxy_geoms:
+        geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom.get("name"))
+        mesh_id = model.geom_dataid[geom_id]
+        start = model.mesh_vertadr[mesh_id]
+        stop = start + model.mesh_vertnum[mesh_id]
+        vertices = model.mesh_vert[start:stop]
+        center = (vertices.max(axis=0) + vertices.min(axis=0)) / 2
+        half_size = (vertices.max(axis=0) - vertices.min(axis=0)) / 2
+        rotated_center = model.geom_pos[geom_id].copy()
+        mujoco.mju_rotVecQuat(rotated_center, center, model.geom_quat[geom_id])
+
+        geom.set("type", "box")
+        geom.set("size", " ".join(format(float(value), ".17g") for value in half_size))
+        geom.set(
+            "pos",
+            " ".join(
+                format(float(value), ".17g")
+                for value in model.geom_pos[geom_id] + rotated_center
+            ),
+        )
+        for attribute in ("axisangle", "euler", "xyaxes", "zaxis"):
+            geom.attrib.pop(attribute, None)
+        geom.set(
+            "quat",
+            " ".join(
+                format(float(value), ".17g") for value in model.geom_quat[geom_id]
+            ),
+        )
+        geom.attrib.pop("mesh", None)
+    for geom in generated_names:
+        geom.attrib.pop("name")
+    robot_tree.write(patched_robot, encoding="unicode")
+
+
 @contextmanager
 def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
     """Replace detailed collision meshes with tight box proxies at load time.
@@ -230,56 +304,14 @@ def _low_cost_collision_scene(scene_path: Path) -> Iterator[Path]:
     with TemporaryDirectory(prefix="torchrl-microduck-") as directory:
         patched_robot = Path(directory) / robot_path.name
         patched_scene = Path(directory) / scene_path.name
-        generated_names = []
-        for index, geom in enumerate(proxy_geoms):
-            if geom.get("name") is None:
-                geom.set("name", f"torchrl_collision_proxy_{index}")
-                generated_names.append(geom)
-
-        # Compile the mesh geoms once to obtain MuJoCo's canonicalized mesh
-        # vertices and body-local pose. Explicitly writing the fitted boxes
-        # avoids the incorrect unrotated center produced by ``fitaabb`` in
-        # MuJoCo 3.3 and earlier.
-        robot_tree.write(patched_robot, encoding="unicode")
-        scene_tree.write(patched_scene, encoding="unicode")
-        mujoco = importlib.import_module("mujoco")
-        model = mujoco.MjModel.from_xml_path(str(patched_scene))
-        for geom in proxy_geoms:
-            geom_id = mujoco.mj_name2id(
-                model, mujoco.mjtObj.mjOBJ_GEOM, geom.get("name")
-            )
-            mesh_id = model.geom_dataid[geom_id]
-            start = model.mesh_vertadr[mesh_id]
-            stop = start + model.mesh_vertnum[mesh_id]
-            vertices = model.mesh_vert[start:stop]
-            center = (vertices.max(axis=0) + vertices.min(axis=0)) / 2
-            half_size = (vertices.max(axis=0) - vertices.min(axis=0)) / 2
-            rotated_center = model.geom_pos[geom_id].copy()
-            mujoco.mju_rotVecQuat(rotated_center, center, model.geom_quat[geom_id])
-
-            geom.set("type", "box")
-            geom.set(
-                "size", " ".join(format(float(value), ".17g") for value in half_size)
-            )
-            geom.set(
-                "pos",
-                " ".join(
-                    format(float(value), ".17g")
-                    for value in model.geom_pos[geom_id] + rotated_center
-                ),
-            )
-            for attribute in ("axisangle", "euler", "xyaxes", "zaxis"):
-                geom.attrib.pop(attribute, None)
-            geom.set(
-                "quat",
-                " ".join(
-                    format(float(value), ".17g") for value in model.geom_quat[geom_id]
-                ),
-            )
-            geom.attrib.pop("mesh", None)
-        for geom in generated_names:
-            geom.attrib.pop("name")
-        robot_tree.write(patched_robot, encoding="unicode")
+        _write_collision_proxy_scene(
+            proxy_geoms,
+            compiler,
+            robot_tree,
+            scene_tree,
+            patched_robot,
+            patched_scene,
+        )
         yield patched_scene
 
 
