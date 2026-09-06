@@ -498,11 +498,13 @@ class TestProcgen:
 
     def test_procgen_num_envs_batch_size(self):
         env = ProcgenEnv("coinrun", num_envs=3)
+        native_env = env._env.env
         try:
             td = env.reset()
             assert td["observation"].shape[0] == 3
         finally:
             env.close()
+        assert native_env.closed
 
     def test_procgen_seeding_is_deterministic(self):
         # Procgen must be seeded at construction time via the seed parameter
