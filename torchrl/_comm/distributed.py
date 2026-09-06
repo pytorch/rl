@@ -35,6 +35,7 @@ import torch.distributed as dist
 from tensordict.base import _is_leaf_nontensor, TensorDictBase
 from tensordict.utils import NestedKey
 
+from torchrl import implement_for
 from torchrl._comm.mailbox import MailboxPeerClosedError, MailboxTransportError
 from torchrl._comm.request_reply import (
     Message,
@@ -74,12 +75,23 @@ _OP_TIMEOUT_S = 86_400.0
 # waits for a reply (mirrors torchrl._comm.mailbox._PEER_CHECK_INTERVAL).
 _HEALTH_CHECK_INTERVAL_S = 0.1
 
-# Some Windows torch wheels are built without libuv. Respect the documented
-# environment override elsewhere and default to the legacy TCPStore backend on
-# Windows so direct TCPStore construction remains usable there.
-_TCP_STORE_USE_LIBUV = (
-    sys.platform != "win32" and os.environ.get("USE_LIBUV", "1") != "0"
-)
+
+@implement_for("torch", "2.4")
+def _tcp_store_use_libuv() -> bool:
+    # Some Windows torch wheels are built without libuv. Respect the documented
+    # environment override elsewhere and default to the legacy TCPStore backend
+    # on Windows so direct TCPStore construction remains usable there.
+    return sys.platform != "win32" and os.environ.get("USE_LIBUV", "1") != "0"
+
+
+@implement_for("torch", None, "2.4")
+def _tcp_store_use_libuv() -> bool:  # noqa: F811
+    # Libuv became the default TCPStore backend in torch 2.4 and older wheels
+    # may be built without it.
+    return False
+
+
+_TCP_STORE_USE_LIBUV = _tcp_store_use_libuv()
 
 
 def _send_sentinel_async(
