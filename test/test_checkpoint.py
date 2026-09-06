@@ -9,6 +9,8 @@ import json
 import os
 import random
 import zipfile
+from datetime import datetime, timezone
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -665,6 +667,13 @@ def test_checkpoint_rotation_recovers_interrupted_cross_format_replacement(
     monkeypatch.setattr(rotation, "_remove_atomically", remove_atomically)
 
     new_path = rotation._checkpoint_path(4, new_format)
+    os.utime(old_path, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(new_path, ns=(2_000_000_000, 2_000_000_000))
+    monkeypatch.setattr(
+        rotation,
+        "_read_created_at",
+        Mock(return_value=datetime(2026, 1, 1, tzinfo=timezone.utc)),
+    )
     assert rotation.checkpoints() == (new_path,)
     assert rotation.latest() == new_path
     value = {}
