@@ -768,15 +768,16 @@ class PPOLoss(LossModule):
                 _, log_prob = sample_and_log_prob(
                     dist,
                     (self.samples_mc_entropy,),
-                    reparameterize=getattr(dist, "has_rsample", False),
+                    reparameterize=dist.has_rsample,
                 )
                 sampled_entropy = -log_prob.mean(0)
                 if analytic_entropy and compiling:
                     entropy = torch.where(entropy.isfinite(), entropy, sampled_entropy)
                 else:
                     entropy = sampled_entropy
-        if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
-            entropy.batch_size = adv_shape
+        if is_composite:
+            if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
+                entropy.batch_size = adv_shape
         return entropy.unsqueeze(-1)
 
     def _get_cur_log_prob(

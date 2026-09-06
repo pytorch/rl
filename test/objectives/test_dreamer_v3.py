@@ -64,6 +64,7 @@ from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+_has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _has_gym = (
     importlib.util.find_spec("gymnasium") is not None
     or importlib.util.find_spec("gym") is not None
@@ -1122,6 +1123,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.skipif(not _has_hoptorch, reason="requires hoptorch")
     @pytest.mark.skipif(
         not (_has_hydra and _has_omegaconf and _has_gym),
         reason="requires hydra, omegaconf, and gym",

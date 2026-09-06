@@ -26,7 +26,7 @@ from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey, unravel_key
 
-from torchrl._utils import _maybe_record_function_decorator
+from torchrl._utils import _maybe_record_function_decorator, implement_for
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.modules.distributions.utils import (
@@ -60,6 +60,19 @@ from torchrl.objectives.value.functional import (
 symexp = _symexp
 two_hot_decode = _two_hot_decode
 two_hot_encode = _two_hot_encode
+
+
+@implement_for("torch", None, "2.2")
+def _register_load_state_dict_pre_hook(module: torch.nn.Module, hook) -> None:
+    module._register_load_state_dict_pre_hook(hook, with_module=True)
+
+
+@implement_for("torch", "2.2")
+def _register_load_state_dict_pre_hook(  # noqa: F811
+    module: torch.nn.Module, hook
+) -> None:
+    module.register_load_state_dict_pre_hook(hook)
+
 
 # ---------------------------------------------------------------------------
 # KL balancing for categorical distributions (DreamerV3 §3)
@@ -721,7 +734,7 @@ class DreamerV3ActorLoss(LossModule):
             min_scale=return_normalization_min_scale,
             device=self._default_device,
         )
-        self.register_load_state_dict_pre_hook(self._migrate_legacy_retnorm_state)
+        _register_load_state_dict_pre_hook(self, self._migrate_legacy_retnorm_state)
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         if lmbda is not None:
