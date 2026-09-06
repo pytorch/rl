@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.modules.distributions.utils
+
+
+composite_entropy
+=================
+
+.. autofunction:: composite_entropy

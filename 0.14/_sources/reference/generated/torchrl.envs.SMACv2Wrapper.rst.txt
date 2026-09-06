@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+SMACv2Wrapper
+=============
+
+.. autofunction:: SMACv2Wrapper

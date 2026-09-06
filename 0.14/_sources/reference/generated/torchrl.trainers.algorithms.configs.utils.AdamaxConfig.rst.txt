@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.utils.AdamaxConfig
+======================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.utils
+
+.. autoclass:: AdamaxConfig

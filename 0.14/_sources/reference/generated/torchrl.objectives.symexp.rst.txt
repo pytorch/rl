@@ -1,0 +1,6 @@
+﻿torchrl.objectives.symexp
+=========================
+
+.. currentmodule:: torchrl.objectives
+
+.. autofunction:: symexp

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.VIPTransformConfig
+=================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: VIPTransformConfig

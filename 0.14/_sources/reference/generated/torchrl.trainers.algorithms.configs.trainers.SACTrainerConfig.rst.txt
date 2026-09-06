@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: SACTrainerConfig

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+IQLLoss
+=======
+
+.. autoclass:: IQLLoss
+    :members:

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.multiagent
+
+
+IPPOLoss
+========
+
+.. autoclass:: IPPOLoss
+    :members:

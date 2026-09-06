@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.functional
+
+
+symexp
+======
+
+.. autoclass:: symexp
+    :members:

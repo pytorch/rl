@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig
+==================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: ReinforceLossConfig

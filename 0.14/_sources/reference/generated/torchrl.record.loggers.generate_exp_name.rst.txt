@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.record.loggers
+
+
+generate_exp_name
+=================
+
+.. autofunction:: generate_exp_name

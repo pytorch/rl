@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers
+
+
+MixedPrecisionOptimizationStepper
+=================================
+
+.. autoclass:: MixedPrecisionOptimizationStepper
+    :members:
+    :inherited-members:

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.modules.QValueModelConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.modules
+
+.. autoclass:: QValueModelConfig

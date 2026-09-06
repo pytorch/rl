@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+SACTrainer
+==========
+
+.. autoclass:: SACTrainer
+    :members:
+    :inherited-members:

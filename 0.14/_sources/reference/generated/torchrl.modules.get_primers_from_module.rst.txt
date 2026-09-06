@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+get_primers_from_module
+=======================
+
+.. autoclass:: get_primers_from_module
+    :members:

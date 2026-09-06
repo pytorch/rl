@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+RNDLoss
+=======
+
+.. autoclass:: RNDLoss
+    :members:

@@ -1,0 +1,25 @@
+﻿torchrl.modules.mcts.MCTSScores
+===============================
+
+.. currentmodule:: torchrl.modules.mcts
+
+.. autoclass:: MCTSScores
+
+   
+   .. automethod:: __init__
+
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~MCTSScores.PUCT
+      ~MCTSScores.UCB
+      ~MCTSScores.UCB1_TUNED
+      ~MCTSScores.EXP3
+   
+   

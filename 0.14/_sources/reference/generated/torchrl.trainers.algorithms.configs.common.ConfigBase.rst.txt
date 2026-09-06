@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.common.ConfigBase
+=====================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.common
+
+.. autoclass:: ConfigBase

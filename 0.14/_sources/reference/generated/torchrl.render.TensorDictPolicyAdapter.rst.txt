@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.render
+
+
+TensorDictPolicyAdapter
+=======================
+
+.. autoclass:: TensorDictPolicyAdapter
+    :members:
+    :inherited-members:

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+ActionTokenizerTransform
+========================
+
+.. autoclass:: ActionTokenizerTransform
+    :members:

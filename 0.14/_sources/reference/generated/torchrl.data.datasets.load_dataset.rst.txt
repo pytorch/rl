@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+load_dataset
+============
+
+.. autofunction:: load_dataset

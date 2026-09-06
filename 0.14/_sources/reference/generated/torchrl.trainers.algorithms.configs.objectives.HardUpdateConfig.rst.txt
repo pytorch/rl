@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.HardUpdateConfig
+===============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: HardUpdateConfig

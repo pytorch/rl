@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.vla
+
+
+VLAWrapperBase
+==============
+
+.. autoclass:: VLAWrapperBase
+    :members:

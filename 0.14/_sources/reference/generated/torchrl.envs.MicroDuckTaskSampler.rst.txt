@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+MicroDuckTaskSampler
+====================
+
+.. autoclass:: MicroDuckTaskSampler
+    :members:
+    :inherited-members:

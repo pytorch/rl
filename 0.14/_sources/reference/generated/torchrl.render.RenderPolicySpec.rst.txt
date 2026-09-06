@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.render
+
+
+RenderPolicySpec
+================
+
+.. autoclass:: RenderPolicySpec
+    :members:
+    :inherited-members:

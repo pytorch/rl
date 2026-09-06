@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+IQLTrainer
+==========
+
+.. autoclass:: IQLTrainer
+    :members:
+    :inherited-members:

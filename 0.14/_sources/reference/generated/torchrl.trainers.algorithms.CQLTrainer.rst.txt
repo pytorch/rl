@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+CQLTrainer
+==========
+
+.. autoclass:: CQLTrainer
+    :members:
+    :inherited-members:
