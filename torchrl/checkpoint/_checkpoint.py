@@ -1343,6 +1343,7 @@ class _RotatedCheckpoint:
     step: int
     metric: float | None
     created_at: datetime
+    modified_at_ns: int
 
 
 class CheckpointRotation:
@@ -1508,6 +1509,7 @@ class CheckpointRotation:
                 continue
             try:
                 manifest = Checkpoint.manifest(path)
+                modified_at_ns = path.stat().st_mtime_ns
             except (CheckpointError, OSError, TypeError, ValueError):
                 continue
             records.append(
@@ -1516,10 +1518,16 @@ class CheckpointRotation:
                     step=int(step_text),
                     metric=self._read_metric(manifest),
                     created_at=self._read_created_at(manifest, path),
+                    modified_at_ns=modified_at_ns,
                 )
             )
         records.sort(
-            key=lambda record: (record.step, record.created_at, record.path.name)
+            key=lambda record: (
+                record.step,
+                record.created_at,
+                record.modified_at_ns,
+                record.path.name,
+            )
         )
         return records
 
