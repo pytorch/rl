@@ -69,6 +69,7 @@ _has_gym = (
     importlib.util.find_spec("gymnasium") is not None
     or importlib.util.find_spec("gym") is not None
 )
+_compile_backend = "eager" if os.name == "nt" else "inductor"
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -397,7 +398,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         restored.load_state_dict(two_hot.state_dict())
         torch.testing.assert_close(restored(logits), expected)
 
-        compiled = torch.compile(restored, fullgraph=True)
+        compiled = torch.compile(restored, backend=_compile_backend, fullgraph=True)
         torch.testing.assert_close(compiled(logits), expected, rtol=1e-5, atol=1e-5)
 
     # ------------------------------------------------------------------ #
@@ -1709,7 +1710,9 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             loss_td["return_scale"], torch.tensor(10.0, device=device)
         )
 
-        compiled_scale = torch.compile(loss_module._return_scale, fullgraph=True)
+        compiled_scale = torch.compile(
+            loss_module._return_scale, backend=_compile_backend, fullgraph=True
+        )
         torch.testing.assert_close(
             compiled_scale(fake_data["lambda_target"]),
             torch.tensor(10.0, device=device),
@@ -1992,8 +1995,11 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
         env=env,
         text=True,
     ).stdout.splitlines()
+    expected_benchmark = str(benchmark)
+    if os.name == "nt":
+        expected_benchmark = f"/{benchmark.drive[0].lower()}{benchmark.as_posix()[2:]}"
     assert fast == [
-        str(benchmark),
+        expected_benchmark,
         "--output-dir",
         "dmc_walker_runs",
         "optimization.compile_rssm=scan",

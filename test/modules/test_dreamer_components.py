@@ -8,6 +8,7 @@ import argparse
 import copy
 import functools as ft
 import importlib.util
+import sys
 from unittest import mock
 
 import pytest
@@ -43,6 +44,7 @@ from torchrl.testing import get_default_devices
 
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
+_compile_backend = "eager" if sys.platform == "win32" else "inductor"
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -552,7 +554,7 @@ class TestDreamerV3Components:
             num_layers=2,
             recurrent_backend="scan",
         )
-        compiled = torch.compile(module, fullgraph=True)
+        compiled = torch.compile(module, backend=_compile_backend, fullgraph=True)
         value = torch.randn(2, 5, 6, requires_grad=True)
         hidden = torch.randn(2, 8, requires_grad=True)
         is_init = torch.tensor(
@@ -675,7 +677,7 @@ class TestDreamerV3Components:
         belief = torch.randn(3, 8)
         action = torch.randn(3, 2)
         uniform = torch.rand(3, 2)
-        compiled = torch.compile(prior, fullgraph=True)
+        compiled = torch.compile(prior, backend=_compile_backend, fullgraph=True)
 
         expected = prior(state, belief, action, _uniform=uniform)
         actual = compiled(state, belief, action, _uniform=uniform)
@@ -860,7 +862,7 @@ class TestDreamerV3Components:
     def _test_rssm_rollout_compile(self, scope, unroll):
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
-        rollout.compile_rollout(scope, unroll=unroll)
+        rollout.compile_rollout(scope, unroll=unroll, backend=_compile_backend)
 
         output = rollout(data)
         (
