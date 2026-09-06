@@ -182,7 +182,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "RandomCropTensorDictConfig",
         "RemoveEmptySpecsConfig",
         "RenameTransformConfig",
-        "ReplayBufferConfig",
         "Reward2GoTransformConfig",
         "RewardSumConfig",
         "SMACv2EnvConfig",
@@ -613,6 +612,7 @@ class TestDataConfigs:
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_replay_buffer_config(self):
         """Test ReplayBufferConfig."""
+        from hydra.errors import InstantiationException
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             ListStorageConfig,
@@ -644,7 +644,24 @@ class TestDataConfigs:
         assert cfg_optional.writer is None
         assert cfg_optional.transform is None
         assert cfg_optional.batch_size is None
+        assert cfg_optional.transport == "auto"
+        assert cfg_optional.transport_options is None
         assert isinstance(instantiate(cfg_optional), ReplayBuffer)
+
+        # Test that transport fields are forwarded to ReplayBuffer.__init__.
+        cfg_transport = ReplayBufferConfig(transport="distributed")
+        with pytest.raises(
+            InstantiationException,
+            match="A direct ReplayBuffer only supports transport='auto' or 'direct'",
+        ):
+            instantiate(cfg_transport)
+
+        cfg_transport_options = ReplayBufferConfig(transport_options={"timeout": 1})
+        with pytest.raises(
+            InstantiationException,
+            match="transport_options are only valid for a remote ReplayBuffer",
+        ):
+            instantiate(cfg_transport_options)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensordict_replay_buffer_config_optional_fields(self):
