@@ -5,6 +5,7 @@
 
 from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPool
 from .batched_envs import ParallelEnv, SerialEnv
+from .batched_inference import FixedBatchedInference
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import (
     AntEnv,
@@ -204,6 +205,7 @@ __all__ = [
     "AutoResetEnv",
     "AutoResetTransform",
     "AsyncEnvPool",
+    "FixedBatchedInference",
     "ProcessorAsyncEnvPool",
     "ConditionalPolicySwitch",
     "ThreadingAsyncEnvPool",

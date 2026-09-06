@@ -10,8 +10,10 @@ import pytest
 import torch
 
 from tensordict import set_capture_non_tensor_stack, TensorDict
+from tensordict.nn import TensorDictModule
 from torchrl.envs import (
     AsyncEnvPool,
+    FixedBatchedInference,
     ParallelEnv,
     SerialEnv,
     step_mdp,
@@ -322,6 +324,20 @@ def test_async_env_pool_fast_step_slow_reset(benchmark, exchange):
             )
         finally:
             pool._maybe_shutdown()
+
+
+def test_fixed_batched_inference_overhead(benchmark):
+    """Per-call overhead of the fixed-shape inference helper (CPU path).
+
+    A trivial policy over small observations, so the round time is dominated
+    by staging (key selection, padded copy, mask) rather than compute.
+    """
+    policy = TensorDictModule(
+        torch.nn.Linear(4, 2), in_keys=["obs"], out_keys=["action"]
+    )
+    helper = FixedBatchedInference(policy, "cpu", bucket_sizes=[64])
+    batch = TensorDict({"obs": torch.randn(48, 4)}, batch_size=[48])
+    benchmark(helper, batch)
 
 
 if __name__ == "__main__":
