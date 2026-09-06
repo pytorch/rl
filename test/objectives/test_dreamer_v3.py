@@ -2015,7 +2015,7 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
         env=env,
         text=True,
     ).stdout.splitlines()
-    assert smoke[:3] == [str(benchmark), "--output-dir", "dmc_walker_smoke"]
+    assert smoke[:3] == [expected_benchmark, "--output-dir", "dmc_walker_smoke"]
     assert "replay_buffer.buffer_size=400" in smoke
     assert "optimization.compile_rssm=null" in smoke
     assert "optimization.updates_per_batch=1" in smoke
