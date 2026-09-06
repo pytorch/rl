@@ -153,8 +153,6 @@ Categorical(
  device=cpu,
  dtype=torch.float32,
  domain=continuous)
-/pytorch/rl/torchrl/envs/common.py:3156: FutureWarning: A reset tensordict carrying state was passed to `reset()` without specifying `set_state`. The state is honored for now, but from v0.15 it will be ignored unless you pass `set_state=True` explicitly (pass `set_state=False` to opt into the future behavior and silence this warning).
- set_state = self._resolve_set_state(set_state, tensordict, select_reset_only)
 pinned task: 2 [[0.0, 0.15000000596046448]]
 held for the episode: [2]
 ```
@@ -321,10 +319,8 @@ for task_id, name in enumerate(tasks.name[:2]):
 ```
 
 ```
-/pytorch/rl/torchrl/envs/common.py:3156: FutureWarning: A reset tensordict carrying state was passed to `reset()` without specifying `set_state`. The state is honored for now, but from v0.15 it will be ignored unless you pass `set_state=True` explicitly (pass `set_state=False` to opt into the future behavior and silence this warning).
- set_state = self._resolve_set_state(set_state, tensordict, select_reset_only)
-standing per-task: mean=+0.000 std=0.995 | pooled: mean=-0.553 std=0.776
-tracking+0.20 per-task: mean=-0.000 std=1.000 | pooled: mean=+0.553 std=0.889
+standing per-task: mean=+0.000 std=0.995 | pooled: mean=-0.121 std=1.014
+tracking+0.20 per-task: mean=-0.000 std=0.995 | pooled: mean=+0.121 std=0.976
 ```
 
 The example's `ppo.per_task_advantage` option is exactly
@@ -388,7 +384,7 @@ diag_env.close()
 ```
 
 ```
-heading term per step: 0.004025031812489033 | total reward: 0.057020556181669235
+heading term per step: 0.0015320081729441881 | total reward: 0.015446546487510204
 ```
 
 ## Training end to end
@@ -432,7 +428,7 @@ for every field and preset.
 - `examples/microduck/README.md` for the training recipe and the results
 of the multi-task runs.
 
-**Total running time of the script:** (0 minutes 53.783 seconds)
+**Total running time of the script:** (0 minutes 53.399 seconds)
 
 [`Download Jupyter notebook: microduck.ipynb`](../_downloads/87abf301cfa889a7c2c1c1bbc88875ef/microduck.ipynb)
 
