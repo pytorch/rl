@@ -767,22 +767,22 @@ class InferenceServer(metaclass=_InferenceServerMeta):
     def _collate_model_batch(
         self, items: list[TensorDictBase], *, pad_to_static: bool = False
     ) -> TensorDictBase:
-        if (
-            not pad_to_static
-            or self.static_batch_size is None
-            or len(items) == self.static_batch_size
-        ):
+        if not pad_to_static or self.static_batch_size is None:
             return self.collate_fn(items)
         if len(items) > self.static_batch_size:
             raise RuntimeError(
                 f"Received {len(items)} requests for static_batch_size="
                 f"{self.static_batch_size}."
             )
-        padded_items = list(items)
-        padded_items.extend(
-            items[-1].clone() for _ in range(self.static_batch_size - len(padded_items))
-        )
-        return self.collate_fn(padded_items)
+        # Lazy collation can allocate stacked leaves on their first access.
+        # Materialize them before capture so the graph owns stable input storage.
+        batch = self.collate_fn(items).contiguous()
+        padding = self.static_batch_size - len(items)
+        if padding:
+            batch = torch.cat(
+                [batch, batch[-1:].expand(padding, *batch.batch_size[1:])], dim=0
+            )
+        return batch
 
     def _validate_cudagraph_storage(self) -> None:
         if self._cudagraph_model is None:
