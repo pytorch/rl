@@ -658,6 +658,31 @@ class TestDreamerV3Components:
         assert belief.grad is not None
         assert all(parameter.grad is not None for parameter in prior.parameters())
 
+    @pytest.mark.parametrize("action_dtype", [torch.bool, torch.int64])
+    @pytest.mark.parametrize("recurrent_model", ["gru", "block_gru"])
+    def test_prior_nonfloating_actions(self, action_dtype, recurrent_model):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            action_dim=2,
+            recurrent_model=recurrent_model,
+            num_blocks=2,
+        )
+        state = torch.randn(3, 8)
+        belief = torch.randn(3, 8)
+        action = torch.tensor([[0, 1], [1, 0], [0, 1]], dtype=action_dtype)
+        expected_logits, _, expected_belief = prior(state, belief, action.float())
+        logits, _, next_belief = prior(state, belief, action)
+        torch.testing.assert_close(logits, expected_logits)
+        torch.testing.assert_close(next_belief, expected_belief)
+        # Acting skips prior sampling and calls the deterministic update directly.
+        torch.testing.assert_close(
+            prior._update_belief(state, belief, action), expected_belief
+        )
+
     @pytest.mark.skipif(
         version.parse(torch.__version__) < version.parse("2.4.0"),
         reason="the native RMSNorm compile path requires Torch >= 2.4.0",
