@@ -20,7 +20,7 @@ from statistics import mean
 from typing import Any, Literal
 
 import torch
-from tensordict import lazy_stack, TensorDict
+from tensordict import maybe_dense_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
@@ -248,7 +248,7 @@ def _normalize_tensordict_device_metadata(data: TensorDictBase) -> TensorDictBas
 
 
 def _default_collate(items: list[TensorDictBase]) -> TensorDictBase:
-    return lazy_stack(
+    return maybe_dense_stack(
         [
             _normalize_tensordict_device_metadata(item)
             if isinstance(item, TensorDictBase)
@@ -305,7 +305,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         timeout (float, optional): seconds to wait for new work before
             dispatching a partial batch. Default: ``0.01``.
         collate_fn (Callable, optional): function used to stack a list of
-            TensorDicts into a batch. Default: :func:`~tensordict.lazy_stack`.
+            TensorDicts into a batch. Default: :func:`~tensordict.maybe_dense_stack`.
         device (torch.device or str, optional): device to move batches to
             before calling the model. This is kept as an alias for
             ``policy_device`` for backward compatibility. ``None`` means no

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import functools as ft
 import importlib.util
 import multiprocessing as mp
 import pickle
@@ -17,7 +18,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
-from tensordict import lazy_stack, TensorDict
+from tensordict import lazy_stack, LazyStackedTensorDict, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.nn.probabilistic import (
@@ -52,7 +53,10 @@ from torchrl.modules.inference_server import (
 )
 from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._monarch import MonarchTransport
-from torchrl.modules.inference_server._server import _RayInferenceServerActor
+from torchrl.modules.inference_server._server import (
+    _default_collate,
+    _RayInferenceServerActor,
+)
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_monarch = importlib.util.find_spec("monarch") is not None
@@ -436,6 +440,21 @@ class TestInferenceServerCore:
 
         assert len(calls) >= 1
         assert sum(calls) == 4  # all 4 items processed
+
+    def test_default_collate_prefers_dense_batches(self):
+        """Homogeneous requests use one dense batch while mixed keys stay lazy."""
+        homogeneous = _default_collate(
+            [
+                TensorDict({"observation": torch.randn(4)}),
+                TensorDict({"observation": torch.randn(4)}),
+            ]
+        )
+        heterogeneous = _default_collate(
+            [TensorDict({"a": torch.randn(4)}), TensorDict({"b": torch.randn(4)})]
+        )
+
+        assert not isinstance(homogeneous, LazyStackedTensorDict)
+        assert isinstance(heterogeneous, LazyStackedTensorDict)
 
     def test_collate_error_resolves_futures_and_server_survives(self):
         """A collate failure must reject the affected futures, not kill the loop."""
@@ -2260,20 +2279,25 @@ class TestAsyncBatchedCollector:
                 frames_per_batch=10,
             )
 
-    def test_yield_completed_trajectories(self):
+    @pytest.mark.parametrize(
+        ("env_backend", "env_exchange"),
+        [("threading", "queue"), ("multiprocessing", "shm")],
+    )
+    def test_yield_completed_trajectories(self, env_backend, env_exchange):
         """With yield_completed_trajectories, collector yields done trajectories."""
         num_envs = 3
         max_steps = 5
         policy = _make_counting_policy()
 
         collector = AsyncBatchedCollector(
-            create_env_fn=[lambda: CountingEnv(max_steps=max_steps)] * num_envs,
+            create_env_fn=[ft.partial(CountingEnv, max_steps=max_steps)] * num_envs,
             policy=policy,
             frames_per_batch=1,
             total_frames=30,
             yield_completed_trajectories=True,
             max_batch_size=num_envs,
-            env_backend="threading",
+            env_backend=env_backend,
+            env_exchange=env_exchange,
         )
         count = 0
         for batch in collector:
@@ -2367,6 +2391,41 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    def test_shared_memory_uses_batched_coordinator(self):
+        """Shared slots preserve outputs while one coordinator keeps all envs moving."""
+        num_envs = 4
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy=_make_counting_policy(),
+            frames_per_batch=40,
+            total_frames=40,
+            env_backend="multiprocessing",
+            env_exchange="shm",
+            server_config=InferenceServerConfig(
+                max_batch_size=num_envs,
+                min_batch_size=num_envs,
+                timeout=0.1,
+            ),
+        )
+        try:
+            batch = next(iter(collector))
+            env_ids = {int(env_id) for env_id in batch["env_index"]}
+            assert env_ids == set(range(num_envs))
+            assert "policy_version" in batch.keys()
+            assert collector.env.resolved_exchange == "shm"
+            assert len(collector._workers) == 1
+        finally:
+            collector.shutdown()
+
+        with pytest.raises(ValueError, match="require env_backend"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory],
+                policy=_make_counting_policy(),
+                frames_per_batch=1,
+                env_backend="threading",
+                env_exchange="shm",
+            )
 
     def test_process_server_backend_smoke(self):
         """Dedicated process server works through AsyncBatchedCollector."""
@@ -2506,6 +2565,46 @@ class TestSlotTransport:
             for r in actor_results:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
+
+    def test_submit_multiple_slots_from_one_thread(self):
+        """Slot clients expose futures so one coordinator can fill a server batch."""
+        num_slots = 4
+        transport = SlotTransport(num_slots=num_slots)
+        clients = [transport.client() for _ in range(num_slots)]
+        policy = _make_policy()
+
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=num_slots,
+            min_batch_size=num_slots,
+            timeout=0.1,
+        ):
+            futures = [clients[0].submit(TensorDict({"observation": torch.randn(4)}))]
+            with pytest.raises(RuntimeError, match="inflight request"):
+                clients[0].submit(TensorDict({"observation": torch.randn(4)}))
+            futures.extend(
+                client.submit(TensorDict({"observation": torch.randn(4)}))
+                for client in clients[1:]
+            )
+            results = [future.result(timeout=10.0) for future in futures]
+
+        assert all("action" in result.keys() for result in results)
+
+    def test_drain_round_robin(self):
+        """Saturated drains rotate instead of repeatedly favoring low slot ids."""
+        transport = SlotTransport(num_slots=6)
+        for slot in range(6):
+            transport._slot_submit(slot, TensorDict({"observation": torch.zeros(1)}))
+        _, first, _ = transport.drain_with_timing(4)
+        assert first == [0, 1, 2, 3]
+
+        for slot in range(4):
+            transport._slot_submit(slot, TensorDict({"observation": torch.zeros(1)}))
+        _, second, _ = transport.drain_with_timing(4)
+        _, third, _ = transport.drain_with_timing(4)
+        assert second == [4, 5, 0, 1]
+        assert third == [2, 3]
 
     def test_too_many_clients_raises(self):
         """Creating more clients than slots raises RuntimeError."""
