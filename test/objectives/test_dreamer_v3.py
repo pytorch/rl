@@ -650,6 +650,34 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         assert grad_total > 0, "All gradients are zero after actor backward"
 
+    @pytest.mark.parametrize("entropy_bonus", [0.0, 3e-4])
+    def test_dreamer_v3_actor_entropy(self, device, entropy_bonus):
+        actor_model = self._create_actor_model().to(device)
+        actor_model[-1].distribution_class = IndependentNormal
+        loss_module = DreamerV3ActorLoss(
+            actor_model,
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            entropy_bonus=entropy_bonus,
+        )
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        if entropy_bonus:
+            distribution = actor_model.get_dist(
+                fake_data.select(*actor_model.in_keys).detach()
+            )
+            expected = (
+                fake_data["discount_weight"] * distribution.entropy().unsqueeze(-1)
+            ).mean()
+        else:
+            expected = loss_td["loss_actor"].new_zeros(())
+        torch.testing.assert_close(loss_td["actor_entropy"], expected)
+        assert not loss_td["actor_entropy"].requires_grad
+        loss_td["loss_actor"].backward()
+        assert any(p.grad is not None for p in actor_model.parameters())
+
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     def test_dreamer_v3_actor_loss_cuda_graph(self, device):

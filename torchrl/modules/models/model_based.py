@@ -1607,6 +1607,8 @@ class RSSMPriorV3(nn.Module):
 
         The acting path conditions on the observation, never on a prior sample.
         """
+        if not action.is_floating_point():
+            action = action.to(belief.dtype)
         if self.recurrent_model == "block_gru":
             belief = self.rnn(state, belief, action)
         else:
