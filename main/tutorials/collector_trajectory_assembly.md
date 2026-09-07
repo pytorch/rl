@@ -36,7 +36,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f404c8b83b0>
+<torch._C.Generator object at 0x7ff1a6fd0750>
 ```
 
 ## Why collectors return fixed-size chunks
