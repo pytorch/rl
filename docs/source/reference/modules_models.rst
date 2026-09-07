@@ -37,6 +37,8 @@ For an overview of how the DreamerV3 components fit together, see
     DreamerV3BlockGRUCell
     DreamerV3BlockGRU
     DreamerV3MLP
+    DreamerV3ImageEncoder
+    DreamerV3ImageDecoder
 
 PILCO
 -----

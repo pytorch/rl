@@ -9,6 +9,7 @@ Includes the continuous Dreamer RSSM and the discrete DreamerV3 RSSM.
 from __future__ import annotations
 
 import functools as ft
+import math
 import warnings
 
 from collections.abc import Callable
@@ -1180,6 +1181,239 @@ class DreamerV3MLP(nn.Module):
     def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
         value = inputs[0] if len(inputs) == 1 else torch.cat(inputs, -1)
         return self.model(value)
+
+
+def _dreamer_v3_conv_init(module: nn.Module) -> None:
+    """Initialize convolutions like the reference DreamerV3 implementation."""
+    if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
+        fan_in = module.in_channels * module.kernel_size[0] * module.kernel_size[1]
+        std = 1.1368 / fan_in**0.5
+        nn.init.trunc_normal_(module.weight, std=std, a=-2 * std, b=2 * std)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
+
+
+class _DreamerV3ChannelRMSNorm(nn.Module):
+    """RMS normalization over the channel dimension of ``[..., C, H, W]`` maps."""
+
+    def __init__(self, channels: int, eps: float = 1e-4, device=None):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(channels, device=device))
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        value = value.movedim(-3, -1)
+        value = _dreamer_v3_rms_norm(value, self.weight, self.eps)
+        return value.movedim(-1, -3)
+
+
+class DreamerV3ImageEncoder(nn.Module):
+    """DreamerV3 convolutional image encoder.
+
+    A stack of stride-2 convolutions, each followed by channel-wise RMS
+    normalization and SiLU, as in the reference implementation. Every stage
+    halves the spatial resolution and outputs ``depth * mult`` channels.
+
+    Reference: Hafner et al., DreamerV3 (2023): https://arxiv.org/abs/2301.04104
+
+    Args:
+        in_channels (int, optional): Image channels. Defaults to 3.
+        depth (int, optional): Base channel count; stage ``i`` outputs
+            ``depth * mults[i]`` channels. Defaults to 64.
+        mults (tuple[int, ...], optional): Channel multiplier of each stage.
+            Defaults to ``(2, 3, 4, 4)``.
+        kernel_size (int, optional): Positive odd convolution kernel size. Defaults to 5.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to
+            ``1e-4``.
+        device (torch.device, optional): Device on which to create parameters.
+
+    The input is an image batch of shape ``(*batch, C, H, W)``, either
+    ``uint8`` in ``[0, 255]`` or floating point in ``[0, 1]``. Both are mapped
+    to ``[-0.5, 0.5]`` before the first convolution. The output is the
+    flattened final feature map, ``(*batch, output_features((C, H, W)))``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import DreamerV3ImageEncoder
+        >>> encoder = DreamerV3ImageEncoder(depth=8, mults=(1, 2))
+        >>> image = torch.randint(0, 256, (4, 3, 16, 16), dtype=torch.uint8)
+        >>> encoder(image).shape
+        torch.Size([4, 256])
+        >>> encoder.output_features((3, 16, 16))
+        256
+
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig`
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 3,
+        depth: int = 64,
+        mults: tuple[int, ...] = (2, 3, 4, 4),
+        kernel_size: int = 5,
+        norm_eps: float = 1e-4,
+        device: torch.device | str | None = None,
+    ):
+        super().__init__()
+        if kernel_size < 1 or kernel_size % 2 == 0:
+            raise ValueError("kernel_size must be a positive odd integer.")
+        if not mults:
+            raise ValueError("mults must contain at least one stage.")
+        layers = []
+        channels = in_channels
+        for mult in mults:
+            out_channels = depth * mult
+            layers.extend(
+                [
+                    nn.Conv2d(
+                        channels,
+                        out_channels,
+                        kernel_size,
+                        stride=2,
+                        padding=kernel_size // 2,
+                        device=device,
+                    ),
+                    _DreamerV3ChannelRMSNorm(out_channels, norm_eps, device=device),
+                    nn.SiLU(),
+                ]
+            )
+            channels = out_channels
+        self.layers = nn.Sequential(*layers)
+        self.layers.apply(_dreamer_v3_conv_init)
+        self.out_channels = channels
+        self.num_stages = len(mults)
+
+    def output_features(self, image_shape: tuple[int, int, int]) -> int:
+        """Return the flattened feature count for a ``(C, H, W)`` image shape."""
+        _, height, width = image_shape
+        for _ in range(self.num_stages):
+            height = -(-height // 2)
+            width = -(-width // 2)
+        return self.out_channels * height * width
+
+    def forward(self, image: torch.Tensor) -> torch.Tensor:
+        if not image.is_floating_point():
+            image = image.float() / 255.0
+        image = image - 0.5
+        batch_shape = image.shape[:-3]
+        features = self.layers(image.reshape(-1, *image.shape[-3:]))
+        return features.reshape(*batch_shape, -1)
+
+
+class DreamerV3ImageDecoder(nn.Module):
+    """DreamerV3 transposed-convolution image decoder.
+
+    A (block-)linear projection maps the latent features to the smallest
+    feature map, then stride-2 transposed convolutions with channel-wise RMS
+    normalization and SiLU double the resolution at every stage. The last
+    layer outputs the image channels without normalization, shifted by
+    ``0.5`` to match the scale of image targets divided by ``255``. Predictions
+    are unbounded.
+
+    Reference: Hafner et al., DreamerV3 (2023): https://arxiv.org/abs/2301.04104
+
+    Args:
+        in_features (int): Latent feature count (for instance the stochastic
+            state concatenated with the belief).
+        image_shape (tuple[int, int, int], optional): Decoded ``(C, H, W)``
+            shape. ``H`` and ``W`` must be divisible by ``2 ** len(mults)``.
+            Defaults to ``(3, 64, 64)``.
+        depth (int, optional): Base channel count, mirroring the encoder.
+            Defaults to 64.
+        mults (tuple[int, ...], optional): Channel multipliers of the encoder
+            stages, mirrored here. Defaults to ``(2, 3, 4, 4)``.
+        kernel_size (int, optional): Positive odd transposed convolution kernel
+            size. Defaults to 5.
+        num_blocks (int, optional): Feature blocks of the input projection
+            (see the block-linear layers of the reference implementation).
+            ``1`` uses a dense linear layer. Defaults to 8.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to
+            ``1e-4``.
+        device (torch.device, optional): Device on which to create parameters.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import DreamerV3ImageDecoder
+        >>> decoder = DreamerV3ImageDecoder(
+        ...     in_features=12, image_shape=(3, 16, 16), depth=8, mults=(1, 2), num_blocks=2
+        ... )
+        >>> decoder(torch.randn(4, 8), torch.randn(4, 4)).shape
+        torch.Size([4, 3, 16, 16])
+
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig`
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        image_shape: tuple[int, int, int] = (3, 64, 64),
+        depth: int = 64,
+        mults: tuple[int, ...] = (2, 3, 4, 4),
+        kernel_size: int = 5,
+        num_blocks: int = 8,
+        norm_eps: float = 1e-4,
+        device: torch.device | str | None = None,
+    ):
+        super().__init__()
+        if kernel_size < 1 or kernel_size % 2 == 0:
+            raise ValueError("kernel_size must be a positive odd integer.")
+        if not mults:
+            raise ValueError("mults must contain at least one stage.")
+        channels, height, width = image_shape
+        factor = 2 ** len(mults)
+        if height % factor or width % factor:
+            raise ValueError(
+                f"The image height and width {image_shape[1:]} must be divisible "
+                f"by 2 ** len(mults) = {factor}."
+            )
+        initial_channels = depth * mults[-1]
+        self.initial_shape = (initial_channels, height // factor, width // factor)
+        projection_features = math.prod(self.initial_shape)
+        if num_blocks > 1:
+            self.projection = _DreamerV3BlockLinear(
+                in_features, projection_features, num_blocks, device=device
+            )
+        else:
+            self.projection = nn.Linear(in_features, projection_features, device=device)
+            _dreamer_v3_init(self.projection)
+        self.projection_norm = _DreamerV3ChannelRMSNorm(
+            initial_channels, norm_eps, device=device
+        )
+        layers = []
+        in_channels = initial_channels
+        for stage in reversed(range(len(mults))):
+            last = stage == 0
+            out_channels = channels if last else depth * mults[stage - 1]
+            layers.append(
+                nn.ConvTranspose2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size,
+                    stride=2,
+                    padding=kernel_size // 2,
+                    output_padding=1,
+                    device=device,
+                )
+            )
+            if not last:
+                layers.extend(
+                    [
+                        _DreamerV3ChannelRMSNorm(out_channels, norm_eps, device=device),
+                        nn.SiLU(),
+                    ]
+                )
+            in_channels = out_channels
+        self.layers = nn.Sequential(*layers)
+        self.layers.apply(_dreamer_v3_conv_init)
+
+    def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
+        value = inputs[0] if len(inputs) == 1 else torch.cat(inputs, -1)
+        batch_shape = value.shape[:-1]
+        hidden = self.projection(value.reshape(-1, value.shape[-1]))
+        hidden = hidden.reshape(-1, *self.initial_shape)
+        hidden = F.silu(self.projection_norm(hidden))
+        image = self.layers(hidden) + 0.5
+        return image.reshape(*batch_shape, *image.shape[-3:])
 
 
 def _default_bins(
