@@ -79,7 +79,8 @@ nightly wheel retention. The snapshot
 uses the [Ubuntu snapshot service](https://snapshot.ubuntu.com/). System package
 versions and the GPU model/driver are recorded alongside the Python environment. CPU and GPU are separate series. Dependency or workload changes
 must start a new trend version; do not present them as collector improvements.
-The full nightly suite retains its moving dependency environment and its
+The full nightly suite uses a matching nightly PyTorch/torchvision pair, validates
+installed dependencies with `pip check`, and retains its
 [existing dashboard](https://pytorch.org/rl/dev/bench/).
 
 ## Running and merge order
