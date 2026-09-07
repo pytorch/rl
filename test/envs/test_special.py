@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import pickle
 import threading
 import warnings
@@ -30,6 +31,7 @@ from torchrl.envs import (
     ConditionalSkip,
     EnvBase,
     ParallelEnv,
+    ProcessorAsyncEnvPool,
     SerialEnv,
 )
 from torchrl.envs.batched_envs import (
@@ -78,6 +80,10 @@ class _DelayedCountingEnv(CountingEnv):
     def _step(self, tensordict):
         threading.Event().wait(self.delay)
         return super()._step(tensordict)
+
+
+def _round_robin_affinity(env_index, *, cpus):
+    return (cpus[env_index % len(cpus)],)
 
 
 class _ManyKeysCountingEnv(CountingEnv):
@@ -910,6 +916,94 @@ class TestAsyncEnvPool:
             env.check_env_specs(break_when_any_done="both")
         finally:
             env._maybe_shutdown()
+
+    @pytest.mark.skipif(
+        not hasattr(os, "sched_setaffinity"),
+        reason="CPU affinity requires Linux",
+    )
+    def test_worker_affinity_callable(self, make_envs):
+        cpus = tuple(np.int64(cpu) for cpu in sorted(os.sched_getaffinity(0)))
+        affinity = partial(_round_robin_affinity, cpus=cpus)
+        env = AsyncEnvPool(
+            make_envs,
+            backend="multiprocessing",
+            exchange="queue",
+            worker_affinity=affinity,
+        )
+        try:
+            expected = [
+                {cpus[env_index % len(cpus)]} for env_index in range(env.num_envs)
+            ]
+            assert [
+                os.sched_getaffinity(process.pid) for process in env.threads
+            ] == expected
+        finally:
+            env._maybe_shutdown()
+
+    @pytest.mark.skipif(
+        not hasattr(os, "sched_setaffinity"),
+        reason="CPU affinity requires Linux",
+    )
+    def test_worker_affinity_rejects_unavailable_cpu(self, make_envs):
+        unavailable_cpu = max(os.sched_getaffinity(0)) + 1
+        with pytest.raises(
+            ValueError,
+            match=rf"worker_affinity\[0\].*unavailable.*{unavailable_cpu}",
+        ):
+            AsyncEnvPool(
+                make_envs,
+                backend="multiprocessing",
+                worker_affinity=[(unavailable_cpu,)] * len(make_envs),
+            )
+
+    @pytest.mark.skipif(
+        not hasattr(os, "sched_setaffinity"),
+        reason="CPU affinity requires Linux",
+    )
+    def test_worker_affinity_error_shuts_down_workers(self, make_envs, monkeypatch):
+        available_cpu = next(iter(os.sched_getaffinity(0)))
+        unavailable_cpu = max(os.sched_getaffinity(0)) + 1
+        processes = []
+        setup = ProcessorAsyncEnvPool._setup
+
+        def setup_with_invalid_affinity(env):
+            env._worker_affinity = [(unavailable_cpu,)] * env.num_envs
+            try:
+                setup(env)
+            finally:
+                processes.extend(env.threads)
+
+        monkeypatch.setattr(
+            ProcessorAsyncEnvPool, "_setup", setup_with_invalid_affinity
+        )
+
+        with pytest.raises(RuntimeError, match="failed to set its CPU affinity"):
+            AsyncEnvPool(
+                make_envs,
+                backend="multiprocessing",
+                exchange="queue",
+                worker_affinity=[(available_cpu,)] * len(make_envs),
+            )
+
+        assert processes
+        assert all(process.exitcode is not None for process in processes)
+
+    @pytest.mark.parametrize(
+        ("backend", "worker_affinity", "match"),
+        [
+            ("threading", [(0,)] * 4, "only supported"),
+            ("multiprocessing", [(0,)], "one CPU mask per environment"),
+        ],
+    )
+    def test_worker_affinity_validation(
+        self, make_envs, backend, worker_affinity, match
+    ):
+        with pytest.raises(ValueError, match=match):
+            AsyncEnvPool(
+                make_envs,
+                backend=backend,
+                worker_affinity=worker_affinity,
+            )
 
     @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
     @pytest.mark.parametrize("min_get", [None, 1, 2])
