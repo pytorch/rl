@@ -1327,6 +1327,29 @@ class TestAsyncEnvPool:
                 if proc.is_alive():
                     proc.terminate()
 
+    @pytest.mark.parametrize("envs_per_worker", [1, 2])
+    def test_shutdown_after_worker_death_with_full_command_queue(self, envs_per_worker):
+        env = AsyncEnvPool(
+            [partial(CountingEnv)] * 2,
+            backend="multiprocessing",
+            exchange="queue",
+            envs_per_worker=envs_per_worker,
+        )
+        env.threads[0].terminate()
+        env.threads[0].join(timeout=5)
+        env.input_queue[0].put(("get_specs", [(0, None)]), timeout=1)
+        shutdown_thread = threading.Thread(target=env.shutdown, daemon=True)
+        try:
+            shutdown_thread.start()
+            shutdown_thread.join(timeout=5)
+            assert not shutdown_thread.is_alive(), "shutdown blocked on a dead worker"
+            assert all(not process.is_alive() for process in env.threads)
+        finally:
+            for process in env.threads:
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=5)
+
     @set_capture_non_tensor_stack(False)
     def test_queue_per_env_results_release_shared_mappings(self):
         """Retained pixel transitions must not retain queue transport mappings."""

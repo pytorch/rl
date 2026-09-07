@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import functools as ft
 import importlib.util
 import multiprocessing as mp
 import os
@@ -124,6 +125,16 @@ def _make_policy():
         in_keys=["observation"],
         out_keys=["action"],
     )
+
+
+class _BatchSizeModule(nn.Module):
+    def forward(self, value):
+        return value + value.shape[0]
+
+
+class _RandomModule(nn.Module):
+    def forward(self, value):
+        return torch.rand_like(value)
 
 
 # =============================================================================
@@ -391,6 +402,148 @@ class TestInferenceServerCore:
             for r in results:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
+
+    def test_static_batch_requires_cuda_policy_device(self):
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        with pytest.raises(ValueError, match="CUDA policy_device"):
+            InferenceServer(
+                policy,
+                transport="auto",
+                max_batch_size=4,
+                static_batch_size=4,
+                request_spec=TensorDict({"observation": torch.zeros(1)}),
+                policy_device="cpu",
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_batch_pads_slices_and_owns_results(self):
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        server = InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=4,
+            static_batch_size=4,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+        )
+        transport = server.transport
+        futures = [
+            transport.submit(TensorDict({"observation": torch.tensor([value])}))
+            for value in (1.0, 2.0)
+        ]
+
+        with server:
+            results = [future.result(timeout=5.0) for future in futures]
+            held_action = results[0]["action"]
+            latest = server.client()(TensorDict({"observation": torch.tensor([10.0])}))
+
+        assert len(results) == 2
+        torch.testing.assert_close(
+            results[0]["action"], torch.tensor([5.0], device="cuda:0")
+        )
+        torch.testing.assert_close(
+            results[1]["action"], torch.tensor([6.0], device="cuda:0")
+        )
+        torch.testing.assert_close(
+            latest["action"], torch.tensor([14.0], device="cuda:0")
+        )
+        torch.testing.assert_close(held_action, torch.tensor([5.0], device="cuda:0"))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_rejects_request_spec_key_mismatch(self):
+        policy = TensorDictModule(
+            torch.add, in_keys=["left", "right"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"left": torch.zeros(1), "right": torch.zeros(1)})
+        with InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ) as server:
+            with pytest.raises(RuntimeError, match="missing policy input keys"):
+                server.client()(TensorDict({"left": torch.ones(1)}))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_randomness_advances_across_replays(self):
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            _RandomModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(64)})
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ):
+            client = transport.client()
+            first = client(request_spec.clone())["action"]
+            second = client(request_spec.clone())["action"]
+
+        assert not torch.equal(first, second)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_requires_in_place_weight_updates(self):
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            nn.Linear(1, 1, bias=False),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        with torch.no_grad():
+            policy.module.weight.fill_(1.0)
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ) as server:
+            client = transport.client()
+            request = TensorDict({"observation": torch.tensor([2.0])})
+            graph = server._cudagraph_model
+
+            def copy_weight(model):
+                with torch.no_grad():
+                    model.module.weight.fill_(3.0)
+
+            server.update_model(copy_weight)
+            assert server._cudagraph_model is graph
+            torch.testing.assert_close(
+                client(request.clone())["action"], torch.tensor([6.0])
+            )
+
+            def replace_weight(model):
+                model.module.weight = nn.Parameter(
+                    torch.full_like(model.module.weight, 4.0)
+                )
+
+            with pytest.raises(RuntimeError, match="only supports in-place"):
+                server.update_model(replace_weight)
+            assert server._cudagraph_model is None
+            torch.testing.assert_close(
+                client(request.clone())["action"], torch.tensor([8.0])
+            )
 
     def test_batch_of_requests_with_mixed_root_device_metadata(self):
         transport = _MockTransport()
@@ -694,6 +847,28 @@ class TestInferenceServerCore:
             assert scheme.connect_locked
             assert actor.server.policy_version == 9
             assert actor.server.stats()["weight_updates"] == 2
+        finally:
+            actor.shutdown()
+
+    def test_ray_actor_weight_update_preserves_parameter_storage(self):
+        actor = _RayInferenceServerActor(
+            _make_policy,
+            ThreadingTransport(),
+            None,
+            None,
+            None,
+            None,
+            {},
+        )
+        try:
+            parameter = actor.model.module.weight
+            weights = TensorDict.from_module(actor.model).data.clone()
+            weights.apply_(torch.zeros_like)
+            actor.update_model_weights(weights)
+            assert actor.model.module.weight is parameter
+            torch.testing.assert_close(
+                actor.model.module.weight, torch.zeros_like(parameter)
+            )
         finally:
             actor.shutdown()
 
@@ -1862,6 +2037,49 @@ class TestWeightSyncIntegration:
             assert ws.initialized_on_receiver
             assert ws.synchronized_on_receiver
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_capture_follows_initial_weight_sync(self):
+        class _InitialWeightSync:
+            def __init__(self):
+                self.initialized_on_receiver = False
+                self.synchronized_on_receiver = False
+                self.model = None
+
+            def init_on_receiver(self, *, model_id, model, worker_idx):
+                self.model = model
+                self.initialized_on_receiver = True
+
+            def connect(self, *, worker_idx):
+                self.model.module.weight = nn.Parameter(
+                    torch.full_like(self.model.module.weight, 3.0)
+                )
+                self.synchronized_on_receiver = True
+
+            def receive(self, timeout=None):
+                return None
+
+        policy = TensorDictModule(
+            nn.Linear(1, 1, bias=False),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        with torch.no_grad():
+            policy.module.weight.fill_(1.0)
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        with InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+            weight_sync=_InitialWeightSync(),
+        ) as server:
+            result = server.client()(TensorDict({"observation": torch.tensor([2.0])}))
+        torch.testing.assert_close(result["action"], torch.tensor([6.0]))
+
     def test_weight_update_applied(self):
         """Weights pushed via weight_sync are applied to the model."""
         transport = ThreadingTransport()
@@ -1953,6 +2171,32 @@ class TestWeightSyncIntegration:
             result = client(TensorDict({}, batch_size=[1]))
             assert result["action"].item() == 0
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_compares_effective_interaction_type(self):
+        class _InteractionValue(nn.Module):
+            def forward(self, observation):
+                value = 1 if interaction_type() is InteractionType.RANDOM else 0
+                return torch.full_like(observation, value)
+
+        policy = TensorDictModule(
+            _InteractionValue(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        with set_interaction_type(InteractionType.RANDOM):
+            with InferenceServer(
+                policy,
+                transport="auto",
+                max_batch_size=1,
+                static_batch_size=1,
+                request_spec=request_spec,
+                policy_device="cuda:0",
+                output_device="cpu",
+            ) as server:
+                client = PolicyClientModule(server.transport, out_keys=["action"])
+                result = client(TensorDict({"observation": torch.ones(1)}))
+        assert result["action"].item() == 1
+
 
 # ---------------------------------------------------------------------------
 # AsyncBatchedCollector tests
@@ -1960,6 +2204,27 @@ class TestWeightSyncIntegration:
 
 from torchrl.collectors import AsyncBatchedCollector, Collector
 from torchrl.testing.mocking_classes import CountingEnv
+
+
+class _ControlledResetEnv(CountingEnv):
+    def __init__(self, *, reset_index=0, entered=None, release=None, fail=False):
+        super().__init__(max_steps=0)
+        self._reset_index = reset_index
+        self._reset_count = 0
+        self._entered = entered
+        self._release = release
+        self._fail = fail
+
+    def _reset(self, tensordict=None, **kwargs):
+        if self._reset_count == self._reset_index:
+            if self._entered is not None:
+                self._entered.set()
+            if self._fail:
+                raise ValueError("controlled reset failure")
+            if self._release is not None and not self._release.wait(timeout=10):
+                raise TimeoutError("reset was not released")
+        self._reset_count += 1
+        return super()._reset(tensordict, **kwargs)
 
 
 def _counting_env_factory(max_steps=5):
@@ -2201,11 +2466,11 @@ class TestProcessInferenceServer:
 class TestAsyncBatchedCollector:
     """Tests for :class:`AsyncBatchedCollector`."""
 
-    def test_basic_collection(self):
+    @pytest.mark.parametrize("total_frames", [60, 61])
+    def test_basic_collection(self, total_frames):
         """Collector yields at least frames_per_batch frames."""
         num_envs = 3
         frames_per_batch = 20
-        total_frames = 60
         policy = _make_counting_policy()
 
         collector = AsyncBatchedCollector(
@@ -2222,7 +2487,7 @@ class TestAsyncBatchedCollector:
             total_collected += batch.numel()
         stats = collector.server_stats()
         collector.shutdown()
-        assert total_collected >= total_frames
+        assert total_collected == total_frames
         assert stats["requests"] > 0
 
     def test_policy_factory(self):
@@ -2261,20 +2526,25 @@ class TestAsyncBatchedCollector:
                 frames_per_batch=10,
             )
 
-    def test_yield_completed_trajectories(self):
+    @pytest.mark.parametrize(
+        ("env_backend", "env_exchange"),
+        [("threading", "queue"), ("multiprocessing", "shm")],
+    )
+    def test_yield_completed_trajectories(self, env_backend, env_exchange):
         """With yield_completed_trajectories, collector yields done trajectories."""
         num_envs = 3
         max_steps = 5
         policy = _make_counting_policy()
 
         collector = AsyncBatchedCollector(
-            create_env_fn=[lambda: CountingEnv(max_steps=max_steps)] * num_envs,
+            create_env_fn=[ft.partial(CountingEnv, max_steps=max_steps)] * num_envs,
             policy=policy,
             frames_per_batch=1,
             total_frames=30,
             yield_completed_trajectories=True,
             max_batch_size=num_envs,
-            env_backend="threading",
+            env_backend=env_backend,
+            env_exchange=env_exchange,
         )
         count = 0
         for batch in collector:
@@ -2284,7 +2554,11 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert count >= 30
 
-    def test_shutdown_idempotent(self):
+    @pytest.mark.parametrize(
+        ("env_backend", "env_exchange"),
+        [("threading", "queue"), ("multiprocessing", "shm")],
+    )
+    def test_shutdown_idempotent(self, env_backend, env_exchange):
         """Calling shutdown twice should not raise."""
         policy = _make_counting_policy()
         collector = AsyncBatchedCollector(
@@ -2292,7 +2566,8 @@ class TestAsyncBatchedCollector:
             policy=policy,
             frames_per_batch=10,
             total_frames=10,
-            env_backend="threading",
+            env_backend=env_backend,
+            env_exchange=env_exchange,
         )
         # Consume one batch to start
         for _batch in collector:
@@ -2319,9 +2594,14 @@ class TestAsyncBatchedCollector:
         assert collected >= 50
 
     @pytest.mark.parametrize(
-        ("env_backend", "envs_per_worker"), [("threading", 1), ("multiprocessing", 2)]
+        ("env_backend", "env_exchange", "envs_per_worker"),
+        [
+            ("threading", "queue", 1),
+            ("multiprocessing", "queue", 2),
+            ("multiprocessing", "shm", 2),
+        ],
     )
-    def test_pause_for_torch_compile(self, env_backend, envs_per_worker):
+    def test_pause_for_torch_compile(self, env_backend, env_exchange, envs_per_worker):
         """Compilation can run while a started collector is quiescent."""
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * 5,
@@ -2330,6 +2610,7 @@ class TestAsyncBatchedCollector:
             total_frames=-1,
             env_backend=env_backend,
             envs_per_worker=envs_per_worker,
+            env_exchange=env_exchange,
         )
         iterator = iter(collector)
         next(iterator)
@@ -2387,9 +2668,16 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert called["count"] >= 1
 
-    @pytest.mark.parametrize("env_backend", ["threading", "multiprocessing"])
-    def test_env_backend_smoke(self, env_backend):
-        """Thread and multiprocessing env backends collect data."""
+    @pytest.mark.parametrize(
+        ("env_backend", "env_exchange"),
+        [
+            ("threading", "queue"),
+            ("threading", "auto"),
+            ("multiprocessing", "queue"),
+        ],
+    )
+    def test_env_backend_smoke(self, env_backend, env_exchange):
+        """Supported environment backend and exchange pairs collect data."""
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * 2,
             policy=_make_counting_policy(),
@@ -2397,12 +2685,60 @@ class TestAsyncBatchedCollector:
             total_frames=20,
             max_batch_size=2,
             env_backend=env_backend,
+            env_exchange=env_exchange,
         )
         total = 0
         for batch in collector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    @pytest.mark.parametrize("total_frames", [60, 61])
+    def test_shared_memory_collection(self, total_frames):
+        """Shared slots yield exact batches with correctly attributed transitions."""
+        num_envs = 4
+        frames_per_batch = 10
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy=_make_counting_policy(),
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+            env_backend="multiprocessing",
+            env_exchange="shm",
+            server_config=InferenceServerConfig(
+                max_batch_size=num_envs,
+                min_batch_size=num_envs,
+                timeout=0.1,
+            ),
+        )
+        batches = []
+        env_ids = set()
+        try:
+            assert collector.env.resolved_exchange == "shm"
+            for batch in collector:
+                batches.append(batch.numel())
+                env_ids.update(int(env_id) for env_id in batch["env_index"])
+                assert "policy_version" in batch.keys()
+                torch.testing.assert_close(
+                    batch["next", "observation"],
+                    batch["observation"] + batch["action"],
+                )
+        finally:
+            collector.shutdown()
+        expected_batches = [frames_per_batch] * (total_frames // frames_per_batch)
+        if total_frames % frames_per_batch:
+            expected_batches.append(total_frames % frames_per_batch)
+        assert batches == expected_batches
+        assert env_ids == set(range(num_envs))
+
+        with pytest.raises(ValueError, match="requires env_backend"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory],
+                policy=_make_counting_policy(),
+                frames_per_batch=1,
+                env_backend="threading",
+                env_exchange="shm",
+            )
 
     @pytest.mark.parametrize("envs_per_worker", [1, 2])
     def test_worker_affinity_validation_is_eager(self, envs_per_worker):
@@ -2461,7 +2797,7 @@ class TestAsyncBatchedCollector:
             collector.shutdown()
 
     def test_multiprocessing_envs_per_worker(self):
-        """Grouped workers collect every stream with one coordinator each."""
+        """Grouped workers preserve every stream with a single receive owner."""
         num_envs = 5
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * num_envs,
@@ -2476,8 +2812,71 @@ class TestAsyncBatchedCollector:
             batch = next(iter(collector))
             env_ids = {int(env_id) for env_id in batch["env_index"]}
             assert env_ids == set(range(num_envs))
-            assert collector.env.num_workers == 3
-            assert len(collector._workers) == 3
+            assert len(collector.env.threads) == 3
+            assert len(collector._workers) == 1
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("env_exchange", ["queue", "shm"])
+    @pytest.mark.parametrize("reset_index", [0, 1])
+    def test_grouped_slow_reset_keeps_other_stream_running(
+        self, env_exchange, reset_index
+    ):
+        ctx = mp.get_context("spawn")
+        entered, release = ctx.Event(), ctx.Event()
+        collector = AsyncBatchedCollector(
+            create_env_fn=[
+                ft.partial(
+                    _ControlledResetEnv,
+                    reset_index=reset_index,
+                    entered=entered,
+                    release=release,
+                ),
+                _counting_env_factory,
+            ],
+            policy=_make_counting_policy(),
+            frames_per_batch=8,
+            total_frames=24,
+            env_backend="multiprocessing",
+            env_exchange=env_exchange,
+            envs_per_worker=2,
+        )
+        try:
+            collector._ensure_started()
+            assert entered.wait(timeout=5)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                try:
+                    batches = executor.submit(list, collector).result(timeout=5)
+                    assert sum(batch.numel() for batch in batches) == 24
+                    assert all(
+                        int(index) == 1
+                        for batch in batches
+                        for index in batch["env_index"]
+                    )
+                finally:
+                    release.set()
+        finally:
+            release.set()
+            collector.shutdown()
+
+    @pytest.mark.parametrize("env_exchange", ["queue", "shm"])
+    def test_grouped_environment_error_reaches_collector(self, env_exchange):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[
+                ft.partial(_ControlledResetEnv, reset_index=1, fail=True),
+                _counting_env_factory,
+            ],
+            policy=_make_counting_policy(),
+            frames_per_batch=8,
+            env_backend="multiprocessing",
+            env_exchange=env_exchange,
+            envs_per_worker=2,
+        )
+        try:
+            with pytest.raises(RuntimeError) as error:
+                for _ in collector:
+                    pass
+            assert "controlled reset failure" in str(error.value.__cause__)
         finally:
             collector.shutdown()
 
@@ -2490,7 +2889,35 @@ class TestAsyncBatchedCollector:
             total_frames=20,
             env_backend="threading",
             server_config=InferenceServerConfig(
-                service_backend="process", max_batch_size=2
+                service_backend="process",
+                max_batch_size=2,
+            ),
+        )
+        total = 0
+        for batch in collector:
+            total += batch.numel()
+        collector.shutdown()
+        assert total >= 20
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_process_server_static_batch(self):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_counting_policy,
+            frames_per_batch=10,
+            total_frames=20,
+            env_backend="threading",
+            server_config=InferenceServerConfig(
+                service_backend="process",
+                max_batch_size=2,
+                static_batch_size=2,
+            ),
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
             ),
         )
         total = 0
@@ -2574,6 +3001,29 @@ class TestAsyncBatchedCollector:
         assert total >= 20
         assert stats["requests"] > 0
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_batch_collector(self):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            server_config=InferenceServerConfig(max_batch_size=2, static_batch_size=2),
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+        )
+        total = 0
+        for batch in collector:
+            assert batch.device is None or batch.device.type == "cpu"
+            total += batch.numel()
+        collector.shutdown()
+        assert total >= 20
+
 
 # =============================================================================
 # Tests: SlotTransport
@@ -2619,6 +3069,46 @@ class TestSlotTransport:
             for r in actor_results:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
+
+    def test_submit_multiple_slots_from_one_thread(self):
+        """Slot clients expose futures so one coordinator can fill a server batch."""
+        num_slots = 4
+        transport = SlotTransport(num_slots=num_slots)
+        clients = [transport.client() for _ in range(num_slots)]
+        policy = _make_policy()
+
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=num_slots,
+            min_batch_size=num_slots,
+            timeout=0.1,
+        ):
+            futures = [clients[0].submit(TensorDict({"observation": torch.randn(4)}))]
+            with pytest.raises(RuntimeError, match="inflight request"):
+                clients[0].submit(TensorDict({"observation": torch.randn(4)}))
+            futures.extend(
+                client.submit(TensorDict({"observation": torch.randn(4)}))
+                for client in clients[1:]
+            )
+            results = [future.result(timeout=10.0) for future in futures]
+
+        assert all("action" in result.keys() for result in results)
+
+    def test_drain_round_robin(self):
+        """Saturated drains rotate instead of repeatedly favoring low slot ids."""
+        transport = SlotTransport(num_slots=6)
+        for slot in range(6):
+            transport._slot_submit(slot, TensorDict({"observation": torch.zeros(1)}))
+        _, first, _ = transport.drain_with_timing(4)
+        assert first == [0, 1, 2, 3]
+
+        for slot in range(4):
+            transport._slot_submit(slot, TensorDict({"observation": torch.zeros(1)}))
+        _, second, _ = transport.drain_with_timing(4)
+        _, third, _ = transport.drain_with_timing(4)
+        assert second == [4, 5, 0, 1]
+        assert third == [2, 3]
 
     def test_too_many_clients_raises(self):
         """Creating more clients than slots raises RuntimeError."""
@@ -2739,7 +3229,11 @@ class TestThreadingTransportNoLostSignals:
 
 
 class TestWorkerCrashPropagation:
-    def test_worker_crash_propagates(self):
+    @pytest.mark.parametrize(
+        ("env_backend", "env_exchange"),
+        [("threading", "queue"), ("multiprocessing", "shm")],
+    )
+    def test_worker_crash_propagates(self, env_backend, env_exchange):
         """If the model always fails, the collector propagates the error."""
 
         def bad_model(td):
@@ -2750,6 +3244,8 @@ class TestWorkerCrashPropagation:
             policy=bad_model,
             frames_per_batch=10,
             total_frames=100,
+            env_backend=env_backend,
+            env_exchange=env_exchange,
         )
         with pytest.raises(RuntimeError, match="worker thread"):
             for _ in collector:
