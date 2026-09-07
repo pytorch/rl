@@ -110,7 +110,7 @@ jobs:
             APT_OPTIONS=(-o Dir::Etc::sourcelist=/tmp/benchmark-sources.list -o Dir::Etc::sourceparts=-)
             apt-get "${APT_OPTIONS[@]}" update
             apt-get "${APT_OPTIONS[@]}" install -y --no-install-recommends \
-              git gcc g++ cmake libpython3.10-dev
+              git gcc g++ make cmake libpython3.10-dev
           else
             apt-get update -y
             apt-get install software-properties-common cmake -y
