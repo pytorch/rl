@@ -344,6 +344,62 @@ per-environment receives own their tensor storage. Aggregate batches returned
 with `stack="lazy"` are views over the shared slots and remain valid only until
 actions are sent back to the corresponding environments.
 
+### CPU affinity (Linux)
+
+The multiprocessing backend accepts `worker_affinity` to restrict each
+environment worker to selected CPUs. Pass one CPU mask per environment or a
+callable that returns a mask for an environment index. The mask is applied
+before the environment factory runs, so subprocesses created by the factory
+inherit the worker's affinity.
+
+This option is intended for deployments where Python workers, CPU-heavy
+simulators, and driver services share a constrained CPU set. Without explicit
+placement, the scheduler may run them on the same CPUs, increasing contention
+and environment step-time jitter. Most applications should leave the option
+unset and use the operating system's scheduler.
+
+TorchRL can discover the CPUs available to the current process, but that set
+does not reveal which CPUs the application reserves for its driver or other
+services, nor how many threads each environment and its subprocesses require.
+An automatic partition would therefore impose an arbitrary workload policy and
+can reduce throughput. Affinity is explicit for that reason.
+
+```
+import os
+
+available_cpus = sorted(os.sched_getaffinity(0))
+worker_cpus = available_cpus[:8]
+worker_masks = [
+ tuple(worker_cpus[start : start + 2])
+ for start in range(0, len(worker_cpus), 2)
+]
+env = AsyncEnvPool(
+ [make_env] * len(worker_masks),
+ backend="multiprocessing",
+ exchange="queue",
+ worker_affinity=worker_masks,
+)
+```
+
+Every subprocess created by an environment factory inherits that worker's
+mask. A one-CPU mask therefore confines both the Python worker and all of its
+environment subprocesses to that single CPU; use a wider window when the
+environment launches CPU-parallel work.
+
+Affinity masks do not replace container resource configuration:
+
+- A process can only run on CPUs granted by its container or cgroup cpuset.
+TorchRL validates each mask against `os.sched_getaffinity(0)` before
+workers start; build masks from those currently available indices.
+- A CFS CPU quota limits CPU time, not CPU placement. Affinity neither bypasses
+that quota nor reserves the selected CPUs, and pinning to fewer CPUs than the
+quota can reduce usable parallelism.
+- In Kubernetes, exclusive container CPUs require the kubelet CPU Manager's
+`static` policy, a `Guaranteed` pod, and integer CPU requests (with the
+matching limits required for `Guaranteed` QoS). The resulting cpuset bounds
+the masks accepted here; the application must still divide those assigned
+CPUs between its workers and driver threads.
+
 Note
 
 This class and its subclasses should work when nested in with [`TransformedEnv`](generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv) and

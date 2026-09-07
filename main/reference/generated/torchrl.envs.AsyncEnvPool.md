@@ -40,6 +40,23 @@ Warning
 The default will change from `"queue"` to `"auto"` in
 v0.15 for the multiprocessing backend. A `FutureWarning` is
 emitted when the default is relied upon.
+- **worker_affinity** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**] or**Callable**[**[**int**]**,*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**]**,**optional*) -
+
+Optional Linux CPU placement for multiprocessing workers. This is
+useful when environment workers share a constrained CPU set with
+CPU-heavy simulators or other services: without affinity, the
+scheduler may place them on the same CPUs and increase environment
+step-time jitter. Most users should leave this as `None`.
+
+TorchRL can discover which CPUs the current process may use, but
+it cannot infer which CPUs the application has reserved for other
+work or how many threads an environment and its subprocesses need.
+It therefore does not choose a partition automatically. Provide
+one mask per environment, or a callable mapping an environment
+index to its mask. The mask is applied before the environment is
+constructed and is inherited by subprocesses it starts. Defaults
+to `None`. See [CPU affinity (Linux)](../envs_vectorized.html#async-env-pool-cpu-affinity) for an example
+and deployment guidance.
 - **create_env_kwargs** (*dict**,**optional*) - Keyword arguments to pass to the environment maker. Defaults to {}.
 
 Variables:

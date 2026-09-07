@@ -129,6 +129,37 @@ The pause context finishes in-flight environment and policy requests, parks
 the coordinator threads, and leaves the inference server idle. Collection
 resumes automatically when the context exits.
 
+On Linux, `worker_affinity` assigns CPU masks to the multiprocessing
+environment workers, while `driver_affinity` assigns one mask to the
+inference-server and coordinator threads, as well as the pool's parent-side
+queue feeder threads. Dedicated process-backed inference servers use a spawned
+process and are not covered by `driver_affinity`. For example, with two
+driver CPUs followed by four two-CPU worker windows:
+
+```
+import os
+
+available_cpus = sorted(os.sched_getaffinity(0))
+driver_cpus = available_cpus[:2]
+worker_cpus = available_cpus[2:10]
+worker_masks = [
+ tuple(worker_cpus[start : start + 2])
+ for start in range(0, len(worker_cpus), 2)
+]
+collector = AsyncBatchedCollector(
+ create_env_fn=[make_env] * len(worker_masks),
+ policy=policy,
+ frames_per_batch=200,
+ env_backend="multiprocessing",
+ driver_affinity=driver_cpus,
+ worker_affinity=worker_masks,
+)
+```
+
+Build both masks from the CPUs visible through `os.sched_getaffinity(0)`.
+See [CPU affinity (Linux)](envs_vectorized.html#async-env-pool-cpu-affinity) for container cpuset, CFS quota, and
+Kubernetes CPU Manager considerations.
+
 **Key advantages over direct collection through** [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector):
 
 - The inference server automatically **batches policy forward passes** from
