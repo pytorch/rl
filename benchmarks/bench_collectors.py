@@ -8,6 +8,8 @@ CUDA hosts, ``--mujoco-gl egl``.
 Examples:
     python benchmarks/bench_collectors.py --total-frames 2000
     python benchmarks/bench_collectors.py --num-envs 1,2,4,8 --policy-delay-ms 20
+    python benchmarks/bench_collectors.py --backends async-env-mp --replay-mode iterator
+    python benchmarks/bench_collectors.py --backends async-env-mp --replay-mode background
     python benchmarks/bench_collectors.py --num-envs 64 \
         --backends async-env-mp --env-exchange shm \
         --env-step-latency-ms 50 --policy-hidden-features 9216 \
@@ -35,7 +37,14 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import AsyncBatchedCollector, Collector
-from torchrl.data import Bounded, Categorical, Composite, Unbounded
+from torchrl.data import (
+    Bounded,
+    Categorical,
+    Composite,
+    LazyTensorStorage,
+    ReplayBuffer,
+    Unbounded,
+)
 from torchrl.envs import (
     EnvBase,
     GymEnv,
@@ -73,8 +82,8 @@ class BenchmarkResult:
     status: str
     envs_per_worker: int = 1
     warmup_batches: int = 0
-    p50_batch_ms: float = 0.0
-    p95_batch_ms: float = 0.0
+    p50_batch_ms: float | None = 0.0
+    p95_batch_ms: float | None = 0.0
     host_rss_mib: float = 0.0
     cuda_used_mib: float = 0.0
     frames: int = 0
@@ -343,6 +352,7 @@ def bench(
     policy_delay_ms: float,
     warmup_batches: int,
     envs_per_worker: int = 1,
+    replay_mode: str = "none",
 ) -> BenchmarkResult:
     collector = None
     total = 0
@@ -350,21 +360,42 @@ def bench(
     policy_stats: dict[str, float | int] = {}
     try:
         collector = factory()
+        if replay_mode != "none":
+            # Both modes store the same number of transitions in the same storage.
+            collector.total_frames = total_frames + warmup_batches * frames_per_batch
+            collector.replay_buffer = ReplayBuffer(
+                storage=LazyTensorStorage(collector.total_frames)
+            )
         iterator = iter(collector)
         for _ in range(warmup_batches):
             next(iterator)
         if hasattr(collector, "server_stats"):
             collector.server_stats(reset=True)
         latencies = []
+        initial_frames = collector._frames
         t0 = previous = time_module.perf_counter()
-        for batch in iterator:
-            now = time_module.perf_counter()
-            latencies.append((now - previous) * 1000)
-            previous = now
-            n = batch.numel()
-            total += n
-            if total >= total_frames:
-                break
+        if replay_mode == "background":
+            iterator.close()
+            collector.start()
+            collector._replay_thread.join(timeout=300)
+            if collector._replay_thread.is_alive():
+                raise TimeoutError("Background replay benchmark exceeded 300 seconds.")
+            total = collector.replay_buffer.write_count - initial_frames
+            if collector._replay_error is not None:
+                raise RuntimeError(
+                    "Background replay benchmark failed."
+                ) from collector._replay_error
+        else:
+            for batch in iterator:
+                now = time_module.perf_counter()
+                latencies.append((now - previous) * 1000)
+                previous = now
+                if batch is None:
+                    total = collector.replay_buffer.write_count - initial_frames
+                else:
+                    total += batch.numel()
+                if total >= total_frames:
+                    break
         elapsed = time_module.perf_counter() - t0
         if hasattr(collector, "server_stats"):
             policy_stats = collector.server_stats()
@@ -379,7 +410,12 @@ def bench(
         if torch.device(policy_device).type == "cuda":
             free, capacity = torch.cuda.mem_get_info(policy_device)
             cuda_used = capacity - free
-        percentiles = torch.tensor(latencies).quantile(torch.tensor([0.5, 0.95]))
+        # Background collection has no consumer-side batch latency to report.
+        percentiles = (
+            torch.tensor(latencies).quantile(torch.tensor([0.5, 0.95]))
+            if latencies
+            else None
+        )
         fps = total / elapsed if elapsed > 0 else 0.0
         return BenchmarkResult(
             collector=name,
@@ -396,8 +432,8 @@ def bench(
             status="ok",
             envs_per_worker=envs_per_worker,
             warmup_batches=warmup_batches,
-            p50_batch_ms=percentiles[0].item(),
-            p95_batch_ms=percentiles[1].item(),
+            p50_batch_ms=percentiles[0].item() if percentiles is not None else None,
+            p95_batch_ms=percentiles[1].item() if percentiles is not None else None,
             host_rss_mib=host_rss / 2**20,
             cuda_used_mib=cuda_used / 2**20,
             frames=total,
@@ -559,6 +595,12 @@ def main() -> None:
         choices=["queue", "shm", "auto"],
         help="AsyncEnvPool exchange used by multiprocessing env backends.",
     )
+    parser.add_argument(
+        "--replay-mode",
+        choices=["none", "iterator", "background"],
+        default="none",
+        help="Replay write mode for async-env-mp; iterator and background use identical storage.",
+    )
     parser.add_argument("--policy-device", default="auto")
     parser.add_argument("--output-device", default="cpu")
     parser.add_argument("--jsonl", default="bench_collectors_results.jsonl")
@@ -700,8 +742,9 @@ def main() -> None:
                     ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
-                            name=f"AsyncBatched mp env ({args.env_exchange})",
-                            backend=f"{backend}-{args.env_exchange}",
+                            name=f"AsyncBatched mp env ({args.env_exchange}, replay={args.replay_mode})",
+                            backend=f"{backend}-{args.env_exchange}-replay-{args.replay_mode}",
+                            replay_mode=args.replay_mode,
                             batch_rule=label,
                             factory=lambda num_envs=num_envs, max_batch_size=max_batch_size, min_batch_size=min_batch_size, timeout=timeout: AsyncBatchedCollector(
                                 create_env_fn=[env_factory] * num_envs,

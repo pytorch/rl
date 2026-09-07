@@ -41,6 +41,8 @@ from torchrl._comm import (
 )
 from torchrl.data import (
     LazyTensorStorage,
+    ListStorage,
+    ReplayBuffer,
     ReplayBufferEnsemble,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
@@ -2713,8 +2715,9 @@ class TestAsyncBatchedCollector:
             ("multiprocessing", "queue", 1, True),
         ],
     )
+    @pytest.mark.parametrize("background", [False, True])
     def test_parent_replay_write_and_post_collect_hook(
-        self, env_backend, env_exchange, envs_per_worker, process_slots
+        self, env_backend, env_exchange, envs_per_worker, process_slots, background
     ):
         """Post-processing, hooks and routed writes run in the parent."""
         parent_thread = threading.get_ident()
@@ -2762,7 +2765,14 @@ class TestAsyncBatchedCollector:
             env_backend=env_backend,
         )
         try:
-            outputs = list(collector)
+            if background:
+                collector.start()
+                parent_thread = collector._replay_thread.ident
+                collector._replay_thread.join(timeout=20)
+                assert not collector._replay_thread.is_alive()
+                outputs = [None]
+            else:
+                outputs = list(collector)
         finally:
             collector.shutdown()
 
@@ -2830,6 +2840,115 @@ class TestAsyncBatchedCollector:
             collector.shutdown(timeout=2.0)
 
         assert not any(worker.is_alive() for worker in workers)
+
+    @pytest.mark.parametrize("exchange", ["queue", "shm"])
+    def test_background_replay_owns_transitions_and_stops_at_budget(self, exchange):
+        replay = ReplayBuffer(storage=ListStorage(128))
+        collector = AsyncBatchedCollector(
+            create_env_fn=[ft.partial(_counting_env_factory, max_steps=10_000)] * 3,
+            policy=_make_counting_policy(),
+            frames_per_batch=16,
+            total_frames=97,
+            replay_buffer=replay,
+            env_backend="multiprocessing",
+            env_exchange=exchange,
+        )
+        try:
+            collector.start()
+            with pytest.raises(RuntimeError, match="already collecting"):
+                collector.start()
+            with pytest.raises(RuntimeError, match="Background collection owns"):
+                next(iter(collector))
+            collector._replay_thread.join(timeout=20)
+            assert not collector._replay_thread.is_alive()
+            assert replay.write_count == 97
+            stored = replay[:].clone()
+            # Let workers reuse their exchange slots after the final replay write.
+            time.sleep(0.1)
+            assert replay.write_count == 97
+            assert_close(replay[:], stored)
+            torch.testing.assert_close(
+                stored["next", "observation"], stored["observation"] + 1
+            )
+            for env_id in stored["env_index"].unique():
+                obs = stored[stored["env_index"] == env_id]["observation"].flatten()
+                torch.testing.assert_close(obs, torch.arange(len(obs), dtype=obs.dtype))
+        finally:
+            collector.async_shutdown()
+
+    @pytest.mark.parametrize("fail", [False, True])
+    def test_background_replay_pause_and_error_shutdown(self, fail):
+        replay = ReplayBuffer(storage=LazyTensorStorage(128))
+        wrote = threading.Event()
+
+        def post_collect(td):
+            if fail:
+                raise ValueError("replay hook failed")
+            wrote.set()
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=4,
+            replay_buffer=replay,
+            post_collect_hook=post_collect,
+        )
+        collector.start()
+        writer = collector._replay_thread
+        workers = list(collector._workers)
+        try:
+            if fail:
+                writer.join(timeout=10)
+                with pytest.raises(
+                    RuntimeError, match="Background replay collection failed"
+                ) as error:
+                    collector.async_shutdown()
+                assert isinstance(error.value.__cause__, ValueError)
+            else:
+                assert wrote.wait(timeout=10)
+                with collector.pause(timeout=10):
+                    count = replay.write_count
+                    time.sleep(0.1)
+                    assert replay.write_count == count
+                collector.async_shutdown()
+            assert not writer.is_alive()
+            assert not any(worker.is_alive() for worker in workers)
+        finally:
+            collector.shutdown(raise_on_error=False)
+
+    def test_background_replay_shutdown_retains_blocked_writer(self):
+        entered, release = threading.Event(), threading.Event()
+
+        def blocking_hook(td):
+            entered.set()
+            if not release.wait(timeout=10):
+                raise TimeoutError("Replay hook was not released.")
+            raise ValueError("Replay hook failed during shutdown.")
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory],
+            policy=_make_counting_policy(),
+            frames_per_batch=1,
+            replay_buffer=ReplayBuffer(storage=ListStorage(16)),
+            post_collect_hook=blocking_hook,
+        )
+        try:
+            collector.start()
+            assert entered.wait(timeout=10)
+            writer = collector._replay_thread
+            with pytest.raises(TimeoutError, match="replay writer did not stop"):
+                collector.async_shutdown(timeout=0.1)
+            assert writer.is_alive()
+            release.set()
+            with pytest.raises(
+                RuntimeError, match="Background replay collection failed"
+            ) as error:
+                collector.async_shutdown()
+            assert isinstance(error.value.__cause__, ValueError)
+            assert not writer.is_alive()
+        finally:
+            release.set()
+            collector.shutdown(raise_on_error=False)
 
     @pytest.mark.parametrize("total_frames", [60, 61])
     def test_basic_collection(self, total_frames):

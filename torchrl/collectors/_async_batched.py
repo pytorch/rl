@@ -57,6 +57,10 @@ _ENV_BACKENDS = ("threading", "multiprocessing")
 _PauseRequest = tuple[threading.Barrier, threading.Event]
 
 
+class _CollectorStopped(RuntimeError):
+    """Internal signal interrupting a blocked rollout during shutdown."""
+
+
 def _make_transport(
     policy_backend: str, num_slots: int | None = None
 ) -> InferenceTransport:
@@ -848,6 +852,10 @@ class AsyncBatchedCollector(BaseCollector):
         self._pause_request: list[_PauseRequest | None] = [None]
         self._pause_lock = threading.Lock()
         self._transition_carry: deque[TensorDictBase] = deque()
+        self._iteration_lock = threading.Lock()
+        self._replay_lock = threading.Lock()
+        self._replay_thread: threading.Thread | None = None
+        self._replay_error: Exception | None = None
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -1087,6 +1095,7 @@ class AsyncBatchedCollector(BaseCollector):
 
         workers = tuple(self._workers)
         request = None
+        replay_locked = False
         try:
             if not workers:
                 yield None
@@ -1110,6 +1119,13 @@ class AsyncBatchedCollector(BaseCollector):
                             "Timed out while waiting for environment workers to pause."
                         )
                     self._shutdown_event.wait(0.01)
+                replay_locked = self._replay_lock.acquire(
+                    timeout=-1 if timeout is None else timeout
+                )
+                if not replay_locked:
+                    raise TimeoutError(
+                        "Timed out waiting for the replay writer to pause."
+                    )
                 yield None
                 return
 
@@ -1128,9 +1144,16 @@ class AsyncBatchedCollector(BaseCollector):
                     "coordinator threads to pause."
                 ) from None
 
+            replay_locked = self._replay_lock.acquire(
+                timeout=-1 if timeout is None else timeout
+            )
+            if not replay_locked:
+                raise TimeoutError("Timed out waiting for the replay writer to pause.")
             yield None
         finally:
             try:
+                if replay_locked:
+                    self._replay_lock.release()
                 if self._uses_process_env_workers and workers:
                     self._process_pause_event.clear()
                     # Wait for acknowledgement reset before a subsequent pause.
@@ -1271,6 +1294,10 @@ class AsyncBatchedCollector(BaseCollector):
         """
         rq = self._result_queue
         while True:
+            if self._shutdown_event.is_set():
+                raise _CollectorStopped(
+                    "The collector has stopped collecting transitions."
+                )
             if (
                 self._uses_process_env_workers
                 and self._worker_check_timer.elapsed() >= self._LIVENESS_POLL_S
@@ -1280,6 +1307,8 @@ class AsyncBatchedCollector(BaseCollector):
             try:
                 td = rq.get(timeout=self._LIVENESS_POLL_S)
             except queue.Empty:
+                if self._shutdown_event.is_set():
+                    continue
                 if not self._server.is_alive:
                     raise RuntimeError(
                         "The inference server died while the collector was "
@@ -1415,31 +1444,89 @@ class AsyncBatchedCollector(BaseCollector):
     # BaseCollector interface
     # ------------------------------------------------------------------
 
+    def start(self) -> None:
+        """Collect into replay in a background thread until ``total_frames``.
+
+        Requires ``replay_buffer``. Post-processing and the post-collect hook
+        run on the writer thread. Iteration and background collection are
+        mutually exclusive. Use :meth:`pause` to quiesce collection and writes,
+        and :meth:`async_shutdown` to join the writer and surface its errors.
+        """
+        if self.replay_buffer is None:
+            raise RuntimeError("Background collection requires a replay_buffer.")
+        if self._replay_thread is not None or self._iteration_lock.locked():
+            raise RuntimeError("The collector is already collecting.")
+        self._ensure_started()
+        self._replay_error = None
+        self._iteration_started = True
+        self._replay_thread = threading.Thread(
+            target=self._run_replay,
+            name="AsyncBatchedCollector-replay",
+            daemon=True,
+        )
+        self._replay_thread.start()
+
+    def _run_replay(self) -> None:
+        try:
+            for _ in self.iterator():
+                pass
+        except Exception as exc:
+            self._replay_error = exc
+            self._shutdown_event.set()
+
+    def __iter__(self) -> Iterator[TensorDictBase | None]:
+        if self._replay_thread is not None:
+            # Reject concurrent consumption before BaseCollector's iterator
+            # error handler shuts down the active background collector.
+            raise RuntimeError("Background collection owns the collector iterator.")
+        return super().__iter__()
+
     def iterator(self) -> Iterator[TensorDictBase | None]:
         """Iterate over collected batches."""
+        if self._replay_thread is not None and (
+            threading.current_thread() is not self._replay_thread
+        ):
+            raise RuntimeError("Background collection owns the collector iterator.")
         self._ensure_started()
-
-        total = self.total_frames
-        while total < 0 or self._frames < total:
-            self._iter += 1
-            td = self.rollout()
-            if not self.yield_completed_trajectories and total >= 0:
-                remaining = total - self._frames
-                if td.numel() > remaining:
-                    td = td.reshape(-1)[:remaining]
-            self._frames += td.numel()
-            if self._postproc is not None:
-                td = self._postproc(td)
-            if self.post_collect_hook is not None:
-                self.post_collect_hook(td)
-            if self.replay_buffer is not None:
-                td = _maybe_normalize_replay_buffer_tensordict_device(
-                    td, self.replay_buffer
-                )
-                self.replay_buffer.extend(td)
-                yield None
-            else:
+        if not self._iteration_lock.acquire(blocking=False):
+            raise RuntimeError("The collector is already collecting.")
+        try:
+            total = self.total_frames
+            while (
+                total < 0 or self._frames < total
+            ) and not self._shutdown_event.is_set():
+                self._iter += 1
+                td = self.rollout()
+                # The pause boundary includes post-processing and replay writes.
+                # Never hold this lock while waiting for a paused environment.
+                while not self._replay_lock.acquire(timeout=0.1):
+                    if self._shutdown_event.is_set():
+                        return
+                try:
+                    if self._shutdown_event.is_set():
+                        return
+                    if not self.yield_completed_trajectories and total >= 0:
+                        remaining = total - self._frames
+                        if td.numel() > remaining:
+                            td = td.reshape(-1)[:remaining]
+                    self._frames += td.numel()
+                    if self._postproc is not None:
+                        td = self._postproc(td)
+                    if self.post_collect_hook is not None:
+                        self.post_collect_hook(td)
+                    if self.replay_buffer is not None:
+                        td = _maybe_normalize_replay_buffer_tensordict_device(
+                            td, self.replay_buffer
+                        )
+                        self.replay_buffer.extend(td)
+                        td = None
+                finally:
+                    self._replay_lock.release()
                 yield td
+        except _CollectorStopped:
+            return
+        finally:
+            self._iteration_lock.release()
 
     def shutdown(
         self,
@@ -1458,6 +1545,11 @@ class AsyncBatchedCollector(BaseCollector):
         self._transition_carry.clear()
         _timeout = 5.0 if timeout is None else timeout
         shutdown_timer = timeit("AsyncBatchedCollector.shutdown").start()
+        replay_thread = self._replay_thread
+        if replay_thread is not None:
+            replay_thread.join(timeout=_timeout)
+            if not replay_thread.is_alive():
+                self._replay_thread = None
         if self._uses_process_env_workers:
             while any(worker.is_alive() for worker in self._workers):
                 if shutdown_timer.elapsed() >= _timeout:
@@ -1495,6 +1587,16 @@ class AsyncBatchedCollector(BaseCollector):
             self._worker_error_queue.close()
             self._worker_error_queue.join_thread()
             self._worker_error_queue = None
+
+        if raise_on_error:
+            if replay_thread is not None and replay_thread.is_alive():
+                raise TimeoutError(
+                    "The replay writer did not stop before shutdown timed out."
+                )
+            if self._replay_error is not None:
+                error = self._replay_error
+                self._replay_error = None
+                raise RuntimeError("Background replay collection failed.") from error
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Set the seed (no-op; envs are created inside the pool)."""
