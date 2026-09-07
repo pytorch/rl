@@ -122,6 +122,7 @@ def _measure(
     )
     client = PolicyClientModule(transport)
     roundtrip_ms = []
+    torch.cuda.reset_peak_memory_stats()
     with set_interaction_type(InteractionType.RANDOM):
         with server:
             for _ in range(warmup):
@@ -132,6 +133,7 @@ def _measure(
                 _run_batch(client, request, batch_size)
                 roundtrip_ms.append((time.perf_counter() - started) * 1000)
             stats = server.stats()
+            stats["peak_cuda_memory_bytes"] = torch.cuda.max_memory_allocated()
     return stats, roundtrip_ms
 
 
@@ -160,6 +162,7 @@ def main() -> None:
     torch.set_float32_matmul_precision("high")
 
     for variant in args.variants:
+        torch.manual_seed(0)
         policy, cfg = _make_policy(
             repo_root,
             device=device,
@@ -193,6 +196,11 @@ def main() -> None:
                     static_batch_size if variant == "cuda_graph" else None
                 ),
                 "iterations": args.iterations,
+                "warmup": args.warmup,
+                "requests_per_second": batch_size
+                * args.iterations
+                / (sum(roundtrip_ms) / 1000),
+                "peak_cuda_memory_bytes": stats["peak_cuda_memory_bytes"],
                 "p50_forward_ms": stats["p50_forward_ms"],
                 "p95_forward_ms": stats["p95_forward_ms"],
                 "p50_roundtrip_ms": statistics.median(roundtrip_ms),
