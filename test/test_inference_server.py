@@ -16,7 +16,6 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
@@ -35,7 +34,12 @@ from torchrl._comm import (
     SharedBlock,
     TCPStoreRendezvous,
 )
-
+from torchrl.data import (
+    LazyTensorStorage,
+    ReplayBufferEnsemble,
+    TensorDictReplayBuffer,
+    TensorDictRoundRobinWriter,
+)
 from torchrl.modules.inference_server import (
     InferenceClient,
     InferenceDeviceConfig,
@@ -2200,6 +2204,42 @@ class TestProcessInferenceServer:
 class TestAsyncBatchedCollector:
     """Tests for :class:`AsyncBatchedCollector`."""
 
+    def test_policy_update_uses_inference_server(self):
+        class Policy(nn.Module):
+            def __init__(self, value):
+                super().__init__()
+                self.value = nn.Parameter(torch.tensor(float(value)))
+
+            def forward(self, td):
+                return td.set("action", torch.ones_like(td["observation"]) * self.value)
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=Policy(1),
+            frames_per_batch=4,
+            total_frames=-1,
+            max_batch_size=2,
+            env_backend="threading",
+        )
+        iterator = iter(collector)
+        try:
+            next(iterator)
+            collector.update_policy_weights_(Policy(2))
+            for _ in range(3):
+                batch = next(iterator)
+                updated = batch["policy_version"] == 1
+                if updated.any():
+                    torch.testing.assert_close(
+                        batch["action"][updated],
+                        torch.full_like(batch["action"][updated], 2),
+                    )
+                    break
+            else:
+                pytest.fail("Updated policy version did not reach collection.")
+            assert collector.policy_version == 1
+        finally:
+            collector.shutdown()
+
     def test_basic_collection(self):
         """Collector yields at least frames_per_batch frames."""
         num_envs = 3
@@ -2381,6 +2421,85 @@ class TestAsyncBatchedCollector:
             pass
         collector.shutdown()
         assert called["count"] >= 1
+
+    @pytest.mark.parametrize("env_backend", ["threading", "multiprocessing"])
+    def test_parent_replay_write_and_post_collect_hook(self, env_backend):
+        """Post-processing, hooks and routed writes run in the parent."""
+        parent_thread = threading.get_ident()
+        hook_calls = []
+
+        def postproc(td):
+            td.set(
+                "postproc_marker",
+                torch.ones(td.batch_size, dtype=torch.bool, device=td.device),
+            )
+            return td
+
+        def post_collect_hook(td):
+            assert td["postproc_marker"].all()
+            hook_calls.append(threading.get_ident())
+            td.set(
+                "hook_marker",
+                torch.ones(td.batch_size, dtype=torch.bool, device=td.device),
+            )
+
+        members = [
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(64, device="cpu"),
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+            )
+            for _ in range(2)
+        ]
+        replay_buffer = ReplayBufferEnsemble(*members, routing_key="env_index")
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            postproc=postproc,
+            post_collect_hook=post_collect_hook,
+            replay_buffer=replay_buffer,
+            max_batch_size=2,
+            env_backend=env_backend,
+        )
+        try:
+            outputs = list(collector)
+        finally:
+            collector.shutdown()
+
+        assert outputs and all(output is None for output in outputs)
+        assert hook_calls and set(hook_calls) == {parent_thread}
+        assert replay_buffer.stats()["write_count"] >= 20
+        for env_id, member in enumerate(members):
+            stored = member[:]
+            assert stored.device == torch.device("cpu")
+            assert stored["postproc_marker"].all()
+            assert stored["hook_marker"].all()
+            assert (stored["env_index"] == env_id).all()
+
+    def test_replay_backpressure_does_not_block_shutdown(self):
+        replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(64))
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=2,
+            total_frames=-1,
+            replay_buffer=replay_buffer,
+            max_batch_size=2,
+            env_backend="threading",
+        )
+        iterator = iter(collector)
+        assert next(iterator) is None
+        deadline = time.monotonic() + 2.0
+        while not collector._result_queue.full() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert collector._result_queue.full()
+        workers = list(collector._workers)
+
+        collector.shutdown(timeout=2.0)
+
+        assert collector._result_queue.maxsize == 2
+        assert not any(worker.is_alive() for worker in workers)
 
     @pytest.mark.parametrize("env_backend", ["threading", "multiprocessing"])
     def test_env_backend_smoke(self, env_backend):
