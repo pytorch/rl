@@ -3081,10 +3081,13 @@ class TestAsyncBatchedCollector:
 
     @pytest.mark.parametrize("failure", ["reset", "worker_death"])
     def test_process_slot_worker_failure_with_active_stream(self, failure):
+        entered = mp.get_context("spawn").Event()
         transport = _counting_process_transport(2)
         collector = AsyncBatchedCollector(
             create_env_fn=[
-                ft.partial(_ControlledResetEnv, reset_index=1, fail=True)
+                ft.partial(
+                    _ControlledResetEnv, reset_index=1, entered=entered, fail=True
+                )
                 if failure == "reset"
                 else _counting_env_factory,
                 _counting_env_factory,
@@ -3111,6 +3114,9 @@ class TestAsyncBatchedCollector:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(collect_until_error)
                 try:
+                    if failure == "reset":
+                        # Time error propagation after reset, independently of spawn.
+                        assert entered.wait(timeout=30)
                     with pytest.raises(RuntimeError, match="worker") as error:
                         future.result(timeout=8)
                     if failure == "reset":
