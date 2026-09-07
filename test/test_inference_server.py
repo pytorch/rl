@@ -2694,7 +2694,11 @@ class TestAsyncBatchedCollector:
         assert outputs and all(output is None for output in outputs)
         assert hook_calls and set(hook_calls) == {parent_thread}
         assert replay_buffer.stats()["write_count"] == 21
+        assert sum(len(member) for member in members) == 21
         for env_id, member in enumerate(members):
+            # Fast streams may exhaust a short budget while another process starts.
+            if not len(member):
+                continue
             stored = member[:]
             assert stored.device == torch.device("cpu")
             assert stored["postproc_marker"].all()
