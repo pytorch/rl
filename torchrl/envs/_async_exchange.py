@@ -278,7 +278,7 @@ class _SharedSlotExchange:
             self.result_slots[env_index]
             .select(*keys, strict=True)
             .clone()
-            .set("env_index", NonTensorData(env_index))
+            .set("env_index", NonTensorData(data=env_index))
         )
 
     def read_pair(
@@ -306,7 +306,7 @@ class _SharedSlotExchange:
 
     def read_pair_one(self, descriptor: tuple) -> tuple[TensorDictBase, TensorDictBase]:
         env_index, result_keys, next_keys, _ = descriptor
-        index_data = NonTensorData(env_index)
+        index_data = NonTensorData(data=env_index)
         result = (
             self.result_slots[env_index]
             .select(*result_keys, strict=True)
