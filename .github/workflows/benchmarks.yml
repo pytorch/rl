@@ -182,9 +182,13 @@ jobs:
             bash .github/unittest/helpers/assert_torch_version.sh nightly
             bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
 
+            # As in the pinned setup above, validate the third-party environment
+            # before adding this checkout. TensorDict main's development base
+            # version can precede TorchRL's stable release floor; this suite
+            # tests source compatibility separately from that metadata check.
+            python -m pip check
           fi
           python -m pip install -e . --no-build-isolation --no-deps
-          python -m pip check
           python -m pip freeze --all > benchmarks/dependencies.txt
 
           if [ "${{ matrix.device }}" = "GPU" ]; then
