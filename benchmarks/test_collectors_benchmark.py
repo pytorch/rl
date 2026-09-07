@@ -67,6 +67,7 @@ class _ResetLatencyPixelEnv(PixelMockEnv):
         "parallel",
         "async-queue",
         "async-shm",
+        "async-shm-integrated",
         "async-shm-grouped",
         pytest.param("async-shm-static", marks=pytest.mark.gpu),
     ],
@@ -74,15 +75,25 @@ class _ResetLatencyPixelEnv(PixelMockEnv):
 def test_async_collection_pixels(benchmark, mode, regime):
     """Fixed end-to-end series; see ASYNC_BENCHMARKS.md before changing inputs."""
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    if mode == "async-shm-static":
+    has_static = (
+        "static_batch_size" in inspect.signature(InferenceServerConfig).parameters
+    )
+    has_grouping = (
+        "envs_per_worker" in inspect.signature(AsyncBatchedCollector).parameters
+    )
+    integrated = mode == "async-shm-integrated"
+    use_static = mode == "async-shm-static" or (
+        integrated and device != "cpu" and has_static
+    )
+    group_size = (
+        4 if mode == "async-shm-grouped" or (integrated and has_grouping) else 1
+    )
+    if use_static:
         if device == "cpu":
             pytest.skip("CUDA graphs require CUDA")
-        if "static_batch_size" not in InferenceServerConfig.__dataclass_fields__:
+        if not has_static:
             pytest.skip("Static inference batches are not available on this revision")
-    if (
-        mode == "async-shm-grouped"
-        and "envs_per_worker" not in inspect.signature(AsyncBatchedCollector).parameters
-    ):
+    if group_size > 1 and not has_grouping:
         pytest.skip("Grouped environment workers are not available on this revision")
 
     # Keep these constants stable across merges. CPU and GPU are separate series.
@@ -125,8 +136,8 @@ def test_async_collection_pixels(benchmark, mode, regime):
                 auto_register_policy_transforms=False,
             )
         else:
-            config = {"static_batch_size": num_envs} if mode.endswith("static") else {}
-            grouped = {"envs_per_worker": 4} if mode.endswith("grouped") else {}
+            config = {"static_batch_size": num_envs} if use_static else {}
+            grouped = {"envs_per_worker": group_size} if group_size > 1 else {}
             collector = AsyncBatchedCollector(
                 factories,
                 policy_factory=policy_factory,
@@ -167,6 +178,7 @@ def test_async_collection_pixels(benchmark, mode, regime):
         latency_ms = torch.tensor(latencies[: rounds * batches_per_round]) * 1000
         process = psutil.Process()
         benchmark.extra_info.update(
+            execution=f"{'graph' if use_static else 'eager'}; {group_size} envs/worker",
             num_envs=num_envs,
             frames_per_batch=frames_per_batch,
             transitions=frames_per_batch * batches_per_round,

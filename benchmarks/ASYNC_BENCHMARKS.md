@@ -45,6 +45,15 @@ exist. They start new series when those features merge; absence is never
 reported as zero time or as a speedup. CUDA-only cases carry the `gpu` marker.
 Existing eager series continue unchanged through all merges.
 
+Follow **`async-shm-integrated`** for the cumulative performance curve. It starts
+with eager inference and one environment per worker, enables static inference
+on GPU when that public option becomes available, and uses four environments
+per worker when grouping becomes available. Its environment/policy workload and
+measurement budget remain fixed. Each point records the execution configuration
+in its tooltip, summary and raw JSON. These explicit configuration transitions
+show the combined pipeline as features land; use the fixed modes to separate
+individual changes and detect regressions.
+
 ## Reading results
 
 The dashboard plots **transitions per second**, higher is better. Each point is

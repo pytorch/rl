@@ -24,12 +24,16 @@ def summarize(root: Path, summary: Path) -> None:
         "Three fresh processes, five measured rounds each; warm-up excluded. "
         "Ranges below describe the three run medians, not confidence intervals.",
         "",
-        "| Series | Median frames/s | Run range | Batch p95 (ms) | RSS (MiB) | CUDA peak (MiB) |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Series | Execution | Median frames/s | Run range | Batch p95 (ms) | RSS (MiB) | CUDA peak (MiB) |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     trend = []
     for name in sorted(names):
         rows = [run[name] for run in indexed]
+        executions = {row["extra_info"].get("execution", "pool") for row in rows}
+        if len(executions) != 1:
+            raise RuntimeError(f"Inconsistent execution configuration for {name}")
+        execution = next(iter(executions))
         frames = {row["extra_info"]["transitions"] for row in rows}
         if len(frames) != 1 or next(iter(frames)) <= 0:
             raise RuntimeError(f"Inconsistent transition budget for {name}")
@@ -50,14 +54,16 @@ def summarize(root: Path, summary: Path) -> None:
             ]
             metrics.append(f"{statistics.median(values):.2f}" if values else "-")
         spread = f"{min(fps):.1f}-{max(fps):.1f}"
-        lines.append(f"| {name} | {median:.1f} | {spread} | {' | '.join(metrics)} |")
+        lines.append(
+            f"| {name} | {execution} | {median:.1f} | {spread} | {' | '.join(metrics)} |"
+        )
         trend.append(
             {
                 "name": name,
                 "unit": "frames/s",
                 "value": median,
                 "range": spread,
-                "extra": f"Batch p95: {metrics[0]} ms; process-tree RSS: {metrics[1]} MiB; CUDA peak: {metrics[2]} MiB. Three independent run medians.",
+                "extra": f"Execution: {execution}. Batch p95: {metrics[0]} ms; process-tree RSS: {metrics[1]} MiB; CUDA peak: {metrics[2]} MiB. Three independent run medians.",
             }
         )
     lines.extend(
