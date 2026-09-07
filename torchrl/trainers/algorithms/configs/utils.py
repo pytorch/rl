@@ -319,3 +319,37 @@ class LionConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for Lion optimizer configurations."""
+
+
+@dataclass
+class DreamerV3OptimizerConfig(ConfigBase):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DreamerV3Optimizer`.
+
+    Instantiation returns a partial optimizer constructor; supply its parameters
+    after constructing the learner modules.
+
+    Examples:
+        >>> import torch
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3OptimizerConfig
+        >>> make_optimizer = instantiate(DreamerV3OptimizerConfig(warmup_steps=0))
+        >>> parameter = torch.nn.Parameter(torch.ones(2))
+        >>> optimizer = make_optimizer([parameter])
+        >>> parameter.sum().backward()
+        >>> optimizer.step()
+        >>> bool((parameter < 1).all())
+        True
+    """
+
+    lr: float = 4e-5
+    agc: float = 0.3
+    parameter_norm_min: float = 1e-3
+    beta1: float = 0.9
+    beta2: float = 0.999
+    eps: float = 1e-20
+    warmup_steps: int = 1000
+    _target_: str = "torchrl.trainers.algorithms.DreamerV3Optimizer"
+    _partial_: bool = True
+
+    def __post_init__(self) -> None:
+        """Initialize the partial optimizer configuration."""
