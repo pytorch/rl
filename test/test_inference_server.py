@@ -2545,6 +2545,19 @@ class TestProcessInferenceServer:
         assert not health["process_alive"]
 
 
+def _counting_process_transport(num_slots):
+    return ProcessSlotTransport(
+        TensorDict({"observation": torch.zeros(1, dtype=torch.int32)}),
+        TensorDict(
+            {
+                "action": torch.zeros(1, dtype=torch.int32),
+                "policy_version": torch.zeros((), dtype=torch.long),
+            }
+        ),
+        num_slots=num_slots,
+    )
+
+
 class TestAsyncBatchedCollector:
     """Tests for :class:`AsyncBatchedCollector`."""
 
@@ -2839,8 +2852,10 @@ class TestAsyncBatchedCollector:
         not hasattr(os, "sched_setaffinity"),
         reason="CPU affinity requires Linux",
     )
-    @pytest.mark.parametrize("envs_per_worker", [1, 2])
-    def test_cpu_affinity(self, envs_per_worker):
+    @pytest.mark.parametrize(
+        ("envs_per_worker", "process_slots"), [(1, False), (2, False), (1, True)]
+    )
+    def test_cpu_affinity(self, envs_per_worker, process_slots):
         """Worker processes and driver threads use their configured masks."""
         original_affinity = os.sched_getaffinity(0)
         cpus = sorted(original_affinity)
@@ -2848,10 +2863,15 @@ class TestAsyncBatchedCollector:
         worker_affinity = (cpus[-1],)
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * 3,
-            policy=_make_counting_policy(),
+            policy=None if process_slots else _make_counting_policy(),
+            policy_factory=_make_counting_policy if process_slots else None,
+            transport=_counting_process_transport(3) if process_slots else None,
+            server_config=InferenceServerConfig(
+                service_backend="process" if process_slots else "thread",
+                max_batch_size=2,
+            ),
             frames_per_batch=10,
             total_frames=10,
-            max_batch_size=2,
             env_backend="multiprocessing",
             worker_affinity=[worker_affinity]
             * ((3 + envs_per_worker - 1) // envs_per_worker),
@@ -2861,10 +2881,14 @@ class TestAsyncBatchedCollector:
         try:
             collector._ensure_started()
             assert os.sched_getaffinity(0) == original_affinity
+            processes = collector._workers if process_slots else collector.env.threads
             assert all(
                 os.sched_getaffinity(process.pid) == set(worker_affinity)
-                for process in collector.env.threads
+                for process in processes
             )
+            if process_slots:
+                assert next(iter(collector)).numel() == 10
+                return
             driver_threads = [collector._server._worker, *collector._workers]
             assert all(
                 os.sched_getaffinity(thread.native_id) == set(driver_affinity)
@@ -2983,13 +3007,15 @@ class TestAsyncBatchedCollector:
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-    def test_process_server_static_batch(self):
+    @pytest.mark.parametrize("process_slots", [False, True])
+    def test_process_server_static_batch(self, process_slots):
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * 2,
             policy_factory=_make_counting_policy,
             frames_per_batch=10,
             total_frames=20,
-            env_backend="threading",
+            transport=_counting_process_transport(2) if process_slots else None,
+            env_backend="multiprocessing" if process_slots else "threading",
             server_config=InferenceServerConfig(
                 service_backend="process",
                 max_batch_size=2,
@@ -3012,19 +3038,7 @@ class TestAsyncBatchedCollector:
     def test_process_slot_workers_bypass_driver_coordination(self, total_frames):
         """Environment processes infer and step without driver coordinators."""
         num_envs = 2
-        transport = ProcessSlotTransport(
-            TensorDict(
-                {"observation": torch.zeros(1, dtype=torch.int32)}, batch_size=[]
-            ),
-            TensorDict(
-                {
-                    "action": torch.zeros(1, dtype=torch.int32),
-                    "policy_version": torch.zeros((), dtype=torch.long),
-                },
-                batch_size=[],
-            ),
-            num_slots=num_envs,
-        )
+        transport = _counting_process_transport(num_envs)
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * num_envs,
             policy_factory=_make_counting_policy,
@@ -3060,11 +3074,7 @@ class TestAsyncBatchedCollector:
 
     @pytest.mark.parametrize("failure", ["reset", "worker_death"])
     def test_process_slot_worker_failure_with_active_stream(self, failure):
-        transport = ProcessSlotTransport(
-            TensorDict({"observation": torch.zeros(1, dtype=torch.int32)}),
-            TensorDict({"action": torch.zeros(1, dtype=torch.int32)}),
-            num_slots=2,
-        )
+        transport = _counting_process_transport(2)
         collector = AsyncBatchedCollector(
             create_env_fn=[
                 ft.partial(_ControlledResetEnv, reset_index=1, fail=True)
