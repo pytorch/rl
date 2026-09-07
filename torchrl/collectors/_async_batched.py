@@ -1170,6 +1170,13 @@ class AsyncBatchedCollector(BaseCollector):
                             f"collector was running: {details}."
                         ) from None
                 continue
+            except (EOFError, OSError) as exc:
+                if not self._uses_process_env_workers:
+                    raise
+                self._check_process_workers()
+                raise RuntimeError(
+                    "An environment worker result could not be received."
+                ) from exc
             self._check_worker_result(td)
             return td
 
@@ -1207,6 +1214,13 @@ class AsyncBatchedCollector(BaseCollector):
                     td = rq.get_nowait()
                 except queue.Empty:
                     break
+                except (EOFError, OSError) as exc:
+                    if not self._uses_process_env_workers:
+                        raise
+                    self._check_process_workers()
+                    raise RuntimeError(
+                        "An environment worker result could not be received."
+                    ) from exc
                 self._check_worker_result(td)
                 if self._uses_batched_coordinator:
                     for transition in td.unbind(0):

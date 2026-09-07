@@ -28,6 +28,7 @@ import time as time_module
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import psutil
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
@@ -70,6 +71,12 @@ class BenchmarkResult:
     env_step_latency_ms: float
     policy_delay_ms: float
     status: str
+    envs_per_worker: int = 1
+    warmup_batches: int = 0
+    p50_batch_ms: float = 0.0
+    p95_batch_ms: float = 0.0
+    host_rss_mib: float = 0.0
+    cuda_used_mib: float = 0.0
     frames: int = 0
     elapsed_s: float = 0.0
     frames_per_s: float = 0.0
@@ -230,6 +237,7 @@ class PolicyFactory:
     hidden_layers: int = 1
 
     def __call__(self) -> TensorDictModule:
+        torch.manual_seed(0)
         if not self.from_pixels:
             mlp = MLP(
                 activation_class=nn.ReLU,
@@ -334,6 +342,7 @@ def bench(
     env_step_latency_ms: float,
     policy_delay_ms: float,
     warmup_batches: int,
+    envs_per_worker: int = 1,
 ) -> BenchmarkResult:
     collector = None
     total = 0
@@ -344,15 +353,33 @@ def bench(
         iterator = iter(collector)
         for _ in range(warmup_batches):
             next(iterator)
-        t0 = time_module.perf_counter()
+        if hasattr(collector, "server_stats"):
+            collector.server_stats(reset=True)
+        latencies = []
+        t0 = previous = time_module.perf_counter()
         for batch in iterator:
+            now = time_module.perf_counter()
+            latencies.append((now - previous) * 1000)
+            previous = now
             n = batch.numel()
             total += n
             if total >= total_frames:
                 break
-        if collector is not None and hasattr(collector, "server_stats"):
+        elapsed = time_module.perf_counter() - t0
+        if hasattr(collector, "server_stats"):
             policy_stats = collector.server_stats()
-        elapsed = time_module.perf_counter() - t0 if t0 is not None else 0.0
+        process = psutil.Process()
+        host_rss = process.memory_info().rss
+        for child in process.children(recursive=True):
+            try:
+                host_rss += child.memory_info().rss
+            except psutil.NoSuchProcess:
+                pass
+        cuda_used = 0
+        if torch.device(policy_device).type == "cuda":
+            free, capacity = torch.cuda.mem_get_info(policy_device)
+            cuda_used = capacity - free
+        percentiles = torch.tensor(latencies).quantile(torch.tensor([0.5, 0.95]))
         fps = total / elapsed if elapsed > 0 else 0.0
         return BenchmarkResult(
             collector=name,
@@ -367,6 +394,12 @@ def bench(
             env_step_latency_ms=env_step_latency_ms,
             policy_delay_ms=policy_delay_ms,
             status="ok",
+            envs_per_worker=envs_per_worker,
+            warmup_batches=warmup_batches,
+            p50_batch_ms=percentiles[0].item(),
+            p95_batch_ms=percentiles[1].item(),
+            host_rss_mib=host_rss / 2**20,
+            cuda_used_mib=cuda_used / 2**20,
             frames=total,
             elapsed_s=elapsed,
             frames_per_s=fps,
@@ -486,6 +519,7 @@ def main() -> None:
         help="Set MUJOCO_GL/PYOPENGL_PLATFORM, e.g. egl",
     )
     parser.add_argument("--num-envs", default="1,2,4")
+    parser.add_argument("--envs-per-worker", type=int, default=1)
     parser.add_argument(
         "--backends",
         default=("parallel,async-thread,async-env-mp,async-process,async-process-slot"),
@@ -676,6 +710,7 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="multiprocessing",
                                 env_exchange=args.env_exchange,
+                                envs_per_worker=args.envs_per_worker,
                                 server_config=InferenceServerConfig(
                                     service_backend="thread",
                                     max_batch_size=max_batch_size,
@@ -696,6 +731,7 @@ def main() -> None:
                             env_step_latency_ms=args.env_step_latency_ms,
                             policy_delay_ms=args.policy_delay_ms,
                             warmup_batches=args.warmup_batches,
+                            envs_per_worker=args.envs_per_worker,
                         )
                     )
             elif backend == "async-process":

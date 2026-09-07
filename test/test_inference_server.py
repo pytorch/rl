@@ -2881,14 +2881,21 @@ class TestAsyncBatchedCollector:
         try:
             collector._ensure_started()
             assert os.sched_getaffinity(0) == original_affinity
-            processes = collector._workers if process_slots else collector.env.threads
+            if process_slots:
+                # Spawn returns before the worker applies its affinity. A pause
+                # acknowledges that every worker has completed its startup.
+                with collector.pause():
+                    assert all(
+                        os.sched_getaffinity(process.pid) == set(worker_affinity)
+                        for process in collector._workers
+                    )
+                assert next(iter(collector)).numel() == 10
+                return
+            processes = collector.env.threads
             assert all(
                 os.sched_getaffinity(process.pid) == set(worker_affinity)
                 for process in processes
             )
-            if process_slots:
-                assert next(iter(collector)).numel() == 10
-                return
             driver_threads = [collector._server._worker, *collector._workers]
             assert all(
                 os.sched_getaffinity(thread.native_id) == set(driver_affinity)
