@@ -25,6 +25,7 @@ from tensordict.utils import _zip_strict, NestedKey
 from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
     _batching,
@@ -135,6 +136,16 @@ class vLLMWrapper(LLMWrapperBase):
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
             If `False`, only log probabilities will be computed. Defaults to `True`.
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
+
+            When ``generate=True``, response log-probabilities come from vLLM
+            token logprobs. Prompt log-probabilities are attached only if the
+            engine actually returned ``prompt_logprobs``. If it did not (common
+            on the vLLM V1 generate path even when ``SamplingParams.prompt_logprobs``
+            is set), :class:`~torchrl.modules.llm.policies.common.LogProbs.prompt`
+            is left unset and :attr:`~torchrl.modules.llm.policies.common.LogProbs.full`
+            is the response only. Missing prompt scores are **not** replaced
+            with zeros. To score a prompt, call the wrapper with
+            ``generate=False``.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
 
             **Standardized Parameters (cross-backend compatible):**
@@ -1827,9 +1838,13 @@ class vLLMWrapper(LLMWrapperBase):
                     as_list=True,
                 )
                 self._check_not_padded(log_probs_list)
+            prompt_logprobs_padded = None
+            prompt_logprobs_list = None
             if self.num_samples is None:
-                # TODO: this is not correct, we should use the prompt_logprobs
-                #  but they're not returned by vLLM
+                # SamplingParams.prompt_logprobs is requested when
+                # return_log_probs=True, but the vLLM V1 generate path
+                # may still omit per-request prompt_logprobs. Only keep
+                # engine-provided values; never invent zeros.
                 if self.pad_output:
                     prompt_logprobs_padded = request_output_tc.get(
                         "prompt_logprobs",
@@ -1838,7 +1853,8 @@ class vLLMWrapper(LLMWrapperBase):
                         padding_side="right",
                     )
                     if (
-                        prompt_logprobs_padded.shape[-1]
+                        prompt_logprobs_padded is not None
+                        and prompt_logprobs_padded.shape[-1]
                         != tokens_prompt_padded.shape[-1]
                     ):
                         tshape = tokens_prompt_padded.shape
@@ -1863,35 +1879,23 @@ class vLLMWrapper(LLMWrapperBase):
             if self.pad_output:
                 self._check_padded(log_probs_padded)
                 if self.num_samples is None:
-                    # Only set prompt log-probs if they actually contain
-                    # data (vLLM V1 may produce all-zero padded tensors
-                    # from empty per-request prompt_logprobs).
-                    if (
-                        prompt_logprobs_padded is not None
-                        and prompt_logprobs_padded.any()
+                    if _has_usable_prompt_logprobs(
+                        prompt_logprobs_padded, pad_output=True
                     ):
                         self._check_padded(prompt_logprobs_padded)
                         log_probs_obj.prompt = prompt_logprobs_padded
+                    else:
+                        _warn_missing_vllm_prompt_logprobs()
             else:
                 self._check_not_padded(log_probs_list)
-                if self.num_samples is None and prompt_logprobs_list is not None:
-                    # Check that prompt_logprobs actually contain data.
-                    # vLLM V1 may return prompt_logprobs=None per request,
-                    # which from_request_output converts to empty tensors.
-                    # A list of empty tensors is not useful as prompt
-                    # log-probs and must be treated as absent so the
-                    # zero-fill path below creates proper placeholders.
-                    _has_prompt_lp = any(
-                        t.numel() > 0
-                        for t in (
-                            prompt_logprobs_list
-                            if isinstance(prompt_logprobs_list, list)
-                            else [prompt_logprobs_list]
-                        )
-                    )
-                    if _has_prompt_lp:
+                if self.num_samples is None:
+                    if _has_usable_prompt_logprobs(
+                        prompt_logprobs_list, pad_output=False
+                    ):
                         self._check_not_padded(prompt_logprobs_list)
                         log_probs_obj.prompt = prompt_logprobs_list
+                    else:
+                        _warn_missing_vllm_prompt_logprobs()
             with log_probs_obj.view(-1) as log_probs_obj_flat:
                 log_probs_obj_flat.response = (
                     log_probs_padded if self.pad_output else log_probs_list
@@ -1905,40 +1909,13 @@ class vLLMWrapper(LLMWrapperBase):
                     response_lp = (
                         log_probs_padded if self.pad_output else log_probs_list
                     )
-                    if prompt_lp is None and response_lp is not None:
-                        # Prompt logprobs not available (vLLM V1 may not
-                        # return them). Create zero-filled placeholders
-                        # matching prompt token shapes so that "full" can
-                        # be constructed. The loss function masks prompt
-                        # positions anyway.
-                        tokens_prompt = out.get(
-                            (self.tokens_key, "prompt"), as_list=True
-                        )
-                        if tokens_prompt is None:
-                            tokens_prompt = (
-                                tokens_prompt_padded
-                                if self.pad_output
-                                else tokens_prompt_unpadded
-                            )
-                        if tokens_prompt is not None:
-                            if isinstance(tokens_prompt, list):
-                                prompt_lp = [
-                                    torch.zeros_like(t, dtype=response_lp[0].dtype)
-                                    for t in tokens_prompt
-                                ]
-                            else:
-                                prompt_lp = torch.zeros(
-                                    tokens_prompt.shape,
-                                    dtype=response_lp.dtype,
-                                    device=response_lp.device,
-                                )
                     if prompt_lp is not None and response_lp is not None:
                         log_probs_obj_flat.full = self._cat_tensors(
                             prompt_lp, response_lp
                         )
                     else:
-                        # Last resort: use response as full to avoid
-                        # missing key downstream
+                        # Prompt scores were not returned. Do not invent
+                        # zeros (log-prob 0 == probability 1).
                         log_probs_obj_flat.full = response_lp
                 else:
                     log_probs_obj_flat.full = None
@@ -2298,6 +2275,55 @@ class vLLMWrapper(LLMWrapperBase):
         raise NotImplementedError(
             "vLLM does not return logits, so get_generic_dist is not supported"
         )
+
+
+_PROMPT_LOGPROBS_MISSING_WARNED = False
+
+
+def _has_usable_prompt_logprobs(
+    prompt_logprobs: torch.Tensor | list[torch.Tensor] | None,
+    *,
+    pad_output: bool,
+) -> bool:
+    """Return whether ``prompt_logprobs`` contain engine-provided values.
+
+    Empty tensors (vLLM returned ``None``, converted by
+    :meth:`_RequestOutput_tc.from_request_output`) and all-zero padded
+    tensors are treated as absent so callers do not confuse placeholders
+    with real prompt log-probabilities.
+
+    Args:
+        prompt_logprobs (Tensor, list of Tensor or None): values extracted
+            from the vLLM request output.
+        pad_output (bool): whether the generate path padded the batch.
+
+    Returns:
+        bool: ``True`` if the values should be stored on
+        :class:`~torchrl.modules.llm.policies.common.LogProbs.prompt`.
+    """
+    if prompt_logprobs is None:
+        return False
+    if pad_output:
+        if not isinstance(prompt_logprobs, torch.Tensor):
+            return False
+        return bool(prompt_logprobs.numel()) and bool(prompt_logprobs.any())
+    items = prompt_logprobs if isinstance(prompt_logprobs, list) else [prompt_logprobs]
+    return any(isinstance(t, torch.Tensor) and t.numel() > 0 for t in items)
+
+
+def _warn_missing_vllm_prompt_logprobs() -> None:
+    """Log once that generate() did not receive usable prompt log-probs."""
+    global _PROMPT_LOGPROBS_MISSING_WARNED
+    if _PROMPT_LOGPROBS_MISSING_WARNED:
+        return
+    _PROMPT_LOGPROBS_MISSING_WARNED = True
+    torchrl_logger.warning(
+        "vLLMWrapper requested prompt log-probabilities but vLLM did not "
+        "return usable prompt_logprobs on this generate path. "
+        "LogProbs.prompt is left unset and LogProbs.full is the response "
+        "only. Missing prompt scores are not replaced with zeros. "
+        "To score a prompt, call the wrapper with generate=False."
+    )
 
 
 def _extract_logprob(entry):

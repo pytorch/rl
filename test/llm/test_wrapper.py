@@ -43,7 +43,9 @@ from torchrl.modules.llm.policies.common import (
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.modules.llm.policies.vllm_wrapper import (
     _completion_output_to_tc,
+    _has_usable_prompt_logprobs,
     _RequestOutput_tc,
+    _warn_missing_vllm_prompt_logprobs,
     vLLMWrapper,
 )
 from torchrl.modules.llm.trl_interop import HFRewardModelWrapper, TorchRLBufferDataset
@@ -3891,6 +3893,44 @@ class TestRequestOutputConversion:
         torch.testing.assert_close(result.prompt_token_ids[0], torch.tensor([1, 2, 3]))
         # prompt_logprobs=None should become empty tensor
         assert result.prompt_logprobs[0].numel() == 0
+
+
+class TestVLLMPromptLogprobsContract:
+    """Generate-path prompt log-probs must not be invented (#4226)."""
+
+    def test_missing_none_is_unusable(self):
+        assert not _has_usable_prompt_logprobs(None, pad_output=False)
+        assert not _has_usable_prompt_logprobs(None, pad_output=True)
+
+    def test_empty_unpadded_is_unusable(self):
+        assert not _has_usable_prompt_logprobs([torch.tensor([])], pad_output=False)
+        assert not _has_usable_prompt_logprobs(torch.tensor([]), pad_output=False)
+
+    def test_all_zero_padded_is_unusable(self):
+        assert not _has_usable_prompt_logprobs(torch.zeros(2, 4), pad_output=True)
+
+    def test_engine_values_are_usable(self):
+        assert _has_usable_prompt_logprobs(
+            [torch.tensor([-0.1, -0.2])], pad_output=False
+        )
+        padded = torch.zeros(2, 4)
+        padded[0, -1] = -0.3
+        assert _has_usable_prompt_logprobs(padded, pad_output=True)
+
+    def test_missing_prompt_logprobs_warns_once(self, monkeypatch):
+        import torchrl.modules.llm.policies.vllm_wrapper as vllm_mod
+
+        monkeypatch.setattr(vllm_mod, "_PROMPT_LOGPROBS_MISSING_WARNED", False)
+        calls: list[str] = []
+
+        def _capture(message: str, *args: object, **kwargs: object) -> None:
+            calls.append(message % args if args else message)
+
+        monkeypatch.setattr(vllm_mod.torchrl_logger, "warning", _capture)
+        _warn_missing_vllm_prompt_logprobs()
+        _warn_missing_vllm_prompt_logprobs()
+        assert len(calls) == 1
+        assert "not replaced with zeros" in calls[0]
 
 
 class TestTRLInterop:
