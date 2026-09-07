@@ -449,6 +449,10 @@ class TestEnvConfigs:
         assert config.backend == "threading"
         assert config.stack == "dense"
         assert config.exchange == "queue"
+        assert config.worker_affinity is None
+
+        config = OmegaConf.merge(config, {"worker_affinity": [[0, 1], [2, 3]]})
+        assert config.worker_affinity == [[0, 1], [2, 3]]
 
     @pytest.mark.parametrize(
         ("field", "value"),
