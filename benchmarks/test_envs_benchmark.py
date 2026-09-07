@@ -186,6 +186,8 @@ def test_cat_frames_functional(benchmark, padding, N):
 # - test_async_env_pool_dispatch: free envs, so the round time is
 #   ASYNC_POOL_DISPATCH_TRANSITIONS x the consumer-side dispatch cost
 #   (recv -> action write -> send) per transition. The most sensitive tracker.
+# - test_async_env_pool_per_env_dispatch: the same free-env workload through
+#   the per-env receive path used by AsyncBatchedCollector.
 # - test_async_env_pool_fast_step_slow_reset: many envs with millisecond steps
 #   and long occasional resets (the game-engine regime). Sized so that the
 #   consumer is the bottleneck today: the round time falls toward the
@@ -256,6 +258,29 @@ def _async_pool_harvest(pool, num_transitions, max_get):
         harvested += num_ready
 
 
+def _make_async_pool_per_env(num_envs, exchange):
+    pool = AsyncEnvPool(
+        [partial(DelayedCountingEnv, max_steps=10_000_000)] * num_envs,
+        backend="multiprocessing",
+        exchange=exchange,
+    )
+    for env_index in range(num_envs):
+        pool.async_reset_send(env_index=env_index)
+    for env_index in range(num_envs):
+        tensordict = pool.async_reset_recv(env_index=env_index)
+        tensordict["action"] = torch.ones(1)
+        pool.async_step_and_maybe_reset_send(tensordict, env_index=env_index)
+    return pool
+
+
+def _async_pool_harvest_per_env(pool, num_transitions):
+    for index in range(num_transitions):
+        env_index = index % pool.num_envs
+        _, tensordict = pool.async_step_and_maybe_reset_recv(env_index=env_index)
+        tensordict["action"] = torch.ones(1)
+        pool.async_step_and_maybe_reset_send(tensordict, env_index=env_index)
+
+
 @pytest.mark.parametrize("exchange", ["queue", "shm"])
 def test_async_env_pool_dispatch(benchmark, exchange):
     """Consumer dispatch cost of AsyncEnvPool with free envs."""
@@ -277,6 +302,25 @@ def test_async_env_pool_dispatch(benchmark, exchange):
                     ASYNC_POOL_DISPATCH_TRANSITIONS,
                     ASYNC_POOL_DISPATCH_ENVS,
                 ),
+                rounds=5,
+                warmup_rounds=1,
+                iterations=1,
+            )
+        finally:
+            pool._maybe_shutdown()
+
+
+@pytest.mark.parametrize("exchange", ["queue", "shm"])
+def test_async_env_pool_per_env_dispatch(benchmark, exchange):
+    """Per-env dispatch cost on the path used by AsyncBatchedCollector."""
+    with set_capture_non_tensor_stack(False):
+        pool = _make_async_pool_per_env(ASYNC_POOL_DISPATCH_ENVS, exchange)
+        try:
+            benchmark.extra_info["num_envs"] = ASYNC_POOL_DISPATCH_ENVS
+            benchmark.extra_info["transitions"] = ASYNC_POOL_DISPATCH_TRANSITIONS
+            benchmark.pedantic(
+                _async_pool_harvest_per_env,
+                args=(pool, ASYNC_POOL_DISPATCH_TRANSITIONS),
                 rounds=5,
                 warmup_rounds=1,
                 iterations=1,

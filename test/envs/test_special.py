@@ -109,6 +109,29 @@ class _ManyKeysCountingEnv(CountingEnv):
         return self._fill_extra_keys(super()._step(tensordict))
 
 
+class _PixelCountingEnv(CountingEnv):
+    """A counting env with the pixel payload from the mmap regression."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observation_spec["pixels"] = Unbounded(
+            (*self.batch_size, 3, 64, 64), dtype=torch.uint8
+        )
+
+    def _fill_pixels(self, tensordict):
+        tensordict.set(
+            "pixels",
+            torch.zeros(*self.batch_size, 3, 64, 64, dtype=torch.uint8),
+        )
+        return tensordict
+
+    def _reset(self, tensordict, **kwargs):
+        return self._fill_pixels(super()._reset(tensordict, **kwargs))
+
+    def _step(self, tensordict):
+        return self._fill_pixels(super()._step(tensordict))
+
+
 def test_callable_metadata_env_closes_when_extraction_fails(monkeypatch):
     env = ContinuousActionVecMockEnv()
     closed = False
@@ -1110,6 +1133,42 @@ class TestAsyncEnvPool:
             for proc in env.threads:
                 if proc.is_alive():
                     proc.terminate()
+
+    @set_capture_non_tensor_stack(False)
+    def test_queue_per_env_results_release_shared_mappings(self):
+        """Retained pixel transitions must not retain queue transport mappings."""
+        env = AsyncEnvPool(
+            [partial(_PixelCountingEnv, max_steps=1000)],
+            backend="multiprocessing",
+            exchange="queue",
+            stack="lazy",
+        )
+        retained = []
+        try:
+            env.async_reset_send(env_index=0)
+            next_tensordict = env.async_reset_recv(env_index=0)
+            for _ in range(128):
+                next_tensordict.set("action", torch.ones(1))
+                env.async_step_and_maybe_reset_send(next_tensordict, env_index=0)
+                transition, next_tensordict = env.async_step_and_maybe_reset_recv(
+                    env_index=0
+                )
+                retained.append(transition)
+
+            batch = env.reset()
+            assert len(retained) == 128
+            assert not any(
+                value.is_shared()
+                for tensordict in (
+                    *retained,
+                    next_tensordict,
+                    *batch.unbind(0),
+                )
+                for _, value in tensordict.items(True, True)
+                if isinstance(value, torch.Tensor)
+            )
+        finally:
+            env._maybe_shutdown()
 
     @set_capture_non_tensor_stack(False)
     def test_exchange_auto_resolves_to_shm(self, make_envs):
