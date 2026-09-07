@@ -210,6 +210,9 @@ ASYNC_POOL_AFFINITY_STEP_LATENCY = 1e-3
 _AFFINITY_CPUS = (
     tuple(sorted(os.sched_getaffinity(0))) if hasattr(os, "sched_getaffinity") else ()
 )
+ASYNC_POOL_GROUPING_ENVS = 64
+ASYNC_POOL_GROUPING_TRANSITIONS = 512
+ASYNC_POOL_GROUPING_STEP_LATENCY = 0.05
 
 
 class DelayedCountingEnv(CountingEnv):
@@ -240,6 +243,7 @@ def _make_async_pool(
     reset_latency,
     max_steps,
     worker_affinity=None,
+    envs_per_worker=1,
 ):
     pool = AsyncEnvPool(
         [
@@ -254,6 +258,7 @@ def _make_async_pool(
         backend="multiprocessing",
         exchange=exchange,
         worker_affinity=worker_affinity,
+        envs_per_worker=envs_per_worker,
     )
     # Prime the steady state: after this, every round starts with a recv.
     tensordict = pool.reset()
@@ -465,6 +470,42 @@ def test_async_env_pool_step_latency_jitter(benchmark, pinned):
                         min(len(samples_ms) - 1, int(len(samples_ms) * 0.99))
                     ],
                 }
+            )
+        finally:
+            pool._maybe_shutdown()
+
+
+@pytest.mark.parametrize(
+    "envs_per_worker",
+    [1, 4],
+    ids=["64-processes", "16-processes-of-4"],
+)
+def test_async_env_pool_multi_env_workers(benchmark, envs_per_worker):
+    """Compare process layouts for many sleeping environments."""
+    with set_capture_non_tensor_stack(False):
+        pool = _make_async_pool(
+            ASYNC_POOL_GROUPING_ENVS,
+            "shm",
+            step_latency=ASYNC_POOL_GROUPING_STEP_LATENCY,
+            reset_latency=0.0,
+            max_steps=10_000_000,
+            envs_per_worker=envs_per_worker,
+        )
+        try:
+            benchmark.extra_info["num_envs"] = ASYNC_POOL_GROUPING_ENVS
+            benchmark.extra_info["num_processes"] = pool.num_workers
+            benchmark.extra_info["envs_per_worker"] = envs_per_worker
+            benchmark.extra_info["transitions"] = ASYNC_POOL_GROUPING_TRANSITIONS
+            benchmark.pedantic(
+                _async_pool_harvest,
+                args=(
+                    pool,
+                    ASYNC_POOL_GROUPING_TRANSITIONS,
+                    ASYNC_POOL_GROUPING_ENVS,
+                ),
+                rounds=5,
+                warmup_rounds=1,
+                iterations=1,
             )
         finally:
             pool._maybe_shutdown()

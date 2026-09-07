@@ -18,7 +18,6 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
@@ -27,6 +26,7 @@ from tensordict.nn.probabilistic import (
     InteractionType,
     set_interaction_type,
 )
+from tensordict.utils import assert_close
 from torchrl import service_backend, transport_backend
 from torchrl._comm import (
     CommandChannel,
@@ -37,7 +37,6 @@ from torchrl._comm import (
     SharedBlock,
     TCPStoreRendezvous,
 )
-
 from torchrl.modules.inference_server import (
     InferenceClient,
     InferenceDeviceConfig,
@@ -47,6 +46,7 @@ from torchrl.modules.inference_server import (
     MPTransport,
     PolicyClientModule,
     ProcessInferenceServer,
+    ProcessSlotTransport,
     RayTransport,
     SharedMemoryTransport,
     SlotTransport,
@@ -335,7 +335,12 @@ class TestInferenceServerCore:
 
     @pytest.mark.parametrize(
         ("service_backend", "transport"),
-        [("thread", "ray"), ("process", "ray"), ("ray", "shared_memory")],
+        [
+            ("thread", "ray"),
+            ("thread", "process_slot"),
+            ("process", "ray"),
+            ("ray", "shared_memory"),
+        ],
     )
     def test_invalid_backend_transport_rejected_before_start(
         self, service_backend, transport
@@ -1736,6 +1741,83 @@ class TestSharedMemoryTransport:
             assert result_queue.get(timeout=1.0) is True
 
 
+class TestProcessSlotTransport:
+    def test_round_robin_nested_slots(self):
+        """A capped sweep rotates fairly and preserves nested-key payloads."""
+        request_spec = TensorDict({"agent": {"observation": torch.zeros(4)}})
+        response_spec = TensorDict({"agent": {"action": torch.zeros(4)}})
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
+        clients = [transport.client() for _ in range(4)]
+        futures = [
+            client.submit(
+                TensorDict({"agent": {"observation": torch.full((4,), float(slot))}})
+            )
+            for slot, client in enumerate(clients)
+        ]
+
+        transport.wait_for_work(timeout=1.0)
+        items, callbacks = transport.drain(2)
+        assert callbacks == [0, 1]
+        for item, callback in zip(items, callbacks):
+            transport.resolve(
+                callback,
+                TensorDict({"agent": {"action": 2 * item["agent", "observation"]}}),
+            )
+        for slot in callbacks:
+            assert torch.equal(
+                futures[slot].result(timeout=1.0)["agent", "action"],
+                torch.full((4,), float(2 * slot)),
+            )
+
+        futures[0] = clients[0].submit(
+            TensorDict({"agent": {"observation": torch.full((4,), 4.0)}})
+        )
+        futures[1] = clients[1].submit(
+            TensorDict({"agent": {"observation": torch.full((4,), 5.0)}})
+        )
+        transport.wait_for_work(timeout=1.0)
+        items, callbacks = transport.drain(4)
+        assert callbacks == [2, 3, 0, 1]
+        for item, callback in zip(items, callbacks):
+            transport.resolve(
+                callback,
+                TensorDict({"agent": {"action": 2 * item["agent", "observation"]}}),
+            )
+        assert all(future.result(timeout=1.0) is not None for future in futures)
+
+    def test_canonical_process_server_and_spawned_clients(self):
+        """Spawned workers exchange only slot signals with the server process."""
+        ctx = mp.get_context("spawn")
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        server = InferenceServer(
+            policy_factory=_make_doubling_policy,
+            service_backend="process",
+            service_backend_options={"mp_context": ctx},
+            transport="process_slot",
+            transport_options={"ctx": ctx},
+            request_spec=request_spec,
+            response_spec=response_spec,
+            num_clients=2,
+            max_batch_size=2,
+        )
+        clients = server.clients(2)
+        result_queue = ctx.Queue()
+        processes = []
+        with server:
+            for client in clients:
+                process = ctx.Process(
+                    target=_shm_actor_fn,
+                    args=(client, 3, result_queue),
+                )
+                process.start()
+                processes.append(process)
+            for process in processes:
+                process.join(timeout=30.0)
+                assert process.exitcode == 0
+            assert server.stats()["requests"] == 6
+        assert all(result_queue.get(timeout=1.0) is True for _ in processes)
+
+
 # =============================================================================
 # Tests: RayTransport (Commit 4)
 # =============================================================================
@@ -2206,6 +2288,27 @@ from torchrl.collectors import AsyncBatchedCollector, Collector
 from torchrl.testing.mocking_classes import CountingEnv
 
 
+class _ControlledResetEnv(CountingEnv):
+    def __init__(self, *, reset_index=0, entered=None, release=None, fail=False):
+        super().__init__(max_steps=0)
+        self._reset_index = reset_index
+        self._reset_count = 0
+        self._entered = entered
+        self._release = release
+        self._fail = fail
+
+    def _reset(self, tensordict=None, **kwargs):
+        if self._reset_count == self._reset_index:
+            if self._entered is not None:
+                self._entered.set()
+            if self._fail:
+                raise ValueError("controlled reset failure")
+            if self._release is not None and not self._release.wait(timeout=10):
+                raise TimeoutError("reset was not released")
+        self._reset_count += 1
+        return super()._reset(tensordict, **kwargs)
+
+
 def _counting_env_factory(max_steps=5):
     """Factory that returns a CountingEnv."""
     return CountingEnv(max_steps=max_steps)
@@ -2442,6 +2545,19 @@ class TestProcessInferenceServer:
         assert not health["process_alive"]
 
 
+def _counting_process_transport(num_slots):
+    return ProcessSlotTransport(
+        TensorDict({"observation": torch.zeros(1, dtype=torch.int32)}),
+        TensorDict(
+            {
+                "action": torch.zeros(1, dtype=torch.int32),
+                "policy_version": torch.zeros((), dtype=torch.long),
+            }
+        ),
+        num_slots=num_slots,
+    )
+
+
 class TestAsyncBatchedCollector:
     """Tests for :class:`AsyncBatchedCollector`."""
 
@@ -2609,17 +2725,22 @@ class TestAsyncBatchedCollector:
         assert collected >= 50
 
     @pytest.mark.parametrize(
-        ("env_backend", "env_exchange"),
-        [("threading", "queue"), ("multiprocessing", "shm")],
+        ("env_backend", "env_exchange", "envs_per_worker"),
+        [
+            ("threading", "queue", 1),
+            ("multiprocessing", "queue", 2),
+            ("multiprocessing", "shm", 2),
+        ],
     )
-    def test_pause_for_torch_compile(self, env_backend, env_exchange):
+    def test_pause_for_torch_compile(self, env_backend, env_exchange, envs_per_worker):
         """Compilation can run while a started collector is quiescent."""
         collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * 4,
+            create_env_fn=[_counting_env_factory] * 5,
             policy=_make_counting_policy(),
             frames_per_batch=10,
             total_frames=-1,
             env_backend=env_backend,
+            envs_per_worker=envs_per_worker,
             env_exchange=env_exchange,
         )
         iterator = iter(collector)
@@ -2750,43 +2871,66 @@ class TestAsyncBatchedCollector:
                 env_exchange="shm",
             )
 
-    def test_worker_affinity_validation_is_eager(self):
-        with pytest.raises(ValueError, match="one CPU mask per environment"):
+    @pytest.mark.parametrize("envs_per_worker", [1, 2])
+    def test_worker_affinity_validation_is_eager(self, envs_per_worker):
+        with pytest.raises(ValueError, match="one CPU mask per worker process"):
             AsyncBatchedCollector(
-                create_env_fn=[_counting_env_factory] * 2,
+                create_env_fn=[_counting_env_factory] * 3,
                 policy=_make_counting_policy(),
                 frames_per_batch=10,
                 total_frames=10,
                 env_backend="multiprocessing",
                 worker_affinity=[(0,)],
+                envs_per_worker=envs_per_worker,
             )
 
     @pytest.mark.skipif(
         not hasattr(os, "sched_setaffinity"),
         reason="CPU affinity requires Linux",
     )
-    def test_cpu_affinity(self):
+    @pytest.mark.parametrize(
+        ("envs_per_worker", "process_slots"), [(1, False), (2, False), (1, True)]
+    )
+    def test_cpu_affinity(self, envs_per_worker, process_slots):
         """Worker processes and driver threads use their configured masks."""
         original_affinity = os.sched_getaffinity(0)
         cpus = sorted(original_affinity)
         driver_affinity = (cpus[0],)
         worker_affinity = (cpus[-1],)
         collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * 2,
-            policy=_make_counting_policy(),
+            create_env_fn=[_counting_env_factory] * 3,
+            policy=None if process_slots else _make_counting_policy(),
+            policy_factory=_make_counting_policy if process_slots else None,
+            transport=_counting_process_transport(3) if process_slots else None,
+            server_config=InferenceServerConfig(
+                service_backend="process" if process_slots else "thread",
+                max_batch_size=2,
+            ),
             frames_per_batch=10,
             total_frames=10,
-            max_batch_size=2,
             env_backend="multiprocessing",
-            worker_affinity=[worker_affinity] * 2,
+            worker_affinity=[worker_affinity]
+            * ((3 + envs_per_worker - 1) // envs_per_worker),
             driver_affinity=driver_affinity,
+            envs_per_worker=envs_per_worker,
         )
         try:
             collector._ensure_started()
             assert os.sched_getaffinity(0) == original_affinity
+            if process_slots:
+                # Spawn returns before the worker applies its affinity. A pause
+                # acknowledges that every worker has completed its startup.
+                with collector.pause():
+                    assert all(
+                        os.sched_getaffinity(process.pid) == set(worker_affinity)
+                        for process in collector._workers
+                    )
+                assert next(iter(collector)).numel() == 10
+                return
+            processes = collector.env.threads
             assert all(
                 os.sched_getaffinity(process.pid) == set(worker_affinity)
-                for process in collector.env.threads
+                for process in processes
             )
             driver_threads = [collector._server._worker, *collector._workers]
             assert all(
@@ -2798,6 +2942,90 @@ class TestAsyncBatchedCollector:
                 == set(driver_affinity)
                 for input_queue in collector.env.input_queue
             )
+        finally:
+            collector.shutdown()
+
+    def test_multiprocessing_envs_per_worker(self):
+        """Grouped workers preserve every stream with a single receive owner."""
+        num_envs = 5
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy=_make_counting_policy(),
+            frames_per_batch=25,
+            total_frames=25,
+            max_batch_size=num_envs,
+            env_backend="multiprocessing",
+            envs_per_worker=2,
+        )
+        try:
+            batch = next(iter(collector))
+            env_ids = {int(env_id) for env_id in batch["env_index"]}
+            assert env_ids == set(range(num_envs))
+            assert len(collector.env.threads) == 3
+            assert len(collector._workers) == 1
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("env_exchange", ["queue", "shm"])
+    @pytest.mark.parametrize("reset_index", [0, 1])
+    def test_grouped_slow_reset_keeps_other_stream_running(
+        self, env_exchange, reset_index
+    ):
+        ctx = mp.get_context("spawn")
+        entered, release = ctx.Event(), ctx.Event()
+        collector = AsyncBatchedCollector(
+            create_env_fn=[
+                ft.partial(
+                    _ControlledResetEnv,
+                    reset_index=reset_index,
+                    entered=entered,
+                    release=release,
+                ),
+                _counting_env_factory,
+            ],
+            policy=_make_counting_policy(),
+            frames_per_batch=8,
+            total_frames=24,
+            env_backend="multiprocessing",
+            env_exchange=env_exchange,
+            envs_per_worker=2,
+        )
+        try:
+            collector._ensure_started()
+            assert entered.wait(timeout=5)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                try:
+                    batches = executor.submit(list, collector).result(timeout=5)
+                    assert sum(batch.numel() for batch in batches) == 24
+                    assert all(
+                        int(index) == 1
+                        for batch in batches
+                        for index in batch["env_index"]
+                    )
+                finally:
+                    release.set()
+        finally:
+            release.set()
+            collector.shutdown()
+
+    @pytest.mark.parametrize("env_exchange", ["queue", "shm"])
+    def test_grouped_environment_error_reaches_collector(self, env_exchange):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[
+                ft.partial(_ControlledResetEnv, reset_index=1, fail=True),
+                _counting_env_factory,
+            ],
+            policy=_make_counting_policy(),
+            frames_per_batch=8,
+            env_backend="multiprocessing",
+            env_exchange=env_exchange,
+            envs_per_worker=2,
+        )
+        try:
+            with pytest.raises(RuntimeError) as error:
+                for _ in collector:
+                    pass
+            assert "controlled reset failure" in str(error.value.__cause__)
         finally:
             collector.shutdown()
 
@@ -2822,13 +3050,15 @@ class TestAsyncBatchedCollector:
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-    def test_process_server_static_batch(self):
+    @pytest.mark.parametrize("process_slots", [False, True])
+    def test_process_server_static_batch(self, process_slots):
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * 2,
             policy_factory=_make_counting_policy,
             frames_per_batch=10,
             total_frames=20,
-            env_backend="threading",
+            transport=_counting_process_transport(2) if process_slots else None,
+            env_backend="multiprocessing" if process_slots else "threading",
             server_config=InferenceServerConfig(
                 service_backend="process",
                 max_batch_size=2,
@@ -2846,6 +3076,91 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    @pytest.mark.parametrize("total_frames", [24, 25])
+    def test_process_slot_workers_bypass_driver_coordination(self, total_frames):
+        """Environment processes infer and step without driver coordinators."""
+        num_envs = 2
+        transport = _counting_process_transport(num_envs)
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            frames_per_batch=12,
+            total_frames=total_frames,
+            env_backend="multiprocessing",
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=num_envs
+            ),
+        )
+        workers = []
+        try:
+            iterator = iter(collector)
+            batch = next(iterator)
+            saved = batch.clone()
+            for _ in range(2):
+                with collector.pause(timeout=5):
+                    requests = collector.server_stats()["requests"]
+                    time.sleep(0.05)
+                    assert collector.server_stats()["requests"] == requests
+            assert batch.numel() + sum(td.numel() for td in iterator) == total_frames
+            assert_close(batch, saved)
+            workers = list(collector._workers)
+            assert collector._env_pool is None
+            assert all(worker.pid is not None for worker in workers)
+            assert batch["action"].eq(1).all()
+            assert "policy_version" in batch.keys()
+            assert collector.server_stats()["requests"] >= batch.numel()
+        finally:
+            collector.shutdown()
+        assert not any(worker.is_alive() for worker in workers)
+
+    @pytest.mark.parametrize("failure", ["reset", "worker_death"])
+    def test_process_slot_worker_failure_with_active_stream(self, failure):
+        entered = mp.get_context("spawn").Event()
+        transport = _counting_process_transport(2)
+        collector = AsyncBatchedCollector(
+            create_env_fn=[
+                ft.partial(
+                    _ControlledResetEnv, reset_index=1, entered=entered, fail=True
+                )
+                if failure == "reset"
+                else _counting_env_factory,
+                _counting_env_factory,
+            ],
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            frames_per_batch=8,
+            env_backend="multiprocessing",
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=2
+            ),
+        )
+        iterator = iter(collector)
+
+        def collect_until_error():
+            for _ in iterator:
+                pass
+
+        try:
+            if failure == "worker_death":
+                next(iterator)
+                collector._workers[0].terminate()
+                collector._workers[0].join(timeout=5)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(collect_until_error)
+                try:
+                    if failure == "reset":
+                        # Time error propagation after reset, independently of spawn.
+                        assert entered.wait(timeout=30)
+                    with pytest.raises(RuntimeError, match="worker") as error:
+                        future.result(timeout=8)
+                    if failure == "reset":
+                        assert "controlled reset failure" in str(error.value.__cause__)
+                finally:
+                    collector.shutdown()
+        finally:
+            collector.shutdown()
 
     def test_policy_version_key_none_disables_annotations(self):
         collector = AsyncBatchedCollector(
