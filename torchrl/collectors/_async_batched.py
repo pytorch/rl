@@ -14,7 +14,13 @@ from collections.abc import Callable, Iterator, Sequence
 from typing import Literal
 
 import torch
-from tensordict import lazy_stack, NestedKey, TensorDictBase
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    maybe_dense_stack,
+    NestedKey,
+    TensorDictBase,
+)
 
 from torchrl._comm import MailboxTransportError
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
@@ -120,7 +126,10 @@ def _env_loop(
             if shutdown_event.is_set():
                 break
 
-            action_td = client(obs)
+            # Initial resets may have no device metadata while later policy
+            # results do. Keep requests collatable when streams start or reset
+            # at different times; tensor placement is unchanged.
+            action_td = client(obs.clone(recurse=False).clear_device_())
             if env_device is not None:
                 action_td = action_td.to(env_device)
             pool.async_step_and_maybe_reset_send(action_td, env_index=env_id)
@@ -134,10 +143,121 @@ def _env_loop(
             result_queue.put(exc)
 
 
+def _env_ids(tensordict: TensorDictBase) -> list[int]:
+    """Read one environment index for each item in the leading batch dimension."""
+    values = tensordict.get(_ENV_IDX_KEY)
+    if hasattr(values, "data") and not isinstance(values, torch.Tensor):
+        values = values.data
+    if hasattr(values, "tolist"):
+        values = values.tolist()
+    if not isinstance(values, list):
+        values = [values]
+    result = []
+    for value in values:
+        while isinstance(value, list) and len(value) == 1:
+            value = value[0]
+        result.append(int(value))
+    return result
+
+
+def _env_batch_loop(
+    pool: AsyncEnvPool,
+    clients: list[PolicyClientModule],
+    result_queue: queue.Queue,
+    shutdown_event: threading.Event,
+    pause_request: list[_PauseRequest | None],
+    env_device: torch.device | None,
+    storing_device: torch.device | None,
+):
+    """Coordinate a shared-memory env pool from one thread in ready batches."""
+    exchange_keys = pool.exchange_keys
+    ready_observations = {}
+    pending_actions = {}
+    policy_outputs = {}
+    stepping = 0
+    poll_interval = 0.001
+
+    try:
+        env_ids = list(range(pool.num_envs))
+        pool.async_reset_send(env_index=env_ids)
+        observations = pool.async_reset_recv(min_get=pool.num_envs)
+        for env_id, observation in zip(_env_ids(observations), observations.unbind(0)):
+            ready_observations[env_id] = observation
+
+        while not shutdown_event.is_set():
+            if pause_request[0] is None and ready_observations:
+                for env_id, observation in ready_observations.items():
+                    pending_actions[env_id] = clients[env_id].submit(observation)
+                ready_observations.clear()
+
+            if pause_request[0] is not None and not pending_actions and not stepping:
+                _wait_while_paused(pause_request)
+                continue
+
+            ready_ids = [
+                env_id for env_id, future in pending_actions.items() if future.done()
+            ]
+            if ready_ids:
+                env_inputs = []
+                for env_id in ready_ids:
+                    action = pending_actions.pop(env_id).result()
+                    if env_device is not None:
+                        action = action.to(env_device)
+                    policy_outputs[env_id] = action
+                    env_inputs.append(action.select(*exchange_keys, strict=False))
+                pool.async_step_and_maybe_reset_send(
+                    lazy_stack(env_inputs), env_index=ready_ids
+                )
+                stepping += len(ready_ids)
+
+            if shutdown_event.is_set():
+                break
+            if not stepping:
+                shutdown_event.wait(poll_interval)
+                continue
+
+            try:
+                transitions, next_observations = pool.async_step_and_maybe_reset_recv(
+                    min_get=1,
+                    max_get=pool.num_envs,
+                    timeout=poll_interval if pending_actions else None,
+                )
+            except TimeoutError:
+                continue
+
+            completed_ids = _env_ids(next_observations)
+            stepping -= len(completed_ids)
+
+            # Submit before copying transitions so policy inference overlaps
+            # the shared-memory copy. During a pause, retain observations until
+            # all in-flight inference and environment work has drained.
+            for env_id, observation in zip(completed_ids, next_observations.unbind(0)):
+                if pause_request[0] is None:
+                    pending_actions[env_id] = clients[env_id].submit(observation)
+                else:
+                    ready_observations[env_id] = observation
+
+            outputs = lazy_stack(
+                [policy_outputs.pop(env_id) for env_id in completed_ids]
+            )
+            # Dense pool stacking already copied the transition tensors out of
+            # shared memory before the slots can be reused. A lazy stack still
+            # aliases the slots and must be cloned before actions are sent back.
+            if isinstance(transitions, LazyStackedTensorDict):
+                transitions = transitions.clone()
+            transitions.update(outputs.exclude(*transitions.keys(True, True)))
+            if storing_device is not None:
+                transitions = transitions.to(storing_device)
+            result_queue.put(transitions)
+    except Exception as exc:
+        if not shutdown_event.is_set():
+            result_queue.put(exc)
+
+
 class AsyncBatchedCollector(BaseCollector):
     """Asynchronous collector with env slots and a policy server.
 
-    The collector pairs per-env coordinator threads with an
+    The collector pairs environment coordinators with an
     :class:`~torchrl.envs.AsyncEnvPool` and an
     :class:`~torchrl.modules.InferenceServer`.
 
@@ -147,11 +267,10 @@ class AsyncBatchedCollector(BaseCollector):
     * An :class:`~torchrl.envs.AsyncEnvPool` runs *N* environments using
       whatever backend the user chooses (``"threading"``,
       ``"multiprocessing"``).
-    * *N* lightweight coordinator threads -- one per environment -- each own
-      a slot in the pool and an inference client.  A thread sends its env's
-      observation to the :class:`~torchrl.modules.InferenceServer`, blocks
-      until the batched action is returned, then sends the action back to
-      the pool for stepping.
+    * With a shared-memory environment exchange, one coordinator thread drains
+      whichever environments are ready and submits their observations without
+      blocking. Other exchanges use one lightweight coordinator thread per
+      environment.
     * The :class:`~torchrl.modules.InferenceServer` running in a background
       thread continuously drains observation submissions, batches them, runs
       a single forward pass, and fans actions back out.
@@ -221,6 +340,10 @@ class AsyncBatchedCollector(BaseCollector):
             of ``"threading"`` or ``"multiprocessing"``.  Falls back to
             ``backend`` when ``None``.  The coordinator threads are always
             Python threads regardless of this setting.  Defaults to ``None``.
+        env_exchange (str, optional): data exchange of a multiprocessing
+            :class:`~torchrl.envs.AsyncEnvPool`, one of ``"queue"``, ``"shm"``
+            or ``"auto"``. The shared-memory exchange also enables batched
+            coordination from one thread. Defaults to ``"queue"``.
         policy_backend (str, optional): backend for the inference transport
             used to communicate with the
             :class:`~torchrl.modules.InferenceServer`.  One of
@@ -305,8 +428,10 @@ class AsyncBatchedCollector(BaseCollector):
             "threading", "multiprocessing", "ray", "monarch"
         ] = "threading",
         env_backend: Literal["threading", "multiprocessing"] | None = None,
-        policy_backend: Literal["threading", "multiprocessing", "ray", "monarch"]
-        | None = None,
+        env_exchange: Literal["queue", "shm", "auto"] = "queue",
+        policy_backend: (
+            Literal["threading", "multiprocessing", "ray", "monarch"] | None
+        ) = None,
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         yield_completed_trajectories: bool = False,
@@ -386,6 +511,16 @@ class AsyncBatchedCollector(BaseCollector):
                 "env_backend='multiprocessing'."
             )
         self._env_backend = effective_env_backend
+        if env_exchange not in ("queue", "shm", "auto"):
+            raise ValueError(
+                f"env_exchange={env_exchange!r} is not supported. Expected one of "
+                "('queue', 'shm', 'auto')."
+            )
+        if env_exchange == "shm" and effective_env_backend != "multiprocessing":
+            raise ValueError(
+                "env_exchange='shm' requires env_backend='multiprocessing'."
+            )
+        self._env_exchange = env_exchange
         if worker_affinity is None:
             self._worker_affinity = None
         else:
@@ -438,6 +573,7 @@ class AsyncBatchedCollector(BaseCollector):
                 max_batch_size=max_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
+                collate_fn=maybe_dense_stack,
                 policy_device=policy_device,
                 output_device=output_device,
                 weight_sync=weight_sync,
@@ -454,6 +590,7 @@ class AsyncBatchedCollector(BaseCollector):
                 max_batch_size=max_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
+                collate_fn=maybe_dense_stack,
                 policy_device=policy_device,
                 output_device=output_device,
                 weight_sync=weight_sync,
@@ -484,8 +621,10 @@ class AsyncBatchedCollector(BaseCollector):
         self._env_pool: AsyncEnvPool | None = None
         self._workers: list[threading.Thread] = []
         self._clients: list[Callable] | None = None
+        self._uses_batched_coordinator = False
         self._pause_request: list[_PauseRequest | None] = [None]
         self._pause_lock = threading.Lock()
+        self._transition_carry: deque[TensorDictBase] = deque()
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -496,7 +635,7 @@ class AsyncBatchedCollector(BaseCollector):
     # ------------------------------------------------------------------
 
     def _ensure_started(self) -> None:
-        """Create the env pool, start the server and per-env threads."""
+        """Create the env pool, start the server and coordinator threads."""
         if self._workers and all(w.is_alive() for w in self._workers):
             return
 
@@ -506,25 +645,22 @@ class AsyncBatchedCollector(BaseCollector):
                 original_affinity = os.sched_getaffinity(0)
                 os.sched_setaffinity(0, self._driver_affinity)
 
-            # Build the pool while the driver mask is active so its parent-side
-            # multiprocessing queue feeder threads inherit that mask. Worker
-            # processes apply their own masks before constructing their envs.
+            # Build the pool under the driver mask so feeder threads inherit it.
             kwargs = {}
             if self._create_env_kwargs is not None:
                 kwargs["create_env_kwargs"] = self._create_env_kwargs
             self._env_pool = AsyncEnvPool(
                 self._create_env_fn,
                 backend=self._env_backend,
-                # Pinned to the current default so the pool's default-change
-                # FutureWarning is not emitted from library code; switching the
-                # collector to the shm exchange is a deliberate follow-up.
-                exchange="queue",
+                # Explicit so the pool's default-change FutureWarning is not
+                # emitted from library code.
+                exchange=self._env_exchange,
                 worker_affinity=self._worker_affinity,
                 **kwargs,
             )
 
-            # Create clients before a process server starts so response queues
-            # are inherited by the child process.
+            # Create clients before a process server starts so response queues are
+            # inherited by the child process.
             if self._clients is None:
                 self._clients = [
                     PolicyClientModule(
@@ -534,15 +670,37 @@ class AsyncBatchedCollector(BaseCollector):
                     for _ in range(self._num_envs)
                 ]
 
-            # Threads inherit the affinity of the thread that creates them.
+            # Start inference server
             if not self._server.is_alive:
                 self._server.start()
 
-            # Start per-env coordinator threads
+            # Start coordinator threads. Shared slots can be drained safely in
+            # ready batches, avoiding one Python thread and one clone per env.
             self._result_queue = queue.Queue()
             self._shutdown_event = threading.Event()
 
             self._workers = []
+            if self._env_pool.resolved_exchange == "shm":
+                self._uses_batched_coordinator = True
+                thread = threading.Thread(
+                    target=_env_batch_loop,
+                    kwargs={
+                        "pool": self._env_pool,
+                        "clients": self._clients,
+                        "result_queue": self._result_queue,
+                        "shutdown_event": self._shutdown_event,
+                        "pause_request": self._pause_request,
+                        "env_device": self._env_device,
+                        "storing_device": self._storing_device,
+                    },
+                    daemon=True,
+                    name="AsyncBatchedCollector-env-batch",
+                )
+                self._workers.append(thread)
+                thread.start()
+                return
+
+            self._uses_batched_coordinator = False
             for i in range(self._num_envs):
                 t = threading.Thread(
                     target=_env_loop,
@@ -735,23 +893,47 @@ class AsyncBatchedCollector(BaseCollector):
     def _rollout_frames(self) -> TensorDictBase:
         """Drain ``frames_per_batch`` transitions from the workers."""
         rq = self._result_queue
+        frames_to_collect = self.frames_per_batch
+        if self.total_frames >= 0:
+            frames_to_collect = min(frames_to_collect, self.total_frames - self._frames)
         collected = 0
         transitions: list[TensorDictBase] = []
 
-        while collected < self.frames_per_batch:
+        while self._transition_carry and collected < frames_to_collect:
+            transition = self._transition_carry.popleft()
+            transitions.append(transition)
+            collected += transition.numel()
+
+        while collected < frames_to_collect:
             # Block for at least one transition
             td = self._next_result()
-            transitions.append(td)
-            collected += td.numel()
+            if self._uses_batched_coordinator:
+                for transition in td.unbind(0):
+                    if collected < frames_to_collect:
+                        transitions.append(transition)
+                        collected += transition.numel()
+                    else:
+                        self._transition_carry.append(transition)
+            else:
+                transitions.append(td)
+                collected += td.numel()
             # Batch-drain any additional items already in the queue
-            while collected < self.frames_per_batch:
+            while collected < frames_to_collect:
                 try:
                     td = rq.get_nowait()
                 except queue.Empty:
                     break
                 self._check_worker_result(td)
-                transitions.append(td)
-                collected += td.numel()
+                if self._uses_batched_coordinator:
+                    for transition in td.unbind(0):
+                        if collected < frames_to_collect:
+                            transitions.append(transition)
+                            collected += transition.numel()
+                        else:
+                            self._transition_carry.append(transition)
+                else:
+                    transitions.append(td)
+                    collected += td.numel()
             if self.verbose:
                 torchrl_logger.debug(
                     f"AsyncBatchedCollector: {collected}/{self.frames_per_batch} frames"
@@ -764,25 +946,27 @@ class AsyncBatchedCollector(BaseCollector):
         """Drain transitions until a complete trajectory is available."""
         while not self._trajectory_queue:
             td = self._next_result()
-            env_id = 0
-            eid = td.get(_ENV_IDX_KEY, default=None)
-            if eid is not None:
-                # Unwrap NonTensorData / NonTensorStack / list wrappers
-                if hasattr(eid, "data"):
-                    eid = eid.data
-                while isinstance(eid, (list,)) and len(eid) == 1:
-                    eid = eid[0]
-                env_id = int(eid)
-
-            self._yield_queues[env_id].append(td)
-            if td["next", "done"].any():
-                self._trajectory_queue.append(
-                    lazy_stack(list(self._yield_queues[env_id]), -1)
-                )
-                self._yield_queues[env_id].clear()
+            if self._uses_batched_coordinator:
+                for transition in td.unbind(0):
+                    self._record_trajectory_transition(transition)
+            else:
+                self._record_trajectory_transition(td)
 
         result = self._trajectory_queue.popleft()
         return result.reshape(-1)
+
+    def _record_trajectory_transition(self, td: TensorDictBase) -> None:
+        """Record one environment transition for trajectory yielding."""
+        env_id = 0
+        if td.get(_ENV_IDX_KEY, default=None) is not None:
+            env_id = _env_ids(td)[0]
+
+        self._yield_queues[env_id].append(td)
+        if td["next", "done"].any():
+            self._trajectory_queue.append(
+                lazy_stack(list(self._yield_queues[env_id]), -1)
+            )
+            self._yield_queues[env_id].clear()
 
     @property
     def rollout(self) -> Callable[[], TensorDictBase]:
@@ -802,6 +986,10 @@ class AsyncBatchedCollector(BaseCollector):
         while total < 0 or self._frames < total:
             self._iter += 1
             td = self.rollout()
+            if not self.yield_completed_trajectories and total >= 0:
+                remaining = total - self._frames
+                if td.numel() > remaining:
+                    td = td.reshape(-1)[:remaining]
             self._frames += td.numel()
             if self._postproc is not None:
                 td = self._postproc(td)
@@ -821,6 +1009,7 @@ class AsyncBatchedCollector(BaseCollector):
         if request is not None:
             request[0].abort()
             request[1].set()
+        self._transition_carry.clear()
         _timeout = timeout or 5.0
         for w in self._workers:
             w.join(timeout=_timeout)

@@ -25,7 +25,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict, expand_as_right
+from tensordict.utils import _zip_strict, expand_as_right, NestedKey
 
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.data.tensor_specs import NonTensor
@@ -689,6 +689,17 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         """
         return "shm" if getattr(self, "_slot_exchange", None) is not None else "queue"
 
+    @property
+    def exchange_keys(self) -> tuple[NestedKey, ...]:
+        """The tensor keys accepted by the active shared-memory exchange.
+
+        Returns an empty tuple when the resolved exchange is ``"queue"``.
+        """
+        exchange = getattr(self, "_slot_exchange", None)
+        if exchange is None:
+            return ()
+        return tuple(exchange._input_keys)
+
     def stats(self, *, reset: bool = False) -> dict[str, float | int]:
         """Return shared-memory exchange statistics.
 
@@ -1205,7 +1216,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 data = env.reset(data)
                 target = per_env_reset_queue if per_env else reset_queue
                 if shared_slots is None:
-                    data.set(cls._env_idx_key, NonTensorData(i))
+                    data.set(cls._env_idx_key, NonTensorData(data=i))
                     target.put(data)
                 else:
                     keys, ready_s = _SharedSlotExchange.publish(
@@ -1217,7 +1228,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     data = shared_slots[0].select(*data, strict=True)
                 data = env._reset(data)
                 if shared_slots is None:
-                    data.set(cls._env_idx_key, NonTensorData(i))
+                    data.set(cls._env_idx_key, NonTensorData(data=i))
                     reset_queue.put(data)
                 else:
                     keys, ready_s = _SharedSlotExchange.publish(
@@ -1230,8 +1241,8 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 data, data_ = env.step_and_maybe_reset(data)
                 target = per_env_step_reset_queue if per_env else step_reset_queue
                 if shared_slots is None:
-                    data.set(cls._env_idx_key, NonTensorData(i))
-                    data_.set(cls._env_idx_key, NonTensorData(i))
+                    data.set(cls._env_idx_key, NonTensorData(data=i))
+                    data_.set(cls._env_idx_key, NonTensorData(data=i))
                     target.put((data, data_))
                 else:
                     result_keys, next_keys, ready_s = _SharedSlotExchange.publish_pair(
@@ -1244,7 +1255,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 data = env.step(data)
                 target = per_env_step_queue if per_env else step_queue
                 if shared_slots is None:
-                    data.set(cls._env_idx_key, NonTensorData(i))
+                    data.set(cls._env_idx_key, NonTensorData(data=i))
                     target.put(data)
                 else:
                     keys, ready_s = _SharedSlotExchange.publish(
@@ -1256,7 +1267,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     data = shared_slots[0].select(*data, strict=True)
                 data = env._step(data)
                 if shared_slots is None:
-                    data.set(cls._env_idx_key, NonTensorData(i))
+                    data.set(cls._env_idx_key, NonTensorData(data=i))
                     step_queue.put(data)
                 else:
                     keys, ready_s = _SharedSlotExchange.publish(
@@ -1337,28 +1348,28 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
     @classmethod
     def _step_func(cls, env_td: tuple[EnvBase, TensorDictBase, int]):
         env, td, idx = env_td
-        return env.step(td).set(cls._env_idx_key, NonTensorData(idx))
+        return env.step(td).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
     def _private_step_func(cls, env_td: tuple[EnvBase, TensorDictBase, int]):
         env, td, idx = env_td
-        return env._step(td).set(cls._env_idx_key, NonTensorData(idx))
+        return env._step(td).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
     def _reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
         env, td, idx = env_td
-        return env.reset(td).set(cls._env_idx_key, NonTensorData(idx))
+        return env.reset(td).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
     def _private_reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
         env, td, idx = env_td
-        return env._reset(td).set(cls._env_idx_key, NonTensorData(idx))
+        return env._reset(td).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
     def _step_and_maybe_reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
         env, td, idx = env_td
         td, td_ = env.step_and_maybe_reset(td)
-        idx = NonTensorData(idx)
+        idx = NonTensorData(data=idx)
         return td.set(cls._env_idx_key, idx), td_.set(cls._env_idx_key, idx)
 
     @staticmethod

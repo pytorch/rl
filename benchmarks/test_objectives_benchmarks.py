@@ -21,6 +21,8 @@ from tensordict.nn import (
 from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded, Unbounded
 from torchrl.modules import (
+    DreamerV3ImageDecoder,
+    DreamerV3ImageEncoder,
     MLP,
     QValueActor,
     SignedHyperbolicValueTransform,
@@ -236,6 +238,24 @@ def test_dreamer_v3_value_speed(
     loss(td)
     loss = _maybe_compile(loss, compile, td, fullgraph=False, warmup=1)
     benchmark(loss, td)
+
+
+def test_dreamer_v3_image_reconstruction_speed(benchmark):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    encoder = DreamerV3ImageEncoder(depth=16, device=device)
+    decoder = DreamerV3ImageDecoder(
+        in_features=encoder.output_features((3, 64, 64)), depth=16, device=device
+    )
+    images = torch.rand(32, 3, 64, 64, device=device)
+
+    def reconstruct():
+        encoder.zero_grad(set_to_none=True)
+        decoder.zero_grad(set_to_none=True)
+        (decoder(encoder(images)) - images).square().mean().backward()
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+
+    benchmark(reconstruct)
 
 
 @pytest.mark.parametrize("backward", [None, "backward"])
@@ -464,7 +484,12 @@ def test_sac_speed(
 
 
 @pytest.mark.parametrize("backward", [None, "backward"])
-@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+# Cold TQC quantile kernels can exceed the default four-minute CI timeout.
+# This bounds compilation/warm-up; the timed steady-state workload is unchanged.
+@pytest.mark.parametrize(
+    "compile",
+    [False, pytest.param(True, marks=pytest.mark.timeout(900)), "reduce-overhead"],
+)
 def test_tqc_speed(
     benchmark,
     backward,

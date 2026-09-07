@@ -4,15 +4,24 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import functools
+import gc
+import inspect
 import time
 
+import psutil
 import pytest
 import torch.cuda
 import tqdm
+from bench_collectors import PixelMockEnv, PolicyFactory
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
 
-from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
+from torchrl.collectors import (
+    AsyncBatchedCollector,
+    Collector,
+    MultiAsyncCollector,
+    MultiSyncCollector,
+)
 from torchrl.data import (
     Binary,
     Categorical,
@@ -32,7 +41,166 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import MLP, RandomPolicy
+from torchrl.modules.inference_server import (
+    InferenceDeviceConfig,
+    InferenceServerConfig,
+)
 from torchrl.testing.mocking_classes import MockBatchedLockedEnv
+
+
+class _ResetLatencyPixelEnv(PixelMockEnv):
+    """Add reset stalls to the shared fake-pixel benchmark workload."""
+
+    def __init__(self, *, reset_latency_s=0.0, **kwargs):
+        super().__init__(**kwargs)
+        self.reset_latency_s = reset_latency_s
+
+    def _reset(self, tensordict=None, **kwargs):
+        time.sleep(self.reset_latency_s)
+        return super()._reset(tensordict, **kwargs)
+
+
+@pytest.mark.parametrize("regime", ["uniform", "slow-reset"])
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "parallel",
+        "async-queue",
+        "async-shm",
+        "async-shm-integrated",
+        "async-shm-grouped",
+        pytest.param("async-shm-static", marks=pytest.mark.gpu),
+    ],
+)
+def test_async_collection_pixels(benchmark, mode, regime):
+    """Fixed end-to-end series; see ASYNC_BENCHMARKS.md before changing inputs."""
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    has_static = (
+        "static_batch_size" in inspect.signature(InferenceServerConfig).parameters
+    )
+    has_grouping = (
+        "envs_per_worker" in inspect.signature(AsyncBatchedCollector).parameters
+    )
+    integrated = mode == "async-shm-integrated"
+    use_static = mode == "async-shm-static" or (
+        integrated and device != "cpu" and has_static
+    )
+    group_size = (
+        4 if mode == "async-shm-grouped" or (integrated and has_grouping) else 1
+    )
+    if use_static:
+        if device == "cpu":
+            pytest.skip("CUDA graphs require CUDA")
+        if not has_static:
+            pytest.skip("Static inference batches are not available on this revision")
+    if group_size > 1 and not has_grouping:
+        pytest.skip("Grouped environment workers are not available on this revision")
+
+    # Keep these constants stable across merges. CPU and GPU are separate series.
+    num_envs = 32 if device != "cpu" else 8
+    frames_per_batch = 256
+    batches_per_round = 4
+    rounds = 5
+    warmup_rounds = 2
+    gc.collect()
+    if device != "cpu":
+        torch.cuda.empty_cache()
+    torch.manual_seed(0)
+    old_threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    factories = [
+        functools.partial(
+            _ResetLatencyPixelEnv,
+            step_latency_s=0.001,
+            reset_latency_s=0.2 if regime == "slow-reset" and index == 0 else 0.0,
+            max_steps=16 if regime == "slow-reset" else 200,
+        )
+        for index in range(num_envs)
+    ]
+    policy_factory = PolicyFactory(
+        hidden_features=1024 if device != "cpu" else 256, hidden_layers=2
+    )
+    collector = None
+    try:
+        if mode == "parallel":
+            collector = Collector(
+                ParallelEnv(num_envs, factories, num_threads=1, num_sub_threads=1),
+                policy_factory(),
+                frames_per_batch=frames_per_batch,
+                total_frames=-1,
+                policy_device=device,
+                env_device="cpu",
+                storing_device="cpu",
+                trust_policy=True,
+                use_buffers=False,
+                auto_register_policy_transforms=False,
+            )
+        else:
+            config = {"static_batch_size": num_envs} if use_static else {}
+            grouped = {"envs_per_worker": group_size} if group_size > 1 else {}
+            collector = AsyncBatchedCollector(
+                factories,
+                policy_factory=policy_factory,
+                frames_per_batch=frames_per_batch,
+                total_frames=-1,
+                env_backend="multiprocessing",
+                env_exchange="queue" if mode == "async-queue" else "shm",
+                server_config=InferenceServerConfig(
+                    max_batch_size=num_envs, min_batch_size=1, timeout=0.001, **config
+                ),
+                device_config=InferenceDeviceConfig(
+                    policy_device=device, output_device="cpu", storing_device="cpu"
+                ),
+                **grouped,
+            )
+        iterator = iter(collector)
+        latencies = []
+
+        def collect_round():
+            frames = 0
+            for _ in range(batches_per_round):
+                start = time.perf_counter()
+                batch = next(iterator)
+                latencies.append(time.perf_counter() - start)
+                frames += batch.numel()
+            # A faster run must not silently collect fewer transitions.
+            assert frames == frames_per_batch * batches_per_round
+
+        for _ in range(warmup_rounds):
+            collect_round()
+        latencies.clear()
+        if device != "cpu":
+            torch.cuda.synchronize()
+            torch.cuda.reset_peak_memory_stats()
+        if isinstance(collector, AsyncBatchedCollector):
+            collector.server_stats(reset=True)
+        benchmark.pedantic(collect_round, rounds=rounds, iterations=1)
+        latency_ms = torch.tensor(latencies[: rounds * batches_per_round]) * 1000
+        process = psutil.Process()
+        benchmark.extra_info.update(
+            execution=f"{'graph' if use_static else 'eager'}; {group_size} envs/worker",
+            num_envs=num_envs,
+            frames_per_batch=frames_per_batch,
+            transitions=frames_per_batch * batches_per_round,
+            warmup_rounds=warmup_rounds,
+            measured_rounds=rounds,
+            batch_latency_p50_ms=latency_ms.quantile(0.5).item(),
+            batch_latency_p95_ms=latency_ms.quantile(0.95).item(),
+            process_tree_rss_bytes=sum(
+                child.memory_info().rss
+                for child in [process, *process.children(recursive=True)]
+            ),
+        )
+        if device != "cpu":
+            benchmark.extra_info[
+                "cuda_peak_allocated_bytes"
+            ] = torch.cuda.max_memory_allocated()
+        if isinstance(collector, AsyncBatchedCollector):
+            benchmark.extra_info["server_stats"] = collector.server_stats()
+    finally:
+        if collector is not None:
+            collector.shutdown()
+        torch.set_num_threads(old_threads)
 
 
 class _PayloadEnv(EnvBase):

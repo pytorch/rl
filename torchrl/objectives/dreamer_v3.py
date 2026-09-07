@@ -599,7 +599,9 @@ class DreamerV3ActorLoss(LossModule):
         discount_loss (bool, optional): If ``True``, discount the actor loss
             with a cumulative gamma factor. Default: ``True``.
         entropy_bonus (float, optional): Weight for the entropy regularisation
-            term ``eta``. Default: ``3e-4``.
+            term ``eta``. The returned ``actor_entropy`` metric is detached and
+            discount-weighted, and is zero when this bonus is disabled.
+            Default: ``3e-4``.
         use_reinforce (bool, optional): If ``True``, uses REINFORCE (log-prob
             * stop-gradient advantage). If ``False``, uses the straight
             reparameterization gradient (suitable for continuous Gaussian
@@ -897,10 +899,13 @@ class DreamerV3ActorLoss(LossModule):
             entropy = _match_trailing_dim(entropy, discount)
             entropy = (discount * entropy).mean()
             actor_loss = actor_loss - self.entropy_bonus * entropy
+        else:
+            entropy = actor_loss.new_zeros(())
 
         loss_tensordict = TensorDict(
             {
                 "loss_actor": actor_loss,
+                "actor_entropy": entropy.detach(),
                 "return_low": self.return_low.detach().clone(),
                 "return_high": self.return_high.detach().clone(),
                 "return_scale": return_scale.detach().clone(),

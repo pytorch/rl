@@ -65,6 +65,7 @@ from torchrl.trainers.trainers import CountFramesLog
 
 # Test if configs can be imported (requires hydra)
 try:
+    from hydra.utils import instantiate as instantiate_config
     from torchrl.trainers.algorithms import configs as algorithm_configs
     from torchrl.trainers.algorithms.configs.modules import (
         ActivationConfig,
@@ -75,6 +76,7 @@ try:
     _configs_available = True
 except ImportError:
     _configs_available = False
+    instantiate_config = None
     ActivationConfig = DreamerV3MLPConfig = LayerConfig = None
 
 
@@ -1188,6 +1190,26 @@ class TestModuleConfigs:
         assert isinstance(module, DreamerV3MLP)
         output = module(torch.randn(3, 2), torch.randn(3, 4))
         assert output.shape == (3, expected_features)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_dreamer_v3_image_configs(self):
+        encoder = instantiate_config(
+            algorithm_configs.DreamerV3ImageEncoderConfig(depth=4, mults=[1, 2])
+        )
+        decoder = instantiate_config(
+            algorithm_configs.DreamerV3ImageDecoderConfig(
+                in_features=128,
+                image_shape=[3, 16, 16],
+                depth=4,
+                mults=[1, 2],
+                num_blocks=2,
+            )
+        )
+        image = torch.rand(2, 3, 16, 16)
+        output = decoder(encoder(image))
+        assert output.shape == image.shape
+        (output - image).square().mean().backward()
+        assert all(parameter.grad is not None for parameter in encoder.parameters())
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_convnet_config(self):

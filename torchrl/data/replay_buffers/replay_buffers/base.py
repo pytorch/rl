@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import collections
 import contextlib
+import functools as ft
 import json
 import multiprocessing
 import pickle
@@ -25,7 +26,6 @@ try:
 except ImportError:
     from torch._dynamo import is_compiling
 
-from functools import wraps
 from typing import Literal, TYPE_CHECKING, TypeVar
 
 from tensordict import (
@@ -99,13 +99,19 @@ def _storage_index(index: Any, storage: Storage) -> Any:
 
 
 def _maybe_delay_init(func):
-    @wraps(func)
+    @ft.wraps(func)
     def wrapper(self, *args, **kwargs):
         if self._delayed_init and not self.initialized:
             self._init()
         return func(self, *args, **kwargs)
 
     return wrapper
+
+
+def _run_after_futures(futures: tuple[Future, ...], operation: Callable[[], T]) -> T:
+    for future in futures:
+        future.result()
+    return operation()
 
 
 class ConditionalUpdateResult(TensorClass["nocast"]):
@@ -459,6 +465,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._prefetch = bool(prefetch)
         self._prefetch_cap = prefetch or 0
         self._prefetch_queue = collections.deque()
+        self._pending_update_futures = collections.deque()
+        self._sample_dependency = None
+        self._update_executor = None
         self._batch_size = batch_size
         self._warned_batch_size_conflict = False
 
@@ -672,9 +681,46 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             del self._distributed_service
 
     def shutdown(self, timeout: float | None = None) -> None:
-        """Mark this direct replay-buffer owner as shut down."""
+        """Wait for pending replay work and close this direct replay buffer.
+
+        Pending prefetched samples and asynchronous conditional updates are
+        allowed to finish before their executors are closed. Any background
+        exception is re-raised after both executors have been shut down.
+        Repeated calls are safe.
+        """
         del timeout
-        self._service_shutdown = True
+        with self._futures_lock:
+            if self._service_shutdown:
+                return
+            self._service_shutdown = True
+
+        error = None
+        try:
+            self.synchronize()
+        except BaseException as err:
+            error = err
+        finally:
+            with self._futures_lock:
+                prefetch_executor = getattr(self, "_prefetch_executor", None)
+                update_executor = self._update_executor
+                self._prefetch_executor = None
+                self._update_executor = None
+            if prefetch_executor is not None:
+                prefetch_executor.shutdown(wait=True)
+            if update_executor is not None:
+                update_executor.shutdown(wait=True)
+        if error is not None:
+            raise error
+
+    def synchronize(self) -> None:
+        """Wait for pending samples and asynchronous updates.
+
+        Prefetched results remain queued and are returned by subsequent calls
+        to :meth:`sample` in the same order. Background exceptions are
+        propagated to the caller.
+        """
+        with self._futures_lock:
+            self._synchronize_futures_locked()
 
     def _initialize_prioritized_sampler(self) -> None:
         """Initialize priority trees for existing data when using PrioritizedSampler.
@@ -1038,6 +1084,97 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             stats["capacity"] = int(capacity)
             stats["utilization"] = float(size) / capacity if capacity else 0.0
         return stats
+
+    @_maybe_delay_init
+    def submit_update_if_present(
+        self,
+        *,
+        index: torch.Tensor,
+        generation: torch.Tensor,
+        patch: Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+        version_key: NestedKey | None = None,
+        version: int | torch.Tensor | None = None,
+        require_newer: bool = False,
+    ) -> Future[ConditionalUpdateResult]:
+        """Submits an ordered conditional update on a background thread.
+
+        The update runs after all samples that were already prefetched when
+        this method was called. Samples prefetched after this call wait for
+        the update, while unrelated prefetch work remains parallel. Multiple
+        submitted updates execute in submission order.
+
+        Inputs are retained by reference until the returned future completes.
+        Callers must not mutate ``index``, ``generation``, ``patch`` or
+        ``version`` in that interval. In particular, values backed by static
+        CUDA-graph output buffers must be cloned before submission.
+
+        Keyword arguments have the same meaning as in
+        :meth:`update_if_present`.
+
+        Returns:
+            A :class:`concurrent.futures.Future` whose result is the
+            :class:`ConditionalUpdateResult` returned by
+            :meth:`update_if_present`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import (
+            ...     LazyTensorStorage,
+            ...     TensorDictReplayBuffer,
+            ...     TensorDictRoundRobinWriter,
+            ... )
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(4),
+            ...     writer=TensorDictRoundRobinWriter(track_generations=True),
+            ... )
+            >>> index = rb.extend(
+            ...     TensorDict({"value": torch.zeros(4)}, batch_size=[4])
+            ... )
+            >>> generation = rb.writer.generations_of(index)
+            >>> future = rb.submit_update_if_present(
+            ...     index=index,
+            ...     generation=generation,
+            ...     patch={"value": torch.ones(4)},
+            ... )
+            >>> future.result().updated_count
+            4
+            >>> rb.shutdown()
+        """
+        if self.service_backend != "direct":
+            raise NotImplementedError(
+                "submit_update_if_present is only supported by direct replay buffers."
+            )
+        operation = ft.partial(
+            self.update_if_present,
+            index=index,
+            generation=generation,
+            patch=patch,
+            version_key=version_key,
+            version=version,
+            require_newer=require_newer,
+        )
+        with self._futures_lock:
+            if self._service_shutdown:
+                raise RuntimeError("A shut down replay buffer cannot accept updates.")
+            while (
+                self._pending_update_futures and self._pending_update_futures[0].done()
+            ):
+                completed = self._pending_update_futures.popleft()
+                completed.result()
+            if not self._pending_update_futures:
+                self._sample_dependency = None
+            if self._update_executor is None:
+                self._update_executor = ThreadPoolExecutor(max_workers=1)
+            dependencies = tuple(self._prefetch_queue)
+            if self._sample_dependency is not None:
+                dependencies = (*dependencies, self._sample_dependency)
+            future = self._update_executor.submit(
+                _run_after_futures, dependencies, operation
+            )
+            self._pending_update_futures.append(future)
+            self._sample_dependency = future
+        return future
 
     def update_if_present(
         self,
@@ -1539,11 +1676,30 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
         return tree_map(_clone_leaf, result)
 
+    def _synchronize_futures_locked(self) -> None:
+        futures = tuple(
+            dict.fromkeys((*self._prefetch_queue, *self._pending_update_futures))
+        )
+        if futures:
+            wait(futures)
+        error = None
+        for future in futures:
+            try:
+                future.result()
+            except BaseException as err:
+                if error is None:
+                    error = err
+        self._pending_update_futures.clear()
+        self._sample_dependency = None
+        if error is not None:
+            raise error
+
     @contextlib.contextmanager
     def _capture_prefetch_state(
         self, *, clone_queue: bool = True
     ) -> Iterator[dict[str, Any]]:
         with self._futures_lock:
+            self._synchronize_futures_locked()
             results = (
                 tuple(future.result() for future in self._prefetch_queue)
                 if self._prefetch
@@ -1658,6 +1814,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         prefetch_state = state_dict.get("_prefetch_state")
         self._validate_prefetch_state(prefetch_state)
+        self.synchronize()
         with self._futures_lock:
             self._clear_prefetch_queue_locked()
             with self._replay_lock:
@@ -1760,6 +1917,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         path = Path(path).absolute()
         prefetch_state = self._load_prefetch_state(path)
         self._validate_prefetch_state(prefetch_state)
+        self.synchronize()
         with self._futures_lock:
             self._clear_prefetch_queue_locked()
             with self._replay_lock:
@@ -2045,6 +2203,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             A batch of data selected in the replay buffer.
             A tuple containing this batch and info if return_info flag is set to True.
         """
+        if self._service_shutdown:
+            raise RuntimeError("A shut down replay buffer cannot be sampled.")
         if (
             batch_size is not None
             and self._batch_size is not None
@@ -2069,19 +2229,33 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "for a proper usage of the batch-size arguments."
             )
         if not self._prefetch:
+            with self._futures_lock:
+                dependency = self._sample_dependency
+            if dependency is not None:
+                dependency.result()
             result = self._sample(batch_size)
         else:
             with self._futures_lock:
                 if len(self._prefetch_queue):
                     result = self._prefetch_queue.popleft().result()
                 else:
+                    if self._sample_dependency is not None:
+                        self._sample_dependency.result()
                     result = self._sample(batch_size)
                 while (
                     len(self._prefetch_queue)
                     < min(self._sampler._remaining_batches, self._prefetch_cap)
                     and not self._sampler.ran_out
                 ):
-                    fut = self._prefetch_executor.submit(self._sample, batch_size)
+                    operation = ft.partial(self._sample, batch_size)
+                    if self._sample_dependency is None:
+                        fut = self._prefetch_executor.submit(operation)
+                    else:
+                        fut = self._prefetch_executor.submit(
+                            _run_after_futures,
+                            (self._sample_dependency,),
+                            operation,
+                        )
                     self._prefetch_queue.append(fut)
 
         if return_info:
@@ -2316,10 +2490,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 state["_futures_lock_placeholder"] = None
             _prefetch_queue = state.pop("_prefetch_queue", None)
             _prefetch_executor = state.pop("_prefetch_executor", None)
+            state.pop("_update_executor", None)
             if _prefetch_queue is not None:
                 state["_prefetch_queue_placeholder"] = None
             if _prefetch_executor is not None:
                 state["_prefetch_executor_placeholder"] = None
+            state["_update_executor_placeholder"] = None
             state["_prefetch_state"] = prefetch_state
             return state
 
@@ -2349,6 +2525,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             state["_prefetch_executor"] = ThreadPoolExecutor(
                 max_workers=state["_prefetch_cap"]
             )
+        if "_update_executor_placeholder" in state:
+            state.pop("_update_executor_placeholder")
+            state["_update_executor"] = None
+        state.setdefault("_pending_update_futures", collections.deque())
+        state.setdefault("_sample_dependency", None)
+        state.setdefault("_update_executor", None)
         self.__dict__.update(state)
         if rngstate is not None:
             self.set_rng(rng)

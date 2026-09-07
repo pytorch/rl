@@ -179,6 +179,12 @@ Kubernetes CPU Manager considerations.
   idle time.
 - Supports ``yield_completed_trajectories=True`` for episode-level yields.
 
+For many fixed-schema CPU environments, set ``env_backend="multiprocessing"``
+and ``env_exchange="shm"``. The collector then drains ready shared-memory slots
+in batches from one coordinator thread, while keeping faster environments
+independent of slower ones. This path is intended for environments whose step
+latency dominates its millisecond-scale coordinator polling interval.
+
 Scaling ``Collector`` across local processes
 --------------------------------------------
 

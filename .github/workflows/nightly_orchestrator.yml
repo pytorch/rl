@@ -148,9 +148,9 @@ jobs:
     if: needs.config.outputs.run_tests == 'true'
     uses: ./.github/workflows/benchmarks.yml
     with:
-      # The nightly run is now the sole feed of the gh-pages benchmark trend
-      # (benchmarks.yml no longer triggers on pushes to main). Only "full"
-      # mode uploads; dry-run and smoke-test must not touch gh-pages.
+      # The nightly run feeds the full-suite trend; main merges also run the
+      # short async suite. Only "full" mode uploads; dry-run and smoke-test
+      # must not touch gh-pages.
       skip-upload: ${{ needs.config.outputs.mode != 'full' }}
     secrets: inherit
     permissions:

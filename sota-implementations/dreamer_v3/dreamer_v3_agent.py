@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import importlib.util
-from collections.abc import Callable, Iterable
 
 import torch
 from dreamer_v3_utils import latent_state_dim, POLICY_RNG_STREAM, stream_seed
@@ -267,118 +266,6 @@ class DreamerV3SeededPolicy(TensorDictModuleBase):
             torch.manual_seed(stream_seed(self.seed, self.counter, POLICY_RNG_STREAM))
             self.counter += 1
             return self.module(tensordict)
-
-
-# --- Optimizer ---
-
-
-class DreamerV3Optimizer(torch.optim.Optimizer):
-    """The DreamerV3 optimizer: AGC, RMS scaling, momentum and warmup.
-
-    AGC clips each gradient to the ``agc`` fraction of its parameter norm.
-    """
-
-    def __init__(
-        self,
-        parameters: Iterable[torch.nn.Parameter],
-        *,
-        lr: float = 4e-5,
-        agc: float = 0.3,
-        parameter_norm_min: float = 1e-3,
-        beta1: float = 0.9,
-        beta2: float = 0.999,
-        eps: float = 1e-20,
-        warmup_steps: int = 1000,
-    ):
-        super().__init__(
-            parameters,
-            {
-                "lr": lr,
-                "agc": agc,
-                "parameter_norm_min": parameter_norm_min,
-                "beta1": beta1,
-                "beta2": beta2,
-                "eps": eps,
-                "warmup_steps": warmup_steps,
-                "step": 0,
-            },
-        )
-
-    @torch.no_grad()
-    def step(self, closure: Callable[[], torch.Tensor] | None = None) -> None:
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            group["step"] += 1
-            step = group["step"]
-            warmup_steps = group["warmup_steps"]
-            schedule_step = step - 1
-            warmup = min(1.0, schedule_step / warmup_steps) if warmup_steps else 1.0
-            learning_rate = group["lr"] * warmup
-
-            # Group by device and dtype for the multi-tensor kernels.
-            buckets: dict[
-                tuple[torch.device, torch.dtype], list[torch.nn.Parameter]
-            ] = {}
-            for parameter in group["params"]:
-                if parameter.grad is not None:
-                    buckets.setdefault((parameter.device, parameter.dtype), []).append(
-                        parameter
-                    )
-
-            for parameters in buckets.values():
-                gradients = [parameter.grad.float() for parameter in parameters]
-                if group["agc"]:
-                    gradient_norms = list(torch._foreach_norm(gradients))
-                    parameter_norms = list(
-                        torch._foreach_norm(
-                            [parameter.detach().float() for parameter in parameters]
-                        )
-                    )
-                    torch._foreach_clamp_min_(
-                        parameter_norms, group["parameter_norm_min"]
-                    )
-                    maximum_norms = torch._foreach_mul(parameter_norms, group["agc"])
-                    gradient_denominators = torch._foreach_maximum(
-                        gradient_norms, maximum_norms
-                    )
-                    gradient_scales = torch._foreach_div(
-                        maximum_norms, gradient_denominators
-                    )
-                    gradients = list(torch._foreach_mul(gradients, gradient_scales))
-
-                rms = []
-                momentum = []
-                for parameter in parameters:
-                    state = self.state[parameter]
-                    if not state:
-                        state["rms"] = torch.zeros_like(parameter, dtype=torch.float32)
-                        state["momentum"] = torch.zeros_like(
-                            parameter, dtype=torch.float32
-                        )
-                    rms.append(state["rms"])
-                    momentum.append(state["momentum"])
-                beta1 = group["beta1"]
-                beta2 = group["beta2"]
-                torch._foreach_mul_(rms, beta2)
-                torch._foreach_addcmul_(rms, gradients, gradients, value=1 - beta2)
-                rms_hat = torch._foreach_div(rms, 1 - beta2**step)
-                rms_denominator = torch._foreach_sqrt(rms_hat)
-                torch._foreach_add_(rms_denominator, group["eps"])
-                normalized = torch._foreach_div(gradients, rms_denominator)
-                torch._foreach_mul_(momentum, beta1)
-                torch._foreach_add_(momentum, normalized, alpha=1 - beta1)
-                momentum_hat = torch._foreach_div(momentum, 1 - beta1**step)
-                if parameters[0].dtype != torch.float32:
-                    momentum_hat = [
-                        update.to(parameter.dtype)
-                        for update, parameter in zip(momentum_hat, parameters)
-                    ]
-                torch._foreach_add_(parameters, momentum_hat, alpha=-learning_rate)
-        return loss
 
 
 # --- Builders ---

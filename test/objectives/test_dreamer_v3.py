@@ -8,6 +8,7 @@ Reference: https://arxiv.org/abs/2301.04104
 """
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import os
@@ -61,6 +62,7 @@ from torchrl.objectives.dreamer_v3 import (
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
+from torchrl.trainers.algorithms import DreamerV3Optimizer
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
@@ -649,6 +651,34 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             if p.grad is not None
         )
         assert grad_total > 0, "All gradients are zero after actor backward"
+
+    @pytest.mark.parametrize("entropy_bonus", [0.0, 3e-4])
+    def test_dreamer_v3_actor_entropy(self, device, entropy_bonus):
+        actor_model = self._create_actor_model().to(device)
+        actor_model[-1].distribution_class = IndependentNormal
+        loss_module = DreamerV3ActorLoss(
+            actor_model,
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            entropy_bonus=entropy_bonus,
+        )
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        if entropy_bonus:
+            distribution = actor_model.get_dist(
+                fake_data.select(*actor_model.in_keys).detach()
+            )
+            expected = (
+                fake_data["discount_weight"] * distribution.entropy().unsqueeze(-1)
+            ).mean()
+        else:
+            expected = loss_td["loss_actor"].new_zeros(())
+        torch.testing.assert_close(loss_td["actor_entropy"], expected)
+        assert not loss_td["actor_entropy"].requires_grad
+        loss_td["loss_actor"].backward()
+        assert any(p.grad is not None for p in actor_model.parameters())
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -2091,6 +2121,38 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
     )
     assert incompatible.returncode == 2
     assert "mutually exclusive" in incompatible.stderr
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+def test_dreamer_v3_optimizer_updates_and_resume(device):
+    parameter = nn.Parameter(torch.tensor([3.0, 4.0], device=device))
+    optimizer = DreamerV3Optimizer(
+        [parameter], lr=0.05, agc=0.2, beta1=0.5, beta2=0.5, warmup_steps=2
+    )
+    parameter.grad = torch.tensor([6.0, 8.0], device=device)
+    optimizer.step()
+    # The first update builds moments but starts the warm-up at zero.
+    torch.testing.assert_close(parameter, parameter.new_tensor([3.0, 4.0]))
+    parameter.grad = torch.tensor([0.0, 10.0], device=device)
+    optimizer.step()
+    # Clipped gradients are (0.6, 0.8), then (0, 1). The second
+    # bias-corrected RMS for the second coordinate is sqrt(0.88).
+    expected = parameter.new_tensor(
+        [3.0 - 0.025 / 3, 4.0 - 0.025 * (1 + 2 / 0.88**0.5) / 3]
+    )
+    torch.testing.assert_close(parameter, expected)
+
+    restored_parameter = nn.Parameter(parameter.detach().clone())
+    restored = DreamerV3Optimizer([restored_parameter])
+    restored.load_state_dict(copy.deepcopy(optimizer.state_dict()))
+    for current, value in ((optimizer, parameter), (restored, restored_parameter)):
+        current.zero_grad(set_to_none=True)
+        with pytest.raises(RuntimeError, match="no parameter gradients"):
+            current.step()
+        value.grad = value.new_tensor([-2.0, 3.0])
+        current.step()
+    torch.testing.assert_close(restored_parameter, parameter)
+    assert not torch.equal(parameter, expected)
 
 
 if __name__ == "__main__":

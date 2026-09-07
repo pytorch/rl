@@ -98,6 +98,8 @@ from torchrl.trainers.algorithms.configs.logging import (
 from torchrl.trainers.algorithms.configs.modules import (
     AdditiveGaussianModuleConfig,
     ConvNetConfig,
+    DreamerV3ImageDecoderConfig,
+    DreamerV3ImageEncoderConfig,
     DreamerV3MLPConfig,
     MLPConfig,
     ModelConfig,
@@ -218,6 +220,7 @@ from torchrl.trainers.algorithms.configs.utils import (
     AdamConfig,
     AdamWConfig,
     ASGDConfig,
+    DreamerV3OptimizerConfig,
     LBFGSConfig,
     LionConfig,
     NAdamConfig,
@@ -260,6 +263,7 @@ __all__ = [
     "AdadeltaConfig",
     "AdagradConfig",
     "ASGDConfig",
+    "DreamerV3OptimizerConfig",
     "LBFGSConfig",
     "LionConfig",
     "NAdamConfig",
@@ -300,6 +304,8 @@ __all__ = [
     "VmasEnvConfig",
     # Networks and Models
     "ConvNetConfig",
+    "DreamerV3ImageDecoderConfig",
+    "DreamerV3ImageEncoderConfig",
     "DreamerV3MLPConfig",
     "MLPConfig",
     "ModelConfig",
@@ -515,6 +521,16 @@ def _register_configs():
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
     cs.store(group="network", name="dreamer_v3_mlp", node=DreamerV3MLPConfig)
+    cs.store(
+        group="network",
+        name="dreamer_v3_image_encoder",
+        node=DreamerV3ImageEncoderConfig,
+    )
+    cs.store(
+        group="network",
+        name="dreamer_v3_image_decoder",
+        node=DreamerV3ImageDecoderConfig,
+    )
     cs.store(group="network", name="convnet", node=ConvNetConfig)
     cs.store(group="network", name="qmixer", node=QMixerNetworkConfig)
     cs.store(group="network", name="vdn_mixer", node=VDNMixerNetworkConfig)
@@ -738,6 +754,7 @@ def _register_configs():
     # =============================================================================
 
     cs.store(group="optimizer", name="adam", node=AdamConfig)
+    cs.store(group="optimizer", name="dreamer_v3", node=DreamerV3OptimizerConfig)
     cs.store(group="optimizer", name="adamw", node=AdamWConfig)
     cs.store(group="optimizer", name="adamax", node=AdamaxConfig)
     cs.store(group="optimizer", name="adadelta", node=AdadeltaConfig)
