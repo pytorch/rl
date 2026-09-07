@@ -218,6 +218,14 @@ def _process_env_loop(
             transition = transition.clone()
             if storing_device is not None:
                 transition = transition.to(storing_device)
+            if all(
+                value.device.type == "cpu"
+                for value in transition.values(True, True)
+                if isinstance(value, torch.Tensor)
+            ):
+                # Transfer one shared storage instead of negotiating a file
+                # descriptor for every tensor leaf of every transition.
+                transition = transition.consolidate()
             if not _put_result(
                 result_queue,
                 transition,
