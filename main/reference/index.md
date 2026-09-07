@@ -250,6 +250,10 @@
 - [Trainer Basics](trainers_basics.html)
 - [Loggers](trainers_loggers.html)
 - [Training Hooks](trainers_hooks.html)
+- [DreamerV3 optimization](trainers.html#dreamerv3-optimization)
+
+- [DreamerV3Optimizer](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html)
+- [DreamerV3OptimizerConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html)
 - [torchrl._utils package](utils.html)
 
 - [implement_for](generated/torchrl.implement_for.html)

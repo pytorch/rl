@@ -2206,6 +2206,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="utils.html">torchrl._utils package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2259,6 +2261,8 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html">torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html">torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig</a></li>
@@ -2596,6 +2600,12 @@ For an overview of how the DreamerV3 components fit together, see
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP" title="torchrl.modules.DreamerV3MLP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerV3MLP</span></code></a>(in_features, out_features[, ...])</p></td>
 <td><p>RMS-normalized multilayer perceptron used by DreamerV3 heads.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.DreamerV3ImageEncoder.html#torchrl.modules.DreamerV3ImageEncoder" title="torchrl.modules.DreamerV3ImageEncoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerV3ImageEncoder</span></code></a>([in_channels, depth, ...])</p></td>
+<td><p>DreamerV3 convolutional image encoder.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DreamerV3ImageDecoder.html#torchrl.modules.DreamerV3ImageDecoder" title="torchrl.modules.DreamerV3ImageDecoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerV3ImageDecoder</span></code></a>(in_features[, ...])</p></td>
+<td><p>DreamerV3 transposed-convolution image decoder.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2992,7 +3002,7 @@ For an overview of how the DreamerV3 components fit together, see
        "headline": "Robot Learning",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules_models.html",
-       "articleBody": "Robot Learning# Policy architectures for robot manipulation and imitation learning. World Models and Model-Based RL# Modules for model-based reinforcement learning, including world models and dynamics models. For an overview of how the DreamerV3 components fit together, see DreamerV3 in a nutshell. WorldModel(*args, **kwargs) A general, composable world model for model-based RL. WorldModelWrapper(*args, **kwargs) World model wrapper. DreamerActor(out_features[, depth, ...]) Dreamer actor network. ObsEncoder([channels, num_layers, ...]) Observation encoder network. ObsDecoder([channels, num_layers, ...]) Observation decoder network. RSSMPosterior([hidden_dim, state_dim, ...]) The posterior network of the RSSM. RSSMPrior(action_spec[, hidden_dim, ...]) The prior network of the RSSM. RSSMRollout(*args, **kwargs) Rollout the RSSM network. SymExpTwoHot([num_bins]) DreamerV3 categorical scalar representation. DreamerV3BlockGRUCell(input_size, ...) Single-step DreamerV3 block-diagonal GRU cell. DreamerV3BlockGRU(input_size, hidden_size, ...) Batch-major DreamerV3 block-diagonal GRU sequence module. DreamerV3MLP(in_features, out_features[, ...]) RMS-normalized multilayer perceptron used by DreamerV3 heads. PILCO# Components for moment-matching model-based policy search (PILCO). GPWorldModel(obs_dim, action_dim[, in_keys, ...]) Gaussian Process world model with moment-matching uncertainty propagation. RBFController(input_dim, output_dim, max_action) Radial Basis Function controller for moment-matching policy search.",
+       "articleBody": "Robot Learning# Policy architectures for robot manipulation and imitation learning. World Models and Model-Based RL# Modules for model-based reinforcement learning, including world models and dynamics models. For an overview of how the DreamerV3 components fit together, see DreamerV3 in a nutshell. WorldModel(*args, **kwargs) A general, composable world model for model-based RL. WorldModelWrapper(*args, **kwargs) World model wrapper. DreamerActor(out_features[, depth, ...]) Dreamer actor network. ObsEncoder([channels, num_layers, ...]) Observation encoder network. ObsDecoder([channels, num_layers, ...]) Observation decoder network. RSSMPosterior([hidden_dim, state_dim, ...]) The posterior network of the RSSM. RSSMPrior(action_spec[, hidden_dim, ...]) The prior network of the RSSM. RSSMRollout(*args, **kwargs) Rollout the RSSM network. SymExpTwoHot([num_bins]) DreamerV3 categorical scalar representation. DreamerV3BlockGRUCell(input_size, ...) Single-step DreamerV3 block-diagonal GRU cell. DreamerV3BlockGRU(input_size, hidden_size, ...) Batch-major DreamerV3 block-diagonal GRU sequence module. DreamerV3MLP(in_features, out_features[, ...]) RMS-normalized multilayer perceptron used by DreamerV3 heads. DreamerV3ImageEncoder([in_channels, depth, ...]) DreamerV3 convolutional image encoder. DreamerV3ImageDecoder(in_features[, ...]) DreamerV3 transposed-convolution image decoder. PILCO# Components for moment-matching model-based policy search (PILCO). GPWorldModel(obs_dim, action_dim[, in_keys, ...]) Gaussian Process world model with moment-matching uncertainty propagation. RBFController(input_dim, output_dim, max_action) Radial Basis Function controller for moment-matching policy search.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

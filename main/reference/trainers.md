@@ -75,3 +75,12 @@ trainer.train()
 - [TargetNetUpdaterHook](generated/torchrl.trainers.TargetNetUpdaterHook.html)
 - [UTDRHook](generated/torchrl.trainers.UTDRHook.html)
 - [ValueEstimatorHook](generated/torchrl.trainers.ValueEstimatorHook.html)
+
+## DreamerV3 optimization
+
+The algorithm-specific optimizer is available independently of a trainer or
+example script. See [DreamerV3 in a nutshell](dreamer_v3.html) for the loss and target-update composition.
+
+| [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer)(parameters, *[, lr, agc, ...]) | DreamerV3 adaptive gradient clipping, RMS scaling and momentum. |
+| --- | --- |
+| [`DreamerV3OptimizerConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig)([lr, agc, ...]) | Hydra configuration for [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer). |

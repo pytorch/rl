@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DreamerV3ImageEncoder
+=====================
+
+.. autoclass:: DreamerV3ImageEncoder
+    :members:

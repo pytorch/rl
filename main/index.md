@@ -217,6 +217,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Key Features](reference/trainers.html#key-features)
 - [Quick Example](reference/trainers.html#quick-example)
 - [Documentation Sections](reference/trainers.html#documentation-sections)
+- [DreamerV3 optimization](reference/trainers.html#dreamerv3-optimization)
 - [torchrl._utils package](reference/utils.html)
 
 - [implement_for](reference/generated/torchrl.implement_for.html)

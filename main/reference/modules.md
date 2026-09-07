@@ -101,6 +101,8 @@ actor = ProbabilisticActor(
 - [DreamerV3BlockGRUCell](generated/torchrl.modules.DreamerV3BlockGRUCell.html)
 - [DreamerV3BlockGRU](generated/torchrl.modules.DreamerV3BlockGRU.html)
 - [DreamerV3MLP](generated/torchrl.modules.DreamerV3MLP.html)
+- [DreamerV3ImageEncoder](generated/torchrl.modules.DreamerV3ImageEncoder.html)
+- [DreamerV3ImageDecoder](generated/torchrl.modules.DreamerV3ImageDecoder.html)
 - [PILCO](modules_models.html#pilco)
 - [Distribution Classes](modules_distributions.html)
 

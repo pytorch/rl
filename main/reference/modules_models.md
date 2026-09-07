@@ -21,6 +21,8 @@ For an overview of how the DreamerV3 components fit together, see
 | [`DreamerV3BlockGRUCell`](generated/torchrl.modules.DreamerV3BlockGRUCell.html#torchrl.modules.DreamerV3BlockGRUCell)(input_size, ...) | Single-step DreamerV3 block-diagonal GRU cell. |
 | [`DreamerV3BlockGRU`](generated/torchrl.modules.DreamerV3BlockGRU.html#torchrl.modules.DreamerV3BlockGRU)(input_size, hidden_size, ...) | Batch-major DreamerV3 block-diagonal GRU sequence module. |
 | [`DreamerV3MLP`](generated/torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP)(in_features, out_features[, ...]) | RMS-normalized multilayer perceptron used by DreamerV3 heads. |
+| [`DreamerV3ImageEncoder`](generated/torchrl.modules.DreamerV3ImageEncoder.html#torchrl.modules.DreamerV3ImageEncoder)([in_channels, depth, ...]) | DreamerV3 convolutional image encoder. |
+| [`DreamerV3ImageDecoder`](generated/torchrl.modules.DreamerV3ImageDecoder.html#torchrl.modules.DreamerV3ImageDecoder)(in_features[, ...]) | DreamerV3 transposed-convolution image decoder. |
 
 ## PILCO
 
