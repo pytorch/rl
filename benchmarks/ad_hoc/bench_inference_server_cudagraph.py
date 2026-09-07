@@ -27,8 +27,13 @@ from pathlib import Path
 import torch
 from omegaconf import OmegaConf
 from tensordict import TensorDict
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 
-from torchrl.modules.inference_server import InferenceServer, ThreadingTransport
+from torchrl.modules.inference_server import (
+    InferenceServer,
+    PolicyClientModule,
+    ThreadingTransport,
+)
 
 
 def _load_agent(repo_root: Path) -> dict:
@@ -88,8 +93,8 @@ def _make_request(
     )
 
 
-def _run_batch(transport: ThreadingTransport, request: TensorDict, batch_size: int):
-    futures = [transport.submit(request.clone()) for _ in range(batch_size)]
+def _run_batch(client: PolicyClientModule, request: TensorDict, batch_size: int):
+    futures = [client.submit(request.clone()) for _ in range(batch_size)]
     return [future.result() for future in futures]
 
 
@@ -115,16 +120,18 @@ def _measure(
         output_device="cpu",
         stats_window_size=iterations,
     )
+    client = PolicyClientModule(transport)
     roundtrip_ms = []
-    with server:
-        for _ in range(warmup):
-            _run_batch(transport, request, batch_size)
-        server.stats(reset=True)
-        for _ in range(iterations):
-            started = time.perf_counter()
-            _run_batch(transport, request, batch_size)
-            roundtrip_ms.append((time.perf_counter() - started) * 1000)
-        stats = server.stats()
+    with set_interaction_type(InteractionType.RANDOM):
+        with server:
+            for _ in range(warmup):
+                _run_batch(client, request, batch_size)
+            server.stats(reset=True)
+            for _ in range(iterations):
+                started = time.perf_counter()
+                _run_batch(client, request, batch_size)
+                roundtrip_ms.append((time.perf_counter() - started) * 1000)
+            stats = server.stats()
     return stats, roundtrip_ms
 
 

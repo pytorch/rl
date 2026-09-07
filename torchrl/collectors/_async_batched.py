@@ -444,7 +444,7 @@ class AsyncBatchedCollector(BaseCollector):
 
         if self._server.static_batch_size is not None:
             request_spec = self._env_pool.fake_tensordict()[0]
-            self._server._prepare_cudagraph(request_spec)
+            self._server.prepare_cudagraph(request_spec)
 
         # Create clients before a process server starts so response queues are
         # inherited by the child process.

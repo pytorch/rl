@@ -24,7 +24,11 @@ import torch
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import CudaGraphModule
-from tensordict.nn.probabilistic import InteractionType, set_interaction_type
+from tensordict.nn.probabilistic import (
+    interaction_type,
+    InteractionType,
+    set_interaction_type,
+)
 from tensordict.utils import NestedKey
 from torch import nn
 
@@ -38,11 +42,13 @@ from torchrl._comm.backends import (
 )
 from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
 from torchrl.modules.inference_server._client import (
+    _INTERACTION_TYPE_TO_CODE,
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
 )
 from torchrl.modules.inference_server._config import (
     _resolve_device_config,
+    _validate_static_batch_size,
     InferenceDeviceConfig,
     InferenceServerConfig,
 )
@@ -68,6 +74,15 @@ _CODE_TO_INTERACTION_TYPE = {
     4: InteractionType.DETERMINISTIC,
 }
 _has_ray = importlib.util.find_spec("ray") is not None
+
+
+def _validate_cudagraph_device(
+    static_batch_size: int | None, policy_device: torch.device | None
+) -> None:
+    if static_batch_size is not None and (
+        policy_device is None or policy_device.type != "cuda"
+    ):
+        raise ValueError("static_batch_size requires an explicit CUDA policy_device.")
 
 
 class _InferenceServerMeta(type):
@@ -308,8 +323,9 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             CUDA-graph the served policy. Partial batches repeat their last
             request up to this size, and padded outputs are discarded. The
             graph is captured before the serve loop starts using
-            ``request_spec``. Must be at least ``max_batch_size``. Defaults to
-            ``None`` (eager policy execution).
+            ``request_spec``. Requires an explicit CUDA ``policy_device`` and
+            must be at least ``max_batch_size``. Defaults to ``None`` (eager
+            policy execution).
         min_batch_size (int, optional): minimum number of requests to
             accumulate before dispatching a batch.  After the first request
             arrives the server keeps draining for up to ``timeout`` seconds
@@ -497,17 +513,12 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         )
         self._cudagraph_interaction_code: int | None = None
         self._cudagraph_storage_signature = None
+        self._cudagraph_tensor_references = None
+        self._cudagraph_input_keys: frozenset[NestedKey] | None = None
+        self._cudagraph_input_keys_validated = False
 
-        if self.static_batch_size is not None:
-            if isinstance(self.static_batch_size, bool) or not isinstance(
-                self.static_batch_size, int
-            ):
-                raise TypeError("static_batch_size must be an integer or None.")
-            if self.static_batch_size < self.max_batch_size:
-                raise ValueError(
-                    "static_batch_size must be at least max_batch_size, got "
-                    f"{self.static_batch_size} and {self.max_batch_size}."
-                )
+        _validate_static_batch_size(self.static_batch_size, self.max_batch_size)
+        _validate_cudagraph_device(self.static_batch_size, self.policy_device)
 
         self._shutdown_event = (
             threading.Event() if shutdown_event is None else shutdown_event
@@ -622,7 +633,10 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         shared-memory schemes whose background receiver thread applies
         weights outside the server's polling loop.
         """
-        self._mark_weight_update()
+        try:
+            self._validate_cudagraph_storage()
+        finally:
+            self._mark_weight_update()
 
     def update_model(
         self,
@@ -644,9 +658,11 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         """
         with self._model_lock:
             result = update_fn(self.model)
-            self._recapture_cudagraph_if_needed()
-            if mark_weight_update:
-                self._mark_weight_update()
+            try:
+                self._validate_cudagraph_storage()
+            finally:
+                if mark_weight_update:
+                    self._mark_weight_update()
         return result
 
     # -- lifecycle ------------------------------------------------------------
@@ -665,7 +681,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                     "static_batch_size requires request_spec so the CUDA graph "
                     "can be captured before the serve loop starts."
                 )
-            self._prepare_cudagraph(self._cudagraph_request_spec)
+            self.prepare_cudagraph(self._cudagraph_request_spec)
         self._shutdown_event.clear()
         self._worker = threading.Thread(
             target=self._run, daemon=True, name="InferenceServer-worker"
@@ -714,8 +730,23 @@ class InferenceServer(metaclass=_InferenceServerMeta):
 
     # -- background loop ------------------------------------------------------
 
-    def _model_storage_signature(self):
+    def _model_tensor_references(self):
         if not isinstance(self.model, nn.Module):
+            return None
+        return tuple(
+            (
+                name,
+                value,
+            )
+            for name, value in (
+                *self.model.named_parameters(),
+                *self.model.named_buffers(),
+            )
+        )
+
+    @staticmethod
+    def _tensor_storage_signature(tensor_references):
+        if tensor_references is None:
             return None
         return tuple(
             (
@@ -727,14 +758,20 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                 value.dtype,
                 value.device,
             )
-            for name, value in (
-                *self.model.named_parameters(),
-                *self.model.named_buffers(),
-            )
+            for name, value in tensor_references
         )
 
-    def _collate_model_batch(self, items: list[TensorDictBase]) -> TensorDictBase:
-        if self.static_batch_size is None or len(items) == self.static_batch_size:
+    def _model_storage_signature(self):
+        return self._tensor_storage_signature(self._model_tensor_references())
+
+    def _collate_model_batch(
+        self, items: list[TensorDictBase], *, pad_to_static: bool = False
+    ) -> TensorDictBase:
+        if (
+            not pad_to_static
+            or self.static_batch_size is None
+            or len(items) == self.static_batch_size
+        ):
             return self.collate_fn(items)
         if len(items) > self.static_batch_size:
             raise RuntimeError(
@@ -747,24 +784,51 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         )
         return self.collate_fn(padded_items)
 
-    def _recapture_cudagraph_if_needed(self) -> None:
+    def _validate_cudagraph_storage(self) -> None:
+        if self._cudagraph_model is None:
+            return
+        captured_signature = self._tensor_storage_signature(
+            self._cudagraph_tensor_references
+        )
+        current_signature = self._model_storage_signature()
         if (
-            self._cudagraph_model is not None
-            and self._model_storage_signature() != self._cudagraph_storage_signature
+            captured_signature == self._cudagraph_storage_signature
+            and current_signature == self._cudagraph_storage_signature
         ):
-            self._prepare_cudagraph(self._cudagraph_request_spec)
+            return
+        self._cudagraph_model = None
+        self._cudagraph_tensor_references = None
+        self._cudagraph_storage_signature = None
+        self._cudagraph_input_keys = None
+        self._cudagraph_input_keys_validated = False
+        raise RuntimeError(
+            "A model update replaced parameter or buffer storage used by the "
+            "CUDA graph. CUDA-graphed inference only supports in-place weight "
+            "updates; the server has fallen back to eager inference."
+        )
 
     @torch.no_grad()
-    def _prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+        """Capture the configured static CUDA graph before server start.
+
+        Args:
+            request_spec (TensorDictBase): representative unbatched request.
+        """
         if self.static_batch_size is None:
             return
+        if self.is_alive:
+            raise RuntimeError("The CUDA graph must be prepared before server start.")
+        self._init_weight_sync()
         self._cudagraph_request_spec = request_spec.clone()
         cudagraph_model = CudaGraphModule(
             self.model, warmup=2, device=self.policy_device
         )
         captured_interaction_code = None
+        captured_input_keys = None
         for warmup_index in range(2):
-            batch = self._collate_model_batch([request_spec.clone()])
+            batch = self._collate_model_batch(
+                [request_spec.clone()], pad_to_static=True
+            )
             if self.policy_device is not None:
                 batch = batch.to(self.policy_device)
             (
@@ -774,6 +838,12 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             ) = self._interaction_type_context(batch)
             if warmup_index == 0:
                 captured_interaction_code = interaction_code
+                model_in_keys = getattr(self.model, "in_keys", None)
+                captured_input_keys = frozenset(
+                    model_in_keys
+                    if model_in_keys is not None
+                    else batch.keys(include_nested=True, leaves_only=True)
+                )
             elif interaction_code != captured_interaction_code:
                 raise RuntimeError(
                     "The interaction type changed while preparing the CUDA graph."
@@ -782,13 +852,22 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                 cudagraph_model(batch)
         self._cudagraph_model = cudagraph_model
         self._cudagraph_interaction_code = captured_interaction_code
-        self._cudagraph_storage_signature = self._model_storage_signature()
+        self._cudagraph_tensor_references = self._model_tensor_references()
+        self._cudagraph_storage_signature = self._tensor_storage_signature(
+            self._cudagraph_tensor_references
+        )
+        self._cudagraph_input_keys = captured_input_keys
+        self._cudagraph_input_keys_validated = False
 
     def _init_weight_sync(self) -> None:
         """Initialise the weight sync scheme on the receiver (server) side."""
         ws = self.weight_sync
         if ws is None:
             return
+        # Ride the scheme's post-application cascade so the version is bumped
+        # when weights are actually applied (see update_policy_weights_).
+        if isinstance(ws, WeightSyncScheme) and ws.context is None:
+            ws.context = self
         if not ws.initialized_on_receiver:
             ws.init_on_receiver(
                 model_id=self._weight_sync_model_id,
@@ -797,10 +876,6 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             )
         if not ws.synchronized_on_receiver:
             ws.connect(worker_idx=0)
-        # Ride the scheme's post-application cascade so the version is bumped
-        # when weights are actually applied (see update_policy_weights_).
-        if isinstance(ws, WeightSyncScheme) and ws.context is None:
-            ws.context = self
 
     def _poll_weight_update(self) -> None:
         """Non-blocking check for fresh weights from the trainer."""
@@ -817,7 +892,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         with self._model_lock:
             weights = ws.receive(timeout=0.0)
             if weights is not None:
-                self._recapture_cudagraph_if_needed()
+                self._validate_cudagraph_storage()
             if weights is not None and getattr(ws, "context", None) is not self:
                 # When the server is the scheme context, receive() already
                 # cascaded into update_policy_weights_; do not count twice.
@@ -841,16 +916,22 @@ class InferenceServer(metaclass=_InferenceServerMeta):
     def _interaction_type_context(self, batch: TensorDictBase):
         code = batch.get(_REMOTE_INTERACTION_TYPE_KEY, default=None)
         if code is None:
-            return contextlib.nullcontext(), batch, None
+            current_interaction_type = interaction_type()
+            interaction_code = (
+                _INTERACTION_TYPE_TO_CODE[current_interaction_type.value]
+                if current_interaction_type is not None
+                else _NO_INTERACTION_TYPE_CODE
+            )
+            return contextlib.nullcontext(), batch, interaction_code
         if not isinstance(code, torch.Tensor):
             interaction_code = int(code)
         else:
             flat_code = code.reshape(-1)
             if flat_code.numel() == 0:
                 return (
-                    contextlib.nullcontext(),
+                    set_interaction_type(None),
                     batch.exclude(_REMOTE_INTERACTION_TYPE_KEY, inplace=False),
-                    None,
+                    _NO_INTERACTION_TYPE_CODE,
                 )
             interaction_code = int(flat_code[0].item())
             if not flat_code.eq(interaction_code).all():
@@ -861,7 +942,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         batch = batch.exclude(_REMOTE_INTERACTION_TYPE_KEY, inplace=False)
         if interaction_code == _NO_INTERACTION_TYPE_CODE:
             # Sentinel: the caller had no active interaction context.
-            return contextlib.nullcontext(), batch, None
+            return set_interaction_type(None), batch, interaction_code
         interaction_type_value = _CODE_TO_INTERACTION_TYPE[interaction_code]
         return set_interaction_type(interaction_type_value), batch, interaction_code
 
@@ -915,7 +996,10 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                         if item_submitted_at is not None
                     ]
                     real_batch_size = len(callbacks)
-                    batch = self._collate_model_batch(items)
+                    padded_for_cudagraph = self._cudagraph_model is not None
+                    batch = self._collate_model_batch(
+                        items, pad_to_static=padded_for_cudagraph
+                    )
                     if self.policy_device is not None:
                         batch = batch.to(self.policy_device)
                     forward_start = time.monotonic()
@@ -925,23 +1009,38 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                             batch,
                             interaction_code,
                         ) = self._interaction_type_context(batch)
+                        use_cudagraph = self._cudagraph_model is not None
                         if (
-                            self._cudagraph_model is not None
+                            use_cudagraph
                             and interaction_code != self._cudagraph_interaction_code
                         ):
                             raise RuntimeError(
                                 "CUDA-graphed inference requires the interaction "
                                 "type used during capture."
                             )
+                        if use_cudagraph and not self._cudagraph_input_keys_validated:
+                            request_keys = frozenset(
+                                batch.keys(include_nested=True, leaves_only=True)
+                            )
+                            missing_keys = self._cudagraph_input_keys - request_keys
+                            if missing_keys:
+                                raise RuntimeError(
+                                    "The first CUDA-graph request does not match "
+                                    "request_spec; missing policy input keys "
+                                    f"{list(missing_keys)!r}."
+                                )
+                            self._cudagraph_input_keys_validated = True
                         with interaction_context:
-                            if self._cudagraph_model is None:
+                            if not use_cudagraph:
                                 result_batch = self.model(batch)
                             else:
                                 result_batch = self._cudagraph_model(batch)
-                        if self.static_batch_size is not None:
+                        if padded_for_cudagraph:
                             result_batch = result_batch[:real_batch_size]
                         if self.output_device is not None:
                             result_batch = result_batch.to(self.output_device)
+                        if use_cudagraph:
+                            result_batch = result_batch.clone()
                         result_batch = self._set_policy_version(result_batch)
                     forward_ms = (time.monotonic() - forward_start) * 1000.0
                     self._record_batch_stats(
@@ -1113,7 +1212,8 @@ class ProcessInferenceServer:
             readiness.
         max_batch_size (int, optional): maximum requests per forward pass.
         static_batch_size (int, optional): fixed CUDA-graph batch size forwarded
-            to :class:`InferenceServer`.
+            to :class:`InferenceServer`. Requires an explicit CUDA
+            ``policy_device``.
         min_batch_size (int, optional): minimum requests to accumulate before
             dispatching a partial batch.
         timeout (float, optional): wait timeout in seconds.
@@ -1229,6 +1329,8 @@ class ProcessInferenceServer:
             output_device=output_device,
             allow_storing_device=False,
         )
+        _validate_static_batch_size(static_batch_size, max_batch_size)
+        _validate_cudagraph_device(static_batch_size, _devices.policy_device)
         self.policy_factory = policy_factory
         self.transport = transport
         self.static_batch_size = static_batch_size
@@ -1284,7 +1386,12 @@ class ProcessInferenceServer:
         # Live mirror of the child's policy version ("q" = signed 64-bit).
         self._policy_version_value = self._ctx.Value("q", int(policy_version))
 
-    def _prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+        """Set the representative request used for child-process capture.
+
+        Args:
+            request_spec (TensorDictBase): representative unbatched request.
+        """
         if self.is_alive:
             raise RuntimeError(
                 "The process inference server must prepare its CUDA graph before start."
@@ -1637,14 +1744,14 @@ class _RayInferenceServerActor:
         self, weights: TensorDictBase, mark_weight_update: bool = True
     ) -> None:
         if self.server is None:
-            weights.to_module(self.model, preserve_module_state=False)
+            weights.to_module(self.model, inplace=True)
             if mark_weight_update:
                 self._server_kwargs["policy_version"] = (
                     int(self._server_kwargs.get("policy_version", 0)) + 1
                 )
         else:
             self.server.update_model(
-                ft.partial(weights.to_module, preserve_module_state=False),
+                ft.partial(weights.to_module, inplace=True),
                 mark_weight_update=mark_weight_update,
             )
 
@@ -1692,8 +1799,10 @@ class _RayInferenceServerActor:
             with self.server._model_lock:
                 for scheme in self._receiver_schemes.values():
                     scheme.receive()
-                self.server._recapture_cudagraph_if_needed()
-                self.server._mark_weight_update(model_version)
+                try:
+                    self.server._validate_cudagraph_storage()
+                finally:
+                    self.server._mark_weight_update(model_version)
 
     def _connect_weights_scheme(self, model_version: int | None = None) -> None:
         if not self._receiver_schemes:
@@ -1711,8 +1820,10 @@ class _RayInferenceServerActor:
                 for scheme in self._receiver_schemes.values():
                     if not scheme.synchronized_on_receiver:
                         scheme.connect(worker_idx=0)
-                self.server._recapture_cudagraph_if_needed()
-                self.server._mark_weight_update(model_version)
+                try:
+                    self.server._validate_cudagraph_storage()
+                finally:
+                    self.server._mark_weight_update(model_version)
 
     def shutdown(self) -> None:
         for scheme in self._receiver_schemes.values():
@@ -1838,6 +1949,18 @@ class _RayInferenceServer(InferenceServer):
         if not self.is_alive:
             raise RuntimeError("The Ray inference server is not alive.")
         return self
+
+    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+        """Reject post-construction capture for the already-running Ray actor.
+
+        Args:
+            request_spec (TensorDictBase): unused representative request.
+        """
+        del request_spec
+        raise RuntimeError(
+            "A Ray inference server captures inside its actor; pass request_spec "
+            "when constructing InferenceServer."
+        )
 
     def client(self):
         if self._actor is None:

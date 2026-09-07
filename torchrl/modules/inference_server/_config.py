@@ -18,6 +18,20 @@ def _as_device(device: torch.device | str | int | None) -> torch.device | None:
     return torch.device(device)
 
 
+def _validate_static_batch_size(
+    static_batch_size: int | None, max_batch_size: int
+) -> None:
+    if static_batch_size is None:
+        return
+    if isinstance(static_batch_size, bool) or not isinstance(static_batch_size, int):
+        raise TypeError("static_batch_size must be an integer or None.")
+    if static_batch_size < max_batch_size:
+        raise ValueError(
+            "static_batch_size must be at least max_batch_size, got "
+            f"{static_batch_size} and {max_batch_size}."
+        )
+
+
 @dataclass
 class InferenceDeviceConfig:
     """Device placement for asynchronous policy-server collection.
@@ -265,16 +279,7 @@ class InferenceServerConfig:
                 f"service_backend={self.service_backend!r} is not supported. "
                 "Expected 'thread', 'process', or 'ray'."
             )
-        if self.static_batch_size is not None:
-            if isinstance(self.static_batch_size, bool) or not isinstance(
-                self.static_batch_size, int
-            ):
-                raise TypeError("static_batch_size must be an integer or None.")
-            if self.static_batch_size < self.max_batch_size:
-                raise ValueError(
-                    "static_batch_size must be at least max_batch_size, got "
-                    f"{self.static_batch_size} and {self.max_batch_size}."
-                )
+        _validate_static_batch_size(self.static_batch_size, self.max_batch_size)
         if self.max_inflight_per_env is not None and self.max_inflight_per_env < 1:
             raise ValueError(
                 f"max_inflight_per_env must be at least 1 (got "
