@@ -904,6 +904,12 @@ Return type:
 
 Module
 
+*property*exchange_keys*: tuple[NestedKey, ...]*
+
+The tensor keys accepted by the active shared-memory exchange.
+
+Returns an empty tuple when the resolved exchange is `"queue"`.
+
 extra_repr() → str
 
 Return the extra representation of the module.

@@ -29,7 +29,7 @@ buffer of shape `[num_slots, ...]` is allocated on the first
 submit. Subsequent submits copy into the buffer in-place
 (`update_`). Defaults to `False` because the extra copy
 into the buffer is not currently compensated by the batching
-path (`lazy_stack` still calls `torch.stack`).
+path, which still materializes a separate policy-input batch.
 
 Note
 
