@@ -460,6 +460,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._prefetch_cap = prefetch or 0
         self._prefetch_queue = collections.deque()
         self._batch_size = batch_size
+        self._warned_batch_size_conflict = False
 
         if batch_size is None and prefetch:
             raise ValueError(
@@ -2048,7 +2049,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             batch_size is not None
             and self._batch_size is not None
             and batch_size != self._batch_size
+            and not getattr(self, "_warned_batch_size_conflict", False)
         ):
+            self._warned_batch_size_conflict = True
             warnings.warn(
                 f"Got conflicting batch_sizes in constructor ({self._batch_size}) "
                 f"and `sample` ({batch_size}). Refer to the ReplayBuffer documentation "

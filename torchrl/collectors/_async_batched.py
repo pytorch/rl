@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import queue
 import threading
 import time
@@ -25,6 +26,7 @@ from torchrl._comm import MailboxTransportError
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
+from torchrl.envs.async_envs import _validate_cpu_affinity
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServer,
@@ -367,6 +369,24 @@ class AsyncBatchedCollector(BaseCollector):
         create_env_kwargs (dict or list[dict], optional): keyword arguments
             forwarded to each environment factory.  A single dict is broadcast
             to all factories.
+        worker_affinity (Sequence[Sequence[int]] or Callable[[int], Sequence[int]], optional):
+            Optional Linux CPU placement forwarded to the multiprocessing
+            :class:`~torchrl.envs.AsyncEnvPool`. Use it when worker scheduling
+            on CPUs reserved for simulators or driver work causes contention or
+            step-time jitter; most users should leave it unset. TorchRL knows
+            which CPUs are available, but not the application's intended CPU
+            partition or each environment's thread requirements, so it cannot
+            choose these masks automatically. Provide one mask per environment,
+            or a callable mapping each environment index to its mask. Defaults
+            to ``None``. See :ref:`async_batched_collector_cpu_affinity` for a
+            complete collector example.
+        driver_affinity (Sequence[int], optional): Linux CPU affinity mask for
+            the inference-server and per-environment coordinator threads, plus
+            parent-side multiprocessing queue feeder threads. Dedicated
+            process-backed inference servers are not covered. The thread
+            constructing the collector is restored to its original affinity
+            after startup. Defaults to ``None``. See
+            :ref:`async_batched_collector_cpu_affinity` for an example.
 
     Examples:
         >>> from torchrl.collectors import AsyncBatchedCollector
@@ -416,6 +436,10 @@ class AsyncBatchedCollector(BaseCollector):
         weight_sync_model_id: str = "policy",
         verbose: bool = False,
         create_env_kwargs: dict | list[dict] | None = None,
+        worker_affinity: Sequence[Sequence[int]]
+        | Callable[[int], Sequence[int]]
+        | None = None,
+        driver_affinity: Sequence[int] | None = None,
         server_config: InferenceServerConfig | None = None,
         device_config: InferenceDeviceConfig | None = None,
         policy_version: int = 0,
@@ -478,6 +502,11 @@ class AsyncBatchedCollector(BaseCollector):
                 f"env_backend={effective_env_backend!r} is not supported. "
                 f"Expected one of {_ENV_BACKENDS}."
             )
+        if worker_affinity is not None and effective_env_backend != "multiprocessing":
+            raise ValueError(
+                "worker_affinity is only supported with "
+                "env_backend='multiprocessing'."
+            )
         self._env_backend = effective_env_backend
         if env_exchange not in ("queue", "shm", "auto"):
             raise ValueError(
@@ -489,6 +518,33 @@ class AsyncBatchedCollector(BaseCollector):
                 "env_exchange='shm' requires env_backend='multiprocessing'."
             )
         self._env_exchange = env_exchange
+        if worker_affinity is None:
+            self._worker_affinity = None
+        else:
+            if callable(worker_affinity):
+                affinity_masks = [
+                    worker_affinity(env_index) for env_index in range(self._num_envs)
+                ]
+            else:
+                affinity_masks = list(worker_affinity)
+                if len(affinity_masks) != self._num_envs:
+                    raise ValueError(
+                        "worker_affinity must provide one CPU mask per "
+                        f"environment, got {len(affinity_masks)} masks for "
+                        f"{self._num_envs} environments."
+                    )
+            self._worker_affinity = [
+                _validate_cpu_affinity(
+                    affinity,
+                    option_name=f"worker_affinity[{env_index}]",
+                )
+                for env_index, affinity in enumerate(affinity_masks)
+            ]
+        self._driver_affinity = (
+            _validate_cpu_affinity(driver_affinity, option_name="driver_affinity")
+            if driver_affinity is not None
+            else None
+        )
         self._server_backend = server_backend
         if server_backend == "process":
             if policy_backend not in (None, "multiprocessing"):
@@ -580,80 +636,93 @@ class AsyncBatchedCollector(BaseCollector):
         if self._workers and all(w.is_alive() for w in self._workers):
             return
 
-        # Build env pool
-        kwargs = {}
-        if self._create_env_kwargs is not None:
-            kwargs["create_env_kwargs"] = self._create_env_kwargs
-        self._env_pool = AsyncEnvPool(
-            self._create_env_fn,
-            backend=self._env_backend,
-            # Explicit so the pool's default-change FutureWarning is not
-            # emitted from library code.
-            exchange=self._env_exchange,
-            **kwargs,
-        )
+        original_affinity = None
+        try:
+            if self._driver_affinity is not None:
+                original_affinity = os.sched_getaffinity(0)
+                os.sched_setaffinity(0, self._driver_affinity)
 
-        # Create clients before a process server starts so response queues are
-        # inherited by the child process.
-        if self._clients is None:
-            self._clients = [
-                PolicyClientModule(
-                    self._transport.client(),
-                    max_inflight=self._max_inflight_per_env,
+            # Build the pool under the driver mask so feeder threads inherit it.
+            kwargs = {}
+            if self._create_env_kwargs is not None:
+                kwargs["create_env_kwargs"] = self._create_env_kwargs
+            self._env_pool = AsyncEnvPool(
+                self._create_env_fn,
+                backend=self._env_backend,
+                # Explicit so the pool's default-change FutureWarning is not
+                # emitted from library code.
+                exchange=self._env_exchange,
+                worker_affinity=self._worker_affinity,
+                **kwargs,
+            )
+
+            # Create clients before a process server starts so response queues are
+            # inherited by the child process.
+            if self._clients is None:
+                self._clients = [
+                    PolicyClientModule(
+                        self._transport.client(),
+                        max_inflight=self._max_inflight_per_env,
+                    )
+                    for _ in range(self._num_envs)
+                ]
+
+            # Start inference server
+            if not self._server.is_alive:
+                self._server.start()
+
+            # Start coordinator threads. Shared slots can be drained safely in
+            # ready batches, avoiding one Python thread and one clone per env.
+            self._result_queue = queue.Queue()
+            self._shutdown_event = threading.Event()
+
+            self._workers = []
+            if self._env_pool.resolved_exchange == "shm":
+                self._uses_batched_coordinator = True
+                thread = threading.Thread(
+                    target=_env_batch_loop,
+                    kwargs={
+                        "pool": self._env_pool,
+                        "clients": self._clients,
+                        "result_queue": self._result_queue,
+                        "shutdown_event": self._shutdown_event,
+                        "pause_request": self._pause_request,
+                        "env_device": self._env_device,
+                        "storing_device": self._storing_device,
+                    },
+                    daemon=True,
+                    name="AsyncBatchedCollector-env-batch",
                 )
-                for _ in range(self._num_envs)
-            ]
+                self._workers.append(thread)
+                thread.start()
+                return
 
-        # Start inference server
-        if not self._server.is_alive:
-            self._server.start()
-
-        # Start coordinator threads. Shared slots can be drained safely in
-        # ready batches, avoiding one Python thread and one clone per env.
-        self._result_queue = queue.Queue()
-        self._shutdown_event = threading.Event()
-
-        self._workers = []
-        if self._env_pool.resolved_exchange == "shm":
-            self._uses_batched_coordinator = True
-            thread = threading.Thread(
-                target=_env_batch_loop,
-                kwargs={
-                    "pool": self._env_pool,
-                    "clients": self._clients,
-                    "result_queue": self._result_queue,
-                    "shutdown_event": self._shutdown_event,
-                    "pause_request": self._pause_request,
-                    "env_device": self._env_device,
-                    "storing_device": self._storing_device,
-                },
-                daemon=True,
-                name="AsyncBatchedCollector-env-batch",
-            )
-            self._workers.append(thread)
-            thread.start()
-            return
-
-        self._uses_batched_coordinator = False
-        for i in range(self._num_envs):
-            t = threading.Thread(
-                target=_env_loop,
-                kwargs={
-                    "pool": self._env_pool,
-                    "env_id": i,
-                    "transport": self._transport,
-                    "client": self._clients[i],
-                    "result_queue": self._result_queue,
-                    "shutdown_event": self._shutdown_event,
-                    "pause_request": self._pause_request,
-                    "env_device": self._env_device,
-                    "storing_device": self._storing_device,
-                },
-                daemon=True,
-                name=f"AsyncBatchedCollector-env-{i}",
-            )
-            self._workers.append(t)
-            t.start()
+            self._uses_batched_coordinator = False
+            for i in range(self._num_envs):
+                t = threading.Thread(
+                    target=_env_loop,
+                    kwargs={
+                        "pool": self._env_pool,
+                        "env_id": i,
+                        "transport": self._transport,
+                        "client": self._clients[i],
+                        "result_queue": self._result_queue,
+                        "shutdown_event": self._shutdown_event,
+                        "pause_request": self._pause_request,
+                        "env_device": self._env_device,
+                        "storing_device": self._storing_device,
+                    },
+                    daemon=True,
+                    name=f"AsyncBatchedCollector-env-{i}",
+                )
+                self._workers.append(t)
+                t.start()
+        except Exception:
+            self.shutdown(raise_on_error=False)
+            raise
+        finally:
+            if original_affinity is not None:
+                os.sched_setaffinity(0, original_affinity)
 
     @contextlib.contextmanager
     def pause(self, timeout: float | None = 30.0) -> Iterator[None]:
@@ -821,20 +890,23 @@ class AsyncBatchedCollector(BaseCollector):
     def _rollout_frames(self) -> TensorDictBase:
         """Drain ``frames_per_batch`` transitions from the workers."""
         rq = self._result_queue
+        frames_to_collect = self.frames_per_batch
+        if self.total_frames >= 0:
+            frames_to_collect = min(frames_to_collect, self.total_frames - self._frames)
         collected = 0
         transitions: list[TensorDictBase] = []
 
-        while self._transition_carry and collected < self.frames_per_batch:
+        while self._transition_carry and collected < frames_to_collect:
             transition = self._transition_carry.popleft()
             transitions.append(transition)
             collected += transition.numel()
 
-        while collected < self.frames_per_batch:
+        while collected < frames_to_collect:
             # Block for at least one transition
             td = self._next_result()
             if self._uses_batched_coordinator:
                 for transition in td.unbind(0):
-                    if collected < self.frames_per_batch:
+                    if collected < frames_to_collect:
                         transitions.append(transition)
                         collected += transition.numel()
                     else:
@@ -843,7 +915,7 @@ class AsyncBatchedCollector(BaseCollector):
                 transitions.append(td)
                 collected += td.numel()
             # Batch-drain any additional items already in the queue
-            while collected < self.frames_per_batch:
+            while collected < frames_to_collect:
                 try:
                     td = rq.get_nowait()
                 except queue.Empty:
@@ -851,7 +923,7 @@ class AsyncBatchedCollector(BaseCollector):
                 self._check_worker_result(td)
                 if self._uses_batched_coordinator:
                     for transition in td.unbind(0):
-                        if collected < self.frames_per_batch:
+                        if collected < frames_to_collect:
                             transitions.append(transition)
                             collected += transition.numel()
                         else:
@@ -911,6 +983,10 @@ class AsyncBatchedCollector(BaseCollector):
         while total < 0 or self._frames < total:
             self._iter += 1
             td = self.rollout()
+            if not self.yield_completed_trajectories and total >= 0:
+                remaining = total - self._frames
+                if td.numel() > remaining:
+                    td = td.reshape(-1)[:remaining]
             self._frames += td.numel()
             if self._postproc is not None:
                 td = self._postproc(td)

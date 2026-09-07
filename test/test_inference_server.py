@@ -8,6 +8,7 @@ import concurrent.futures
 import functools as ft
 import importlib.util
 import multiprocessing as mp
+import os
 import pickle
 import queue
 import threading
@@ -2201,11 +2202,11 @@ class TestProcessInferenceServer:
 class TestAsyncBatchedCollector:
     """Tests for :class:`AsyncBatchedCollector`."""
 
-    def test_basic_collection(self):
+    @pytest.mark.parametrize("total_frames", [60, 61])
+    def test_basic_collection(self, total_frames):
         """Collector yields at least frames_per_batch frames."""
         num_envs = 3
         frames_per_batch = 20
-        total_frames = 60
         policy = _make_counting_policy()
 
         collector = AsyncBatchedCollector(
@@ -2222,7 +2223,7 @@ class TestAsyncBatchedCollector:
             total_collected += batch.numel()
         stats = collector.server_stats()
         collector.shutdown()
-        assert total_collected >= total_frames
+        assert total_collected == total_frames
         assert stats["requests"] > 0
 
     def test_policy_factory(self):
@@ -2423,11 +2424,11 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert total >= 20
 
-    def test_shared_memory_collection(self):
+    @pytest.mark.parametrize("total_frames", [60, 61])
+    def test_shared_memory_collection(self, total_frames):
         """Shared slots yield exact batches with correctly attributed transitions."""
         num_envs = 4
         frames_per_batch = 10
-        total_frames = 60
         collector = AsyncBatchedCollector(
             create_env_fn=[_counting_env_factory] * num_envs,
             policy=_make_counting_policy(),
@@ -2455,7 +2456,10 @@ class TestAsyncBatchedCollector:
                 )
         finally:
             collector.shutdown()
-        assert batches == [frames_per_batch] * (total_frames // frames_per_batch)
+        expected_batches = [frames_per_batch] * (total_frames // frames_per_batch)
+        if total_frames % frames_per_batch:
+            expected_batches.append(total_frames % frames_per_batch)
+        assert batches == expected_batches
         assert env_ids == set(range(num_envs))
 
         with pytest.raises(ValueError, match="requires env_backend"):
@@ -2466,6 +2470,57 @@ class TestAsyncBatchedCollector:
                 env_backend="threading",
                 env_exchange="shm",
             )
+
+    def test_worker_affinity_validation_is_eager(self):
+        with pytest.raises(ValueError, match="one CPU mask per environment"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=10,
+                total_frames=10,
+                env_backend="multiprocessing",
+                worker_affinity=[(0,)],
+            )
+
+    @pytest.mark.skipif(
+        not hasattr(os, "sched_setaffinity"),
+        reason="CPU affinity requires Linux",
+    )
+    def test_cpu_affinity(self):
+        """Worker processes and driver threads use their configured masks."""
+        original_affinity = os.sched_getaffinity(0)
+        cpus = sorted(original_affinity)
+        driver_affinity = (cpus[0],)
+        worker_affinity = (cpus[-1],)
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=10,
+            max_batch_size=2,
+            env_backend="multiprocessing",
+            worker_affinity=[worker_affinity] * 2,
+            driver_affinity=driver_affinity,
+        )
+        try:
+            collector._ensure_started()
+            assert os.sched_getaffinity(0) == original_affinity
+            assert all(
+                os.sched_getaffinity(process.pid) == set(worker_affinity)
+                for process in collector.env.threads
+            )
+            driver_threads = [collector._server._worker, *collector._workers]
+            assert all(
+                os.sched_getaffinity(thread.native_id) == set(driver_affinity)
+                for thread in driver_threads
+            )
+            assert all(
+                os.sched_getaffinity(input_queue._thread.native_id)
+                == set(driver_affinity)
+                for input_queue in collector.env.input_queue
+            )
+        finally:
+            collector.shutdown()
 
     def test_process_server_backend_smoke(self):
         """Dedicated process server works through AsyncBatchedCollector."""
