@@ -329,9 +329,30 @@ Examples
 >>> collector.map_fn("update_policy_weights_", list_of_kwargs=[{"weights": w1}, {"weights": w2}])
 ```
 
-pause()
+pause(*timeout: float | None = 30.0*) → Iterator[None][[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.pause)
 
-Context manager that pauses the collector if it is running free.
+Pause environment coordination and policy inference.
+
+In-flight policy and environment requests finish before the context is
+entered. The coordinator threads then remain parked until the context
+exits, leaving the inference server idle. This provides a quiescent
+boundary for operations such as a lazy [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) call.
+
+Compile and warm up modules before starting collection whenever
+possible. Use this context when compilation after collection has
+started is unavoidable.
+
+Parameters:
+
+**timeout** (*float**or**None*) - maximum seconds to wait for the
+coordinator threads to pause. `None` waits indefinitely.
+Defaults to `30.0`.
+
+Raises:
+
+- **RuntimeError** - if another pause is active or a coordinator exits.
+- **TimeoutError** - if the coordinator threads do not park within
+ `timeout` seconds.
 
 *property*policy*: Callable*
 
