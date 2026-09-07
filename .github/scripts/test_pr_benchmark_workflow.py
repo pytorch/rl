@@ -215,7 +215,7 @@ def test_workflow_runs_only_four_primary_measurements():
     assert "needs: benchmark" in workflow
 
 
-@pytest.mark.parametrize("failure", [None, "missing", "budget", "series"])
+@pytest.mark.parametrize("failure", [None, "missing", "budget", "series", "execution"])
 def test_async_trends_use_complete_repeated_measurements(tmp_path, failure):
     for repeat, duration in enumerate([1.0, 2.0, 4.0], 1):
         document = _document({"collection": duration})
@@ -225,6 +225,8 @@ def test_async_trends_use_complete_repeated_measurements(tmp_path, failure):
                 continue
             if failure == "budget":
                 document["benchmarks"][0]["extra_info"]["transitions"] = 2048
+            if failure == "execution":
+                document["benchmarks"][0]["extra_info"]["execution"] = "different"
             if failure == "series":
                 document["benchmarks"] = []
         (tmp_path / f"async-{repeat}.json").write_text(json.dumps(document))
