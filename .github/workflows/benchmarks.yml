@@ -163,20 +163,15 @@ jobs:
           fi
 
           if [ "$BENCHMARK_SUITE" = full ]; then
-            # NB: the nightly/cu128 channel is frozen (torch and torchvision builds
-            # drifted out of sync there, making install ResolutionImpossible). Use the
-            # live cu126 nightly channel; its CUDA 12.6 wheels run fine on the GPU
-            # runner via driver backward-compatibility.
-            # The --extra-index-url onto PyPI is required: torch nightly pulls in
-            # transitive deps (e.g. spmd-types) that are only shipped as sdists on the
-            # torch channel, and building those sdists needs setuptools/wheel which the
-            # torch index does not host. Install torch separately so torchvision's
-            # exact torch dependency cannot make pip backtrack into PyPI stable
-            # torch. Then install nightly torchvision without dependencies and
-            # constrain later dependency installs so PyPI stable releases cannot
-            # upgrade torch/torchvision before the version assertion.
-            python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --extra-index-url https://pypi.org/simple -U
+            # Resolve a matching nightly pair from the live cu126 channel. The
+            # latest torch and torchvision wheels can have different build dates.
+            # Install the vision wheel first without dependencies, then honor its
+            # exact torch requirement so resolution cannot fall back to stable.
+            # PyPI supplies dependencies absent from the nightly wheel index.
             python -m pip install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cu126 --no-deps -U
+            python -c "import importlib.metadata; print('\n'.join(importlib.metadata.requires('torchvision')))" > /tmp/torchvision-requirements.txt
+            python -m pip install --pre -r /tmp/torchvision-requirements.txt \
+              --index-url https://download.pytorch.org/whl/nightly/cu126 --extra-index-url https://pypi.org/simple
             python -m pip freeze | grep -E '^(torch|torchvision)==' > /tmp/torch-constraints.txt
             python -m pip install -c /tmp/torch-constraints.txt ninja pytest pytest-benchmark pytest-timeout "hoptorch>=0.1.4" "mujoco>=3.8.1,<3.9.0" "dm_control>=1.0.41" "gym[accept-rom-license,atari]" transformers accelerate
             python -m pip install -c /tmp/torch-constraints.txt "pybind11[global]"
@@ -189,6 +184,7 @@ jobs:
 
           fi
           python -m pip install -e . --no-build-isolation --no-deps
+          python -m pip check
           python -m pip freeze --all > benchmarks/dependencies.txt
 
           if [ "${{ matrix.device }}" = "GPU" ]; then
