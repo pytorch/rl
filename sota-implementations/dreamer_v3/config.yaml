@@ -58,6 +58,9 @@ optimization:
   rssm_scan_unroll: 8
   # Capture the fixed-shape learner forward/backward on CUDA after warmup.
   cudagraph_train_step: false
+  # Compile learner networks and losses: null, "losses" (numerically identical
+  # to eager) or "all" (also traces the imagination rollout in the actor loss).
+  compile_learner: null
   lr: 4.0e-5
   optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3

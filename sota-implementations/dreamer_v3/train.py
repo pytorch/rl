@@ -32,6 +32,7 @@ from dreamer_v3_agent import (
     build_real_world_actor,
     build_value,
     build_world_model,
+    compile_learner,
     DreamerV3BehaviorPolicySync,
     DreamerV3SeededPolicy,
     make_env,
@@ -302,6 +303,9 @@ def _build_learner(
         slow_critic_regularization=cfg.optimization.slow_critic_regularization,
     ).to(device)
     value_target_updater = SoftUpdate(value_loss, tau=cfg.optimization.slow_critic_tau)
+    compile_learner(
+        cfg.optimization.compile_learner, model_loss, actor_loss, value_loss
+    )
 
     trainable_parameters = (
         list(world_model.parameters())
@@ -562,7 +566,8 @@ def main(cfg: DictConfig):
     use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
     torchrl_logger.info(
         "DreamerV3 execution: device=%s, replay_device=%s, rssm_backend=%s, "
-        "rssm_scan_unroll=%s, mixed_precision=%s, cudagraph_train_step=%s",
+        "rssm_scan_unroll=%s, mixed_precision=%s, cudagraph_train_step=%s, "
+        "compile_learner=%s",
         device,
         replay_device,
         cfg.optimization.compile_rssm or "eager",
@@ -573,6 +578,7 @@ def main(cfg: DictConfig):
         ),
         use_bfloat16,
         cfg.optimization.cudagraph_train_step,
+        cfg.optimization.compile_learner or "none",
     )
     num_envs = cfg.collector.num_envs
     count_reset_records = cfg.collector.count_reset_records

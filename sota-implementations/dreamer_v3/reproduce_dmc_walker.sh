@@ -84,6 +84,7 @@ elif [ "$fast" -eq 1 ]; then
     optimization.compile_rssm=scan
     optimization.rssm_scan_unroll=8
     optimization.cudagraph_train_step=true
+    optimization.compile_learner=losses
   )
 fi
 

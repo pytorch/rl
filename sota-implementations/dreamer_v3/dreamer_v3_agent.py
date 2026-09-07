@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import importlib.util
 
+from typing import Literal
+
 import torch
 from dreamer_v3_utils import latent_state_dim, POLICY_RNG_STREAM, stream_seed
 from omegaconf import DictConfig
@@ -40,7 +42,13 @@ from torchrl.modules.models.model_based_v3 import (
     RSSMPriorV3,
     RSSMRolloutV3,
 )
-from torchrl.objectives import symexp, symlog
+from torchrl.objectives import (
+    DreamerV3ActorLoss,
+    DreamerV3ModelLoss,
+    DreamerV3ValueLoss,
+    symexp,
+    symlog,
+)
 
 _has_dm_control = importlib.util.find_spec("dm_control") is not None
 
@@ -269,6 +277,54 @@ class DreamerV3SeededPolicy(TensorDictModuleBase):
 
 
 # --- Builders ---
+
+
+def compile_learner(
+    mode: Literal["losses", "all"] | None,
+    model_loss: DreamerV3ModelLoss,
+    actor_loss: DreamerV3ActorLoss,
+    value_loss: DreamerV3ValueLoss,
+) -> None:
+    """Compile the learner networks and losses selected by ``mode``.
+
+    ``"losses"`` compiles every encoder, decoder, reward, continuation, actor
+    and value network together with the value and replay-value losses; these
+    regions are numerically identical to eager. ``"all"`` also compiles the
+    actor loss, which traces the imagination rollout, so its random draws fall
+    inside the compiled region like the ``"scan"`` RSSM backend. ``None``
+    leaves everything eager.
+
+    Args:
+        mode ("losses", "all" or None): Which regions to compile.
+        model_loss (DreamerV3ModelLoss): World-model loss holding the encoder,
+            RSSM, decoder, reward and continuation heads.
+        actor_loss (DreamerV3ActorLoss): Actor loss holding the imagination
+            model and the actor network.
+        value_loss (DreamerV3ValueLoss): Value loss holding the critic.
+    """
+    if mode is None:
+        return
+    if mode not in ("losses", "all"):
+        raise ValueError(
+            f"compile_learner mode must be None, 'losses' or 'all', got {mode!r}."
+        )
+    leaf_types = (DreamerV3MLP, _DreamerV3Actor, _DreamerV3Decoder)
+    seen: set[int] = set()
+    for root in (model_loss, actor_loss, value_loss):
+        for module in root.modules():
+            if (
+                isinstance(module, TensorDictModule)
+                and isinstance(module.module, leaf_types)
+                and id(module) not in seen
+            ):
+                seen.add(id(module))
+                module.module = torch.compile(module.module, dynamic=False)
+    value_loss.forward = torch.compile(value_loss.forward, dynamic=False)
+    value_loss.replay_value_loss = torch.compile(
+        value_loss.replay_value_loss, dynamic=False
+    )
+    if mode == "all":
+        actor_loss.forward = torch.compile(actor_loss.forward, dynamic=False)
 
 
 def make_env(cfg: DictConfig, seed: int | None = 0) -> TransformedEnv:

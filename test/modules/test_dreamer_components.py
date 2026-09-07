@@ -934,6 +934,30 @@ class TestDreamerV3Components:
         ).backward()
         assert all(parameter.grad is not None for parameter in rollout.parameters())
 
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_rssm_rollout_scan_under_outer_compile_with_autocast(self):
+        rollout = self._make_rollout(torch.device("cpu"))
+        data = self._make_rollout_data(torch.device("cpu"))
+        rollout.compile_rollout("scan", unroll=2, backend=_compile_backend)
+
+        def loss(tensordict):
+            output = rollout(tensordict)
+            return (
+                output["next", "posterior_logits"].float().square().mean()
+                + output["next", "belief"].float().square().mean()
+            )
+
+        compiled_loss = torch.compile(loss, backend=_compile_backend, dynamic=False)
+        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+            value = compiled_loss(data)
+        value.backward()
+        assert torch.isfinite(value)
+        assert all(parameter.grad is not None for parameter in rollout.parameters())
+
 
 def test_public_block_gru_triton_errors():
     with mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", False):
