@@ -132,7 +132,10 @@ def _env_loop(
             if shutdown_event.is_set():
                 break
 
-            action_td = client(obs)
+            # Initial resets may have no device metadata while later policy
+            # results do. Keep requests collatable when streams start or reset
+            # at different times; tensor placement is unchanged.
+            action_td = client(obs.clone(recurse=False).clear_device_())
             if env_device is not None:
                 action_td = action_td.to(env_device)
             pool.async_step_and_maybe_reset_send(action_td, env_index=env_id)
