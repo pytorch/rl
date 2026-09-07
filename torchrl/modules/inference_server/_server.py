@@ -776,7 +776,9 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             )
         # Lazy collation can allocate stacked leaves on their first access.
         # Materialize them before capture so the graph owns stable input storage.
-        batch = self.collate_fn(items).contiguous()
+        # Transfer real requests before padding so host-to-device traffic scales
+        # with the ready batch rather than the configured graph capacity.
+        batch = self.collate_fn(items).contiguous().to(self.policy_device)
         padding = self.static_batch_size - len(items)
         if padding:
             batch = torch.cat(
