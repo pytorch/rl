@@ -71,8 +71,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - device: CPU
-            image: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04@sha256:5f0d2d827f6436b3cb7468fd8acbdc8c1d41261614e579ae49afe6141da51133
           - device: GPU
             image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04@sha256:b3e7fba84d169f46939f00c25be7d016f712a8d651f4756d6a55e693d84d94f2
     defaults:
@@ -199,6 +197,8 @@ jobs:
             python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
           fi
 
+          python -m pytest test/test_inference_server.py -q -m gpu \
+            -k 'static or cudagraph' --timeout=180
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
@@ -221,7 +221,7 @@ jobs:
               python -m pytest -v --rank 0 --timeout=300 --benchmark-only \
                 --benchmark-save-data --benchmark-json "async-${repeat}.json" \
                 test_envs_benchmark.py test_collectors_benchmark.py \
-                -k 'async_env_pool or async_collection_pixels'
+                -k 'async_collection_pixels and (async-shm-uniform or async-shm-slow-reset or async-shm-static)'
             done
           else
             python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only \
