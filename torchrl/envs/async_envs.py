@@ -23,7 +23,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict, expand_as_right
+from tensordict.utils import _zip_strict, expand_as_right, NestedKey
 
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.data.tensor_specs import NonTensor
@@ -603,6 +603,17 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         exchange).
         """
         return "shm" if getattr(self, "_slot_exchange", None) is not None else "queue"
+
+    @property
+    def exchange_keys(self) -> tuple[NestedKey, ...]:
+        """The tensor keys accepted by the active shared-memory exchange.
+
+        Returns an empty tuple when the resolved exchange is ``"queue"``.
+        """
+        exchange = getattr(self, "_slot_exchange", None)
+        if exchange is None:
+            return ()
+        return tuple(exchange._input_keys)
 
     def stats(self, *, reset: bool = False) -> dict[str, float | int]:
         """Return shared-memory exchange statistics.

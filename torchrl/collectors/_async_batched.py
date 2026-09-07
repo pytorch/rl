@@ -13,7 +13,13 @@ from collections.abc import Callable, Iterator, Sequence
 from typing import Literal
 
 import torch
-from tensordict import lazy_stack, NestedKey, TensorDictBase
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    maybe_dense_stack,
+    NestedKey,
+    TensorDictBase,
+)
 
 from torchrl._comm import MailboxTransportError
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
@@ -134,12 +140,16 @@ def _env_loop(
 
 def _env_ids(tensordict: TensorDictBase) -> list[int]:
     """Read one environment index for each item in the leading batch dimension."""
-    values = tensordict.get(_ENV_IDX_KEY).tolist()
+    values = tensordict.get(_ENV_IDX_KEY)
+    if hasattr(values, "data") and not isinstance(values, torch.Tensor):
+        values = values.data
+    if hasattr(values, "tolist"):
+        values = values.tolist()
     if not isinstance(values, list):
         values = [values]
     result = []
     for value in values:
-        while isinstance(value, list):
+        while isinstance(value, list) and len(value) == 1:
             value = value[0]
         result.append(int(value))
     return result
@@ -155,7 +165,7 @@ def _env_batch_loop(
     storing_device: torch.device | None,
 ):
     """Coordinate a shared-memory env pool from one thread in ready batches."""
-    exchange_keys = tuple(pool._slot_exchange._input_keys)
+    exchange_keys = pool.exchange_keys
     ready_observations = {}
     pending_actions = {}
     policy_outputs = {}
@@ -225,7 +235,12 @@ def _env_batch_loop(
             outputs = lazy_stack(
                 [policy_outputs.pop(env_id) for env_id in completed_ids]
             )
-            transitions = transitions.clone().update(outputs)
+            # Dense pool stacking already copied the transition tensors out of
+            # shared memory before the slots can be reused. A lazy stack still
+            # aliases the slots and must be cloned before actions are sent back.
+            if isinstance(transitions, LazyStackedTensorDict):
+                transitions = transitions.clone()
+            transitions.update(outputs.exclude(*transitions.keys(True, True)))
             if storing_device is not None:
                 transitions = transitions.to(storing_device)
             result_queue.put(transitions)
@@ -469,10 +484,9 @@ class AsyncBatchedCollector(BaseCollector):
                 f"env_exchange={env_exchange!r} is not supported. Expected one of "
                 "('queue', 'shm', 'auto')."
             )
-        if env_exchange != "queue" and effective_env_backend != "multiprocessing":
+        if env_exchange == "shm" and effective_env_backend != "multiprocessing":
             raise ValueError(
-                "env_exchange='shm' and 'auto' require "
-                "env_backend='multiprocessing'."
+                "env_exchange='shm' requires env_backend='multiprocessing'."
             )
         self._env_exchange = env_exchange
         self._server_backend = server_backend
@@ -500,6 +514,7 @@ class AsyncBatchedCollector(BaseCollector):
                 max_batch_size=max_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
+                collate_fn=maybe_dense_stack,
                 policy_device=policy_device,
                 output_device=output_device,
                 weight_sync=weight_sync,
@@ -516,6 +531,7 @@ class AsyncBatchedCollector(BaseCollector):
                 max_batch_size=max_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
+                collate_fn=maybe_dense_stack,
                 policy_device=policy_device,
                 output_device=output_device,
                 weight_sync=weight_sync,
@@ -549,6 +565,7 @@ class AsyncBatchedCollector(BaseCollector):
         self._uses_batched_coordinator = False
         self._pause_request: list[_PauseRequest | None] = [None]
         self._pause_lock = threading.Lock()
+        self._transition_carry: deque[TensorDictBase] = deque()
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -807,14 +824,24 @@ class AsyncBatchedCollector(BaseCollector):
         collected = 0
         transitions: list[TensorDictBase] = []
 
+        while self._transition_carry and collected < self.frames_per_batch:
+            transition = self._transition_carry.popleft()
+            transitions.append(transition)
+            collected += transition.numel()
+
         while collected < self.frames_per_batch:
             # Block for at least one transition
             td = self._next_result()
             if self._uses_batched_coordinator:
-                transitions.extend(td.unbind(0))
+                for transition in td.unbind(0):
+                    if collected < self.frames_per_batch:
+                        transitions.append(transition)
+                        collected += transition.numel()
+                    else:
+                        self._transition_carry.append(transition)
             else:
                 transitions.append(td)
-            collected += td.numel()
+                collected += td.numel()
             # Batch-drain any additional items already in the queue
             while collected < self.frames_per_batch:
                 try:
@@ -823,10 +850,15 @@ class AsyncBatchedCollector(BaseCollector):
                     break
                 self._check_worker_result(td)
                 if self._uses_batched_coordinator:
-                    transitions.extend(td.unbind(0))
+                    for transition in td.unbind(0):
+                        if collected < self.frames_per_batch:
+                            transitions.append(transition)
+                            collected += transition.numel()
+                        else:
+                            self._transition_carry.append(transition)
                 else:
                     transitions.append(td)
-                collected += td.numel()
+                    collected += td.numel()
             if self.verbose:
                 torchrl_logger.debug(
                     f"AsyncBatchedCollector: {collected}/{self.frames_per_batch} frames"
@@ -851,14 +883,8 @@ class AsyncBatchedCollector(BaseCollector):
     def _record_trajectory_transition(self, td: TensorDictBase) -> None:
         """Record one environment transition for trajectory yielding."""
         env_id = 0
-        eid = td.get(_ENV_IDX_KEY, default=None)
-        if eid is not None:
-            # Unwrap NonTensorData / NonTensorStack / list wrappers
-            if hasattr(eid, "data"):
-                eid = eid.data
-            while isinstance(eid, list) and len(eid) == 1:
-                eid = eid[0]
-            env_id = int(eid)
+        if td.get(_ENV_IDX_KEY, default=None) is not None:
+            env_id = _env_ids(td)[0]
 
         self._yield_queues[env_id].append(td)
         if td["next", "done"].any():
@@ -904,6 +930,7 @@ class AsyncBatchedCollector(BaseCollector):
         if request is not None:
             request[0].abort()
             request[1].set()
+        self._transition_carry.clear()
         _timeout = timeout or 5.0
         for w in self._workers:
             w.join(timeout=_timeout)
