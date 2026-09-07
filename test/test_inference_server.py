@@ -2584,6 +2584,9 @@ class TestAsyncBatchedCollector:
     )
     def test_policy_update_uses_inference_server(self, device):
         class Policy(nn.Module):
+            in_keys = ["observation"]
+            out_keys = ["action"]
+
             def __init__(self, value):
                 super().__init__()
                 self.value = nn.Parameter(torch.tensor(float(value)))
