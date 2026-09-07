@@ -10,6 +10,7 @@ import functools
 import json
 import pickle
 import threading
+import warnings
 
 import pytest
 import torch
@@ -650,6 +651,23 @@ def test_add_warning():
         match=r"Using `add\(\)` with a TensorDict that has batch_size",
     ):
         rb.add(TensorDict(batch_size=[1]))
+
+
+def test_sample_batch_size_conflict_warns_once():
+    rb = ReplayBuffer(storage=ListStorage(10), batch_size=2)
+    rb.extend(torch.arange(10))
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        rb.sample(3)
+        rb.sample(4)
+
+    conflicts = [
+        warning
+        for warning in caught
+        if "Got conflicting batch_sizes" in str(warning.message)
+    ]
+    assert len(conflicts) == 1
 
 
 @pytest.mark.parametrize("stack", [False, True])

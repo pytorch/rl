@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -37,6 +38,8 @@ class BatchedEnvConfig(EnvConfig):
     backend: str = "threading"
     stack: str = "dense"
     exchange: str = "queue"
+    worker_affinity: list[list[int]] | None = None
+    envs_per_worker: int = 1
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_batched_env"
 
     def __post_init__(self) -> None:
@@ -65,6 +68,10 @@ def make_batched_env(
     backend: Literal["threading", "multiprocessing", "asyncio"] = "threading",
     stack: Literal["dense", "maybe_dense", "lazy"] = "dense",
     exchange: Literal["queue", "shm", "auto"] = "queue",
+    worker_affinity: Sequence[Sequence[int]]
+    | Callable[[int], Sequence[int]]
+    | None = None,
+    envs_per_worker: int = 1,
     **kwargs: Any,
 ) -> EnvBase:
     """Create a batched environment.
@@ -77,6 +84,10 @@ def make_batched_env(
         backend: Async execution backend.
         stack: Async result stacking mode.
         exchange: Async multiprocessing exchange mode.
+        worker_affinity: Optional Linux CPU affinity masks for async
+            multiprocessing workers.
+        envs_per_worker: Environments hosted by each async multiprocessing
+            worker process.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -133,6 +144,9 @@ def make_batched_env(
         kwargs["backend"] = backend
         kwargs["stack"] = stack
         kwargs["exchange"] = exchange
+        if worker_affinity is not None:
+            kwargs["worker_affinity"] = worker_affinity
+        kwargs["envs_per_worker"] = envs_per_worker
         return AsyncEnvPool([env_fn] * num_workers, **kwargs)
     else:
         raise ValueError(f"Unknown batched_env_type: {batched_env_type}")

@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import os
+import statistics
 import time
 from functools import partial
 
@@ -200,6 +202,17 @@ ASYNC_POOL_REGIME_TRANSITIONS = 2048
 ASYNC_POOL_REGIME_STEP_LATENCY = 1e-3
 ASYNC_POOL_REGIME_RESET_LATENCY = 0.2
 ASYNC_POOL_REGIME_EPISODE_STEPS = 200
+ASYNC_POOL_AFFINITY_MIN_CPUS = 16
+ASYNC_POOL_AFFINITY_ENVS = 32
+ASYNC_POOL_AFFINITY_TRANSITIONS = 2048
+ASYNC_POOL_AFFINITY_STEP_LATENCY = 1e-3
+
+_AFFINITY_CPUS = (
+    tuple(sorted(os.sched_getaffinity(0))) if hasattr(os, "sched_getaffinity") else ()
+)
+ASYNC_POOL_GROUPING_ENVS = 64
+ASYNC_POOL_GROUPING_TRANSITIONS = 512
+ASYNC_POOL_GROUPING_STEP_LATENCY = 0.05
 
 
 class DelayedCountingEnv(CountingEnv):
@@ -223,7 +236,15 @@ class DelayedCountingEnv(CountingEnv):
         return super()._reset(tensordict, **kwargs)
 
 
-def _make_async_pool(num_envs, exchange, step_latency, reset_latency, max_steps):
+def _make_async_pool(
+    num_envs,
+    exchange,
+    step_latency,
+    reset_latency,
+    max_steps,
+    worker_affinity=None,
+    envs_per_worker=1,
+):
     pool = AsyncEnvPool(
         [
             partial(
@@ -236,6 +257,8 @@ def _make_async_pool(num_envs, exchange, step_latency, reset_latency, max_steps)
         * num_envs,
         backend="multiprocessing",
         exchange=exchange,
+        worker_affinity=worker_affinity,
+        envs_per_worker=envs_per_worker,
     )
     # Prime the steady state: after this, every round starts with a recv.
     tensordict = pool.reset()
@@ -279,6 +302,38 @@ def _async_pool_harvest_per_env(pool, num_transitions):
         _, tensordict = pool.async_step_and_maybe_reset_recv(env_index=env_index)
         tensordict["action"] = torch.ones(1)
         pool.async_step_and_maybe_reset_send(tensordict, env_index=env_index)
+
+
+def _async_pool_step_latencies(pool, num_transitions):
+    # Drain every in-flight warm-up step, then send a fresh synchronized round
+    # so each observed latency has a precise dispatch timestamp.
+    _, td_next = pool.async_step_and_maybe_reset_recv(min_get=pool.num_envs)
+    td_next["action"] = torch.ones(pool.num_envs, 1)
+    sent_at = time.perf_counter()
+    pool.async_step_and_maybe_reset_send(td_next)
+    send_times = [sent_at] * pool.num_envs
+
+    latencies = []
+    while len(latencies) < num_transitions:
+        _, td_next = pool.async_step_and_maybe_reset_recv(
+            min_get=1, max_get=pool.num_envs
+        )
+        observed_at = time.perf_counter()
+        env_indices = td_next["env_index"]
+        if isinstance(env_indices, torch.Tensor):
+            env_indices = env_indices.reshape(-1).tolist()
+        else:
+            env_indices = [int(env_index) for env_index in env_indices]
+        latencies.extend(
+            observed_at - send_times[env_index] for env_index in env_indices
+        )
+
+        td_next["action"] = torch.ones(td_next.shape[0], 1)
+        sent_at = time.perf_counter()
+        pool.async_step_and_maybe_reset_send(td_next)
+        for env_index in env_indices:
+            send_times[env_index] = sent_at
+    return latencies[:num_transitions]
 
 
 @pytest.mark.parametrize("exchange", ["queue", "shm"])
@@ -359,6 +414,92 @@ def test_async_env_pool_fast_step_slow_reset(benchmark, exchange):
                     pool,
                     ASYNC_POOL_REGIME_TRANSITIONS,
                     ASYNC_POOL_REGIME_ENVS,
+                ),
+                rounds=5,
+                warmup_rounds=1,
+                iterations=1,
+            )
+        finally:
+            pool._maybe_shutdown()
+
+
+@pytest.mark.skipif(
+    len(_AFFINITY_CPUS) < ASYNC_POOL_AFFINITY_MIN_CPUS,
+    reason="CPU-affinity jitter benchmark requires a many-core Linux host",
+)
+@pytest.mark.parametrize("pinned", [False, True], ids=["default", "pinned"])
+def test_async_env_pool_step_latency_jitter(benchmark, pinned):
+    """Track pool wall time and last-round latency with worker-only affinity.
+
+    ``pytest-benchmark`` measures each complete 2048-transition round. The
+    latency summary in ``extra_info`` describes only the samples returned by
+    the last of five measured rounds; the driver remains unpinned in both
+    variants.
+    """
+    num_envs = min(ASYNC_POOL_AFFINITY_ENVS, len(_AFFINITY_CPUS))
+    worker_affinity = [(cpu,) for cpu in _AFFINITY_CPUS[:num_envs]] if pinned else None
+    with set_capture_non_tensor_stack(False):
+        pool = _make_async_pool(
+            num_envs,
+            exchange="shm",
+            step_latency=ASYNC_POOL_AFFINITY_STEP_LATENCY,
+            reset_latency=0.0,
+            max_steps=10_000_000,
+            worker_affinity=worker_affinity,
+        )
+        try:
+            samples = benchmark.pedantic(
+                _async_pool_step_latencies,
+                args=(pool, ASYNC_POOL_AFFINITY_TRANSITIONS),
+                rounds=5,
+                warmup_rounds=1,
+                iterations=1,
+            )
+            samples_ms = sorted(sample * 1e3 for sample in samples)
+            benchmark.extra_info.update(
+                {
+                    "affinity": "pinned" if pinned else "default",
+                    "num_envs": num_envs,
+                    "transitions": ASYNC_POOL_AFFINITY_TRANSITIONS,
+                    "step_latency_mean_ms": statistics.fmean(samples_ms),
+                    "step_latency_stddev_ms": statistics.pstdev(samples_ms),
+                    "step_latency_p50_ms": samples_ms[len(samples_ms) // 2],
+                    "step_latency_p99_ms": samples_ms[
+                        min(len(samples_ms) - 1, int(len(samples_ms) * 0.99))
+                    ],
+                }
+            )
+        finally:
+            pool._maybe_shutdown()
+
+
+@pytest.mark.parametrize(
+    "envs_per_worker",
+    [1, 4],
+    ids=["64-processes", "16-processes-of-4"],
+)
+def test_async_env_pool_multi_env_workers(benchmark, envs_per_worker):
+    """Compare process layouts for many sleeping environments."""
+    with set_capture_non_tensor_stack(False):
+        pool = _make_async_pool(
+            ASYNC_POOL_GROUPING_ENVS,
+            "shm",
+            step_latency=ASYNC_POOL_GROUPING_STEP_LATENCY,
+            reset_latency=0.0,
+            max_steps=10_000_000,
+            envs_per_worker=envs_per_worker,
+        )
+        try:
+            benchmark.extra_info["num_envs"] = ASYNC_POOL_GROUPING_ENVS
+            benchmark.extra_info["num_processes"] = pool.num_workers
+            benchmark.extra_info["envs_per_worker"] = envs_per_worker
+            benchmark.extra_info["transitions"] = ASYNC_POOL_GROUPING_TRANSITIONS
+            benchmark.pedantic(
+                _async_pool_harvest,
+                args=(
+                    pool,
+                    ASYNC_POOL_GROUPING_TRANSITIONS,
+                    ASYNC_POOL_GROUPING_ENVS,
                 ),
                 rounds=5,
                 warmup_rounds=1,

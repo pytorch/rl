@@ -427,6 +427,7 @@ class TestEnvConfigs:
             batched_env_type="async",
             backend="multiprocessing",
             exchange="shm",
+            envs_per_worker=2,
         )
         with warnings.catch_warnings():
             warnings.filterwarnings(
@@ -436,6 +437,7 @@ class TestEnvConfigs:
         try:
             assert isinstance(env, AsyncEnvPool)
             assert env.exchange == "shm"
+            assert env.num_workers == 1
         finally:
             env.close(raise_if_closed=False)
 
@@ -448,6 +450,11 @@ class TestEnvConfigs:
         assert config.backend == "threading"
         assert config.stack == "dense"
         assert config.exchange == "queue"
+        assert config.worker_affinity is None
+
+        config = OmegaConf.merge(config, {"worker_affinity": [[0, 1], [2, 3]]})
+        assert config.worker_affinity == [[0, 1], [2, 3]]
+        assert config.envs_per_worker == 1
 
     @pytest.mark.parametrize(
         ("field", "value"),

@@ -356,6 +356,88 @@ per-environment receives own their tensor storage. Aggregate batches returned
 with ``stack="lazy"`` are views over the shared slots and remain valid only until
 actions are sent back to the corresponding environments.
 
+Multiprocessing pools can reduce process and command-pipe overhead by hosting
+several environments in each worker:
+
+.. code-block:: python
+
+    env = AsyncEnvPool(
+        [make_env] * 64,
+        backend="multiprocessing",
+        exchange="shm",
+        envs_per_worker=4,
+    )
+
+Each worker runs its environments concurrently in threads, so grouping is most
+useful for I/O-bound environments. CPU-bound Python environments can contend
+for the GIL and should generally keep ``envs_per_worker=1``. The process count
+is ``ceil(num_envs / envs_per_worker)``. Grouping also changes CPU-affinity
+granularity: a worker affinity mask applied before its environment threads are
+created is inherited by all of them, while tools that pin an already-running
+PID may need to target every thread explicitly. Container CPU sets and quotas
+apply to the grouped process and all of its threads; use one environment per
+worker when environments require independent CPU placement.
+
+.. _async_env_pool_cpu_affinity:
+
+CPU affinity (Linux)
+~~~~~~~~~~~~~~~~~~~~
+
+The multiprocessing backend accepts ``worker_affinity`` to restrict each
+worker process to selected CPUs. Pass one CPU mask per worker process or a
+callable that returns a mask for a worker index. With ``envs_per_worker=4`` and
+64 environments, provide 16 masks. The mask is applied before environment
+threads and factories start, so all environments in a worker and subprocesses
+created by their factories inherit the worker's affinity.
+
+This option is intended for deployments where Python workers, CPU-heavy
+simulators, and driver services share a constrained CPU set. Without explicit
+placement, the scheduler may run them on the same CPUs, increasing contention
+and environment step-time jitter. Most applications should leave the option
+unset and use the operating system's scheduler.
+
+TorchRL can discover the CPUs available to the current process, but that set
+does not reveal which CPUs the application reserves for its driver or other
+services, nor how many threads each environment and its subprocesses require.
+An automatic partition would therefore impose an arbitrary workload policy and
+can reduce throughput. Affinity is explicit for that reason.
+
+.. code-block:: python
+
+    import os
+
+    available_cpus = sorted(os.sched_getaffinity(0))
+    worker_cpus = available_cpus[:8]
+    worker_masks = [
+        tuple(worker_cpus[start : start + 2])
+        for start in range(0, len(worker_cpus), 2)
+    ]
+    env = AsyncEnvPool(
+        [make_env] * len(worker_masks),
+        backend="multiprocessing",
+        exchange="queue",
+        worker_affinity=worker_masks,
+    )
+
+Every subprocess created by an environment factory inherits that worker's
+mask. A one-CPU mask therefore confines both the Python worker and all of its
+environment subprocesses to that single CPU; use a wider window when the
+environment launches CPU-parallel work.
+
+Affinity masks do not replace container resource configuration:
+
+- A process can only run on CPUs granted by its container or cgroup cpuset.
+  TorchRL validates each mask against ``os.sched_getaffinity(0)`` before
+  workers start; build masks from those currently available indices.
+- A CFS CPU quota limits CPU time, not CPU placement. Affinity neither bypasses
+  that quota nor reserves the selected CPUs, and pinning to fewer CPUs than the
+  quota can reduce usable parallelism.
+- In Kubernetes, exclusive container CPUs require the kubelet CPU Manager's
+  ``static`` policy, a ``Guaranteed`` pod, and integer CPU requests (with the
+  matching limits required for ``Guaranteed`` QoS). The resulting cpuset bounds
+  the masks accepted here; the application must still divide those assigned
+  CPUs between its workers and driver threads.
+
 .. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.transforms.TransformedEnv` and
     batched environments, but users won't currently be able to use the async features of the base environment when
     it's nested in these classes. One should prefer nested transformed envs within an `AsyncEnvPool` instead.
@@ -367,9 +449,9 @@ Classes
 - :class:`~torchrl.envs.AsyncEnvPool`: A base class for asynchronous environment pools. It determines the backend
   implementation to use based on the provided arguments and manages the lifecycle of the environments.
 - :class:`~torchrl.envs.ProcessorAsyncEnvPool`: An implementation of :class:`~torchrl.envs.AsyncEnvPool` using
-  multiprocessing for parallel execution of environments. This class manages a pool of environments, each running in
-  its own process, and provides methods for asynchronous stepping and resetting of environments using inter-process
-  communication. It is automatically instantiated when `"multiprocessing"` is passed as a backend during the
+  multiprocessing for parallel execution of environments. This class manages a pool of environments across worker
+  processes and provides methods for asynchronous stepping and resetting using inter-process communication. It is
+  automatically instantiated when `"multiprocessing"` is passed as a backend during the
   :class:`~torchrl.envs.AsyncEnvPool` instantiation.
 - :class:`~torchrl.envs.ThreadingAsyncEnvPool`: An implementation of :class:`~torchrl.envs.AsyncEnvPool` using
   threading for parallel execution of environments. This class manages a pool of environments, each running in its own
