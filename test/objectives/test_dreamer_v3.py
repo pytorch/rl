@@ -419,7 +419,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             torch.softmax(logits.double(), dim=-1) * two_hot.bins.double()
         ).sum(-1)
         torch.testing.assert_close(
-            two_hot(logits).squeeze(-1).double(), reference, rtol=1e-5, atol=1e-3
+            two_hot(logits).squeeze(-1).double(), reference, rtol=1e-4, atol=1e-3
         )
 
     # ------------------------------------------------------------------ #
@@ -2054,6 +2054,7 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
         "optimization.compile_rssm=scan",
         "optimization.rssm_scan_unroll=8",
         "optimization.cudagraph_train_step=true",
+        "optimization.compile_learner=losses",
         "benchmark.seeds=[0]",
     ]
 

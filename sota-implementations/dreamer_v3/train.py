@@ -303,9 +303,6 @@ def _build_learner(
         slow_critic_regularization=cfg.optimization.slow_critic_regularization,
     ).to(device)
     value_target_updater = SoftUpdate(value_loss, tau=cfg.optimization.slow_critic_tau)
-    compile_learner(
-        cfg.optimization.compile_learner, model_loss, actor_loss, value_loss
-    )
 
     trainable_parameters = (
         list(world_model.parameters())
@@ -324,6 +321,9 @@ def _build_learner(
         world_model=world_model,
         actor_model=actor_model,
         mixed_precision=cfg.optimization.mixed_precision,
+    )
+    compile_learner(
+        cfg.optimization.compile_learner, model_loss, actor_loss, value_loss
     )
     return _Learner(
         world_model=world_model,

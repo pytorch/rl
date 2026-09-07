@@ -2340,7 +2340,13 @@ class RSSMRolloutV3(TensorDictModuleBase):
         )
 
     def _scan(self, state, belief, action, embedding, reset, *, unroll: int = 1):
-        """Run the recurrence with the higher-order :func:`torch.scan`."""
+        """Run the recurrence with the higher-order :func:`torch.scan`.
+
+        Each step returns its carry in the dtypes of the incoming carry. Under
+        autocast the networks emit the recurrent state in a lower precision
+        than the initial carry, and the higher-order scan requires both to
+        match once an outer :func:`torch.compile` traces this function.
+        """
         if not isinstance(unroll, int) or isinstance(unroll, bool) or unroll < 1:
             raise ValueError(f"unroll must be a positive integer, got {unroll!r}.")
         prior_net = self.rssm_prior.module
@@ -2384,8 +2390,6 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 state.clone(),
                 belief.clone(),
             )
-            # Autocast can return the recurrent state in a lower precision than
-            # the initial carry; the higher-order scan requires both to match.
             return (
                 state.to(carry_dtypes[0]).clone(),
                 belief.to(carry_dtypes[1]).clone(),
