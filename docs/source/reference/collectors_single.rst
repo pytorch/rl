@@ -120,6 +120,24 @@ and a **policy** -- all internal wiring is handled automatically:
 
     collector.shutdown()
 
+Compile modules and run their first warm-up calls before iterating the
+collector whenever possible. Compiler initialization can create process-wide
+worker resources, and overlapping a first compilation with the collector's
+coordinator and inference threads can stall either workload. If lazy
+compilation after collection has started is unavoidable, pause the collector
+around that call:
+
+.. code-block:: python
+
+    for data in collector:
+        with collector.pause():
+            compiled_learner(data)
+        break
+
+The pause context finishes in-flight environment and policy requests, parks
+the coordinator threads, and leaves the inference server idle. Collection
+resumes automatically when the context exits.
+
 **Key advantages over direct collection through** :class:`Collector`:
 
 - The inference server automatically **batches policy forward passes** from

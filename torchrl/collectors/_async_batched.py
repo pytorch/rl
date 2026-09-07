@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import queue
 import threading
 import time
@@ -33,6 +34,7 @@ _ENV_IDX_KEY = "env_index"
 
 _POLICY_BACKENDS = ("threading", "multiprocessing", "ray", "monarch")
 _ENV_BACKENDS = ("threading", "multiprocessing")
+_PauseRequest = tuple[threading.Barrier, threading.Event]
 
 
 def _make_transport(
@@ -71,6 +73,19 @@ def _make_transport(
     )
 
 
+def _wait_while_paused(pause_request: list[_PauseRequest | None]) -> None:
+    """Park one coordinator and report when it reaches the pause boundary."""
+    request = pause_request[0]
+    if request is None:
+        return
+    barrier, resume_event = request
+    try:
+        barrier.wait()
+    except threading.BrokenBarrierError:
+        return
+    resume_event.wait()
+
+
 def _env_loop(
     pool: AsyncEnvPool,
     env_id: int,
@@ -78,6 +93,7 @@ def _env_loop(
     client: Callable | None,
     result_queue: queue.Queue,
     shutdown_event: threading.Event,
+    pause_request: list[_PauseRequest | None],
     env_device: torch.device | None,
     storing_device: torch.device | None,
 ):
@@ -96,20 +112,21 @@ def _env_loop(
     try:
         pool.async_reset_send(env_index=env_id)
         obs = pool.async_reset_recv(env_index=env_id)
-        action_td = client(obs)
 
         while not shutdown_event.is_set():
+            _wait_while_paused(pause_request)
+            if shutdown_event.is_set():
+                break
+
+            action_td = client(obs)
             if env_device is not None:
                 action_td = action_td.to(env_device)
             pool.async_step_and_maybe_reset_send(action_td, env_index=env_id)
-            cur_td, next_obs = pool.async_step_and_maybe_reset_recv(env_index=env_id)
+            cur_td, obs = pool.async_step_and_maybe_reset_recv(env_index=env_id)
             cur_td.set(_ENV_IDX_KEY, env_id)
             if storing_device is not None:
                 cur_td = cur_td.to(storing_device)
             result_queue.put(cur_td)
-            if shutdown_event.is_set():
-                break
-            action_td = client(next_obs)
     except Exception as exc:
         if not shutdown_event.is_set():
             result_queue.put(exc)
@@ -411,6 +428,8 @@ class AsyncBatchedCollector(BaseCollector):
         self._env_pool: AsyncEnvPool | None = None
         self._workers: list[threading.Thread] = []
         self._clients: list[Callable] | None = None
+        self._pause_request: list[_PauseRequest | None] = [None]
+        self._pause_lock = threading.Lock()
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -469,6 +488,7 @@ class AsyncBatchedCollector(BaseCollector):
                     "client": self._clients[i],
                     "result_queue": self._result_queue,
                     "shutdown_event": self._shutdown_event,
+                    "pause_request": self._pause_request,
                     "env_device": self._env_device,
                     "storing_device": self._storing_device,
                 },
@@ -477,6 +497,70 @@ class AsyncBatchedCollector(BaseCollector):
             )
             self._workers.append(t)
             t.start()
+
+    @contextlib.contextmanager
+    def pause(self, timeout: float | None = 30.0) -> Iterator[None]:
+        """Pause environment coordination and policy inference.
+
+        In-flight policy and environment requests finish before the context is
+        entered. The coordinator threads then remain parked until the context
+        exits, leaving the inference server idle. This provides a quiescent
+        boundary for operations such as a lazy :func:`torch.compile` call.
+
+        Compile and warm up modules before starting collection whenever
+        possible. Use this context when compilation after collection has
+        started is unavoidable.
+
+        Args:
+            timeout (float or None): maximum seconds to wait for the
+                coordinator threads to pause. ``None`` waits indefinitely.
+                Defaults to ``30.0``.
+
+        Raises:
+            RuntimeError: if another pause is active or a coordinator exits.
+            TimeoutError: if the coordinator threads do not park within
+                ``timeout`` seconds.
+        """
+        if not self._pause_lock.acquire(blocking=False):
+            raise RuntimeError("AsyncBatchedCollector is already paused.")
+
+        workers = tuple(self._workers)
+        request = None
+        try:
+            if not workers:
+                yield None
+                return
+            if not all(worker.is_alive() for worker in workers):
+                raise RuntimeError(
+                    "AsyncBatchedCollector cannot pause because a coordinator "
+                    "thread has exited."
+                )
+
+            request = (threading.Barrier(len(workers) + 1), threading.Event())
+            self._pause_request[0] = request
+            try:
+                request[0].wait(timeout=timeout)
+            except threading.BrokenBarrierError:
+                if not all(worker.is_alive() for worker in workers):
+                    raise RuntimeError(
+                        "AsyncBatchedCollector cannot pause because a "
+                        "coordinator thread exited while pausing."
+                    ) from None
+                raise TimeoutError(
+                    "Timed out while waiting for AsyncBatchedCollector "
+                    "coordinator threads to pause."
+                ) from None
+
+            yield None
+        finally:
+            try:
+                if request is not None:
+                    if self._pause_request[0] is request:
+                        self._pause_request[0] = None
+                    request[0].abort()
+                    request[1].set()
+            finally:
+                self._pause_lock.release()
 
     @property
     def env(self) -> AsyncEnvPool:
@@ -661,6 +745,11 @@ class AsyncBatchedCollector(BaseCollector):
         """Shut down the collector, inference server, threads and env pool."""
         if self._shutdown_event is not None:
             self._shutdown_event.set()
+        request = self._pause_request[0]
+        self._pause_request[0] = None
+        if request is not None:
+            request[0].abort()
+            request[1].set()
         _timeout = timeout or 5.0
         for w in self._workers:
             w.join(timeout=_timeout)
