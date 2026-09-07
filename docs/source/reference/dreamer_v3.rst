@@ -291,8 +291,8 @@ the update schedule explicit. A typical update cycle is:
 5. Update the online critic on those same detached returns.
 6. Soft-update the slow critic.
 
-The runnable ``sota-implementations/dreamer_v3`` example uses a single optimizer
-over the world model, actor and critic parameters, reproducing the current JAX
+The public :class:`~torchrl.trainers.algorithms.DreamerV3Optimizer` jointly optimizes
+the world model, actor and critic parameters, reproducing the current JAX
 implementation's adaptive gradient clipping, LaProp-style RMS scaling followed
 by momentum, and warmup chain.
 Those choices belong to the training recipe rather than the loss API, so users
