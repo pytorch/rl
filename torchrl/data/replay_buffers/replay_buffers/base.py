@@ -1145,8 +1145,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             raise NotImplementedError(
                 "submit_update_if_present is only supported by direct replay buffers."
             )
-        if self._service_shutdown:
-            raise RuntimeError("A shut down replay buffer cannot accept updates.")
         operation = ft.partial(
             self.update_if_present,
             index=index,
@@ -1157,6 +1155,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             require_newer=require_newer,
         )
         with self._futures_lock:
+            if self._service_shutdown:
+                raise RuntimeError("A shut down replay buffer cannot accept updates.")
             while (
                 self._pending_update_futures and self._pending_update_futures[0].done()
             ):
