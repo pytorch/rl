@@ -1304,14 +1304,17 @@ def _make_replay_buffer_with_blocked_prefetch(seed=0):
     return replay_buffer, collate
 
 
-def test_replay_buffer_orders_submitted_updates_with_prefetch():
+@pytest.mark.parametrize(
+    ("key", "overwrite"), [("obs", False), (("latent", "state"), True)]
+)
+def test_replay_buffer_orders_submitted_updates_with_prefetch(key, overwrite):
     replay_buffer = _OrderedUpdateReplayBuffer(
         storage=LazyTensorStorage(8),
         writer=TensorDictRoundRobinWriter(track_generations=True),
         batch_size=8,
         prefetch=2,
     )
-    index = replay_buffer.extend(TensorDict({"obs": torch.zeros(8)}, batch_size=[8]))
+    index = replay_buffer.extend(TensorDict({key: torch.zeros(8)}, batch_size=[8]))
     generation = replay_buffer.writer.generations_of(index)
     replay_buffer.sample()
     assert replay_buffer.prefetch_started.wait(timeout=5)
@@ -1319,7 +1322,7 @@ def test_replay_buffer_orders_submitted_updates_with_prefetch():
     future = replay_buffer.submit_update_if_present(
         index=index,
         generation=generation,
-        patch={"obs": torch.ones(8)},
+        patch={key: torch.ones(8)},
     )
     assert not replay_buffer.update_started.wait(timeout=0.05)
     replay_buffer.release_prefetch.set()
@@ -1333,11 +1336,13 @@ def test_replay_buffer_orders_submitted_updates_with_prefetch():
     sample_thread.start()
     assert not replay_buffer.sample_after_update_started.wait(timeout=0.05)
 
+    if overwrite:
+        replay_buffer.extend(TensorDict({key: torch.full((8,), 3.0)}, batch_size=[8]))
     replay_buffer.release_update.set()
     sample_thread.join(timeout=5)
     assert not sample_thread.is_alive()
-    assert future.result(timeout=5).updated_count == 8
-    assert (replay_buffer.sample_after_update["obs"] == 1).all()
+    assert future.result(timeout=5).updated_count == (0 if overwrite else 8)
+    assert (replay_buffer.sample_after_update[key] == (3 if overwrite else 1)).all()
     assert max(
         replay_buffer.events.index("sample-2-end"),
         replay_buffer.events.index("sample-3-end"),
@@ -1417,6 +1422,10 @@ def test_replay_buffer_shutdown_propagates_update_errors_and_is_idempotent():
     assert future.done()
     assert not replay_buffer.is_alive
     replay_buffer.shutdown()
+    with pytest.raises(RuntimeError, match="cannot accept updates"):
+        replay_buffer.submit_update_if_present(
+            index=index, generation=generation, patch={"obs": torch.ones(4)}
+        )
     with pytest.raises(RuntimeError, match="cannot be sampled"):
         replay_buffer.sample(1)
 
