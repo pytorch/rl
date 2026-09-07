@@ -24,13 +24,16 @@ environment instances themselves.
 - **exchange** (*Literal**[**"queue"**,**"shm"**,**"auto"**]**,**optional*) -
 
 Data exchange
-used by the multiprocessing backend. `"shm"` stores fixed-shape
-tensor data in shared slots and sends only readiness descriptors
-through queues; it requires identical, fixed-shape, CPU, tensor-only
-schemas across workers. `"auto"` selects `"shm"` when the env
-schema supports it and falls back to `"queue"` otherwise (the
-resolution is reported by `resolved_exchange` and logged on
-fallback). Defaults to `"queue"`.
+used by the multiprocessing backend. `"queue"` supports dynamic
+data and copies received tensors out of multiprocessing shared
+memory so retaining results does not retain one mapping per tensor.
+`"shm"` stores fixed-shape tensor data in shared slots and sends
+only readiness descriptors through queues; it requires identical,
+fixed-shape, CPU, tensor-only schemas across workers. `"auto"`
+selects `"shm"` when the env schema supports it and falls back to
+`"queue"` otherwise (the resolution is reported by
+`resolved_exchange` and logged on fallback). Defaults to
+`"queue"`.
 
 Warning
 
