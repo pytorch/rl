@@ -971,7 +971,7 @@ class TestMujoco:
         vertices = original_model.mesh_vert[start:stop]
         expected_center = (vertices.max(axis=0) + vertices.min(axis=0)) / 2
         expected_half_size = (vertices.max(axis=0) - vertices.min(axis=0)) / 2
-        rotated_center = np.empty(3)
+        rotated_center = np.zeros(3, dtype=np.float64)
         original_collision_id = mujoco.mj_name2id(
             original_model, mujoco.mjtObj.mjOBJ_GEOM, "collision"
         )
