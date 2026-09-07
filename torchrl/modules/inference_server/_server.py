@@ -289,8 +289,9 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             or ``"nccl"``. Explicit selectors never fall back to another
             transport.
         request_spec (TensorDictBase, optional): static request layout for
-            shared-memory or process-owned distributed transports. Ray-owned
-            distributed transports infer and bind this layout on first use.
+            ``"shared_memory"``, ``"process_slot"``, or process-owned
+            distributed transports. Ray-owned distributed transports infer
+            and bind this layout on first use.
         response_spec (TensorDictBase, optional): static response layout paired
             with ``request_spec``.
         num_clients (int, optional): expected concurrent client count for
@@ -371,6 +372,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             "process",
             "ray",
             "shared_memory",
+            "process_slot",
             "direct",
             "distributed",
         ] = "auto",
@@ -1106,7 +1108,11 @@ class ProcessInferenceServer:
             transport._set_peer_alive(peer_alive)
         self._peer_alive = peer_alive
         self._process_monitor: threading.Thread | None = None
-        self._service_client = transport.client()
+        self._service_client = (
+            transport.client()
+            if getattr(transport, "_clients_require_registration", True)
+            else None
+        )
         self._shutdown_event = self._ctx.Event()
         self._ready_queue = self._ctx.Queue()
         control_request_queue = self._ctx.Queue()
@@ -1256,6 +1262,8 @@ class ProcessInferenceServer:
 
     def client(self) -> Any:
         """Return a restricted inference client from the owned transport."""
+        if self._service_client is None:
+            self._service_client = self.transport.client()
         return self._service_client
 
     def clients(self, num_clients: int) -> list[Any]:
@@ -1264,7 +1272,7 @@ class ProcessInferenceServer:
             raise TypeError("num_clients must be an integer.")
         if num_clients < 1:
             raise ValueError("num_clients must be at least 1.")
-        # MPTransport routes replies per client, so reserve a fresh endpoint.
+        # Transports may route replies per client, so reserve fresh endpoints.
         return [self.transport.client() for _ in range(num_clients)]
 
     def stats(

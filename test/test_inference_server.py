@@ -17,7 +17,6 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
@@ -36,7 +35,6 @@ from torchrl._comm import (
     SharedBlock,
     TCPStoreRendezvous,
 )
-
 from torchrl.modules.inference_server import (
     InferenceClient,
     InferenceDeviceConfig,
@@ -46,6 +44,7 @@ from torchrl.modules.inference_server import (
     MPTransport,
     PolicyClientModule,
     ProcessInferenceServer,
+    ProcessSlotTransport,
     RayTransport,
     SharedMemoryTransport,
     SlotTransport,
@@ -324,7 +323,12 @@ class TestInferenceServerCore:
 
     @pytest.mark.parametrize(
         ("service_backend", "transport"),
-        [("thread", "ray"), ("process", "ray"), ("ray", "shared_memory")],
+        [
+            ("thread", "ray"),
+            ("thread", "process_slot"),
+            ("process", "ray"),
+            ("ray", "shared_memory"),
+        ],
     )
     def test_invalid_backend_transport_rejected_before_start(
         self, service_backend, transport
@@ -1561,6 +1565,83 @@ class TestSharedMemoryTransport:
             assert result_queue.get(timeout=1.0) is True
 
 
+class TestProcessSlotTransport:
+    def test_round_robin_nested_slots(self):
+        """A capped sweep rotates fairly and preserves nested-key payloads."""
+        request_spec = TensorDict({"agent": {"observation": torch.zeros(4)}})
+        response_spec = TensorDict({"agent": {"action": torch.zeros(4)}})
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
+        clients = [transport.client() for _ in range(4)]
+        futures = [
+            client.submit(
+                TensorDict({"agent": {"observation": torch.full((4,), float(slot))}})
+            )
+            for slot, client in enumerate(clients)
+        ]
+
+        transport.wait_for_work(timeout=1.0)
+        items, callbacks = transport.drain(2)
+        assert callbacks == [0, 1]
+        for item, callback in zip(items, callbacks):
+            transport.resolve(
+                callback,
+                TensorDict({"agent": {"action": 2 * item["agent", "observation"]}}),
+            )
+        for slot in callbacks:
+            assert torch.equal(
+                futures[slot].result(timeout=1.0)["agent", "action"],
+                torch.full((4,), float(2 * slot)),
+            )
+
+        futures[0] = clients[0].submit(
+            TensorDict({"agent": {"observation": torch.full((4,), 4.0)}})
+        )
+        futures[1] = clients[1].submit(
+            TensorDict({"agent": {"observation": torch.full((4,), 5.0)}})
+        )
+        transport.wait_for_work(timeout=1.0)
+        items, callbacks = transport.drain(4)
+        assert callbacks == [2, 3, 0, 1]
+        for item, callback in zip(items, callbacks):
+            transport.resolve(
+                callback,
+                TensorDict({"agent": {"action": 2 * item["agent", "observation"]}}),
+            )
+        assert all(future.result(timeout=1.0) is not None for future in futures)
+
+    def test_canonical_process_server_and_spawned_clients(self):
+        """Spawned workers exchange only slot signals with the server process."""
+        ctx = mp.get_context("spawn")
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        server = InferenceServer(
+            policy_factory=_make_doubling_policy,
+            service_backend="process",
+            service_backend_options={"mp_context": ctx},
+            transport="process_slot",
+            transport_options={"ctx": ctx},
+            request_spec=request_spec,
+            response_spec=response_spec,
+            num_clients=2,
+            max_batch_size=2,
+        )
+        clients = server.clients(2)
+        result_queue = ctx.Queue()
+        processes = []
+        with server:
+            for client in clients:
+                process = ctx.Process(
+                    target=_shm_actor_fn,
+                    args=(client, 3, result_queue),
+                )
+                process.start()
+                processes.append(process)
+            for process in processes:
+                process.join(timeout=30.0)
+                assert process.exitcode == 0
+            assert server.stats()["requests"] == 6
+        assert all(result_queue.get(timeout=1.0) is True for _ in processes)
+
+
 # =============================================================================
 # Tests: RayTransport (Commit 4)
 # =============================================================================
@@ -2484,6 +2565,46 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    def test_process_slot_workers_bypass_driver_coordination(self):
+        """Environment processes infer and step without driver coordinators."""
+        num_envs = 2
+        transport = ProcessSlotTransport(
+            TensorDict(
+                {"observation": torch.zeros(1, dtype=torch.int32)}, batch_size=[]
+            ),
+            TensorDict(
+                {
+                    "action": torch.zeros(1, dtype=torch.int32),
+                    "policy_version": torch.zeros((), dtype=torch.long),
+                },
+                batch_size=[],
+            ),
+            num_slots=num_envs,
+        )
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            frames_per_batch=12,
+            total_frames=12,
+            env_backend="multiprocessing",
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=num_envs
+            ),
+        )
+        workers = []
+        try:
+            batch = next(iter(collector))
+            workers = list(collector._workers)
+            assert collector._env_pool is None
+            assert all(worker.pid is not None for worker in workers)
+            assert batch["action"].eq(1).all()
+            assert "policy_version" in batch.keys()
+            assert collector.server_stats()["requests"] >= batch.numel()
+        finally:
+            collector.shutdown()
+        assert not any(worker.is_alive() for worker in workers)
 
     def test_policy_version_key_none_disables_annotations(self):
         collector = AsyncBatchedCollector(

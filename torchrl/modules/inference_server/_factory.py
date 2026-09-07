@@ -11,6 +11,7 @@ from tensordict.base import TensorDictBase
 from torchrl.modules.inference_server._distributed import _DistributedInferenceTransport
 from torchrl.modules.inference_server._monarch import MonarchTransport
 from torchrl.modules.inference_server._mp import MPTransport
+from torchrl.modules.inference_server._process_slot import ProcessSlotTransport
 from torchrl.modules.inference_server._ray import RayTransport
 from torchrl.modules.inference_server._shared_memory import SharedMemoryTransport
 from torchrl.modules.inference_server._slot import SlotTransport
@@ -36,7 +37,13 @@ def _validate_inference_transport_selection(
     kind = "auto" if transport is None else transport
     allowed = {
         "thread": {"auto", "thread", "queue", "direct"},
-        "process": {"auto", "process", "shared_memory", "distributed"},
+        "process": {
+            "auto",
+            "process",
+            "process_slot",
+            "shared_memory",
+            "distributed",
+        },
         "ray": {"auto", "ray", "distributed"},
     }[service_backend]
     if kind not in allowed:
@@ -46,10 +53,8 @@ def _validate_inference_transport_selection(
         )
     if (request_spec is None) != (response_spec is None):
         raise ValueError("request_spec and response_spec must be provided together.")
-    if kind == "shared_memory" and request_spec is None:
-        raise ValueError(
-            "transport='shared_memory' requires request_spec and response_spec."
-        )
+    if kind in ("shared_memory", "process_slot") and request_spec is None:
+        raise ValueError(f"transport={kind!r} requires request_spec and response_spec.")
     if kind == "distributed" and service_backend == "process" and request_spec is None:
         raise ValueError(
             "Process-owned distributed inference requires request_spec and response_spec."
@@ -130,6 +135,17 @@ def _make_inference_transport(
             )
         options.setdefault("num_slots", num_clients or 1)
         return SharedMemoryTransport(request_spec, response_spec, **options)
+    if kind == "process_slot":
+        if service_backend != "process":
+            raise ValueError(
+                "transport='process_slot' requires service_backend='process'."
+            )
+        if request_spec is None or response_spec is None:
+            raise ValueError(
+                "transport='process_slot' requires request_spec and response_spec."
+            )
+        options.setdefault("num_slots", num_clients or 1)
+        return ProcessSlotTransport(request_spec, response_spec, **options)
     if kind == "direct":
         if service_backend != "thread":
             raise ValueError("transport='direct' requires service_backend='thread'.")
@@ -148,7 +164,8 @@ def _make_inference_transport(
         return _DistributedInferenceTransport(request_spec, response_spec, **options)
     raise ValueError(
         f"Unknown inference transport {transport!r}. Expected one of 'auto', "
-        "'thread', 'process', 'ray', 'shared_memory', 'direct', or 'distributed'."
+        "'thread', 'process', 'ray', 'shared_memory', 'process_slot', 'direct', "
+        "or 'distributed'."
     )
 
 
@@ -156,6 +173,8 @@ def _inference_transport_kind(transport: InferenceTransport) -> str:
     """Return the compact selector for a resolved inference transport."""
     if isinstance(transport, SharedMemoryTransport):
         return "shared_memory"
+    if isinstance(transport, ProcessSlotTransport):
+        return "process_slot"
     if isinstance(transport, SlotTransport):
         return "direct"
     if isinstance(transport, RayTransport):

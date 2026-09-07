@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import functools as ft
 import importlib.util
 import json
 import os
@@ -47,6 +48,7 @@ from torchrl.modules import ConvNet, MLP
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServerConfig,
+    ProcessSlotTransport,
 )
 
 OBS_SHAPE = (3, 84, 84)
@@ -260,6 +262,26 @@ class PolicyFactory:
         )
 
 
+def _make_process_slot_transport(
+    env_factory: EnvFactory, num_envs: int
+) -> ProcessSlotTransport:
+    env = env_factory()
+    try:
+        input_key = "pixels" if env_factory.from_pixels else "observation"
+        request_spec = env.fake_tensordict().select(input_key, strict=True)
+        response_spec = env.rand_action().set(
+            "policy_version",
+            torch.zeros(env.batch_size, dtype=torch.long),
+        )
+    finally:
+        env.close()
+    return ProcessSlotTransport(
+        request_spec=request_spec,
+        response_spec=response_spec,
+        num_slots=num_envs,
+    )
+
+
 def _parse_int_list(value: str) -> list[int]:
     return [int(item) for item in value.split(",") if item]
 
@@ -466,8 +488,11 @@ def main() -> None:
     parser.add_argument("--num-envs", default="1,2,4")
     parser.add_argument(
         "--backends",
-        default="parallel,async-thread,async-env-mp,async-process",
-        help="Comma-separated: parallel, async-thread, async-env-mp, async-process",
+        default=("parallel,async-thread,async-env-mp,async-process,async-process-slot"),
+        help=(
+            "Comma-separated: parallel, async-thread, async-env-mp, "
+            "async-process, async-process-slot"
+        ),
     )
     parser.add_argument(
         "--batching-rules",
@@ -695,6 +720,51 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="multiprocessing",
                                 env_exchange=args.env_exchange,
+                                server_config=InferenceServerConfig(
+                                    service_backend="process",
+                                    max_batch_size=max_batch_size,
+                                    min_batch_size=min_batch_size,
+                                    timeout=timeout,
+                                ),
+                                device_config=InferenceDeviceConfig(
+                                    policy_device=policy_device,
+                                    output_device=output_device,
+                                ),
+                            ),
+                            env_name=args.env,
+                            num_envs=num_envs,
+                            frames_per_batch=args.frames_per_batch,
+                            total_frames=args.total_frames,
+                            policy_device=policy_device,
+                            output_device=output_device,
+                            env_step_latency_ms=args.env_step_latency_ms,
+                            policy_delay_ms=args.policy_delay_ms,
+                            warmup_batches=args.warmup_batches,
+                        )
+                    )
+            elif backend == "async-process-slot":
+                for rule in batching_rules:
+                    (
+                        max_batch_size,
+                        min_batch_size,
+                        timeout,
+                        label,
+                    ) = _resolve_batching_rule(rule, num_envs)
+                    results.append(
+                        bench(
+                            name="AsyncBatched direct process slots",
+                            backend=backend,
+                            batch_rule=label,
+                            factory=ft.partial(
+                                AsyncBatchedCollector,
+                                create_env_fn=[env_factory] * num_envs,
+                                policy_factory=policy_factory,
+                                transport=_make_process_slot_transport(
+                                    env_factory, num_envs
+                                ),
+                                frames_per_batch=args.frames_per_batch,
+                                total_frames=-1,
+                                env_backend="multiprocessing",
                                 server_config=InferenceServerConfig(
                                     service_backend="process",
                                     max_batch_size=max_batch_size,
