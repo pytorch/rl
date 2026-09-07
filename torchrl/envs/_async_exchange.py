@@ -154,12 +154,13 @@ class _SharedSlotExchange:
                     )
 
     def worker_slots(
-        self, env_index: int
+        self, start: int, stop: int
     ) -> tuple[TensorDictBase, TensorDictBase, TensorDictBase, timeit]:
+        """Return one contiguous shared-memory slice for a worker process."""
         return (
-            self.input_slots[env_index],
-            self.result_slots[env_index],
-            self.next_slots[env_index],
+            self.input_buffer[start:stop],
+            self.result_buffer[start:stop],
+            self.next_buffer[start:stop],
             self._clock,
         )
 

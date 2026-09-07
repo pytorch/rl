@@ -141,11 +141,15 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             it cannot infer which CPUs the application has reserved for other
             work or how many threads an environment and its subprocesses need.
             It therefore does not choose a partition automatically. Provide
-            one mask per environment, or a callable mapping an environment
-            index to its mask. The mask is applied before the environment is
-            constructed and is inherited by subprocesses it starts. Defaults
-            to ``None``. See :ref:`async_env_pool_cpu_affinity` for an example
-            and deployment guidance.
+            one mask per worker process, or a callable mapping a worker
+            index to its mask. The mask is applied before environment threads
+            and factories start and is inherited by subprocesses they start.
+            Defaults to ``None``. See :ref:`async_env_pool_cpu_affinity` for an
+            example and deployment guidance.
+        envs_per_worker (int, optional): Number of environments hosted by each
+            multiprocessing worker process. Environments within a worker are
+            executed concurrently in threads. This option is only supported by
+            the multiprocessing backend. Defaults to ``1``.
         create_env_kwargs (dict, optional):
             Keyword arguments to pass to the environment maker. Defaults to `{}`.
 
@@ -153,6 +157,8 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         min_get (int): Minimum number of environments to process in a batch.
         env_makers (list): List of environment makers or environments.
         num_envs (int): Number of environments in the pool.
+        envs_per_worker (int): Number of environments hosted by each
+            multiprocessing worker.
         backend (str): Backend used for parallel execution.
         stack (str): Method used for stacking environment outputs.
 
@@ -277,6 +283,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         worker_affinity: Sequence[Sequence[int]]
         | Callable[[int], Sequence[int]]
         | None = None,
+        envs_per_worker: int = 1,
         create_env_kwargs: dict | list[dict] | None = None,
     ) -> None:
         if not isinstance(env_makers, Sequence):
@@ -285,6 +292,20 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         self.env_makers = env_makers
         self.num_envs = len(env_makers)
         self.backend = backend
+        if (
+            isinstance(envs_per_worker, bool)
+            or not isinstance(envs_per_worker, int)
+            or envs_per_worker < 1
+        ):
+            raise ValueError(
+                "envs_per_worker must be a positive integer, got "
+                f"{envs_per_worker!r}."
+            )
+        if backend != "multiprocessing" and envs_per_worker != 1:
+            raise ValueError(
+                "envs_per_worker is only supported with backend='multiprocessing'."
+            )
+        self.envs_per_worker = envs_per_worker
         self.worker_affinity = worker_affinity
         self._worker_affinity = None
         if worker_affinity is not None:
@@ -293,24 +314,25 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                     "worker_affinity is only supported with "
                     "backend='multiprocessing'."
                 )
+            num_workers = (self.num_envs + envs_per_worker - 1) // envs_per_worker
             if callable(worker_affinity):
                 affinity_masks = [
-                    worker_affinity(env_index) for env_index in range(self.num_envs)
+                    worker_affinity(worker_index) for worker_index in range(num_workers)
                 ]
             else:
                 affinity_masks = list(worker_affinity)
-                if len(affinity_masks) != self.num_envs:
+                if len(affinity_masks) != num_workers:
                     raise ValueError(
                         "worker_affinity must provide one CPU mask per "
-                        f"environment, got {len(affinity_masks)} masks for "
-                        f"{self.num_envs} environments."
+                        f"worker process, got {len(affinity_masks)} masks for "
+                        f"{num_workers} worker processes."
                     )
             self._worker_affinity = [
                 _validate_cpu_affinity(
                     affinity,
-                    option_name=f"worker_affinity[{env_index}]",
+                    option_name=f"worker_affinity[{worker_index}]",
                 )
-                for env_index, affinity in enumerate(affinity_masks)
+                for worker_index, affinity in enumerate(affinity_masks)
             ]
         if exchange is None:
             if backend == "multiprocessing":
@@ -727,9 +749,9 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 class ProcessorAsyncEnvPool(AsyncEnvPool):
     """An implementation of `AsyncEnvPool` using multiprocessing for parallel execution of environments.
 
-    This class manages a pool of environments, each running in its own process, and
-    provides methods for asynchronous stepping and resetting of environments using
-    inter-process communication.
+    This class manages a pool of environments across worker processes and provides
+    methods for asynchronous stepping and resetting using inter-process
+    communication. A worker can host multiple environments in dedicated threads.
 
     Supports per-env ``recv`` via ``env_index`` for thread-safe concurrent access
     from multiple collector threads.
@@ -740,8 +762,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         If this is not possible, please raise an issue.
 
     Methods:
-        _setup(): Initializes the multiprocessing queues and processes for each
-            environment.
+        _setup(): Initializes multiprocessing queues and worker processes.
         async_step_send(tensordict): Sends a step command to the environments.
         async_step_recv(min_get): Receives the results of the step command.
         async_reset_send(tensordict): Sends a reset command to the environments.
@@ -759,40 +780,83 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._per_env_step_reset_queues = [
             Queue(maxsize=1) for _ in range(self.num_envs)
         ]
-        self.input_queue = [Queue(maxsize=1) for _ in range(self.num_envs)]
-        self.output_queue = [Queue(maxsize=1) for _ in range(self.num_envs)]
+        self._worker_env_indices = [
+            tuple(range(start, min(start + self.envs_per_worker, self.num_envs)))
+            for start in range(0, self.num_envs, self.envs_per_worker)
+        ]
+        self.num_workers = len(self._worker_env_indices)
+        self._env_to_worker = [
+            worker_index
+            for worker_index, env_indices in enumerate(self._worker_env_indices)
+            for _ in env_indices
+        ]
+        self.input_queue = [Queue(maxsize=1) for _ in range(self.num_workers)]
+        self.output_queue = [
+            Queue(maxsize=len(env_indices)) for env_indices in self._worker_env_indices
+        ]
         self._current_reset = 0
         self._current_step = 0
         self._current_step_reset = 0
         self._slot_exchange = None
 
-        num_threads = self.num_envs
         self.threads = []
-        for i in range(num_threads):
-            thread = multiprocessing.Process(
-                target=self._env_exec,
-                kwargs={
-                    "i": i,
-                    "env_or_factory": self.env_makers[i],
-                    "create_env_kwargs": self.create_env_kwargs[i],
-                    "input_queue": self.input_queue[i],
-                    "output_queue": self.output_queue[i],
+        for worker_index, env_indices in enumerate(self._worker_env_indices):
+            if len(env_indices) == 1:
+                env_index = env_indices[0]
+                target = self._env_exec
+                worker_kwargs = {
+                    "i": env_index,
+                    "env_or_factory": self.env_makers[env_index],
+                    "create_env_kwargs": self.create_env_kwargs[env_index],
+                    "input_queue": self.input_queue[worker_index],
+                    "output_queue": self.output_queue[worker_index],
                     "step_reset_queue": self.step_reset_queue,
                     "step_queue": self.step_queue,
                     "reset_queue": self.reset_queue,
-                    "per_env_step_queue": self._per_env_step_queues[i],
-                    "per_env_reset_queue": self._per_env_reset_queues[i],
-                    "per_env_step_reset_queue": self._per_env_step_reset_queues[i],
-                    "cpu_affinity": None
-                    if self._worker_affinity is None
-                    else self._worker_affinity[i],
-                },
+                    "per_env_step_queue": self._per_env_step_queues[env_index],
+                    "per_env_reset_queue": self._per_env_reset_queues[env_index],
+                    "per_env_step_reset_queue": self._per_env_step_reset_queues[
+                        env_index
+                    ],
+                    "grouped_input": True,
+                }
+            else:
+                target = self._worker_exec
+                worker_kwargs = {
+                    "env_indices": env_indices,
+                    "env_makers": [self.env_makers[i] for i in env_indices],
+                    "create_env_kwargs": [
+                        self.create_env_kwargs[i] for i in env_indices
+                    ],
+                    "input_queue": self.input_queue[worker_index],
+                    "output_queue": self.output_queue[worker_index],
+                    "step_reset_queue": self.step_reset_queue,
+                    "step_queue": self.step_queue,
+                    "reset_queue": self.reset_queue,
+                    "per_env_step_queues": [
+                        self._per_env_step_queues[i] for i in env_indices
+                    ],
+                    "per_env_reset_queues": [
+                        self._per_env_reset_queues[i] for i in env_indices
+                    ],
+                    "per_env_step_reset_queues": [
+                        self._per_env_step_reset_queues[i] for i in env_indices
+                    ],
+                }
+            worker_kwargs["cpu_affinity"] = (
+                None
+                if self._worker_affinity is None
+                else self._worker_affinity[worker_index]
+            )
+            thread = multiprocessing.Process(
+                target=target,
+                kwargs=worker_kwargs,
             )
             self.threads.append(thread)
             thread.start()
         if self._worker_affinity is not None:
             try:
-                for i in range(num_threads):
+                for i in range(self.num_workers):
                     status, payload = self.output_queue[i].get()
                     if status != "affinity_ready":
                         raise RuntimeError(
@@ -807,11 +871,15 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     thread.join()
                 raise
         # Get specs from each worker and cache them for _get_child_specs()
-        for i in range(num_threads):
-            self.input_queue[i].put(("get_specs", None))
-        self._child_specs = []
-        for i in range(num_threads):
-            self._child_specs.append(self.output_queue[i].get())
+        for worker_index, env_indices in enumerate(self._worker_env_indices):
+            self.input_queue[worker_index].put(
+                ("get_specs", [(env_index, None) for env_index in env_indices])
+            )
+        self._child_specs = [None] * self.num_envs
+        for worker_index, env_indices in enumerate(self._worker_env_indices):
+            for _ in env_indices:
+                env_index, spec = self.output_queue[worker_index].get()
+                self._child_specs[env_index] = spec
         # Batch sizes are already available from the worker specs. Caching them
         # here avoids a later round trip over the input queues used for steps,
         # which may block behind in-flight env work.
@@ -820,9 +888,18 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         output_spec = specs["output_spec"]
         input_spec = specs["input_spec"]
         if self.exchange in ("shm", "auto"):
-            for i in range(num_threads):
-                self.input_queue[i].put(("get_fake_tensordict", None))
-            fake_tensordicts = [self.output_queue[i].get() for i in range(num_threads)]
+            for worker_index, env_indices in enumerate(self._worker_env_indices):
+                self.input_queue[worker_index].put(
+                    (
+                        "get_fake_tensordict",
+                        [(env_index, None) for env_index in env_indices],
+                    )
+                )
+            fake_tensordicts = [None] * self.num_envs
+            for worker_index, env_indices in enumerate(self._worker_env_indices):
+                for _ in env_indices:
+                    env_index, fake = self.output_queue[worker_index].get()
+                    fake_tensordicts[env_index] = fake
             try:
                 self._slot_exchange = _SharedSlotExchange(fake_tensordicts)
             except (TypeError, ValueError, RuntimeError) as err:
@@ -834,12 +911,18 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     f"the queue exchange. Reason: {err}"
                 )
             if self._slot_exchange is not None:
-                for i in range(num_threads):
-                    self.input_queue[i].put(
-                        ("init_shm", self._slot_exchange.worker_slots(i))
+                for worker_index, env_indices in enumerate(self._worker_env_indices):
+                    self.input_queue[worker_index].put(
+                        (
+                            "init_shm",
+                            self._slot_exchange.worker_slots(
+                                env_indices[0], env_indices[-1] + 1
+                            ),
+                        )
                     )
-                for i in range(num_threads):
-                    self.output_queue[i].get()
+                for worker_index, env_indices in enumerate(self._worker_env_indices):
+                    for _ in env_indices:
+                        self.output_queue[worker_index].get()
         return output_spec, input_spec
 
     def _get_child_specs(self) -> list:
@@ -849,6 +932,25 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     @property
     def env_batch_sizes(self) -> list[torch.Size]:
         return self._env_batch_sizes
+
+    def _send_worker_batches(
+        self,
+        msg: str,
+        env_idx: list[int],
+        local_tds: tuple[TensorDictBase, ...],
+        *,
+        per_env: bool,
+        record_action: bool,
+    ) -> None:
+        requests = [[] for _ in range(self.num_workers)]
+        for env_index, local_td in _zip_strict(env_idx, local_tds):
+            data = self._prepare_worker_data(
+                env_index, local_td, record_action=record_action
+            )
+            requests[self._env_to_worker[env_index]].append((env_index, data))
+        for worker_index, worker_requests in enumerate(requests):
+            if worker_requests:
+                self.input_queue[worker_index].put((msg, worker_requests, per_env))
 
     def _prepare_worker_data(
         self,
@@ -905,10 +1007,13 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 )
             self._busy.update(env_idx)
 
-        local_tds = tensordict.unbind(0)
-        for _env_idx, local_td in _zip_strict(env_idx, local_tds):
-            data = self._prepare_worker_data(_env_idx, local_td, record_action=True)
-            self.input_queue[_env_idx].put(("step", data, _per_env))
+        self._send_worker_batches(
+            "step",
+            env_idx,
+            tensordict.unbind(0),
+            per_env=_per_env,
+            record_action=True,
+        )
         if not _per_env:
             self._current_step = self._current_step + len(env_idx)
 
@@ -961,10 +1066,13 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             )
         self._busy.update(env_idx)
 
-        local_tds = tensordict.unbind(0)
-        for _env_idx, local_td in _zip_strict(env_idx, local_tds):
-            data = self._prepare_worker_data(_env_idx, local_td, record_action=True)
-            self.input_queue[_env_idx].put(("_step", data))
+        self._send_worker_batches(
+            "_step",
+            env_idx,
+            tensordict.unbind(0),
+            per_env=False,
+            record_action=True,
+        )
         self._current_step = self._current_step + len(env_idx)
 
     _async_private_step_recv = async_step_recv
@@ -981,12 +1089,15 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
                 )
             self._busy.update(env_idx)
-        local_tds = tensordict.unbind(0)
-        for _env_idx, local_td in _zip_strict(env_idx, local_tds):
-            if not _per_env:
-                self._current_step_reset = self._current_step_reset + 1
-            data = self._prepare_worker_data(_env_idx, local_td, record_action=True)
-            self.input_queue[_env_idx].put(("step_and_maybe_reset", data, _per_env))
+        if not _per_env:
+            self._current_step_reset = self._current_step_reset + len(env_idx)
+        self._send_worker_batches(
+            "step_and_maybe_reset",
+            env_idx,
+            tensordict.unbind(0),
+            per_env=_per_env,
+            record_action=True,
+        )
 
     def async_step_and_maybe_reset_recv(
         self,
@@ -1042,12 +1153,15 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
                 )
             self._busy.update(env_idx)
-        local_tds = tensordict.unbind(0)
-        for _env_idx, local_td in _zip_strict(env_idx, local_tds):
-            if not _per_env:
-                self._current_reset = self._current_reset + 1
-            data = self._prepare_worker_data(_env_idx, local_td, record_action=False)
-            self.input_queue[_env_idx].put(("reset", data, _per_env))
+        if not _per_env:
+            self._current_reset = self._current_reset + len(env_idx)
+        self._send_worker_batches(
+            "reset",
+            env_idx,
+            tensordict.unbind(0),
+            per_env=_per_env,
+            record_action=False,
+        )
 
     def async_reset_recv(
         self,
@@ -1099,11 +1213,14 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
             )
         self._busy.update(env_idx)
-        local_tds = tensordict.unbind(0)
-        for _env_idx, local_td in _zip_strict(env_idx, local_tds):
-            self._current_reset = self._current_reset + 1
-            data = self._prepare_worker_data(_env_idx, local_td, record_action=False)
-            self.input_queue[_env_idx].put(("_reset", data))
+        self._current_reset = self._current_reset + len(env_idx)
+        self._send_worker_batches(
+            "_reset",
+            env_idx,
+            tensordict.unbind(0),
+            per_env=False,
+            record_action=False,
+        )
 
     _async_private_reset_recv = async_reset_recv
 
@@ -1131,8 +1248,8 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     continue
 
     def shutdown(self):
-        for env_id in range(self.num_envs):
-            self.input_queue[env_id].put(("shutdown", None))
+        for worker_index in range(self.num_workers):
+            self.input_queue[worker_index].put(("shutdown", None))
 
         # A worker whose unread results still sit in a result queue cannot
         # exit: its process teardown joins the queue's feeder thread, which
@@ -1157,6 +1274,92 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 thread.join()
 
     @classmethod
+    def _worker_exec(
+        cls,
+        env_indices,
+        env_makers,
+        create_env_kwargs,
+        input_queue,
+        output_queue,
+        step_queue,
+        step_reset_queue,
+        reset_queue,
+        per_env_step_queues=None,
+        per_env_reset_queues=None,
+        per_env_step_reset_queues=None,
+        cpu_affinity=None,
+    ):
+        if cpu_affinity is not None:
+            try:
+                os.sched_setaffinity(0, cpu_affinity)
+            except Exception as err:
+                output_queue.put(("affinity_error", repr(err)))
+                return
+            output_queue.put(("affinity_ready", None))
+        local_input_queues = {env_index: queue.Queue(1) for env_index in env_indices}
+        env_threads = []
+        for (
+            env_index,
+            env_maker,
+            kwargs,
+            per_env_step_queue,
+            per_env_reset_queue,
+            per_env_step_reset_queue,
+        ) in zip(
+            env_indices,
+            env_makers,
+            create_env_kwargs,
+            per_env_step_queues,
+            per_env_reset_queues,
+            per_env_step_reset_queues,
+        ):
+            env_thread = threading.Thread(
+                target=cls._env_exec,
+                kwargs={
+                    "i": env_index,
+                    "env_or_factory": env_maker,
+                    "create_env_kwargs": kwargs,
+                    "input_queue": local_input_queues[env_index],
+                    "output_queue": output_queue,
+                    "step_queue": step_queue,
+                    "step_reset_queue": step_reset_queue,
+                    "reset_queue": reset_queue,
+                    "per_env_step_queue": per_env_step_queue,
+                    "per_env_reset_queue": per_env_reset_queue,
+                    "per_env_step_reset_queue": per_env_step_reset_queue,
+                },
+            )
+            env_threads.append(env_thread)
+            env_thread.start()
+
+        while True:
+            msg_data = input_queue.get()
+            if len(msg_data) == 3:
+                msg, requests, per_env = msg_data
+            else:
+                msg, requests = msg_data
+                per_env = False
+            if msg == "shutdown":
+                for local_queue in local_input_queues.values():
+                    local_queue.put(("shutdown", None))
+                for env_thread in env_threads:
+                    env_thread.join()
+                break
+            if msg == "init_shm":
+                input_slots, result_slots, next_slots, clock = requests
+                requests = [
+                    (env_index, (input_slot, result_slot, next_slot, clock))
+                    for env_index, input_slot, result_slot, next_slot in zip(
+                        env_indices,
+                        input_slots.unbind(0),
+                        result_slots.unbind(0),
+                        next_slots.unbind(0),
+                    )
+                ]
+            for env_index, data in requests:
+                local_input_queues[env_index].put((msg, data, per_env))
+
+    @classmethod
     def _env_exec(
         cls,
         i,
@@ -1171,6 +1374,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         per_env_reset_queue=None,
         per_env_step_reset_queue=None,
         cpu_affinity=None,
+        grouped_input=False,
     ):
         if cpu_affinity is not None:
             try:
@@ -1192,10 +1396,21 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             else:
                 msg, data = msg_data
                 per_env = False
+            if grouped_input and msg != "shutdown":
+                if msg == "init_shm":
+                    input_slots, result_slots, next_slots, clock = data
+                    data = (
+                        input_slots[0],
+                        result_slots[0],
+                        next_slots[0],
+                        clock,
+                    )
+                else:
+                    _, data = data[0]
             if msg == "get_specs":
-                output_queue.put(env.specs)
+                output_queue.put((i, env.specs))
             elif msg == "get_fake_tensordict":
-                output_queue.put(env.fake_tensordict())
+                output_queue.put((i, env.fake_tensordict()))
             elif msg == "init_shm":
                 shared_slots = data
                 output_queue.put(True)

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import multiprocessing
 import os
 import pickle
 import threading
@@ -84,6 +85,11 @@ class _DelayedCountingEnv(CountingEnv):
 
 def _round_robin_affinity(env_index, *, cpus):
     return (cpus[env_index % len(cpus)],)
+
+
+def _counting_env_with_affinity_report(env_index, reports):
+    reports.put((env_index, os.sched_getaffinity(0)))
+    return CountingEnv()
 
 
 class _ManyKeysCountingEnv(CountingEnv):
@@ -897,9 +903,12 @@ class TestAsyncEnvPool:
             partial(CountingEnv),
         ]
 
-    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
-    def test_specs(self, backend, make_envs):
-        env = self.make_env(makers=make_envs, backend=backend)
+    @pytest.mark.parametrize(
+        ("backend", "envs_per_worker"),
+        [("multiprocessing", 1), ("multiprocessing", 3), ("threading", 1)],
+    )
+    def test_specs(self, backend, envs_per_worker, make_envs):
+        env = AsyncEnvPool(make_envs, backend=backend, envs_per_worker=envs_per_worker)
         assert env.batch_size == (4,)
         try:
             if backend == "multiprocessing":
@@ -921,24 +930,38 @@ class TestAsyncEnvPool:
         not hasattr(os, "sched_setaffinity"),
         reason="CPU affinity requires Linux",
     )
-    def test_worker_affinity_callable(self, make_envs):
+    @pytest.mark.parametrize("envs_per_worker", [1, 3])
+    def test_worker_affinity_callable(self, make_envs, envs_per_worker):
         cpus = tuple(np.int64(cpu) for cpu in sorted(os.sched_getaffinity(0)))
         affinity = partial(_round_robin_affinity, cpus=cpus)
+        reports = multiprocessing.Queue()
         env = AsyncEnvPool(
-            make_envs,
+            [
+                partial(_counting_env_with_affinity_report, env_index, reports)
+                for env_index in range(len(make_envs))
+            ],
             backend="multiprocessing",
             exchange="queue",
             worker_affinity=affinity,
+            envs_per_worker=envs_per_worker,
         )
         try:
             expected = [
-                {cpus[env_index % len(cpus)]} for env_index in range(env.num_envs)
+                {cpus[worker_index % len(cpus)]}
+                for worker_index in range(env.num_workers)
             ]
             assert [
                 os.sched_getaffinity(process.pid) for process in env.threads
             ] == expected
+            factory_masks = dict(reports.get(timeout=10) for _ in make_envs)
+            assert factory_masks == {
+                env_index: expected[env_index // envs_per_worker]
+                for env_index in range(len(make_envs))
+            }
         finally:
             env._maybe_shutdown()
+            reports.close()
+            reports.join_thread()
 
     @pytest.mark.skipif(
         not hasattr(os, "sched_setaffinity"),
@@ -960,7 +983,10 @@ class TestAsyncEnvPool:
         not hasattr(os, "sched_setaffinity"),
         reason="CPU affinity requires Linux",
     )
-    def test_worker_affinity_error_shuts_down_workers(self, make_envs, monkeypatch):
+    @pytest.mark.parametrize("envs_per_worker", [1, 3])
+    def test_worker_affinity_error_shuts_down_workers(
+        self, make_envs, monkeypatch, envs_per_worker
+    ):
         available_cpu = next(iter(os.sched_getaffinity(0)))
         unavailable_cpu = max(os.sched_getaffinity(0)) + 1
         processes = []
@@ -982,7 +1008,9 @@ class TestAsyncEnvPool:
                 make_envs,
                 backend="multiprocessing",
                 exchange="queue",
-                worker_affinity=[(available_cpu,)] * len(make_envs),
+                worker_affinity=[(available_cpu,)]
+                * ((len(make_envs) + envs_per_worker - 1) // envs_per_worker),
+                envs_per_worker=envs_per_worker,
             )
 
         assert processes
@@ -992,17 +1020,19 @@ class TestAsyncEnvPool:
         ("backend", "worker_affinity", "match"),
         [
             ("threading", [(0,)] * 4, "only supported"),
-            ("multiprocessing", [(0,)], "one CPU mask per environment"),
+            ("multiprocessing", [(0,)], "one CPU mask per worker process"),
         ],
     )
+    @pytest.mark.parametrize("envs_per_worker", [1, 3])
     def test_worker_affinity_validation(
-        self, make_envs, backend, worker_affinity, match
+        self, make_envs, backend, worker_affinity, match, envs_per_worker
     ):
         with pytest.raises(ValueError, match=match):
             AsyncEnvPool(
                 make_envs,
                 backend=backend,
                 worker_affinity=worker_affinity,
+                envs_per_worker=envs_per_worker,
             )
 
     @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
@@ -1070,6 +1100,57 @@ class TestAsyncEnvPool:
             assert "observation" in message
         finally:
             env._maybe_shutdown()
+
+    @pytest.mark.parametrize("exchange", ["queue", "shm"])
+    @set_capture_non_tensor_stack(False)
+    def test_multiprocessing_envs_per_worker(self, exchange):
+        makers = [partial(CountingEnv, start_val=index) for index in range(5)]
+        env = AsyncEnvPool(
+            makers,
+            backend="multiprocessing",
+            exchange=exchange,
+            envs_per_worker=2,
+        )
+        try:
+            assert env.num_workers == 3
+            assert len(env.threads) == 3
+
+            reset = env.reset()
+            torch.testing.assert_close(
+                reset["observation"].squeeze(-1),
+                torch.arange(5, dtype=torch.int32),
+            )
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            step, next_step = env.step_and_maybe_reset(reset)
+            torch.testing.assert_close(
+                step["next", "observation"].squeeze(-1),
+                torch.arange(1, 6, dtype=torch.int32),
+            )
+            assert list(next_step[env._env_idx_key]) == list(range(5))
+
+            env.async_reset_send(env_index=4)
+            per_env_reset = env.async_reset_recv(env_index=4)
+            assert per_env_reset[env._env_idx_key] == 4
+        finally:
+            env._maybe_shutdown()
+
+    @pytest.mark.parametrize("envs_per_worker", [0, -1, 1.5, True])
+    def test_invalid_envs_per_worker(self, make_envs, envs_per_worker):
+        with pytest.raises(ValueError, match="positive integer"):
+            AsyncEnvPool(
+                make_envs,
+                backend="multiprocessing",
+                exchange="queue",
+                envs_per_worker=envs_per_worker,
+            )
+
+    def test_envs_per_worker_rejects_threading(self, make_envs):
+        with pytest.raises(ValueError, match="only supported"):
+            AsyncEnvPool(
+                make_envs,
+                backend="threading",
+                envs_per_worker=2,
+            )
 
     @set_capture_non_tensor_stack(False)
     def test_shared_memory_full_batch_preserves_env_order(self):

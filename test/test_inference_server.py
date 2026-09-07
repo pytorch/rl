@@ -2318,14 +2318,18 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert collected >= 50
 
-    def test_pause_for_torch_compile(self):
+    @pytest.mark.parametrize(
+        ("env_backend", "envs_per_worker"), [("threading", 1), ("multiprocessing", 2)]
+    )
+    def test_pause_for_torch_compile(self, env_backend, envs_per_worker):
         """Compilation can run while a started collector is quiescent."""
         collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * 4,
+            create_env_fn=[_counting_env_factory] * 5,
             policy=_make_counting_policy(),
             frames_per_batch=10,
             total_frames=-1,
-            env_backend="threading",
+            env_backend=env_backend,
+            envs_per_worker=envs_per_worker,
         )
         iterator = iter(collector)
         next(iterator)
@@ -2400,36 +2404,41 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert total >= 20
 
-    def test_worker_affinity_validation_is_eager(self):
-        with pytest.raises(ValueError, match="one CPU mask per environment"):
+    @pytest.mark.parametrize("envs_per_worker", [1, 2])
+    def test_worker_affinity_validation_is_eager(self, envs_per_worker):
+        with pytest.raises(ValueError, match="one CPU mask per worker process"):
             AsyncBatchedCollector(
-                create_env_fn=[_counting_env_factory] * 2,
+                create_env_fn=[_counting_env_factory] * 3,
                 policy=_make_counting_policy(),
                 frames_per_batch=10,
                 total_frames=10,
                 env_backend="multiprocessing",
                 worker_affinity=[(0,)],
+                envs_per_worker=envs_per_worker,
             )
 
     @pytest.mark.skipif(
         not hasattr(os, "sched_setaffinity"),
         reason="CPU affinity requires Linux",
     )
-    def test_cpu_affinity(self):
+    @pytest.mark.parametrize("envs_per_worker", [1, 2])
+    def test_cpu_affinity(self, envs_per_worker):
         """Worker processes and driver threads use their configured masks."""
         original_affinity = os.sched_getaffinity(0)
         cpus = sorted(original_affinity)
         driver_affinity = (cpus[0],)
         worker_affinity = (cpus[-1],)
         collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * 2,
+            create_env_fn=[_counting_env_factory] * 3,
             policy=_make_counting_policy(),
             frames_per_batch=10,
             total_frames=10,
             max_batch_size=2,
             env_backend="multiprocessing",
-            worker_affinity=[worker_affinity] * 2,
+            worker_affinity=[worker_affinity]
+            * ((3 + envs_per_worker - 1) // envs_per_worker),
             driver_affinity=driver_affinity,
+            envs_per_worker=envs_per_worker,
         )
         try:
             collector._ensure_started()
@@ -2448,6 +2457,27 @@ class TestAsyncBatchedCollector:
                 == set(driver_affinity)
                 for input_queue in collector.env.input_queue
             )
+        finally:
+            collector.shutdown()
+
+    def test_multiprocessing_envs_per_worker(self):
+        """Grouped workers collect every stream with one coordinator each."""
+        num_envs = 5
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy=_make_counting_policy(),
+            frames_per_batch=25,
+            total_frames=25,
+            max_batch_size=num_envs,
+            env_backend="multiprocessing",
+            envs_per_worker=2,
+        )
+        try:
+            batch = next(iter(collector))
+            env_ids = {int(env_id) for env_id in batch["env_index"]}
+            assert env_ids == set(range(num_envs))
+            assert collector.env.num_workers == 3
+            assert len(collector._workers) == 3
         finally:
             collector.shutdown()
 
