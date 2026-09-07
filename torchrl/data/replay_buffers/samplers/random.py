@@ -284,6 +284,9 @@ class ConsumingSampler(Sampler):
             return 0
         return int(self._live_mask[: self._known_storage_len].sum().item())
 
+    def _sampleable_count(self, storage: Storage, batch_size: int) -> int:
+        return self._num_sampleable(storage)
+
     def _pop_consumed_indices(
         self, storage: Storage | None = None, max_count: int | None = None
     ) -> torch.Tensor:
@@ -501,6 +504,10 @@ class SamplerWithoutReplacement(Sampler):
 
     def _storage_len(self, storage):
         return len(storage)
+
+    def can_sample(self, storage: Storage, batch_size: int) -> bool:
+        """Returns whether the storage can provide the requested batch."""
+        return len(storage) >= batch_size if self.drop_last else len(storage) > 0
 
     def sample(
         self, storage: Storage, batch_size: int

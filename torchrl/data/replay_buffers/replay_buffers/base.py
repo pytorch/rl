@@ -1086,6 +1086,23 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         return stats
 
     @_maybe_delay_init
+    def can_sample(self, batch_size: int | None = None) -> bool:
+        """Returns whether the replay buffer can serve a sample batch.
+
+        Args:
+            batch_size (int, optional): requested batch size. Defaults to the
+                batch size configured on the replay buffer.
+        """
+        if batch_size is None:
+            batch_size = self._batch_size
+        if batch_size is None:
+            raise RuntimeError(
+                "batch_size not specified. Configure it on the replay buffer "
+                "or pass it to can_sample()."
+            )
+        return self._sampler.can_sample(self._storage, batch_size)
+
+    @_maybe_delay_init
     def submit_update_if_present(
         self,
         *,

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import textwrap
+from collections import OrderedDict
 from typing import Any
 
 import numpy as np
@@ -95,10 +96,18 @@ class StorageEnsemble(Storage):
         return self._storages[sub]
 
     def state_dict(self) -> dict[str, Any]:
-        raise NotImplementedError
+        return OrderedDict(
+            (str(index), storage.state_dict())
+            for index, storage in enumerate(self._storages)
+        )
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        raise NotImplementedError
+        for index, storage in enumerate(self._storages):
+            storage.load_state_dict(state_dict[str(index)])
+
+    def _empty(self) -> None:
+        for storage in self._storages:
+            storage._empty()
 
     _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
 
