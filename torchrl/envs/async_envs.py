@@ -76,13 +76,16 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         stack (Literal["dense", "maybe_dense", "lazy"], optional):
             The method to use for stacking environment outputs. Defaults to `"dense"`.
         exchange (Literal["queue", "shm", "auto"], optional): Data exchange
-            used by the multiprocessing backend. ``"shm"`` stores fixed-shape
-            tensor data in shared slots and sends only readiness descriptors
-            through queues; it requires identical, fixed-shape, CPU, tensor-only
-            schemas across workers. ``"auto"`` selects ``"shm"`` when the env
-            schema supports it and falls back to ``"queue"`` otherwise (the
-            resolution is reported by :attr:`resolved_exchange` and logged on
-            fallback). Defaults to ``"queue"``.
+            used by the multiprocessing backend. ``"queue"`` supports dynamic
+            data and copies received tensors out of multiprocessing shared
+            memory so retaining results does not retain one mapping per tensor.
+            ``"shm"`` stores fixed-shape tensor data in shared slots and sends
+            only readiness descriptors through queues; it requires identical,
+            fixed-shape, CPU, tensor-only schemas across workers. ``"auto"``
+            selects ``"shm"`` when the env schema supports it and falls back to
+            ``"queue"`` otherwise (the resolution is reported by
+            :attr:`resolved_exchange` and logged on fallback). Defaults to
+            ``"queue"``.
 
             .. warning::
                 The default will change from ``"queue"`` to ``"auto"`` in
@@ -777,6 +780,16 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             track_action=track_action,
         )
 
+    def _stack_queue_results(self, results) -> TensorDictBase:
+        result = self._stack_func(results)
+        if isinstance(result, LazyStackedTensorDict):
+            # A lazy stack retains the individual TensorDicts reconstructed by
+            # multiprocessing.Queue, and therefore one shared-memory mapping
+            # per tensor. Clone its constituents into process-private storage;
+            # dense stacks already own their newly allocated tensor storage.
+            result = result.clone()
+        return result
+
     def async_step_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
     ) -> None:
@@ -807,7 +820,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     ) -> TensorDictBase:
         if env_index is not None:
             if self._slot_exchange is None:
-                return self._per_env_step_queues[env_index].get()
+                return self._per_env_step_queues[env_index].get().clone()
             descriptor = self._slot_exchange.receive_one(
                 self._per_env_step_queues[env_index], track_action=True
             )
@@ -833,7 +846,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             return result
         r, idx = self._sort_results(r)
         self._busy.difference_update(idx)
-        return self._stack_func(r)
+        return self._stack_queue_results(r)
 
     def _async_private_step_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
@@ -883,7 +896,8 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if env_index is not None:
             if self._slot_exchange is None:
-                return self._per_env_step_reset_queues[env_index].get()
+                result, next_result = self._per_env_step_reset_queues[env_index].get()
+                return result.clone(), next_result.clone()
             descriptor = self._slot_exchange.receive_one(
                 self._per_env_step_reset_queues[env_index], track_action=True
             )
@@ -910,7 +924,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         r, r_ = zip(*r)
         r, r_, idx = self._sort_results(r, r_)
         self._busy.difference_update(idx)
-        return self._stack_func(r), self._stack_func(r_)
+        return self._stack_queue_results(r), self._stack_queue_results(r_)
 
     def async_reset_send(
         self,
@@ -943,7 +957,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     ) -> TensorDictBase:
         if env_index is not None:
             if self._slot_exchange is None:
-                return self._per_env_reset_queues[env_index].get()
+                return self._per_env_reset_queues[env_index].get().clone()
             descriptor = self._slot_exchange.receive_one(
                 self._per_env_reset_queues[env_index], track_action=False
             )
@@ -969,7 +983,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             return result
         r, idx = self._sort_results(r)
         self._busy.difference_update(idx)
-        return self._stack_func(r)
+        return self._stack_queue_results(r)
 
     def _async_private_reset_send(
         self,
