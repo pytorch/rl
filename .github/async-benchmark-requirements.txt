@@ -2,6 +2,7 @@
 # Use stable wheels so a cache eviction cannot depend on expired nightly wheels.
 # TensorDict source is pinned in benchmarks.yml; bump the trend version with this lock.
 cloudpickle==3.1.2
+cmake==4.4.0
 cuda-bindings==12.9.7
 cuda-pathfinder==1.8.1
 cuda-toolkit==12.6.3
@@ -45,11 +46,13 @@ pytest-benchmark==5.2.3
 pytest-timeout==2.4.0
 pyvers==0.2.3
 setuptools==83.0.0
+setuptools-scm==10.2.0
 sympy==1.14.0
 tomli==2.4.1
 torch==2.14.0+cu126
 tqdm==4.68.4
 triton==3.8.0
 typing-extensions==4.16.0
+vcs-versioning==2.2.2
 wheel==0.47.0
 zipp==4.1.0
