@@ -79,8 +79,12 @@ nightly wheel retention. The snapshot
 uses the [Ubuntu snapshot service](https://snapshot.ubuntu.com/). System package
 versions and the GPU model/driver are recorded alongside the Python environment. CPU and GPU are separate series. Dependency or workload changes
 must start a new trend version; do not present them as collector improvements.
+The source checkout intentionally tests TensorDict development code, whose base
+version metadata can precede TorchRL's declared stable release floor. `pip check`
+runs before installing the source checkout; source compatibility is exercised by
+the benchmark suites, not claimed from that metadata check.
 The full nightly suite uses a matching nightly PyTorch/torchvision pair, validates
-installed dependencies with `pip check`, and retains its
+the third-party environment with `pip check`, and retains its
 [existing dashboard](https://pytorch.org/rl/dev/bench/).
 
 ## Running and merge order
