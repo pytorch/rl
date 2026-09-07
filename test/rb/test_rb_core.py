@@ -1248,6 +1248,47 @@ class _BlockingPrefetchCollate:
         return torch.stack(data)
 
 
+class _OrderedUpdateReplayBuffer(TensorDictReplayBuffer):
+    def __init__(self, **kwargs):
+        self.events = []
+        self.prefetch_started = threading.Event()
+        self.release_prefetch = threading.Event()
+        self.update_started = threading.Event()
+        self.release_update = threading.Event()
+        self.sample_after_update_started = threading.Event()
+        self.sample_after_update = None
+        self._sample_calls = 0
+        self._sample_calls_lock = threading.Lock()
+        super().__init__(**kwargs)
+
+    def _sample(self, batch_size):
+        with self._sample_calls_lock:
+            self._sample_calls += 1
+            call = self._sample_calls
+        self.events.append(f"sample-{call}-start")
+        if call in (2, 3):
+            if call == 3:
+                self.prefetch_started.set()
+            if not self.release_prefetch.wait(timeout=5):
+                raise RuntimeError("Timed out waiting to release prefetched samples.")
+        elif call >= 4:
+            self.sample_after_update_started.set()
+        result = super()._sample(batch_size)
+        if call >= 4:
+            self.sample_after_update = result[0]
+        self.events.append(f"sample-{call}-end")
+        return result
+
+    def update_if_present(self, **kwargs):
+        self.events.append("update-start")
+        self.update_started.set()
+        if not self.release_update.wait(timeout=5):
+            raise RuntimeError("Timed out waiting to release the update.")
+        result = super().update_if_present(**kwargs)
+        self.events.append("update-end")
+        return result
+
+
 def _make_replay_buffer_with_blocked_prefetch(seed=0):
     collate = _BlockingPrefetchCollate()
     replay_buffer = ReplayBuffer(
@@ -1261,6 +1302,123 @@ def _make_replay_buffer_with_blocked_prefetch(seed=0):
     replay_buffer.sample()
     assert collate.prefetch_started.wait(timeout=5)
     return replay_buffer, collate
+
+
+def test_replay_buffer_orders_submitted_updates_with_prefetch():
+    replay_buffer = _OrderedUpdateReplayBuffer(
+        storage=LazyTensorStorage(8),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+        batch_size=8,
+        prefetch=2,
+    )
+    index = replay_buffer.extend(TensorDict({"obs": torch.zeros(8)}, batch_size=[8]))
+    generation = replay_buffer.writer.generations_of(index)
+    replay_buffer.sample()
+    assert replay_buffer.prefetch_started.wait(timeout=5)
+
+    future = replay_buffer.submit_update_if_present(
+        index=index,
+        generation=generation,
+        patch={"obs": torch.ones(8)},
+    )
+    assert not replay_buffer.update_started.wait(timeout=0.05)
+    replay_buffer.release_prefetch.set()
+    assert replay_buffer.update_started.wait(timeout=5)
+
+    # Consume the two samples that preceded the update. Their replacements
+    # have been submitted but must wait for the update barrier.
+    replay_buffer.sample()
+    replay_buffer.sample()
+    sample_thread = threading.Thread(target=replay_buffer.sample)
+    sample_thread.start()
+    assert not replay_buffer.sample_after_update_started.wait(timeout=0.05)
+
+    replay_buffer.release_update.set()
+    sample_thread.join(timeout=5)
+    assert not sample_thread.is_alive()
+    assert future.result(timeout=5).updated_count == 8
+    assert (replay_buffer.sample_after_update["obs"] == 1).all()
+    assert max(
+        replay_buffer.events.index("sample-2-end"),
+        replay_buffer.events.index("sample-3-end"),
+    ) < replay_buffer.events.index("update-start")
+    assert replay_buffer.events.index("update-end") < replay_buffer.events.index(
+        "sample-4-start"
+    )
+    replay_buffer.shutdown()
+
+
+def test_replay_buffer_synchronize_keeps_prefetched_results_and_checkpoints_updates():
+    replay_buffer = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(8),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+        batch_size=4,
+        prefetch=2,
+        generator=torch.Generator().manual_seed(0),
+    )
+    index = replay_buffer.extend(TensorDict({"obs": torch.zeros(8)}, batch_size=[8]))
+    generation = replay_buffer.writer.generations_of(index)
+    replay_buffer.sample()
+    queued = len(replay_buffer._prefetch_queue)
+    prefetched = []
+    for queued_future in replay_buffer._prefetch_queue:
+        queued_data, queued_info = queued_future.result()
+        prefetched.append((queued_data.clone(), queued_info["index"].clone()))
+    future = replay_buffer.submit_update_if_present(
+        index=index,
+        generation=generation,
+        patch={"obs": torch.ones(8)},
+    )
+
+    replay_buffer.synchronize()
+    assert future.result().updated_count == 8
+    assert len(replay_buffer._prefetch_queue) == queued
+    for expected_data, expected_index in prefetched:
+        actual_data, actual_info = replay_buffer.sample(return_info=True)
+        assert_allclose_td(actual_data.select("obs"), expected_data.select("obs"))
+        assert torch.equal(actual_info["index"], expected_index)
+
+    second = replay_buffer.submit_update_if_present(
+        index=index,
+        generation=generation,
+        patch={"obs": torch.full((8,), 2.0)},
+    )
+    state = replay_buffer.state_dict()
+    assert second.done()
+
+    restored = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(8),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+        batch_size=4,
+        prefetch=2,
+    )
+    restored.load_state_dict(state)
+    assert (restored[:]["obs"] == 2).all()
+    assert len(restored._prefetch_queue) == queued
+    replay_buffer.shutdown()
+    restored.shutdown()
+
+
+def test_replay_buffer_shutdown_propagates_update_errors_and_is_idempotent():
+    replay_buffer = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(4),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    index = replay_buffer.extend(TensorDict({"obs": torch.zeros(4)}, batch_size=[4]))
+    generation = replay_buffer.writer.generations_of(index)
+    future = replay_buffer.submit_update_if_present(
+        index=index,
+        generation=generation,
+        patch={"missing": torch.ones(4)},
+    )
+
+    with pytest.raises(KeyError, match="missing"):
+        replay_buffer.shutdown()
+    assert future.done()
+    assert not replay_buffer.is_alive
+    replay_buffer.shutdown()
+    with pytest.raises(RuntimeError, match="cannot be sampled"):
+        replay_buffer.sample(1)
 
 
 def _release_prefetch_when_futures_lock_is_held(

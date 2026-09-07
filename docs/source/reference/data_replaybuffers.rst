@@ -138,6 +138,35 @@ writer does not track generations.
     )
     print(f"updated {result.updated_count}, skipped {result.stale_count} stale records")
 
+Ordered asynchronous updates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When sampling is prefetched, the conditional write can be submitted with
+:meth:`~torchrl.data.ReplayBuffer.submit_update_if_present`. The replay buffer
+orders the write after the samples already in its prefetch queue and orders
+newly prefetched samples after the write. Prefetch workers otherwise remain
+parallel, so callers do not need a separate replay thread or queue to overlap
+sampling and writeback with learner work.
+
+.. code-block:: python
+
+    future = buffer.submit_update_if_present(
+        index=sample["index"],
+        generation=sample["index_generation"],
+        patch={"recurrent_state": refreshed},
+    )
+    # Continue learner work. Inspect the result only when it is needed.
+    result = future.result()
+
+The submitted tensors are retained by reference and must remain immutable
+until the future completes. Clone outputs stored in reusable memory, including
+static CUDA-graph output buffers, before submitting them. Call
+:meth:`~torchrl.data.ReplayBuffer.synchronize` at an explicit execution
+boundary to wait for both updates and prefetched samples without consuming the
+prefetched results. Checkpointing does this automatically, and
+:meth:`~torchrl.data.ReplayBuffer.shutdown` additionally closes both executor
+pools and propagates background errors.
+
 Version-compared updates
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
