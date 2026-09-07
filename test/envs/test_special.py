@@ -872,6 +872,9 @@ class TestAsyncEnvPool:
         env = self.make_env(makers=make_envs, backend=backend)
         assert env.batch_size == (4,)
         try:
+            if backend == "multiprocessing":
+                assert env._env_batch_sizes == [torch.Size([])] * 4
+            assert env.env_batch_sizes == [torch.Size([])] * 4
             r = env.reset()
             assert r.shape == env.shape
             s = env.rand_step(r)

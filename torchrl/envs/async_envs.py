@@ -704,6 +704,9 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._child_specs = []
         for i in range(num_threads):
             self._child_specs.append(self.output_queue[i].get())
+        # Batch sizes are already available from the worker specs. Caching them
+        # here avoids a later queue round trip that may block behind env work.
+        self._env_batch_sizes = [torch.Size(spec.shape) for spec in self._child_specs]
         specs = torch.stack(list(self._child_specs))
         output_spec = specs["output_spec"]
         input_spec = specs["input_spec"]
