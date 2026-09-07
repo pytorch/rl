@@ -44,8 +44,8 @@ def _validate_inference_transport_selection(
             f"transport={kind!r} is incompatible with "
             f"service_backend={service_backend!r}."
         )
-    if (request_spec is None) != (response_spec is None):
-        raise ValueError("request_spec and response_spec must be provided together.")
+    if request_spec is None and response_spec is not None:
+        raise ValueError("response_spec requires request_spec.")
     if kind == "shared_memory" and request_spec is None:
         raise ValueError(
             "transport='shared_memory' requires request_spec and response_spec."

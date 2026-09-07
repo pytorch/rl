@@ -125,6 +125,16 @@ def _make_policy():
     )
 
 
+class _BatchSizeModule(nn.Module):
+    def forward(self, value):
+        return value + value.new_tensor(value.shape[0])
+
+
+class _RandomModule(nn.Module):
+    def forward(self, value):
+        return torch.rand_like(value)
+
+
 # =============================================================================
 # Tests: core abstractions (Commit 1)
 # =============================================================================
@@ -390,6 +400,104 @@ class TestInferenceServerCore:
             for r in results:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
+
+    def test_static_batch_pads_and_slices_results(self):
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        server = InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=4,
+            static_batch_size=4,
+            request_spec=request_spec,
+            policy_device=device,
+            output_device="cpu",
+        )
+        transport = server.transport
+        futures = [
+            transport.submit(TensorDict({"observation": torch.tensor([value])}))
+            for value in (1.0, 2.0)
+        ]
+
+        with server:
+            results = [future.result(timeout=5.0) for future in futures]
+
+        assert len(results) == 2
+        torch.testing.assert_close(results[0]["action"], torch.tensor([5.0]))
+        torch.testing.assert_close(results[1]["action"], torch.tensor([6.0]))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_randomness_advances_across_replays(self):
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            _RandomModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(64)})
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ):
+            client = transport.client()
+            first = client(request_spec.clone())["action"]
+            second = client(request_spec.clone())["action"]
+
+        assert not torch.equal(first, second)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_recaptures_only_after_storage_changes(self):
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            nn.Linear(1, 1, bias=False),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        with torch.no_grad():
+            policy.module.weight.fill_(1.0)
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ) as server:
+            client = transport.client()
+            request = TensorDict({"observation": torch.tensor([2.0])})
+            graph = server._cudagraph_model
+
+            def copy_weight(model):
+                with torch.no_grad():
+                    model.module.weight.fill_(3.0)
+
+            server.update_model(copy_weight)
+            assert server._cudagraph_model is graph
+            torch.testing.assert_close(
+                client(request.clone())["action"], torch.tensor([6.0])
+            )
+
+            def replace_weight(model):
+                model.module.weight = nn.Parameter(
+                    torch.full_like(model.module.weight, 4.0)
+                )
+
+            server.update_model(replace_weight)
+            assert server._cudagraph_model is not graph
+            torch.testing.assert_close(
+                client(request.clone())["action"], torch.tensor([8.0])
+            )
 
     def test_batch_of_requests_with_mixed_root_device_metadata(self):
         transport = _MockTransport()
@@ -2377,7 +2485,9 @@ class TestAsyncBatchedCollector:
             total_frames=20,
             env_backend="threading",
             server_config=InferenceServerConfig(
-                service_backend="process", max_batch_size=2
+                service_backend="process",
+                max_batch_size=2,
+                static_batch_size=2,
             ),
         )
         total = 0
@@ -2444,7 +2554,7 @@ class TestAsyncBatchedCollector:
             policy=_make_counting_policy(),
             frames_per_batch=10,
             total_frames=20,
-            server_config=InferenceServerConfig(max_batch_size=2),
+            server_config=InferenceServerConfig(max_batch_size=2, static_batch_size=2),
             device_config=InferenceDeviceConfig(
                 policy_device="cpu",
                 output_device="cpu",

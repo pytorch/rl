@@ -83,6 +83,53 @@ threads in the same process:
 
     server.shutdown()
 
+Static CUDA-graph batches
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+CUDA policies can remove Python dispatch and kernel-launch overhead by setting
+``static_batch_size``. The server clones the last real request into any pad
+rows, replays a :class:`tensordict.nn.CudaGraphModule` at the fixed size, and
+discards padded outputs before copying results back to actors. The static size
+must be at least ``max_batch_size``:
+
+.. code-block:: python
+
+    import torch
+    from tensordict import TensorDict
+
+    request_spec = TensorDict(
+        {
+            "observation": torch.zeros(64),
+            "state": torch.zeros(32 * 64),
+            "belief": torch.zeros(512),
+            "previous_action": torch.zeros(20),
+            "is_init": torch.zeros(1, dtype=torch.bool),
+        }
+    )
+    server = InferenceServer(
+        policy,
+        ThreadingTransport(),
+        max_batch_size=64,
+        static_batch_size=64,
+        request_spec=request_spec,
+        policy_device="cuda:0",
+        output_device="cpu",
+    )
+    server.start()  # warm-up and capture finish before the worker starts
+
+The representative ``request_spec`` is required when constructing a server
+directly. :class:`~torchrl.collectors.AsyncBatchedCollector` derives it from
+the environment specs and performs capture before starting its inference and
+coordinator threads. Recurrent tensor inputs such as ``state``, ``belief``,
+and ``is_init`` remain inside the graph. Random CUDA operations advance their
+generator state across replays rather than repeating captured samples.
+
+In-place parameter copies preserve the captured graph. If
+:meth:`InferenceServer.update_model` detects that parameter or buffer storage
+has been replaced, it captures a new graph with the original request layout.
+The interaction type is also fixed at capture time; later requests using a
+different explicit interaction type are rejected.
+
 Shared-memory transport
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -131,8 +178,8 @@ Structured Configuration
 Server execution, batching, and device placement are grouped into two
 dataclasses instead of loose keyword arguments: :class:`InferenceServerConfig`
 collects the execution ``service_backend`` (``"thread"`` or ``"process"``) and the
-batching/instrumentation knobs (``max_batch_size``, ``min_batch_size``,
-``timeout``, ``collect_stats``, ``stats_window_size``), and
+batching/instrumentation knobs (``max_batch_size``, ``static_batch_size``,
+``min_batch_size``, ``timeout``, ``collect_stats``, ``stats_window_size``), and
 :class:`InferenceDeviceConfig` describes device placement across the
 collection pipeline (``policy_device``, ``output_device``, ``env_device``,
 ``storing_device``). Both :class:`InferenceServer` and
