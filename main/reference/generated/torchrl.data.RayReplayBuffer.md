@@ -442,6 +442,61 @@ The storage of the replay buffer.
 
 The storage must be an instance of [`Storage`](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage).
 
+submit_update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → Future[[ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)]
+
+Submits an ordered conditional update on a background thread.
+
+The update runs after all samples that were already prefetched when
+this method was called. Samples prefetched after this call wait for
+the update, while unrelated prefetch work remains parallel. Multiple
+submitted updates execute in submission order.
+
+Inputs are retained by reference until the returned future completes.
+Callers must not mutate `index`, `generation`, `patch` or
+`version` in that interval. In particular, values backed by static
+CUDA-graph output buffers must be cloned before submission.
+
+Keyword arguments have the same meaning as in
+`update_if_present()`.
+
+Returns:
+
+A `concurrent.futures.Future` whose result is the
+[`ConditionalUpdateResult`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult) returned by
+`update_if_present()`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage,
+... TensorDictReplayBuffer,
+... TensorDictRoundRobinWriter,
+... )
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(4),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... )
+>>> index = rb.extend(
+... TensorDict({"value": torch.zeros(4)}, batch_size=[4])
+... )
+>>> generation = rb.writer.generations_of(index)
+>>> future = rb.submit_update_if_present(
+... index=index,
+... generation=generation,
+... patch={"value": torch.ones(4)},
+... )
+>>> future.result().updated_count
+4
+>>> rb.shutdown()
+```
+
+synchronize() → None[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.synchronize)
+
+Wait for pending work owned by the replay-buffer actor.
+
 *property*transform*: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*
 
 The transform of the replay buffer.
