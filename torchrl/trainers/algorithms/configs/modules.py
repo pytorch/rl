@@ -141,6 +141,59 @@ class DreamerV3MLPConfig(NetworkConfig):
 
 
 @dataclass
+class DreamerV3ImageEncoderConfig(NetworkConfig):
+    """Hydra configuration for :class:`~torchrl.modules.DreamerV3ImageEncoder`.
+
+    Example:
+        >>> import torch
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3ImageEncoderConfig
+        >>> cfg = DreamerV3ImageEncoderConfig(depth=8, mults=[1, 2])
+        >>> net = instantiate(cfg)
+        >>> image = torch.randint(0, 256, (4, 3, 16, 16), dtype=torch.uint8)
+        >>> assert net(image).shape == (4, 256)
+
+    .. seealso:: :class:`~torchrl.modules.DreamerV3ImageEncoder`
+    """
+
+    in_channels: int = 3
+    depth: int = 64
+    mults: list[int] = field(default_factory=partial(list, (2, 3, 4, 4)))
+    kernel_size: int = 5
+    norm_eps: float = 1e-4
+    device: Any = None
+    _target_: str = "torchrl.modules.DreamerV3ImageEncoder"
+
+
+@dataclass
+class DreamerV3ImageDecoderConfig(NetworkConfig):
+    """Hydra configuration for :class:`~torchrl.modules.DreamerV3ImageDecoder`.
+
+    Example:
+        >>> import torch
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3ImageDecoderConfig
+        >>> cfg = DreamerV3ImageDecoderConfig(
+        ...     in_features=12, image_shape=[3, 16, 16], depth=8, mults=[1, 2], num_blocks=2
+        ... )
+        >>> net = instantiate(cfg)
+        >>> assert net(torch.randn(4, 12)).shape == (4, 3, 16, 16)
+
+    .. seealso:: :class:`~torchrl.modules.DreamerV3ImageDecoder`
+    """
+
+    in_features: int = MISSING
+    image_shape: list[int] = field(default_factory=partial(list, (3, 64, 64)))
+    depth: int = 64
+    mults: list[int] = field(default_factory=partial(list, (2, 3, 4, 4)))
+    kernel_size: int = 5
+    num_blocks: int = 8
+    norm_eps: float = 1e-4
+    device: Any = None
+    _target_: str = "torchrl.modules.DreamerV3ImageDecoder"
+
+
+@dataclass
 class NormConfig(ConfigBase):
     """A class to configure a normalization layer.
 

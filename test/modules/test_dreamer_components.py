@@ -30,6 +30,8 @@ from torchrl.modules.models.model_based import (
     DreamerActor,
     DreamerV3BlockGRU,
     DreamerV3BlockGRUCell,
+    DreamerV3ImageDecoder,
+    DreamerV3ImageEncoder,
     DreamerV3MLP,
     ObsDecoder,
     ObsEncoder,
@@ -366,6 +368,42 @@ class TestDreamerV3Components:
         )
         output = module(torch.randn(3, 2), torch.randn(3, 4))
         torch.testing.assert_close(output, torch.zeros_like(output))
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("num_blocks", [1, 2])
+    def test_image_encoder_decoder(self, device, num_blocks):
+        encoder = DreamerV3ImageEncoder(
+            depth=4, mults=(1, 2), kernel_size=5, device=device
+        )
+        image = torch.randint(
+            0, 256, (2, 3, 3, 16, 16), dtype=torch.uint8, device=device
+        )
+        features = encoder(image)
+        # Two stride-2 stages: 16x16 -> 4x4 with 4 * 2 channels.
+        assert encoder.output_features((3, 16, 16)) == 8 * 4 * 4
+        assert features.shape == (2, 3, 128)
+        # uint8 and [0, 1] float inputs are the same image.
+        torch.testing.assert_close(features, encoder(image.float() / 255.0))
+
+        decoder = DreamerV3ImageDecoder(
+            in_features=6 + 10,
+            image_shape=(3, 16, 16),
+            depth=4,
+            mults=(1, 2),
+            kernel_size=5,
+            num_blocks=num_blocks,
+            device=device,
+        )
+        state = torch.randn(2, 3, 6, device=device, requires_grad=True)
+        belief = torch.randn(2, 3, 10, device=device)
+        reco = decoder(state, belief)
+        assert reco.shape == (2, 3, 3, 16, 16)
+        reco.sum().backward()
+        assert state.grad.abs().sum() > 0
+        with pytest.raises(ValueError, match="divisible"):
+            DreamerV3ImageDecoder(
+                in_features=16, image_shape=(3, 12, 16), mults=(1, 2, 3)
+            )
 
     @pytest.mark.parametrize("device", get_default_devices())
     def test_block_gru_reference_fixture(self, device):
