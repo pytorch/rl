@@ -22,6 +22,7 @@ def _load_script(name: str):
 
 comparison = _load_script("compare_pr_benchmarks.py")
 comments = _load_script("comment_pr_benchmarks.py")
+async_summary = _load_script("summarize_async_benchmarks.py")
 
 
 def _document(durations_by_name: dict[str, float]) -> dict:
@@ -212,6 +213,33 @@ def test_workflow_runs_only_four_primary_measurements():
     assert "\n  finalize:" not in workflow
     assert "same-runner" not in workflow
     assert "needs: benchmark" in workflow
+
+
+@pytest.mark.parametrize("failure", [None, "missing", "budget", "series"])
+def test_async_trends_use_complete_repeated_measurements(tmp_path, failure):
+    for repeat, duration in enumerate([1.0, 2.0, 4.0], 1):
+        document = _document({"collection": duration})
+        document["benchmarks"][0]["extra_info"] = {"transitions": 1024}
+        if repeat == 3:
+            if failure == "missing":
+                continue
+            if failure == "budget":
+                document["benchmarks"][0]["extra_info"]["transitions"] = 2048
+            if failure == "series":
+                document["benchmarks"] = []
+        (tmp_path / f"async-{repeat}.json").write_text(json.dumps(document))
+    summary = tmp_path / "summary.md"
+    if failure:
+        with pytest.raises(RuntimeError):
+            async_summary.summarize(tmp_path, summary)
+        assert not (tmp_path / "trend.json").exists()
+        return
+    async_summary.summarize(tmp_path, summary)
+    [point] = json.loads((tmp_path / "trend.json").read_text())
+    assert point["value"] == 512
+    assert point["unit"] == "frames/s"
+    assert point["range"] == "256.0-1024.0"
+    assert "confidence intervals" in summary.read_text()
 
 
 if __name__ == "__main__":

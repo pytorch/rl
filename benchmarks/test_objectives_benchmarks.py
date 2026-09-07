@@ -464,7 +464,12 @@ def test_sac_speed(
 
 
 @pytest.mark.parametrize("backward", [None, "backward"])
-@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+# Cold TQC quantile kernels can exceed the default four-minute CI timeout.
+# This bounds compilation/warm-up; the timed steady-state workload is unchanged.
+@pytest.mark.parametrize(
+    "compile",
+    [False, pytest.param(True, marks=pytest.mark.timeout(900)), "reduce-overhead"],
+)
 def test_tqc_speed(
     benchmark,
     backward,

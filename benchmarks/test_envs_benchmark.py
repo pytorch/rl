@@ -269,7 +269,9 @@ def _async_pool_harvest(pool, num_transitions, max_get):
         # is ready without waiting. A finite timeout bounds the whole call
         # (#4184) and raises TimeoutError whenever recv lands while all envs
         # are mid-step, which is the normal state of this loop.
-        _, td_next = pool.async_step_and_maybe_reset_recv(min_get=1, max_get=max_get)
+        _, td_next = pool.async_step_and_maybe_reset_recv(
+            min_get=1, max_get=min(max_get, num_transitions - harvested)
+        )
         num_ready = td_next.shape[0]
         td_next["action"] = torch.ones(num_ready, 1)
         pool.async_step_and_maybe_reset_send(td_next)
@@ -311,7 +313,7 @@ def _async_pool_step_latencies(pool, num_transitions):
     latencies = []
     while len(latencies) < num_transitions:
         _, td_next = pool.async_step_and_maybe_reset_recv(
-            min_get=1, max_get=pool.num_envs
+            min_get=1, max_get=min(pool.num_envs, num_transitions - len(latencies))
         )
         observed_at = time.perf_counter()
         env_indices = td_next["env_index"]
