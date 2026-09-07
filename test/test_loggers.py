@@ -10,14 +10,16 @@ import multiprocessing as mp
 import os
 import os.path
 import pathlib
+import sys
 import tempfile
 import threading
 from time import sleep
 
 import pytest
 import torch
-from tensordict import MemoryMappedTensor
 
+import torchrl.record.loggers.wandb as wandb_logger_module
+from tensordict import MemoryMappedTensor
 from torchrl._comm import MailboxPeerClosedError
 from torchrl.checkpoint import Checkpoint
 from torchrl.data import LazyTensorStorage, ReplayBuffer
@@ -364,6 +366,34 @@ def wandb_tmp_logger(tmp_path):
     logger.experiment.finish()
     wandb.finish()
     del logger
+
+
+def test_wandb_base_url_used_for_login_and_init(monkeypatch):
+    calls = []
+
+    class Settings:
+        def __init__(self, *, base_url):
+            self.base_url = base_url
+
+    def login(*, host, key=None):
+        del key
+        calls.append(("login", host))
+
+    def init(**kwargs):
+        calls.append(("init", kwargs["settings"].base_url))
+        return argparse.Namespace(config={})
+
+    monkeypatch.setitem(
+        sys.modules,
+        "wandb",
+        argparse.Namespace(Settings=Settings, init=init, login=login),
+    )
+    monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+    base_url = "https://wandb.example.com"
+
+    WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
+
+    assert calls == [("login", base_url), ("init", base_url)]
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
