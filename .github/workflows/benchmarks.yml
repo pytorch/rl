@@ -2,6 +2,10 @@ name: Continuous Benchmark
 # The short, pinned async suite runs on relevant main merges. The full suite
 # remains nightly. Manual branch runs produce artifacts without changing trends.
 on:
+  pull_request:
+    paths:
+      - '.github/scripts/*benchmark*.py'
+      - '.github/workflows/benchmarks.yml'
   push:
     branches: [main]
     paths:
@@ -44,8 +48,22 @@ env:
 
 
 jobs:
+  validate-report:
+    name: Validate benchmark reporting
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.20'
+      - run: python -m pip install 'pytest==9.1.1'
+      - run: python -m pytest .github/scripts/test_pr_benchmark_workflow.py -q
 
   benchmark:
+    if: github.event_name != 'pull_request'
+    needs: validate-report
     name: ${{ matrix.device }} Pytest benchmark
     runs-on: linux.g5.4xlarge.nvidia.gpu
     timeout-minutes: 120
