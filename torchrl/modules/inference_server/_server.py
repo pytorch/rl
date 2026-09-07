@@ -1051,7 +1051,7 @@ def _process_server_entry(
                     weights = payload_in["weights"]
                     mark_weight_update = payload_in.get("mark_weight_update", True)
 
-                    def update_model(model):
+                    def update_model(model, weights=weights):
                         if hasattr(model, "load_policy_weights"):
                             model.load_policy_weights(weights)
                         else:
