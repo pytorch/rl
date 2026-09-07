@@ -9,6 +9,7 @@ import pickle
 import threading
 import warnings
 from functools import partial
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -895,6 +896,13 @@ class TestAsyncEnvPool:
         env = self.make_env(makers=make_envs, backend=backend)
         assert env.batch_size == (4,)
         try:
+            if backend == "multiprocessing":
+                with patch.object(
+                    type(env.input_queue[0]), "put", side_effect=AssertionError
+                ):
+                    assert env.env_batch_sizes == [torch.Size([])] * 4
+            else:
+                assert env.env_batch_sizes == [torch.Size([])] * 4
             r = env.reset()
             assert r.shape == env.shape
             s = env.rand_step(r)

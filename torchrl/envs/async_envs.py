@@ -707,6 +707,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._child_specs = []
         for i in range(num_threads):
             self._child_specs.append(self.output_queue[i].get())
+        # Batch sizes are already available from the worker specs. Caching them
+        # here avoids a later round trip over the input queues used for steps,
+        # which may block behind in-flight env work.
+        self._env_batch_sizes = [torch.Size(spec.shape) for spec in self._child_specs]
         specs = torch.stack(list(self._child_specs))
         output_spec = specs["output_spec"]
         input_spec = specs["input_spec"]
@@ -740,13 +744,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
 
     @property
     def env_batch_sizes(self) -> list[torch.Size]:
-        batch_sizes = getattr(self, "_env_batch_sizes", [])
-        if not batch_sizes:
-            for _env_idx in range(self.num_envs):
-                self.input_queue[_env_idx].put(("batch_size", None))
-                batch_sizes.append(self.output_queue[_env_idx].get())
-            self._env_batch_sizes = batch_sizes
-        return batch_sizes
+        return self._env_batch_sizes
 
     def _prepare_worker_data(
         self,
@@ -1089,8 +1087,6 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             elif msg == "init_shm":
                 shared_slots = data
                 output_queue.put(True)
-            elif msg == "batch_size":
-                output_queue.put(env.batch_size)
             elif msg == "reset":
                 if shared_slots is not None:
                     data = shared_slots[0].select(*data, strict=True)
