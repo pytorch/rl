@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import itertools
 import os
+import warnings
 
 from copy import copy
 from functools import partial
@@ -280,7 +281,7 @@ class TestTransformedEnv:
         assert specs == specs_after
 
     @pytest.mark.filterwarnings("error")
-    def test_nested_transformed_env(self):
+    def test_nested_transformed_env(self, monkeypatch):
         base_env = ContinuousActionVecMockEnv()
         t1 = RewardScaling(0, 1)
         t2 = RewardScaling(0, 2)
@@ -302,8 +303,20 @@ class TestTransformedEnv:
             assert isinstance(env.base_env.transform, RewardScaling)
             assert isinstance(env.transform, RewardScaling)
 
-        with pytest.warns(FutureWarning):
+        monkeypatch.setattr(
+            "torchrl.envs.transforms._base._AUTO_UNWRAP_WARNING_EMITTED", False
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             test_unwrap()
+            test_unwrap()
+        unwrap_warnings = [
+            warning
+            for warning in caught
+            if warning.category is UserWarning
+            and "automatically unwrapped" in str(warning.message)
+        ]
+        assert len(unwrap_warnings) == 1
 
         test_wrap(False)
 
