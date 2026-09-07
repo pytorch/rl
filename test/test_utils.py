@@ -847,6 +847,25 @@ class TestTimeitMark:
         assert "delta" in _utils.timeit._REG
 
 
+def test_timeit_cuda_sync_boundaries(monkeypatch):
+    events = mock.Mock()
+    events.time.side_effect = [1.0, 3.0]
+    monkeypatch.setattr(_utils.time, "time", events.time)
+    monkeypatch.setattr(torch.cuda, "synchronize", events.synchronize)
+    _utils.timeit._REG.pop("cuda_sync", None)
+
+    with _utils.timeit("cuda_sync", sync=True):
+        pass
+
+    assert events.mock_calls == [
+        mock.call.synchronize(),
+        mock.call.time(),
+        mock.call.synchronize(),
+        mock.call.time(),
+    ]
+    assert _utils.timeit._REG["cuda_sync"] == [2.0, 2.0, 1]
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

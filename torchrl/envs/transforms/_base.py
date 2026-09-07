@@ -49,6 +49,7 @@ _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
 IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
+_AUTO_UNWRAP_WARNING_EMITTED = False
 
 FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent environment."
 
@@ -1018,6 +1019,8 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         *args,
         **kwargs,
     ):
+        global _AUTO_UNWRAP_WARNING_EMITTED
+
         # Backward compatibility: handle both old and new syntax
         if len(args) > 0:
             # New syntax: TransformedEnv(base_env, transform, ...)
@@ -1052,15 +1055,17 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             if auto_unwrap is None:
                 auto_unwrap = auto_unwrap_transformed_env(allow_none=True)
                 if auto_unwrap is None:
-                    warnings.warn(
-                        "The default behavior of TransformedEnv will change in version 0.9. "
-                        "Nested TransformedEnvs will no longer be automatically unwrapped by default. "
-                        "To prepare for this change, use set_auto_unwrap_transformed_env(val: bool) "
-                        "as a decorator or context manager, or set the environment variable "
-                        "AUTO_UNWRAP_TRANSFORMED_ENV to 'False'.",
-                        FutureWarning,
-                        stacklevel=2,
-                    )
+                    if not _AUTO_UNWRAP_WARNING_EMITTED:
+                        _AUTO_UNWRAP_WARNING_EMITTED = True
+                        warnings.warn(
+                            "The default behavior of TransformedEnv will change in version 0.9. "
+                            "Nested TransformedEnvs will no longer be automatically unwrapped by default. "
+                            "To prepare for this change, use set_auto_unwrap_transformed_env(val: bool) "
+                            "as a decorator or context manager, or set the environment variable "
+                            "AUTO_UNWRAP_TRANSFORMED_ENV to 'False'.",
+                            FutureWarning,
+                            stacklevel=2,
+                        )
                     auto_unwrap = True
         else:
             auto_unwrap = False

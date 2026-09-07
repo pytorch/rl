@@ -239,6 +239,9 @@ class timeit:
 
     Args:
         name (str): The name of the timer.
+        sync (bool, optional): If ``True``, synchronize CUDA before taking each
+            start and elapsed timestamp. This measures completed CUDA work rather
+            than asynchronous launch time. Defaults to ``False``.
 
     Examples:
         >>> from torchrl import timeit
@@ -269,8 +272,9 @@ class timeit:
     _REG = {}
     _MARKS = {}
 
-    def __init__(self, name):
+    def __init__(self, name: str, *, sync: bool = False):
         self.name = name
+        self._sync = sync
 
     def __call__(self, fn: Callable) -> Callable:
         @wraps(fn)
@@ -282,6 +286,8 @@ class timeit:
         return decorated_fn
 
     def __enter__(self) -> timeit:
+        if self._sync:
+            torch.cuda.synchronize()
         self.t0 = time.time()
         return self
 
@@ -301,6 +307,8 @@ class timeit:
             ...     if i % 10 == 0:
             ...         print(f"Elapsed: {timer.elapsed():.3f}s")
         """
+        if self._sync:
+            torch.cuda.synchronize()
         self.t0 = time.time()
         return self
 
@@ -318,6 +326,8 @@ class timeit:
             ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
             ...     # do more work
         """
+        if self._sync:
+            torch.cuda.synchronize()
         return time.time() - self.t0
 
     @classmethod

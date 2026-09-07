@@ -933,6 +933,16 @@ class TestAsyncEnvPool:
             stats = env.stats()
             assert stats["avg_batch_to_action_ms"] > 0
             assert stats["consumer_busy_fraction"] > 0
+
+            invalid = next_step.clone()
+            invalid.set("unknown_input", torch.zeros(invalid.shape))
+            with pytest.raises(KeyError) as exc_info:
+                env.async_step_send(invalid)
+            message = str(exc_info.value)
+            assert "unknown_input" in message
+            assert "fixed exchange schema" in message
+            assert "action" in message
+            assert "observation" in message
         finally:
             env._maybe_shutdown()
 

@@ -180,9 +180,11 @@ class _SharedSlotExchange:
             else:
                 tensor_keys.append(key)
         if unsupported:
+            expected_keys = sorted(self._input_keys, key=repr)
             raise KeyError(
-                "Shared slot exchange received keys absent from the fixed exchange "
-                f"schema: {unsupported}. Use exchange='queue' for dynamic data."
+                f"Shared slot exchange received unsupported input at keys {unsupported}. "
+                f"The fixed exchange schema expects tensor keys {expected_keys}. "
+                "Use exchange='queue' for dynamic data."
             )
         self.input_slots[env_index].update_(
             tensordict.select(*tensor_keys, strict=True)
