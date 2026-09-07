@@ -7,6 +7,7 @@ from __future__ import annotations
 import itertools
 import threading
 import time
+from collections.abc import Callable
 
 from tensordict.base import TensorDictBase
 
@@ -28,11 +29,67 @@ class _SlotClient:
     def __init__(self, transport: SlotTransport, slot_id: int):
         self._transport = transport
         self._slot_id = slot_id
+        self._inflight: _SlotFuture | None = None
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
         """Submit an observation and block until the action is ready."""
-        self._transport._slot_submit(self._slot_id, td)
-        return self._transport._slot_recv(self._slot_id)
+        return self.submit(td).result()
+
+    def submit(self, td: TensorDictBase) -> _SlotFuture:
+        """Submit an observation without blocking for the action."""
+        if self._inflight is not None:
+            raise RuntimeError(
+                f"Inference slot {self._slot_id} already has an inflight request."
+            )
+        future = _SlotFuture(self._transport, self._slot_id, self._release)
+        self._inflight = future
+        try:
+            self._transport._slot_submit(self._slot_id, td)
+        except BaseException:
+            self._release()
+            raise
+        return future
+
+    def _release(self) -> None:
+        self._inflight = None
+
+
+class _SlotFuture:
+    """Minimal future backed by a slot's reusable action event."""
+
+    def __init__(
+        self,
+        transport: SlotTransport,
+        slot_id: int,
+        release: Callable[[], None],
+    ):
+        self._transport = transport
+        self._slot_id = slot_id
+        self._release = release
+        self._completed = False
+        self._result: TensorDictBase | None = None
+        self._exception: BaseException | None = None
+
+    def done(self) -> bool:
+        return self._completed or self._transport._action_events[self._slot_id].is_set()
+
+    def result(self, timeout: float | None = None) -> TensorDictBase:
+        if not self._completed:
+            try:
+                self._result = self._transport._slot_recv(
+                    self._slot_id, timeout=timeout
+                )
+            except TimeoutError:
+                raise
+            except BaseException as exc:
+                self._exception = exc
+            self._completed = True
+            self._release()
+        if self._exception is not None:
+            raise self._exception
+        if self._result is None:
+            raise RuntimeError(f"Inference slot {self._slot_id} returned no result.")
+        return self._result
 
 
 class SlotTransport(InferenceTransport):
@@ -61,7 +118,7 @@ class SlotTransport(InferenceTransport):
             submit.  Subsequent submits copy into the buffer in-place
             (``update_``).  Defaults to ``False`` because the extra copy
             into the buffer is not currently compensated by the batching
-            path (``lazy_stack`` still calls ``torch.stack``).
+            path, which still materializes a separate policy-input batch.
 
     .. note::
         This transport is only suitable for in-process threading scenarios
@@ -99,6 +156,10 @@ class SlotTransport(InferenceTransport):
         # Pre-allocated observation buffer (lazily initialised)
         self._obs_buffer: TensorDictBase | None = None
 
+        # Begin the next sweep after the last slot served so a saturated
+        # transport cannot repeatedly favor low-numbered slots.
+        self._sweep_start = 0
+
     # -- actor (env-thread) API -----------------------------------------------
 
     def _slot_submit(self, slot_id: int, td: TensorDictBase) -> None:
@@ -116,9 +177,10 @@ class SlotTransport(InferenceTransport):
         with self._work_cond:
             self._work_cond.notify()
 
-    def _slot_recv(self, slot_id: int) -> TensorDictBase:
+    def _slot_recv(self, slot_id: int, timeout: float | None = None) -> TensorDictBase:
         """Block until the server writes an action into the slot."""
-        self._action_events[slot_id].wait()
+        if not self._action_events[slot_id].wait(timeout=timeout):
+            raise TimeoutError(f"Timed out waiting for inference slot {slot_id}.")
         self._action_events[slot_id].clear()
         result = self._actions[slot_id]
         self._actions[slot_id] = None
@@ -180,7 +242,9 @@ class SlotTransport(InferenceTransport):
         items: list[TensorDictBase] = []
         slot_ids: list[int] = []
         submitted_at: list[float | None] = []
-        for i in range(self._num_slots):
+        start = self._sweep_start
+        for offset in range(self._num_slots):
+            i = (start + offset) % self._num_slots
             if self._obs_ready[i]:
                 self._obs_ready[i] = False
                 submitted_at.append(self._submitted_at[i])
@@ -198,6 +262,8 @@ class SlotTransport(InferenceTransport):
                 slot_ids.append(i)
                 if len(slot_ids) >= max_items:
                     break
+        if slot_ids:
+            self._sweep_start = (slot_ids[-1] + 1) % self._num_slots
         return items, slot_ids, submitted_at
 
     def resolve(self, callback: int, result: TensorDictBase) -> None:

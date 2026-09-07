@@ -5,21 +5,32 @@
 from __future__ import annotations
 
 import contextlib
+import multiprocessing as mp
 import os
 import queue
 import threading
 import time
 from collections import deque, OrderedDict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Literal
 
 import torch
-from tensordict import lazy_stack, NestedKey, TensorDictBase
-
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    maybe_dense_stack,
+    NestedKey,
+    TensorDictBase,
+)
 from torchrl._comm import MailboxTransportError
-from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
+from torchrl._utils import (
+    _maybe_record_function_decorator,
+    logger as torchrl_logger,
+    timeit,
+)
 from torchrl.collectors._base import BaseCollector
-from torchrl.envs import AsyncEnvPool, EnvBase
+from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import AsyncEnvPool, EnvBase, EnvCreator
 from torchrl.envs.async_envs import _validate_cpu_affinity
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
@@ -27,6 +38,7 @@ from torchrl.modules.inference_server import (
     InferenceServerConfig,
     PolicyClientModule,
     ProcessInferenceServer,
+    ProcessSlotTransport,
     ThreadingTransport,
 )
 from torchrl.modules.inference_server._config import _resolve_device_config
@@ -134,10 +146,198 @@ def _env_loop(
             result_queue.put(exc)
 
 
+def _process_env_loop(
+    env_factory: Callable[[], EnvBase],
+    create_env_kwargs: dict,
+    env_id: int,
+    client: PolicyClientModule,
+    result_queue,
+    shutdown_event,
+    pause_event,
+    paused_event,
+    error_queue,
+    worker_affinity: Sequence[int] | None,
+    env_device: torch.device | None,
+    storing_device: torch.device | None,
+):
+    """Run environment stepping and remote inference in one worker process."""
+    env = None
+    try:
+        if worker_affinity is not None:
+            os.sched_setaffinity(0, worker_affinity)
+        torch.set_num_threads(1)
+        env = env_factory(**create_env_kwargs)
+        observation = env.reset()
+        while not shutdown_event.is_set():
+            if pause_event.is_set():
+                paused_event.set()
+                while pause_event.is_set() and not shutdown_event.is_set():
+                    shutdown_event.wait(0.01)
+                paused_event.clear()
+                continue
+            policy_output = client(observation)
+            action_td = observation.update(policy_output)
+            if env_device is not None:
+                action_td = action_td.to(env_device)
+            transition, observation = env.step_and_maybe_reset(action_td)
+            transition.set(_ENV_IDX_KEY, env_id)
+            # multiprocessing.Queue serializes on a feeder thread after put()
+            # returns. Own the transition storage before the environment or
+            # inference response slot can be reused.
+            transition = transition.clone()
+            if storing_device is not None:
+                transition = transition.to(storing_device)
+            if all(
+                value.device.type == "cpu"
+                for value in transition.values(True, True)
+                if isinstance(value, torch.Tensor)
+            ):
+                # Transfer one shared storage instead of negotiating a file
+                # descriptor for every tensor leaf of every transition.
+                transition = transition.consolidate()
+            result_queue.put(transition)
+    except Exception as exc:
+        if not shutdown_event.is_set():
+            error_queue.put(RuntimeError(f"Environment {env_id} failed: {exc!r}"))
+            shutdown_event.wait()
+    finally:
+        if env is not None:
+            env.close()
+
+
+def _env_ids(tensordict: TensorDictBase) -> list[int]:
+    """Read one environment index for each item in the leading batch dimension."""
+    values = tensordict.get(_ENV_IDX_KEY)
+    if hasattr(values, "data") and not isinstance(values, torch.Tensor):
+        values = values.data
+    if hasattr(values, "tolist"):
+        values = values.tolist()
+    if not isinstance(values, list):
+        values = [values]
+    result = []
+    for value in values:
+        while isinstance(value, list) and len(value) == 1:
+            value = value[0]
+        result.append(int(value))
+    return result
+
+
+def _env_batch_loop(
+    pool: AsyncEnvPool,
+    clients: list[PolicyClientModule],
+    result_queue: queue.Queue,
+    shutdown_event: threading.Event,
+    pause_request: list[_PauseRequest | None],
+    env_device: torch.device | None,
+    storing_device: torch.device | None,
+):
+    """Coordinate a shared-memory env pool from one thread in ready batches."""
+    exchange_keys = pool.exchange_keys
+    ready_observations = {}
+    pending_actions = {}
+    policy_outputs = {}
+    stepping = 0
+    poll_interval = 0.001
+
+    try:
+        env_ids = list(range(pool.num_envs))
+        pool.async_reset_send(env_index=env_ids)
+        resetting = pool.num_envs
+
+        while not shutdown_event.is_set():
+            if resetting:
+                try:
+                    observations = pool.async_reset_recv(
+                        min_get=1, max_get=resetting, timeout=poll_interval
+                    )
+                except TimeoutError:
+                    pass
+                else:
+                    reset_ids = _env_ids(observations)
+                    resetting -= len(reset_ids)
+                    ready_observations.update(zip(reset_ids, observations.unbind(0)))
+            if pause_request[0] is None and ready_observations:
+                for env_id, observation in ready_observations.items():
+                    pending_actions[env_id] = clients[env_id].submit(observation)
+                ready_observations.clear()
+
+            if (
+                pause_request[0] is not None
+                and not resetting
+                and not pending_actions
+                and not stepping
+            ):
+                _wait_while_paused(pause_request)
+                continue
+
+            ready_ids = [
+                env_id for env_id, future in pending_actions.items() if future.done()
+            ]
+            if ready_ids:
+                env_inputs = []
+                for env_id in ready_ids:
+                    action = pending_actions.pop(env_id).result()
+                    if env_device is not None:
+                        action = action.to(env_device)
+                    policy_outputs[env_id] = action
+                    env_inputs.append(
+                        action.select(*exchange_keys, strict=False)
+                        if exchange_keys
+                        else action
+                    )
+                pool.async_step_and_maybe_reset_send(
+                    lazy_stack(env_inputs), env_index=ready_ids
+                )
+                stepping += len(ready_ids)
+
+            if shutdown_event.is_set():
+                break
+            if not stepping:
+                shutdown_event.wait(poll_interval)
+                continue
+
+            try:
+                transitions, next_observations = pool.async_step_and_maybe_reset_recv(
+                    min_get=1,
+                    max_get=pool.num_envs,
+                    timeout=poll_interval,
+                )
+            except TimeoutError:
+                continue
+
+            completed_ids = _env_ids(next_observations)
+            stepping -= len(completed_ids)
+
+            # Submit before copying transitions so policy inference overlaps
+            # the shared-memory copy. During a pause, retain observations until
+            # all in-flight inference and environment work has drained.
+            for env_id, observation in zip(completed_ids, next_observations.unbind(0)):
+                if pause_request[0] is None:
+                    pending_actions[env_id] = clients[env_id].submit(observation)
+                else:
+                    ready_observations[env_id] = observation
+
+            outputs = lazy_stack(
+                [policy_outputs.pop(env_id) for env_id in completed_ids]
+            )
+            # Dense pool stacking already copied the transition tensors out of
+            # shared memory before the slots can be reused. A lazy stack still
+            # aliases the slots and must be cloned before actions are sent back.
+            if isinstance(transitions, LazyStackedTensorDict):
+                transitions = transitions.clone()
+            transitions.update(outputs.exclude(*transitions.keys(True, True)))
+            if storing_device is not None:
+                transitions = transitions.to(storing_device)
+            result_queue.put(transitions)
+    except Exception as exc:
+        if not shutdown_event.is_set():
+            result_queue.put(exc)
+
+
 class AsyncBatchedCollector(BaseCollector):
     """Asynchronous collector with env slots and a policy server.
 
-    The collector pairs per-env coordinator threads with an
+    The collector pairs environment coordinators with an
     :class:`~torchrl.envs.AsyncEnvPool` and an
     :class:`~torchrl.modules.InferenceServer`.
 
@@ -147,11 +347,13 @@ class AsyncBatchedCollector(BaseCollector):
     * An :class:`~torchrl.envs.AsyncEnvPool` runs *N* environments using
       whatever backend the user chooses (``"threading"``,
       ``"multiprocessing"``).
-    * *N* lightweight coordinator threads -- one per environment -- each own
-      a slot in the pool and an inference client.  A thread sends its env's
-      observation to the :class:`~torchrl.modules.InferenceServer`, blocks
-      until the batched action is returned, then sends the action back to
-      the pool for stepping.
+    * With a shared-memory exchange or grouped workers, one coordinator drains
+      whichever environments are ready and submits their observations without
+      blocking. Other exchanges use one lightweight coordinator thread per
+      environment.
+    * With a :class:`~torchrl.modules.inference_server.ProcessSlotTransport`,
+      each multiprocessing environment worker talks directly to the dedicated
+      inference process; the driver receives completed transitions only.
     * The :class:`~torchrl.modules.InferenceServer` running in a background
       thread continuously drains observation submissions, batches them, runs
       a single forward pass, and fans actions back out.
@@ -190,16 +392,20 @@ class AsyncBatchedCollector(BaseCollector):
         server_timeout (float, optional): seconds the server waits for work
             before dispatching a partial batch.  Defaults to ``0.01``.
         transport (InferenceTransport, optional): a pre-built transport
-            object.  When provided, it takes precedence over
-            ``policy_backend``.  When ``None`` (default) a transport is
-            created automatically from the resolved ``policy_backend``.
+            object. When provided, it takes precedence over ``policy_backend``.
+            A :class:`~torchrl.modules.inference_server.ProcessSlotTransport`
+            together with multiprocessing environment and server backends runs
+            the complete acting loop in environment worker processes. When
+            ``None`` (default), a transport is created from the resolved
+            ``policy_backend``.
         device (torch.device or str, optional): device for policy inference
             (shorthand for ``InferenceDeviceConfig(policy_device=...)``).
             Defaults to ``None``.
         server_config (InferenceServerConfig, optional): structured server
             configuration: execution ``backend`` (``"thread"`` runs the serve
             loop in this process, ``"process"`` a dedicated server process
-            requiring ``policy_factory``), batching, and stats settings.
+            requiring ``policy_factory``), batching, optional static
+            CUDA-graph execution, and stats settings.
             Mutually exclusive with the ``max_batch_size``,
             ``min_batch_size``, and ``server_timeout`` keyword arguments.
         device_config (InferenceDeviceConfig, optional): structured device
@@ -221,6 +427,14 @@ class AsyncBatchedCollector(BaseCollector):
             of ``"threading"`` or ``"multiprocessing"``.  Falls back to
             ``backend`` when ``None``.  The coordinator threads are always
             Python threads regardless of this setting.  Defaults to ``None``.
+        env_exchange (str, optional): data exchange of a multiprocessing
+            :class:`~torchrl.envs.AsyncEnvPool`, one of ``"queue"``, ``"shm"``
+            or ``"auto"``. The shared-memory exchange also enables batched
+            coordination from one thread. Defaults to ``"queue"``.
+        envs_per_worker (int, optional): Number of environments hosted by each
+            multiprocessing worker. Grouped workers share one coordinator that
+            drains ready environments without waiting for a complete group.
+            Defaults to ``1``.
         policy_backend (str, optional): backend for the inference transport
             used to communicate with the
             :class:`~torchrl.modules.InferenceServer`.  One of
@@ -256,12 +470,12 @@ class AsyncBatchedCollector(BaseCollector):
             step-time jitter; most users should leave it unset. TorchRL knows
             which CPUs are available, but not the application's intended CPU
             partition or each environment's thread requirements, so it cannot
-            choose these masks automatically. Provide one mask per environment,
-            or a callable mapping each environment index to its mask. Defaults
+            choose these masks automatically. Provide one mask per worker process,
+            or a callable mapping each worker index to its mask. Defaults
             to ``None``. See :ref:`async_batched_collector_cpu_affinity` for a
             complete collector example.
         driver_affinity (Sequence[int], optional): Linux CPU affinity mask for
-            the inference-server and per-environment coordinator threads, plus
+            the inference-server and coordinator threads, plus
             parent-side multiprocessing queue feeder threads. Dedicated
             process-backed inference servers are not covered. The thread
             constructing the collector is restored to its original affinity
@@ -305,8 +519,11 @@ class AsyncBatchedCollector(BaseCollector):
             "threading", "multiprocessing", "ray", "monarch"
         ] = "threading",
         env_backend: Literal["threading", "multiprocessing"] | None = None,
-        policy_backend: Literal["threading", "multiprocessing", "ray", "monarch"]
-        | None = None,
+        env_exchange: Literal["queue", "shm", "auto"] = "queue",
+        envs_per_worker: int = 1,
+        policy_backend: (
+            Literal["threading", "multiprocessing", "ray", "monarch"] | None
+        ) = None,
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         yield_completed_trajectories: bool = False,
@@ -386,27 +603,53 @@ class AsyncBatchedCollector(BaseCollector):
                 "env_backend='multiprocessing'."
             )
         self._env_backend = effective_env_backend
+        if env_exchange not in ("queue", "shm", "auto"):
+            raise ValueError(
+                f"env_exchange={env_exchange!r} is not supported. Expected one of "
+                "('queue', 'shm', 'auto')."
+            )
+        if env_exchange == "shm" and effective_env_backend != "multiprocessing":
+            raise ValueError(
+                "env_exchange='shm' requires env_backend='multiprocessing'."
+            )
+        self._env_exchange = env_exchange
+        if (
+            isinstance(envs_per_worker, bool)
+            or not isinstance(envs_per_worker, int)
+            or envs_per_worker < 1
+        ):
+            raise ValueError(
+                "envs_per_worker must be a positive integer, got "
+                f"{envs_per_worker!r}."
+            )
+        if envs_per_worker != 1 and effective_env_backend != "multiprocessing":
+            raise ValueError(
+                "envs_per_worker is only supported with "
+                "env_backend='multiprocessing'."
+            )
+        self._envs_per_worker = envs_per_worker
         if worker_affinity is None:
             self._worker_affinity = None
         else:
+            num_workers = (self._num_envs + envs_per_worker - 1) // envs_per_worker
             if callable(worker_affinity):
                 affinity_masks = [
-                    worker_affinity(env_index) for env_index in range(self._num_envs)
+                    worker_affinity(worker_index) for worker_index in range(num_workers)
                 ]
             else:
                 affinity_masks = list(worker_affinity)
-                if len(affinity_masks) != self._num_envs:
+                if len(affinity_masks) != num_workers:
                     raise ValueError(
                         "worker_affinity must provide one CPU mask per "
-                        f"environment, got {len(affinity_masks)} masks for "
-                        f"{self._num_envs} environments."
+                        f"worker process, got {len(affinity_masks)} masks for "
+                        f"{num_workers} worker processes."
                     )
             self._worker_affinity = [
                 _validate_cpu_affinity(
                     affinity,
-                    option_name=f"worker_affinity[{env_index}]",
+                    option_name=f"worker_affinity[{worker_index}]",
                 )
-                for env_index, affinity in enumerate(affinity_masks)
+                for worker_index, affinity in enumerate(affinity_masks)
             ]
         self._driver_affinity = (
             _validate_cpu_affinity(driver_affinity, option_name="driver_affinity")
@@ -429,6 +672,38 @@ class AsyncBatchedCollector(BaseCollector):
                 effective_policy_backend, num_slots=self._num_envs
             )
         self._transport = transport
+        self._uses_process_env_workers = isinstance(transport, ProcessSlotTransport)
+        if self._uses_process_env_workers:
+            if envs_per_worker != 1:
+                raise ValueError("ProcessSlotTransport requires envs_per_worker=1.")
+            if (
+                server_backend != "process"
+                or effective_env_backend != "multiprocessing"
+            ):
+                raise ValueError(
+                    "ProcessSlotTransport requires both a process inference server "
+                    "and env_backend='multiprocessing'."
+                )
+            if env_exchange != "queue":
+                raise ValueError(
+                    "env_exchange does not apply when ProcessSlotTransport owns "
+                    "the environment-worker exchange; leave it as 'queue'."
+                )
+            if transport._num_slots < self._num_envs:
+                raise ValueError(
+                    f"ProcessSlotTransport needs at least one slot per environment "
+                    f"({self._num_envs}), but has {transport._num_slots}."
+                )
+            for name, target_device in (
+                ("env_device", self._env_device),
+                ("storing_device", self._storing_device),
+            ):
+                if target_device is not None and target_device.type != "cpu":
+                    raise ValueError(
+                        f"ProcessSlotTransport requires a CPU {name}; got "
+                        f"{target_device}. Keep CUDA policy execution in the "
+                        "inference server process."
+                    )
 
         # ---- build inference server -------------------------------------------
         if server_backend == "process":
@@ -436,8 +711,10 @@ class AsyncBatchedCollector(BaseCollector):
                 policy_factory=policy_factory,
                 transport=transport,
                 max_batch_size=max_batch_size,
+                static_batch_size=_server_defaults.static_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
+                collate_fn=maybe_dense_stack,
                 policy_device=policy_device,
                 output_device=output_device,
                 weight_sync=weight_sync,
@@ -446,14 +723,17 @@ class AsyncBatchedCollector(BaseCollector):
                 stats_window_size=_server_defaults.stats_window_size,
                 policy_version=policy_version,
                 policy_version_key=policy_version_key,
+                mp_context=(transport._ctx if self._uses_process_env_workers else None),
             )
         else:
             self._server = InferenceServer(
                 model=policy,
                 transport=transport,
                 max_batch_size=max_batch_size,
+                static_batch_size=_server_defaults.static_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
+                collate_fn=maybe_dense_stack,
                 policy_device=policy_device,
                 output_device=output_device,
                 weight_sync=weight_sync,
@@ -479,13 +759,16 @@ class AsyncBatchedCollector(BaseCollector):
         self._iter = -1
 
         # ---- runtime state (created lazily) -----------------------------------
-        self._shutdown_event: threading.Event | None = None
-        self._result_queue: queue.Queue | None = None
+        self._shutdown_event: object | None = None
+        self._result_queue: object | None = None
+        self._worker_error_queue = None
         self._env_pool: AsyncEnvPool | None = None
-        self._workers: list[threading.Thread] = []
+        self._workers: list[threading.Thread | mp.Process] = []
         self._clients: list[Callable] | None = None
+        self._uses_batched_coordinator = False
         self._pause_request: list[_PauseRequest | None] = [None]
         self._pause_lock = threading.Lock()
+        self._transition_carry: deque[TensorDictBase] = deque()
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -496,7 +779,7 @@ class AsyncBatchedCollector(BaseCollector):
     # ------------------------------------------------------------------
 
     def _ensure_started(self) -> None:
-        """Create the env pool, start the server and per-env threads."""
+        """Create the env pool, start the server and coordinator threads."""
         if self._workers and all(w.is_alive() for w in self._workers):
             return
 
@@ -506,25 +789,107 @@ class AsyncBatchedCollector(BaseCollector):
                 original_affinity = os.sched_getaffinity(0)
                 os.sched_setaffinity(0, self._driver_affinity)
 
-            # Build the pool while the driver mask is active so its parent-side
-            # multiprocessing queue feeder threads inherit that mask. Worker
-            # processes apply their own masks before constructing their envs.
+            if self._uses_process_env_workers:
+                if self._clients is None:
+                    self._clients = [
+                        PolicyClientModule(
+                            self._transport.client(),
+                            max_inflight=self._max_inflight_per_env,
+                        )
+                        for _ in range(self._num_envs)
+                    ]
+                if self._server.static_batch_size is not None:
+                    self._server.prepare_cudagraph(self._transport._request_slots[0])
+                if not self._server.is_alive:
+                    self._server.start()
+
+                create_env_kwargs = self._create_env_kwargs
+                if create_env_kwargs is None:
+                    create_env_kwargs = [{} for _ in range(self._num_envs)]
+                elif isinstance(create_env_kwargs, Mapping):
+                    create_env_kwargs = [
+                        dict(create_env_kwargs) for _ in range(self._num_envs)
+                    ]
+                elif len(create_env_kwargs) != self._num_envs:
+                    raise ValueError(
+                        "create_env_kwargs must be a dict or a list of dicts with "
+                        f"length {self._num_envs}."
+                    )
+
+                ctx = self._transport._ctx
+                self._result_queue = ctx.Queue()
+                self._worker_error_queue = ctx.Queue()
+                self._worker_check_timer = timeit(
+                    "AsyncBatchedCollector.worker_liveness", sync=False
+                )
+                self._worker_check_timer.start()
+                self._shutdown_event = ctx.Event()
+                self._process_pause_event = ctx.Event()
+                self._process_paused_events = [
+                    ctx.Event() for _ in range(self._num_envs)
+                ]
+                self._workers = []
+                self._uses_batched_coordinator = False
+                try:
+                    for env_id, (env_factory, env_kwargs, client) in enumerate(
+                        zip(self._create_env_fn, create_env_kwargs, self._clients)
+                    ):
+                        if not isinstance(
+                            env_factory, (EnvCreator, CloudpickleWrapper)
+                        ):
+                            env_factory = CloudpickleWrapper(env_factory)
+                        process = ctx.Process(
+                            target=_process_env_loop,
+                            kwargs={
+                                "env_factory": env_factory,
+                                "create_env_kwargs": env_kwargs,
+                                "env_id": env_id,
+                                "client": client,
+                                "result_queue": self._result_queue,
+                                "shutdown_event": self._shutdown_event,
+                                "pause_event": self._process_pause_event,
+                                "paused_event": self._process_paused_events[env_id],
+                                "error_queue": self._worker_error_queue,
+                                "worker_affinity": (
+                                    self._worker_affinity[env_id]
+                                    if self._worker_affinity is not None
+                                    else None
+                                ),
+                                "env_device": self._env_device,
+                                "storing_device": self._storing_device,
+                            },
+                            name=f"AsyncBatchedCollector-env-{env_id}",
+                        )
+                        process.start()
+                        self._workers.append(process)
+                except BaseException:
+                    self._shutdown_event.set()
+                    for process in self._workers:
+                        if process.is_alive():
+                            process.terminate()
+                        process.join(timeout=1.0)
+                    self._workers = []
+                    self._server.shutdown(timeout=1.0)
+                    raise
+                return
+
+            # Build the pool under the driver mask so feeder threads inherit it.
             kwargs = {}
             if self._create_env_kwargs is not None:
                 kwargs["create_env_kwargs"] = self._create_env_kwargs
             self._env_pool = AsyncEnvPool(
                 self._create_env_fn,
                 backend=self._env_backend,
-                # Pinned to the current default so the pool's default-change
-                # FutureWarning is not emitted from library code; switching the
-                # collector to the shm exchange is a deliberate follow-up.
-                exchange="queue",
+                envs_per_worker=self._envs_per_worker,
+                # Explicit so the pool's default-change FutureWarning is not
+                # emitted from library code.
+                exchange=self._env_exchange,
                 worker_affinity=self._worker_affinity,
                 **kwargs,
             )
 
-            # Create clients before a process server starts so response queues
-            # are inherited by the child process.
+            # Create clients before a process server starts so response queues are
+            # inherited by the child process.
             if self._clients is None:
                 self._clients = [
                     PolicyClientModule(
@@ -534,15 +899,41 @@ class AsyncBatchedCollector(BaseCollector):
                     for _ in range(self._num_envs)
                 ]
 
-            # Threads inherit the affinity of the thread that creates them.
+            if self._server.static_batch_size is not None:
+                request_spec = self._env_pool.fake_tensordict()[0]
+                self._server.prepare_cudagraph(request_spec)
+
+            # Start inference server
             if not self._server.is_alive:
                 self._server.start()
 
-            # Start per-env coordinator threads
+            # Start coordinator threads. Shared slots can be drained safely in
+            # ready batches, avoiding one Python thread and one clone per env.
             self._result_queue = queue.Queue()
             self._shutdown_event = threading.Event()
 
             self._workers = []
+            if self._env_pool.resolved_exchange == "shm" or self._envs_per_worker > 1:
+                self._uses_batched_coordinator = True
+                thread = threading.Thread(
+                    target=_env_batch_loop,
+                    kwargs={
+                        "pool": self._env_pool,
+                        "clients": self._clients,
+                        "result_queue": self._result_queue,
+                        "shutdown_event": self._shutdown_event,
+                        "pause_request": self._pause_request,
+                        "env_device": self._env_device,
+                        "storing_device": self._storing_device,
+                    },
+                    daemon=True,
+                    name="AsyncBatchedCollector-env-batch",
+                )
+                self._workers.append(thread)
+                thread.start()
+                return
+
+            self._uses_batched_coordinator = False
             for i in range(self._num_envs):
                 t = threading.Thread(
                     target=_env_loop,
@@ -607,6 +998,22 @@ class AsyncBatchedCollector(BaseCollector):
                     "thread has exited."
                 )
 
+            if self._uses_process_env_workers:
+                self._process_pause_event.set()
+                pause_timer = timeit("AsyncBatchedCollector.process_pause", sync=False)
+                pause_timer.start()
+                while not all(event.is_set() for event in self._process_paused_events):
+                    self._check_process_workers()
+                    if not self._server.is_alive:
+                        raise RuntimeError("The inference server exited while pausing.")
+                    if timeout is not None and pause_timer.elapsed() >= timeout:
+                        raise TimeoutError(
+                            "Timed out while waiting for environment workers to pause."
+                        )
+                    self._shutdown_event.wait(0.01)
+                yield None
+                return
+
             request = (threading.Barrier(len(workers) + 1), threading.Event())
             self._pause_request[0] = request
             try:
@@ -625,6 +1032,14 @@ class AsyncBatchedCollector(BaseCollector):
             yield None
         finally:
             try:
+                if self._uses_process_env_workers and workers:
+                    self._process_pause_event.clear()
+                    # Wait for acknowledgement reset before a subsequent pause.
+                    while any(event.is_set() for event in self._process_paused_events):
+                        if self._shutdown_event.wait(0.01) or not all(
+                            worker.is_alive() for worker in workers
+                        ):
+                            break
                 if request is not None:
                     if self._pause_request[0] is request:
                         self._pause_request[0] = None
@@ -637,6 +1052,11 @@ class AsyncBatchedCollector(BaseCollector):
     def env(self) -> AsyncEnvPool:
         """The underlying :class:`AsyncEnvPool`."""
         self._ensure_started()
+        if self._env_pool is None:
+            raise RuntimeError(
+                "ProcessSlotTransport runs environments directly in worker "
+                "processes and does not create an AsyncEnvPool."
+            )
         return self._env_pool
 
     @property
@@ -669,9 +1089,9 @@ class AsyncBatchedCollector(BaseCollector):
     _SERVER_DEATH_GRACE_S = 2.0
 
     def _check_worker_result(self, item):
-        """Re-raise exceptions propagated from coordinator threads.
+        """Re-raise exceptions propagated from collector workers.
 
-        Worker threads may observe a dying server before the liveness
+        Workers may observe a dying server before the liveness
         watchdog does: their transport read errors out first, and process
         teardown is asynchronous, so a killed server can still report alive
         for a moment. Mailbox transport failures identify a dead peer by
@@ -697,11 +1117,22 @@ class AsyncBatchedCollector(BaseCollector):
                 if time.monotonic() >= deadline:
                     break
                 time.sleep(0.1)
+            worker_kind = "process" if self._uses_process_env_workers else "thread"
             raise RuntimeError(
-                "A collector worker thread raised an exception."
+                f"A collector worker {worker_kind} raised an exception."
             ) from item
 
     _LIVENESS_POLL_S = 1.0
+
+    def _check_process_workers(self) -> None:
+        try:
+            error = self._worker_error_queue.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            raise RuntimeError("An environment worker failed.") from error
+        if any(not worker.is_alive() for worker in self._workers):
+            raise RuntimeError("An environment worker process exited while collecting.")
 
     def _next_result(self) -> TensorDictBase:
         """Block for the next transition, watching server and worker liveness.
@@ -713,6 +1144,12 @@ class AsyncBatchedCollector(BaseCollector):
         """
         rq = self._result_queue
         while True:
+            if (
+                self._uses_process_env_workers
+                and self._worker_check_timer.elapsed() >= self._LIVENESS_POLL_S
+            ):
+                self._worker_check_timer.start()
+                self._check_process_workers()
             try:
                 td = rq.get(timeout=self._LIVENESS_POLL_S)
             except queue.Empty:
@@ -724,10 +1161,30 @@ class AsyncBatchedCollector(BaseCollector):
                     ) from None
                 if self._workers and not any(w.is_alive() for w in self._workers):
                     raise RuntimeError(
-                        "All collector worker threads exited while the "
+                        "All collector workers exited while the "
                         "collector was waiting for transitions."
                     ) from None
+                if self._uses_process_env_workers:
+                    exited = [
+                        worker for worker in self._workers if not worker.is_alive()
+                    ]
+                    if exited:
+                        details = ", ".join(
+                            f"{worker.name} (exitcode={worker.exitcode})"
+                            for worker in exited
+                        )
+                        raise RuntimeError(
+                            "Environment worker process exited while the "
+                            f"collector was running: {details}."
+                        ) from None
                 continue
+            except (EOFError, OSError) as exc:
+                if not self._uses_process_env_workers:
+                    raise
+                self._check_process_workers()
+                raise RuntimeError(
+                    "An environment worker result could not be received."
+                ) from exc
             self._check_worker_result(td)
             return td
 
@@ -735,23 +1192,54 @@ class AsyncBatchedCollector(BaseCollector):
     def _rollout_frames(self) -> TensorDictBase:
         """Drain ``frames_per_batch`` transitions from the workers."""
         rq = self._result_queue
+        frames_to_collect = self.frames_per_batch
+        if self.total_frames >= 0:
+            frames_to_collect = min(frames_to_collect, self.total_frames - self._frames)
         collected = 0
         transitions: list[TensorDictBase] = []
 
-        while collected < self.frames_per_batch:
+        while self._transition_carry and collected < frames_to_collect:
+            transition = self._transition_carry.popleft()
+            transitions.append(transition)
+            collected += transition.numel()
+
+        while collected < frames_to_collect:
             # Block for at least one transition
             td = self._next_result()
-            transitions.append(td)
-            collected += td.numel()
+            if self._uses_batched_coordinator:
+                for transition in td.unbind(0):
+                    if collected < frames_to_collect:
+                        transitions.append(transition)
+                        collected += transition.numel()
+                    else:
+                        self._transition_carry.append(transition)
+            else:
+                transitions.append(td)
+                collected += td.numel()
             # Batch-drain any additional items already in the queue
-            while collected < self.frames_per_batch:
+            while collected < frames_to_collect:
                 try:
                     td = rq.get_nowait()
                 except queue.Empty:
                     break
+                except (EOFError, OSError) as exc:
+                    if not self._uses_process_env_workers:
+                        raise
+                    self._check_process_workers()
+                    raise RuntimeError(
+                        "An environment worker result could not be received."
+                    ) from exc
                 self._check_worker_result(td)
-                transitions.append(td)
-                collected += td.numel()
+                if self._uses_batched_coordinator:
+                    for transition in td.unbind(0):
+                        if collected < frames_to_collect:
+                            transitions.append(transition)
+                            collected += transition.numel()
+                        else:
+                            self._transition_carry.append(transition)
+                else:
+                    transitions.append(td)
+                    collected += td.numel()
             if self.verbose:
                 torchrl_logger.debug(
                     f"AsyncBatchedCollector: {collected}/{self.frames_per_batch} frames"
@@ -764,25 +1252,27 @@ class AsyncBatchedCollector(BaseCollector):
         """Drain transitions until a complete trajectory is available."""
         while not self._trajectory_queue:
             td = self._next_result()
-            env_id = 0
-            eid = td.get(_ENV_IDX_KEY, default=None)
-            if eid is not None:
-                # Unwrap NonTensorData / NonTensorStack / list wrappers
-                if hasattr(eid, "data"):
-                    eid = eid.data
-                while isinstance(eid, (list,)) and len(eid) == 1:
-                    eid = eid[0]
-                env_id = int(eid)
-
-            self._yield_queues[env_id].append(td)
-            if td["next", "done"].any():
-                self._trajectory_queue.append(
-                    lazy_stack(list(self._yield_queues[env_id]), -1)
-                )
-                self._yield_queues[env_id].clear()
+            if self._uses_batched_coordinator:
+                for transition in td.unbind(0):
+                    self._record_trajectory_transition(transition)
+            else:
+                self._record_trajectory_transition(td)
 
         result = self._trajectory_queue.popleft()
         return result.reshape(-1)
+
+    def _record_trajectory_transition(self, td: TensorDictBase) -> None:
+        """Record one environment transition for trajectory yielding."""
+        env_id = 0
+        if td.get(_ENV_IDX_KEY, default=None) is not None:
+            env_id = _env_ids(td)[0]
+
+        self._yield_queues[env_id].append(td)
+        if td["next", "done"].any():
+            self._trajectory_queue.append(
+                lazy_stack(list(self._yield_queues[env_id]), -1)
+            )
+            self._yield_queues[env_id].clear()
 
     @property
     def rollout(self) -> Callable[[], TensorDictBase]:
@@ -802,6 +1292,10 @@ class AsyncBatchedCollector(BaseCollector):
         while total < 0 or self._frames < total:
             self._iter += 1
             td = self.rollout()
+            if not self.yield_completed_trajectories and total >= 0:
+                remaining = total - self._frames
+                if td.numel() > remaining:
+                    td = td.reshape(-1)[:remaining]
             self._frames += td.numel()
             if self._postproc is not None:
                 td = self._postproc(td)
@@ -814,21 +1308,53 @@ class AsyncBatchedCollector(BaseCollector):
         raise_on_error: bool = True,
     ) -> None:
         """Shut down the collector, inference server, threads and env pool."""
-        if self._shutdown_event is not None:
+        if self._shutdown_event is not None and self._workers:
             self._shutdown_event.set()
         request = self._pause_request[0]
         self._pause_request[0] = None
         if request is not None:
             request[0].abort()
             request[1].set()
-        _timeout = timeout or 5.0
-        for w in self._workers:
-            w.join(timeout=_timeout)
+        self._transition_carry.clear()
+        _timeout = 5.0 if timeout is None else timeout
+        shutdown_timer = timeit("AsyncBatchedCollector.shutdown").start()
+        if self._uses_process_env_workers:
+            while any(worker.is_alive() for worker in self._workers):
+                if shutdown_timer.elapsed() >= _timeout:
+                    break
+                if self._result_queue is not None:
+                    while True:
+                        try:
+                            self._result_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                        except (EOFError, OSError):
+                            # The item is already removed from the queue, but
+                            # rebuilding a discarded tensor can fail once its
+                            # worker's resource sharer has exited.
+                            continue
+                for worker in self._workers:
+                    worker.join(timeout=0.05)
+            for worker in self._workers:
+                if worker.is_alive():
+                    worker.terminate()
+                worker.join(timeout=1.0)
+        else:
+            for worker in self._workers:
+                worker.join(timeout=_timeout)
         self._workers = []
-        self._server.shutdown(timeout=_timeout)
+        self._server.shutdown(timeout=max(0.0, _timeout - shutdown_timer.elapsed()))
         if close_env and self._env_pool is not None:
             self._env_pool.close(raise_if_closed=raise_on_error)
             self._env_pool = None
+        if self._uses_process_env_workers and self._result_queue is not None:
+            self._result_queue.close()
+            self._result_queue.join_thread()
+            self._result_queue = None
+        if self._worker_error_queue is not None:
+            self._worker_error_queue.close()
+            self._worker_error_queue.join_thread()
+            self._worker_error_queue = None
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Set the seed (no-op; envs are created inside the pool)."""
