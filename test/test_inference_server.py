@@ -127,7 +127,7 @@ def _make_policy():
 
 class _BatchSizeModule(nn.Module):
     def forward(self, value):
-        return value + value.new_tensor(value.shape[0])
+        return value + value.shape[0]
 
 
 class _RandomModule(nn.Module):
