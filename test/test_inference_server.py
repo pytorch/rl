@@ -2786,6 +2786,42 @@ class TestAsyncBatchedCollector:
         assert total_collected == total_frames
         assert stats["requests"] > 0
 
+    def test_threaded_collection_batches_reset_and_step_observations(self):
+        policy_called = threading.Event()
+
+        class DelayedResetEnv(CountingEnv):
+            def _reset(self, tensordict, **kwargs):
+                assert policy_called.wait(5)
+                return super()._reset(tensordict, **kwargs)
+
+        class PolicyWithFeatures(_BatchCountingPolicy):
+            def forward(self, td):
+                policy_called.set()
+                return super().forward(td).set("features", td["observation"] * 2)
+
+        collector = AsyncBatchedCollector(
+            create_env_fn=[CountingEnv, DelayedResetEnv],
+            policy=PolicyWithFeatures(),
+            frames_per_batch=8,
+            total_frames=24,
+            max_batch_size=2,
+            min_batch_size=2,
+            server_timeout=0.1,
+            env_backend="threading",
+            device_config=InferenceDeviceConfig(policy_device="cpu"),
+        )
+        try:
+            batches = list(collector)
+            assert sum(batch.numel() for batch in batches) == 24
+            assert sum(batch["next", "done"].sum() for batch in batches) > 0
+            for batch in batches:
+                torch.testing.assert_close(batch["features"], batch["observation"] * 2)
+                torch.testing.assert_close(
+                    batch["next", "observation"], batch["observation"] + 1
+                )
+        finally:
+            collector.shutdown()
+
     def test_policy_factory(self):
         """policy_factory is called to create the policy."""
         num_envs = 2
