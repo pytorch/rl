@@ -45,6 +45,7 @@ class WandbLoggerConfig(LoggerConfig):
     save_dir: str | None = None
     id: str | None = None
     project: str | None = None
+    base_url: str | None = None
     video_fps: int = 32
     log_env_packages: bool = True
     log_dir: str | None = None
@@ -64,6 +65,7 @@ def _make_wandb_logger(
     save_dir: str | None = None,
     id: str | None = None,
     project: str | None = None,
+    base_url: str | None = None,
     video_fps: int = 32,
     log_env_packages: bool = True,
     log_dir: str | None = None,
@@ -78,6 +80,7 @@ def _make_wandb_logger(
         save_dir=save_dir,
         id=id,
         project=project,
+        base_url=base_url,
         video_fps=video_fps,
         log_env_packages=log_env_packages,
         log_dir=log_dir,
