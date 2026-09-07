@@ -310,10 +310,13 @@ class TestTransformedEnv:
             warnings.simplefilter("always")
             test_unwrap()
             test_unwrap()
-        future_warnings = [
-            warning for warning in caught if warning.category is FutureWarning
+        unwrap_warnings = [
+            warning
+            for warning in caught
+            if warning.category is UserWarning
+            and "automatically unwrapped" in str(warning.message)
         ]
-        assert len(future_warnings) == 1
+        assert len(unwrap_warnings) == 1
 
         test_wrap(False)
 

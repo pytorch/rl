@@ -847,22 +847,29 @@ class TestTimeitMark:
         assert "delta" in _utils.timeit._REG
 
 
-def test_timeit_cuda_sync_boundaries(monkeypatch):
+@pytest.mark.parametrize("cuda_available", [False, True])
+def test_timeit_cuda_sync_boundaries(monkeypatch, cuda_available):
     events = mock.Mock()
     events.time.side_effect = [1.0, 3.0]
     monkeypatch.setattr(_utils.time, "time", events.time)
+    monkeypatch.setattr(
+        torch.cuda, "is_available", mock.Mock(return_value=cuda_available)
+    )
     monkeypatch.setattr(torch.cuda, "synchronize", events.synchronize)
     _utils.timeit._REG.pop("cuda_sync", None)
 
     with _utils.timeit("cuda_sync", sync=True):
         pass
 
-    assert events.mock_calls == [
-        mock.call.synchronize(),
-        mock.call.time(),
-        mock.call.synchronize(),
-        mock.call.time(),
-    ]
+    if cuda_available:
+        assert events.mock_calls == [
+            mock.call.synchronize(),
+            mock.call.time(),
+            mock.call.synchronize(),
+            mock.call.time(),
+        ]
+    else:
+        assert events.mock_calls == [mock.call.time(), mock.call.time()]
     assert _utils.timeit._REG["cuda_sync"] == [2.0, 2.0, 1]
 
 

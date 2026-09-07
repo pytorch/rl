@@ -241,7 +241,8 @@ class timeit:
         name (str): The name of the timer.
         sync (bool, optional): If ``True``, synchronize CUDA before taking each
             start and elapsed timestamp. This measures completed CUDA work rather
-            than asynchronous launch time. Defaults to ``False``.
+            than asynchronous launch time. This is a no-op when CUDA is unavailable.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl import timeit
@@ -286,7 +287,7 @@ class timeit:
         return decorated_fn
 
     def __enter__(self) -> timeit:
-        if self._sync:
+        if self._sync and torch.cuda.is_available():
             torch.cuda.synchronize()
         self.t0 = time.time()
         return self
@@ -307,7 +308,7 @@ class timeit:
             ...     if i % 10 == 0:
             ...         print(f"Elapsed: {timer.elapsed():.3f}s")
         """
-        if self._sync:
+        if self._sync and torch.cuda.is_available():
             torch.cuda.synchronize()
         self.t0 = time.time()
         return self
@@ -326,7 +327,7 @@ class timeit:
             ...     print(f"Elapsed so far: {timer.elapsed():.3f}s")
             ...     # do more work
         """
-        if self._sync:
+        if self._sync and torch.cuda.is_available():
             torch.cuda.synchronize()
         return time.time() - self.t0
 
@@ -1308,8 +1309,9 @@ class set_auto_unwrap_transformed_env(_DecoratorContextManager):
             instances. If ``False``, :class:`~torchrl.envs.TransformedEnv` will not unwrap nested instances.
             Defaults to ``True``.
 
-    .. note:: Until v0.9, this will raise a warning if :class:`~torchrl.envs.TransformedEnv` are nested
-        and the value is not set explicitly (`auto_unwrap=True` default behavior).
+    .. note:: If this value is not set explicitly, nesting
+        :class:`~torchrl.envs.TransformedEnv` instances emits an informational
+        warning and uses ``auto_unwrap=True``.
         You can set the value of :func:`~torchrl.envs.auto_unwrap_transformed_env`
         through:
 

@@ -975,7 +975,9 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             unwraps the transforms of the inner TransformedEnv in the outer one (the new instance).
             Defaults to ``True``.
 
-            .. note:: This behavior will switch to ``False`` in v0.9.
+            .. note:: If this argument is omitted, nesting
+                :class:`TransformedEnv` instances emits an informational warning
+                and uses ``auto_unwrap=True``.
 
             .. seealso:: :class:`~torchrl.set_auto_unwrap_transformed_env`
 
@@ -1058,12 +1060,12 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
                     if not _AUTO_UNWRAP_WARNING_EMITTED:
                         _AUTO_UNWRAP_WARNING_EMITTED = True
                         warnings.warn(
-                            "The default behavior of TransformedEnv will change in version 0.9. "
-                            "Nested TransformedEnvs will no longer be automatically unwrapped by default. "
-                            "To prepare for this change, use set_auto_unwrap_transformed_env(val: bool) "
-                            "as a decorator or context manager, or set the environment variable "
+                            "Nested TransformedEnvs are automatically unwrapped by default. "
+                            "To preserve the nested structure, pass auto_unwrap=False, use "
+                            "set_auto_unwrap_transformed_env(False) as a decorator or context "
+                            "manager, or set the environment variable "
                             "AUTO_UNWRAP_TRANSFORMED_ENV to 'False'.",
-                            FutureWarning,
+                            UserWarning,
                             stacklevel=2,
                         )
                     auto_unwrap = True
