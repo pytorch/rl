@@ -592,6 +592,10 @@ class RayReplayBuffer(ReplayBuffer):
         """
         return self._client.stats()
 
+    def synchronize(self) -> None:
+        """Wait for pending work owned by the replay-buffer actor."""
+        return ray.get(self._rb.synchronize.remote())
+
     def update_if_present(
         self,
         *,
