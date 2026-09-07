@@ -99,12 +99,27 @@ jobs:
         run: |
           export TZ=Europe/London
           export DEBIAN_FRONTEND=noninteractive  # tzdata bug
-          apt-get update -y
-          apt-get install software-properties-common cmake -y
-          add-apt-repository ppa:git-core/candidate -y
-          apt-get update -y
-          apt-get upgrade -y
-          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev libpython3.10-dev
+          if [ "$BENCHMARK_SUITE" = async ]; then
+            # Resolve OS dependencies against the same archive on every merge.
+            # See https://snapshot.ubuntu.com/ for the Jammy snapshot syntax.
+            cat > /tmp/benchmark-sources.list <<'APT'
+          deb [snapshot=20260907T000000Z] http://archive.ubuntu.com/ubuntu/ jammy main universe
+          deb [snapshot=20260907T000000Z] http://archive.ubuntu.com/ubuntu/ jammy-updates main universe
+          deb [snapshot=20260907T000000Z] http://security.ubuntu.com/ubuntu/ jammy-security main universe
+          APT
+            APT_OPTIONS=(-o Dir::Etc::sourcelist=/tmp/benchmark-sources.list -o Dir::Etc::sourceparts=-)
+            apt-get "${APT_OPTIONS[@]}" update
+            apt-get "${APT_OPTIONS[@]}" install -y --no-install-recommends \
+              git gcc g++ cmake libpython3.10-dev
+          else
+            apt-get update -y
+            apt-get install software-properties-common cmake -y
+            add-apt-repository ppa:git-core/candidate -y
+            apt-get update -y
+            apt-get upgrade -y
+            apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev libpython3.10-dev
+          fi
+          dpkg-query -W -f='${Package}=${Version}\n' | sort > benchmarks/system-packages.txt
       - name: Setup git
         run: |
           git config --global --add safe.directory /__w/rl/rl
@@ -227,6 +242,7 @@ jobs:
           path: |
             benchmarks/*.json
             benchmarks/dependencies.txt
+            benchmarks/system-packages.txt
             benchmarks/gpu.txt
             benchmarks/success.txt
           retention-days: 30
