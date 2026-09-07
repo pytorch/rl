@@ -1,4 +1,5 @@
 # Pinned async trend v1 dependencies: CPython 3.10, Linux x86-64, CUDA 12.6.
+# Use stable wheels so a cache eviction cannot depend on expired nightly wheels.
 # TensorDict source is pinned in benchmarks.yml; bump the trend version with this lock.
 cloudpickle==3.1.2
 cuda-bindings==12.9.7
@@ -23,6 +24,7 @@ nvidia-cuda-runtime-cu12==12.6.77
 nvidia-cudnn-cu12==9.10.2.21
 nvidia-cufft-cu12==11.3.0.4
 nvidia-cufile-cu12==1.11.1.6
+nvidia-curand-cu12==10.3.7.77
 nvidia-cusolver-cu12==11.7.1.2
 nvidia-cusparse-cu12==12.5.4.2
 nvidia-cusparselt-cu12==0.7.1
@@ -45,9 +47,9 @@ pyvers==0.2.3
 setuptools==83.0.0
 sympy==1.14.0
 tomli==2.4.1
-torch==2.15.0.dev20260906+cu126
+torch==2.14.0+cu126
 tqdm==4.68.4
-triton==3.8.0+gitc01b6774
+triton==3.8.0
 typing-extensions==4.16.0
 wheel==0.47.0
 zipp==4.1.0

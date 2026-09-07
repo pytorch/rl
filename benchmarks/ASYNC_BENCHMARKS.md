@@ -63,8 +63,12 @@ not peak unique memory. CUDA peak covers measured rounds in the policy process.
 Artifacts are retained for 30 days and the dashboard keeps 250 points per series.
 
 The short suite uses the existing `linux.g5.4xlarge.nvidia.gpu` runner class, pinned
-container digests, Python 3.10.20, an exact dependency lock and a pinned TensorDict
-source revision. CPU and GPU are separate series. Dependency or workload changes
+container digests, a September 7 Ubuntu archive snapshot, Python 3.10.20, an
+exact dependency lock (stable PyTorch 2.14.0 with CUDA 12.6) and a pinned
+TensorDict source revision. Stable wheels keep cache eviction independent of
+nightly wheel retention. The snapshot
+uses the [Ubuntu snapshot service](https://snapshot.ubuntu.com/). System package
+versions and the GPU model/driver are recorded alongside the Python environment. CPU and GPU are separate series. Dependency or workload changes
 must start a new trend version; do not present them as collector improvements.
 The full nightly suite retains its moving dependency environment and its
 [existing dashboard](https://pytorch.org/rl/dev/bench/).
