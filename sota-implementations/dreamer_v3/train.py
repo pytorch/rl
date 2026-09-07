@@ -33,7 +33,6 @@ from dreamer_v3_agent import (
     build_value,
     build_world_model,
     DreamerV3BehaviorPolicySync,
-    DreamerV3Optimizer,
     DreamerV3SeededPolicy,
     make_env,
     make_primed_env,
@@ -61,7 +60,6 @@ from dreamer_v3_utils import (
 from omegaconf import DictConfig
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import CudaGraphModule, TensorDictModuleBase
-
 from torchrl import timeit
 from torchrl._utils import get_available_device, logger as torchrl_logger
 from torchrl.collectors import Collector
@@ -74,6 +72,7 @@ from torchrl.objectives import (
     DreamerV3ValueLoss,
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
+from torchrl.trainers.algorithms import DreamerV3Optimizer
 
 
 class _Learner(NamedTuple):

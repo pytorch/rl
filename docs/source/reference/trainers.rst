@@ -52,3 +52,16 @@ Documentation Sections
    trainers_basics
    trainers_loggers
    trainers_hooks
+
+DreamerV3 optimization
+----------------------
+
+The algorithm-specific optimizer is available independently of a trainer or
+example script. See :doc:`dreamer_v3` for the loss and target-update composition.
+
+.. autosummary::
+   :toctree: generated/
+   :template: rl_template_noinherit.rst
+
+   ~torchrl.trainers.algorithms.DreamerV3Optimizer
+   ~torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig

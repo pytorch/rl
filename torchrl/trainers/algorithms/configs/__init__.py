@@ -219,6 +219,7 @@ from torchrl.trainers.algorithms.configs.utils import (
     AdamConfig,
     AdamWConfig,
     ASGDConfig,
+    DreamerV3OptimizerConfig,
     LBFGSConfig,
     LionConfig,
     NAdamConfig,
@@ -261,6 +262,7 @@ __all__ = [
     "AdadeltaConfig",
     "AdagradConfig",
     "ASGDConfig",
+    "DreamerV3OptimizerConfig",
     "LBFGSConfig",
     "LionConfig",
     "NAdamConfig",
@@ -745,6 +747,7 @@ def _register_configs():
     # =============================================================================
 
     cs.store(group="optimizer", name="adam", node=AdamConfig)
+    cs.store(group="optimizer", name="dreamer_v3", node=DreamerV3OptimizerConfig)
     cs.store(group="optimizer", name="adamw", node=AdamWConfig)
     cs.store(group="optimizer", name="adamax", node=AdamaxConfig)
     cs.store(group="optimizer", name="adadelta", node=AdadeltaConfig)
