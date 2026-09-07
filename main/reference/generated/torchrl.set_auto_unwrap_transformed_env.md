@@ -12,8 +12,9 @@ Defaults to `True`.
 
 Note
 
-Until v0.9, this will raise a warning if `TransformedEnv` are nested
-and the value is not set explicitly (auto_unwrap=True default behavior).
+If this value is not set explicitly, nesting
+`TransformedEnv` instances emits an informational
+warning and uses `auto_unwrap=True`.
 You can set the value of `auto_unwrap_transformed_env()`
 through:
 
