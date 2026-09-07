@@ -18,6 +18,20 @@ def _as_device(device: torch.device | str | int | None) -> torch.device | None:
     return torch.device(device)
 
 
+def _validate_static_batch_size(
+    static_batch_size: int | None, max_batch_size: int
+) -> None:
+    if static_batch_size is None:
+        return
+    if isinstance(static_batch_size, bool) or not isinstance(static_batch_size, int):
+        raise TypeError("static_batch_size must be an integer or None.")
+    if static_batch_size < max_batch_size:
+        raise ValueError(
+            "static_batch_size must be at least max_batch_size, got "
+            f"{static_batch_size} and {max_batch_size}."
+        )
+
+
 @dataclass
 class InferenceDeviceConfig:
     """Device placement for asynchronous policy-server collection.
@@ -208,6 +222,11 @@ class InferenceServerConfig:
             Ray actor and requires ``policy_factory``. Defaults to ``"thread"``.
         max_batch_size (int, optional): maximum number of requests per forward
             pass. Defaults to ``64``.
+        static_batch_size (int, optional): fixed leading batch size used to
+            CUDA-graph the served policy. Partial batches repeat their last
+            request up to this size, and padded outputs are discarded. Must be
+            at least ``max_batch_size``. Defaults to ``None`` (eager policy
+            execution).
         min_batch_size (int, optional): minimum number of requests to
             accumulate after the first request arrives. Defaults to ``1``.
         timeout (float, optional): seconds to wait for more requests before
@@ -247,6 +266,7 @@ class InferenceServerConfig:
 
     service_backend: Literal["thread", "process", "ray"] = "thread"
     max_batch_size: int = 64
+    static_batch_size: int | None = None
     min_batch_size: int = 1
     timeout: float = 0.01
     collect_stats: bool = True
@@ -259,6 +279,7 @@ class InferenceServerConfig:
                 f"service_backend={self.service_backend!r} is not supported. "
                 "Expected 'thread', 'process', or 'ray'."
             )
+        _validate_static_batch_size(self.static_batch_size, self.max_batch_size)
         if self.max_inflight_per_env is not None and self.max_inflight_per_env < 1:
             raise ValueError(
                 f"max_inflight_per_env must be at least 1 (got "
