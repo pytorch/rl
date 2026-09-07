@@ -265,6 +265,10 @@ class StreamingSliceSampler(SliceSampler):
                     start + complete_length : stop
                 ].clone()
 
+        # Chronological windows are disjoint. Older excess windows must have
+        # been overwritten; bound their metadata even when no samples are taken.
+        while len(self._queued_slices) > storage.max_size // self.slice_len:
+            self._queued_slices.popleft()
         if trajectory is not None:
             self._last_traj = trajectory[-1].clone()
         self._last_was_done = bool(done[-1])
@@ -295,7 +299,15 @@ class StreamingSliceSampler(SliceSampler):
             num_slices=len(fresh),
             seq_length=self.slice_len,
             target_seq_length=None,
-            mask_flat=None,
+            mask_flat=(
+                torch.ones(
+                    len(fresh) * self.slice_len,
+                    dtype=torch.bool,
+                    device=fresh_index.device,
+                )
+                if self.pad_output and not self.strict_length
+                else None
+            ),
             storage=storage,
         )
         if len(fresh) == num_slices:

@@ -2121,10 +2121,10 @@ class TestSamplers:
 
 class TestStreamingSliceSampler:
     @staticmethod
-    def _make_buffer(max_size=16, *, generator=None):
+    def _make_buffer(max_size=16, *, generator=None, **sampler_kwargs):
         return TensorDictReplayBuffer(
             storage=LazyTensorStorage(max_size),
-            sampler=StreamingSliceSampler(slice_len=3),
+            sampler=StreamingSliceSampler(slice_len=3, **sampler_kwargs),
             batch_size=6,
             generator=generator,
         )
@@ -2163,30 +2163,45 @@ class TestStreamingSliceSampler:
         assert (fallback_obs[:, 1:] == fallback_obs[:, :-1] + 1).all()
         assert not ((fallback_obs[:, 0] < 5) & (fallback_obs[:, -1] >= 5)).any()
 
-    def test_overwritten_queued_windows_are_discarded(self):
+    @pytest.mark.parametrize("num_writes", [1, 20])
+    def test_overwritten_queued_windows_are_discarded(self, num_writes):
         rb = self._make_buffer(max_size=6)
-        rb.extend(
-            TensorDict(
-                {
-                    "obs": torch.arange(6),
-                    ("next", "done"): torch.zeros(6, 1, dtype=torch.bool),
-                },
-                [6],
+        for offset in range(0, 6 + 3 * num_writes, 3):
+            rb.extend(
+                TensorDict(
+                    {
+                        "obs": torch.arange(offset, offset + 3),
+                        ("next", "done"): torch.zeros(3, 1, dtype=torch.bool),
+                    },
+                    [3],
+                )
             )
-        )
-        rb.extend(
-            TensorDict(
-                {
-                    "obs": torch.arange(6, 9),
-                    ("next", "done"): torch.zeros(3, 1, dtype=torch.bool),
-                },
-                [3],
-            )
-        )
-
+            assert len(rb.sampler._queued_slices) <= 2
         sample = rb.sample()
+        assert sample["obs"].tolist() == list(range(3 * num_writes, 6 + 3 * num_writes))
 
-        assert sample["obs"].reshape(2, 3).tolist() == [[3, 4, 5], [6, 7, 8]]
+    def test_fresh_and_padded_uniform_slices_share_mask(self):
+        rb = self._make_buffer(
+            strict_length=False,
+            pad_output=True,
+            generator=torch.Generator().manual_seed(0),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(5),
+                    ("collector", "traj_ids"): torch.tensor([0, 0, 0, 1, 1]),
+                    ("next", "done"): torch.tensor(
+                        [[False], [False], [True], [False], [True]]
+                    ),
+                },
+                [5],
+            )
+        )
+        sample = rb.sample()
+        assert sample["obs"][:3].tolist() == [0, 1, 2]
+        assert sample["collector", "mask"][:3].all()
+        assert sample["collector", "mask"].shape == (6,)
 
     def test_state_dict_restores_queue_and_pending_window(self):
         rb = self._make_buffer()
