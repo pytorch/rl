@@ -8,14 +8,18 @@ import importlib.util
 import os
 import shutil
 import time
-import warnings
 from contextlib import nullcontext
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
-from tensordict import assert_allclose_td, TensorDict
+from tensordict import (
+    assert_allclose_td,
+    is_tensor_collection,
+    NonTensorData,
+    TensorDict,
+)
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
@@ -31,7 +35,13 @@ from torchrl.data.datasets.lerobot import (
     lerobot_columns_to_tensordict,
     LeRobotExperienceReplay,
 )
-from torchrl.data.datasets.minari_data import MinariExperienceReplay
+from torchrl.data.datasets.minari_data import (
+    _extract_nontensor_fields,
+    _NAME_MATCH,
+    _patch_nontensor_data_to_stack,
+    _preallocate_nontensor_fields,
+    MinariExperienceReplay,
+)
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
@@ -521,6 +531,166 @@ def custom_minari_init(custom_envs, num_episodes=5):
     return custom_dataset_ids
 
 
+def _minari_like_episode(missions: list[bytes], n_actions: int) -> TensorDict:
+    """Build one H5-style Minari episode with a NonTensorData mission array."""
+    n_obs = n_actions + 1
+    if len(missions) != n_obs:
+        raise ValueError("missions must cover the reset observation plus each step")
+    return TensorDict(
+        {
+            "actions": torch.zeros(n_actions, 1),
+            "rewards": torch.zeros(n_actions),
+            "terminations": torch.tensor(
+                [False] * (n_actions - 1) + [True], dtype=torch.bool
+            ),
+            "truncations": torch.zeros(n_actions, dtype=torch.bool),
+            "observations": TensorDict(
+                {
+                    "image": torch.zeros(n_obs, 2, 2, 3, dtype=torch.uint8),
+                    "mission": NonTensorData(
+                        np.array(missions, dtype=object),
+                        batch_size=[n_obs],
+                    ),
+                },
+                batch_size=[n_obs],
+            ),
+        }
+    )
+
+
+def _materialize_minari_like_storage(episodes: dict[int, TensorDict]) -> TensorDict:
+    """Replay the MinariExperienceReplay download fill on synthetic episodes.
+
+    This is the path that used to copy the first episode's mission array onto
+    every later step (#3105).
+    """
+    episode_dict = {}
+    total_steps = 0
+    td_data = TensorDict()
+    last_episode = None
+    dataset_has_nontensor = False
+    first_episode_num = min(episodes)
+    for episode_num in sorted(episodes):
+        episode = episodes[episode_num]
+        last_episode = episode
+        episode_len = episode["actions"].shape[0]
+        episode_dict[episode_num] = episode_len
+        total_steps += episode_len
+        if episode_num != first_episode_num:
+            continue
+        td_data.set("episode", 0)
+        seen = set()
+        for key, val in episode.items():
+            match = _NAME_MATCH[key]
+            if match in seen:
+                continue
+            seen.add(match)
+            if key in ("observations", "state", "infos"):
+                if is_tensor_collection(val) and any(
+                    isinstance(val.get(k), NonTensorData) for k in val.keys()
+                ):
+                    dataset_has_nontensor = True
+                if not val.shape:
+                    continue
+                td_data.set(("next", match), torch.zeros_like(val[0]))
+                td_data.set(match, torch.zeros_like(val[0]))
+            elif key not in ("terminations", "truncations", "rewards"):
+                td_data.set(match, torch.zeros_like(val[0]))
+            else:
+                td_data.set(("next", match), torch.zeros_like(val[0].unsqueeze(-1)))
+
+    td_data["next", "done"] = (
+        td_data["next", "truncated"] | td_data["next", "terminated"]
+    )
+    td_data = td_data.expand(total_steps).contiguous()
+    if dataset_has_nontensor:
+        _preallocate_nontensor_fields(
+            td_data, last_episode, total_steps, name_map=_NAME_MATCH
+        )
+
+    index = 0
+    for episode_num in sorted(episode_dict):
+        steps = episode_dict[episode_num]
+        episode = _patch_nontensor_data_to_stack(episodes[episode_num].clone())
+        data_view = td_data[slice(index, index + steps)]
+        data_view.fill_("episode", episode_num)
+        for key, val in episode.items():
+            match = _NAME_MATCH[key]
+            if key in ("observations", "state", "infos"):
+                if not val.shape:
+                    continue
+                val_next = val[1:].clone()
+                val_copy = val[:-1].clone()
+                data_view["next", match].copy_(val_next)
+                data_view[match].copy_(val_copy)
+                if is_tensor_collection(val_next):
+                    data_view["next", match].update_(
+                        _extract_nontensor_fields(val_next)
+                    )
+                    data_view[match].update_(_extract_nontensor_fields(val_copy))
+            elif key not in ("terminations", "truncations", "rewards"):
+                data_view[match].copy_(val)
+            else:
+                data_view[("next", match)].copy_(val.unsqueeze(-1))
+        data_view["next", "done"].copy_(
+            data_view["next", "terminated"] | data_view["next", "truncated"]
+        )
+        index += steps
+    return td_data
+
+
+def test_patch_nontensor_data_to_stack_indexes_one_mission_per_step():
+    """``NonTensorData`` of a mission array must become a per-step stack."""
+    episode = _minari_like_episode(
+        [b"pick up a blue box", b"pick up a green key"], n_actions=1
+    )
+    patched = _patch_nontensor_data_to_stack(episode.clone())
+    missions = patched.get(("observations", "mission"))
+    assert missions[0].data == b"pick up a blue box"
+    assert missions[1].data == b"pick up a green key"
+
+
+def test_minari_categorical_missions_are_not_broadcast_from_first_episode(tmp_path):
+    """Later episodes must keep their own mission strings (#3105).
+
+    The download path used to treat each episode's missions as one
+    ``NonTensorData``. Indexing that object does not slice the strings, so
+    every step received the first episode's array. The public contract is a
+    scalar ``("observation", "mission")`` per transition, different across
+    episodes.
+    """
+    ep0_missions = [b"pick up a blue box"] * 4
+    ep1_missions = [
+        b"pick up the purple key",
+        b"pick up the purple key",
+        b"pick up a green key",
+        b"open the red door",
+    ]
+    storage = _materialize_minari_like_storage(
+        {
+            0: _minari_like_episode(ep0_missions, n_actions=3),
+            1: _minari_like_episode(ep1_missions, n_actions=3),
+        }
+    )
+    assert storage.shape[0] == 6
+    for step in range(3):
+        mission = storage[step]["observation", "mission"]
+        next_mission = storage[step]["next", "observation", "mission"]
+        assert isinstance(mission, (bytes, str))
+        assert mission == ep0_missions[step]
+        assert next_mission == ep0_missions[step + 1]
+    for step in range(3):
+        mission = storage[3 + step]["observation", "mission"]
+        assert isinstance(mission, (bytes, str))
+        assert mission == ep1_missions[step]
+        assert mission != b"pick up a blue box"
+    assert storage[5]["next", "observation", "mission"] == b"open the red door"
+
+    memmaped = storage.memmap_like(tmp_path)
+    assert memmaped[3]["observation", "mission"] == b"pick up the purple key"
+    assert memmaped[5]["next", "observation", "mission"] == b"open the red door"
+
+
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
 @pytest.mark.slow
 class TestMinari:
@@ -786,29 +956,6 @@ class TestMinari:
         )
         sample = data.sample()
         assert sample.shape[0] == 32
-
-    def test_correct_categorical_missions(self):
-        try:
-            exp_replay = MinariExperienceReplay(
-                dataset_id="minigrid/BabyAI-Pickup/optimal-v0",
-                batch_size=1,
-                root=None,
-            )
-        except Exception as e:
-            err_str = str(e).lower()
-            if any(
-                x in err_str
-                for x in (
-                    "429",
-                    "too many requests",
-                    "not found locally",
-                    "download failed",
-                )
-            ):
-                warnings.warn(f"Test inconclusive due to download failure: {e}")
-                return
-            raise
-        assert isinstance(exp_replay[0][("observation", "mission")], (bytes, str))
 
 
 @pytest.mark.slow
