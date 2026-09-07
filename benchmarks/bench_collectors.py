@@ -8,9 +8,14 @@ CUDA hosts, ``--mujoco-gl egl``.
 Examples:
     python benchmarks/bench_collectors.py --total-frames 2000
     python benchmarks/bench_collectors.py --num-envs 1,2,4,8 --policy-delay-ms 20
+    python benchmarks/bench_collectors.py --num-envs 64 \
+        --backends async-env-mp --env-exchange shm \
+        --env-step-latency-ms 50 --policy-hidden-features 9216 \
+        --policy-hidden-layers 2 --policy-device cuda:0
     MUJOCO_GL=egl python benchmarks/bench_collectors.py \
         --env gym-mujoco --from-pixels --mujoco-gl egl --policy-device cuda:0
 """
+
 from __future__ import annotations
 
 import argparse
@@ -219,6 +224,8 @@ class PolicyFactory:
     action_dim: int = ACTION_DIM
     delay_s: float = 0.0
     from_pixels: bool = True
+    hidden_features: int = 256
+    hidden_layers: int = 1
 
     def __call__(self) -> TensorDictModule:
         if not self.from_pixels:
@@ -244,7 +251,7 @@ class PolicyFactory:
             in_features=cnn_out.shape[-1],
             activation_class=nn.ReLU,
             out_features=self.action_dim,
-            num_cells=[256],
+            num_cells=[self.hidden_features] * self.hidden_layers,
         )
         return TensorDictModule(
             LatencyHead(nn.Sequential(cnn, mlp), delay_s=self.delay_s),
@@ -475,6 +482,24 @@ def main() -> None:
     parser.add_argument("--warmup-batches", type=int, default=1)
     parser.add_argument("--env-step-latency-ms", type=float, default=1.0)
     parser.add_argument("--policy-delay-ms", type=float, default=0.0)
+    parser.add_argument(
+        "--policy-hidden-features",
+        type=int,
+        default=256,
+        help="Width of each hidden policy layer.",
+    )
+    parser.add_argument(
+        "--policy-hidden-layers",
+        type=int,
+        default=1,
+        help="Number of hidden policy layers.",
+    )
+    parser.add_argument(
+        "--env-exchange",
+        default="queue",
+        choices=["queue", "shm", "auto"],
+        help="AsyncEnvPool exchange used by multiprocessing env backends.",
+    )
     parser.add_argument("--policy-device", default="auto")
     parser.add_argument("--output-device", default="cpu")
     parser.add_argument("--jsonl", default="bench_collectors_results.jsonl")
@@ -505,6 +530,8 @@ def main() -> None:
         action_dim=action_dim,
         delay_s=args.policy_delay_ms / 1000.0,
         from_pixels=env_factory.from_pixels,
+        hidden_features=args.policy_hidden_features,
+        hidden_layers=args.policy_hidden_layers,
     )
 
     results: list[BenchmarkResult] = []
@@ -614,8 +641,8 @@ def main() -> None:
                     ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
-                            name="AsyncBatched mp env",
-                            backend=backend,
+                            name=f"AsyncBatched mp env ({args.env_exchange})",
+                            backend=f"{backend}-{args.env_exchange}",
                             batch_rule=label,
                             factory=lambda num_envs=num_envs, max_batch_size=max_batch_size, min_batch_size=min_batch_size, timeout=timeout: AsyncBatchedCollector(
                                 create_env_fn=[env_factory] * num_envs,
@@ -623,6 +650,7 @@ def main() -> None:
                                 frames_per_batch=args.frames_per_batch,
                                 total_frames=-1,
                                 env_backend="multiprocessing",
+                                env_exchange=args.env_exchange,
                                 server_config=InferenceServerConfig(
                                     service_backend="thread",
                                     max_batch_size=max_batch_size,
@@ -655,8 +683,10 @@ def main() -> None:
                     ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
-                            name="AsyncBatched process server",
-                            backend=backend,
+                            name=(
+                                "AsyncBatched process server " f"({args.env_exchange})"
+                            ),
+                            backend=f"{backend}-{args.env_exchange}",
                             batch_rule=label,
                             factory=lambda num_envs=num_envs, max_batch_size=max_batch_size, min_batch_size=min_batch_size, timeout=timeout: AsyncBatchedCollector(
                                 create_env_fn=[env_factory] * num_envs,
@@ -664,6 +694,7 @@ def main() -> None:
                                 frames_per_batch=args.frames_per_batch,
                                 total_frames=-1,
                                 env_backend="multiprocessing",
+                                env_exchange=args.env_exchange,
                                 server_config=InferenceServerConfig(
                                     service_backend="process",
                                     max_batch_size=max_batch_size,

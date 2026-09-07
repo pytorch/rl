@@ -120,6 +120,57 @@ and a **policy** -- all internal wiring is handled automatically:
 
     collector.shutdown()
 
+Compile modules and run their first warm-up calls before iterating the
+collector whenever possible. Compiler initialization can create process-wide
+worker resources, and overlapping a first compilation with the collector's
+coordinator and inference threads can stall either workload. If lazy
+compilation after collection has started is unavoidable, pause the collector
+around that call:
+
+.. code-block:: python
+
+    for data in collector:
+        with collector.pause():
+            compiled_learner(data)
+        break
+
+The pause context finishes in-flight environment and policy requests, parks
+the coordinator threads, and leaves the inference server idle. Collection
+resumes automatically when the context exits.
+
+.. _async_batched_collector_cpu_affinity:
+
+On Linux, ``worker_affinity`` assigns CPU masks to the multiprocessing
+environment workers, while ``driver_affinity`` assigns one mask to the
+inference-server and coordinator threads, as well as the pool's parent-side
+queue feeder threads. Dedicated process-backed inference servers use a spawned
+process and are not covered by ``driver_affinity``. For example, with two
+driver CPUs followed by four two-CPU worker windows:
+
+.. code-block:: python
+
+    import os
+
+    available_cpus = sorted(os.sched_getaffinity(0))
+    driver_cpus = available_cpus[:2]
+    worker_cpus = available_cpus[2:10]
+    worker_masks = [
+        tuple(worker_cpus[start : start + 2])
+        for start in range(0, len(worker_cpus), 2)
+    ]
+    collector = AsyncBatchedCollector(
+        create_env_fn=[make_env] * len(worker_masks),
+        policy=policy,
+        frames_per_batch=200,
+        env_backend="multiprocessing",
+        driver_affinity=driver_cpus,
+        worker_affinity=worker_masks,
+    )
+
+Build both masks from the CPUs visible through ``os.sched_getaffinity(0)``.
+See :ref:`async_env_pool_cpu_affinity` for container cpuset, CFS quota, and
+Kubernetes CPU Manager considerations.
+
 **Key advantages over direct collection through** :class:`Collector`:
 
 - The inference server automatically **batches policy forward passes** from
@@ -127,6 +178,12 @@ and a **policy** -- all internal wiring is handled automatically:
 - Environment stepping and inference run in **overlapping fashion**, reducing
   idle time.
 - Supports ``yield_completed_trajectories=True`` for episode-level yields.
+
+For many fixed-schema CPU environments, set ``env_backend="multiprocessing"``
+and ``env_exchange="shm"``. The collector then drains ready shared-memory slots
+in batches from one coordinator thread, while keeping faster environments
+independent of slower ones. This path is intended for environments whose step
+latency dominates its millisecond-scale coordinator polling interval.
 
 Scaling ``Collector`` across local processes
 --------------------------------------------

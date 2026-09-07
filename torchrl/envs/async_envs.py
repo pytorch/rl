@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import abc
 import multiprocessing
+import os
 import queue
 import threading
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import as_completed, FIRST_COMPLETED, ThreadPoolExecutor, wait
 from multiprocessing import Queue
+from numbers import Integral
 from typing import Literal
 
 import torch
@@ -23,12 +25,49 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict, expand_as_right
+from tensordict.utils import _zip_strict, expand_as_right, NestedKey
 
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs._async_exchange import _receive_batch, _SharedSlotExchange
 from torchrl.envs.common import _EnvPostInit, EnvBase
+
+
+class _ValidatedCPUAffinity(tuple):
+    pass
+
+
+def _validate_cpu_affinity(
+    cpu_affinity: Sequence[int], *, option_name: str
+) -> tuple[int, ...]:
+    if isinstance(cpu_affinity, _ValidatedCPUAffinity):
+        return cpu_affinity
+    if not hasattr(os, "sched_setaffinity") or not hasattr(os, "sched_getaffinity"):
+        raise NotImplementedError(
+            f"{option_name} requires os.sched_getaffinity and "
+            "os.sched_setaffinity, which are only available on Linux."
+        )
+    try:
+        cpu_affinity = tuple(cpu_affinity)
+    except TypeError as err:
+        raise TypeError(f"{option_name} must be a sequence of CPU indices.") from err
+    if not cpu_affinity:
+        raise ValueError(f"{option_name} must contain at least one CPU index.")
+    if any(
+        isinstance(cpu, bool) or not isinstance(cpu, Integral) for cpu in cpu_affinity
+    ):
+        raise TypeError(f"{option_name} must contain only integer CPU indices.")
+    if any(cpu < 0 for cpu in cpu_affinity):
+        raise ValueError(f"{option_name} CPU indices must be non-negative.")
+    cpu_affinity = _ValidatedCPUAffinity(int(cpu) for cpu in cpu_affinity)
+    available_cpus = os.sched_getaffinity(0)
+    unavailable_cpus = sorted(set(cpu_affinity).difference(available_cpus))
+    if unavailable_cpus:
+        raise ValueError(
+            f"{option_name} contains CPUs unavailable to this process: "
+            f"{unavailable_cpus}."
+        )
+    return cpu_affinity
 
 
 class _AsyncEnvMeta(_EnvPostInit):
@@ -76,18 +115,37 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         stack (Literal["dense", "maybe_dense", "lazy"], optional):
             The method to use for stacking environment outputs. Defaults to `"dense"`.
         exchange (Literal["queue", "shm", "auto"], optional): Data exchange
-            used by the multiprocessing backend. ``"shm"`` stores fixed-shape
-            tensor data in shared slots and sends only readiness descriptors
-            through queues; it requires identical, fixed-shape, CPU, tensor-only
-            schemas across workers. ``"auto"`` selects ``"shm"`` when the env
-            schema supports it and falls back to ``"queue"`` otherwise (the
-            resolution is reported by :attr:`resolved_exchange` and logged on
-            fallback). Defaults to ``"queue"``.
+            used by the multiprocessing backend. ``"queue"`` supports dynamic
+            data and copies received tensors out of multiprocessing shared
+            memory so retaining results does not retain one mapping per tensor.
+            ``"shm"`` stores fixed-shape tensor data in shared slots and sends
+            only readiness descriptors through queues; it requires identical,
+            fixed-shape, CPU, tensor-only schemas across workers. ``"auto"``
+            selects ``"shm"`` when the env schema supports it and falls back to
+            ``"queue"`` otherwise (the resolution is reported by
+            :attr:`resolved_exchange` and logged on fallback). Defaults to
+            ``"queue"``.
 
             .. warning::
                 The default will change from ``"queue"`` to ``"auto"`` in
                 v0.15 for the multiprocessing backend. A ``FutureWarning`` is
                 emitted when the default is relied upon.
+        worker_affinity (Sequence[Sequence[int]] or Callable[[int], Sequence[int]], optional):
+            Optional Linux CPU placement for multiprocessing workers. This is
+            useful when environment workers share a constrained CPU set with
+            CPU-heavy simulators or other services: without affinity, the
+            scheduler may place them on the same CPUs and increase environment
+            step-time jitter. Most users should leave this as ``None``.
+
+            TorchRL can discover which CPUs the current process may use, but
+            it cannot infer which CPUs the application has reserved for other
+            work or how many threads an environment and its subprocesses need.
+            It therefore does not choose a partition automatically. Provide
+            one mask per environment, or a callable mapping an environment
+            index to its mask. The mask is applied before the environment is
+            constructed and is inherited by subprocesses it starts. Defaults
+            to ``None``. See :ref:`async_env_pool_cpu_affinity` for an example
+            and deployment guidance.
         create_env_kwargs (dict, optional):
             Keyword arguments to pass to the environment maker. Defaults to `{}`.
 
@@ -216,6 +274,9 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         backend: Literal["threading", "multiprocessing", "asyncio"] = "threading",
         stack: Literal["dense", "maybe_dense", "lazy"] = "dense",
         exchange: Literal["queue", "shm", "auto"] | None = None,
+        worker_affinity: Sequence[Sequence[int]]
+        | Callable[[int], Sequence[int]]
+        | None = None,
         create_env_kwargs: dict | list[dict] | None = None,
     ) -> None:
         if not isinstance(env_makers, Sequence):
@@ -224,6 +285,33 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         self.env_makers = env_makers
         self.num_envs = len(env_makers)
         self.backend = backend
+        self.worker_affinity = worker_affinity
+        self._worker_affinity = None
+        if worker_affinity is not None:
+            if backend != "multiprocessing":
+                raise ValueError(
+                    "worker_affinity is only supported with "
+                    "backend='multiprocessing'."
+                )
+            if callable(worker_affinity):
+                affinity_masks = [
+                    worker_affinity(env_index) for env_index in range(self.num_envs)
+                ]
+            else:
+                affinity_masks = list(worker_affinity)
+                if len(affinity_masks) != self.num_envs:
+                    raise ValueError(
+                        "worker_affinity must provide one CPU mask per "
+                        f"environment, got {len(affinity_masks)} masks for "
+                        f"{self.num_envs} environments."
+                    )
+            self._worker_affinity = [
+                _validate_cpu_affinity(
+                    affinity,
+                    option_name=f"worker_affinity[{env_index}]",
+                )
+                for env_index, affinity in enumerate(affinity_masks)
+            ]
         if exchange is None:
             if backend == "multiprocessing":
                 warnings.warn(
@@ -601,6 +689,17 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         """
         return "shm" if getattr(self, "_slot_exchange", None) is not None else "queue"
 
+    @property
+    def exchange_keys(self) -> tuple[NestedKey, ...]:
+        """The tensor keys accepted by the active shared-memory exchange.
+
+        Returns an empty tuple when the resolved exchange is ``"queue"``.
+        """
+        exchange = getattr(self, "_slot_exchange", None)
+        if exchange is None:
+            return ()
+        return tuple(exchange._input_keys)
+
     def stats(self, *, reset: bool = False) -> dict[str, float | int]:
         """Return shared-memory exchange statistics.
 
@@ -676,6 +775,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._current_reset = 0
         self._current_step = 0
         self._current_step_reset = 0
+        self._slot_exchange = None
 
         num_threads = self.num_envs
         self.threads = []
@@ -694,20 +794,42 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     "per_env_step_queue": self._per_env_step_queues[i],
                     "per_env_reset_queue": self._per_env_reset_queues[i],
                     "per_env_step_reset_queue": self._per_env_step_reset_queues[i],
+                    "cpu_affinity": None
+                    if self._worker_affinity is None
+                    else self._worker_affinity[i],
                 },
             )
             self.threads.append(thread)
             thread.start()
+        if self._worker_affinity is not None:
+            try:
+                for i in range(num_threads):
+                    status, payload = self.output_queue[i].get()
+                    if status != "affinity_ready":
+                        raise RuntimeError(
+                            f"AsyncEnvPool worker {i} failed to set its CPU "
+                            f"affinity: {payload}"
+                        )
+            except Exception:
+                for thread in self.threads:
+                    if thread.is_alive():
+                        thread.terminate()
+                for thread in self.threads:
+                    thread.join()
+                raise
         # Get specs from each worker and cache them for _get_child_specs()
         for i in range(num_threads):
             self.input_queue[i].put(("get_specs", None))
         self._child_specs = []
         for i in range(num_threads):
             self._child_specs.append(self.output_queue[i].get())
+        # Batch sizes are already available from the worker specs. Caching them
+        # here avoids a later round trip over the input queues used for steps,
+        # which may block behind in-flight env work.
+        self._env_batch_sizes = [torch.Size(spec.shape) for spec in self._child_specs]
         specs = torch.stack(list(self._child_specs))
         output_spec = specs["output_spec"]
         input_spec = specs["input_spec"]
-        self._slot_exchange = None
         if self.exchange in ("shm", "auto"):
             for i in range(num_threads):
                 self.input_queue[i].put(("get_fake_tensordict", None))
@@ -737,13 +859,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
 
     @property
     def env_batch_sizes(self) -> list[torch.Size]:
-        batch_sizes = getattr(self, "_env_batch_sizes", [])
-        if not batch_sizes:
-            for _env_idx in range(self.num_envs):
-                self.input_queue[_env_idx].put(("batch_size", None))
-                batch_sizes.append(self.output_queue[_env_idx].get())
-            self._env_batch_sizes = batch_sizes
-        return batch_sizes
+        return self._env_batch_sizes
 
     def _prepare_worker_data(
         self,
@@ -777,6 +893,16 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             track_action=track_action,
         )
 
+    def _stack_queue_results(self, results) -> TensorDictBase:
+        result = self._stack_func(results)
+        if isinstance(result, LazyStackedTensorDict):
+            # A lazy stack retains the individual TensorDicts reconstructed by
+            # multiprocessing.Queue, and therefore one shared-memory mapping
+            # per tensor. Clone its constituents into process-private storage;
+            # dense stacks already own their newly allocated tensor storage.
+            result = result.clone()
+        return result
+
     def async_step_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
     ) -> None:
@@ -807,7 +933,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     ) -> TensorDictBase:
         if env_index is not None:
             if self._slot_exchange is None:
-                return self._per_env_step_queues[env_index].get()
+                return self._per_env_step_queues[env_index].get().clone()
             descriptor = self._slot_exchange.receive_one(
                 self._per_env_step_queues[env_index], track_action=True
             )
@@ -833,7 +959,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             return result
         r, idx = self._sort_results(r)
         self._busy.difference_update(idx)
-        return self._stack_func(r)
+        return self._stack_queue_results(r)
 
     def _async_private_step_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
@@ -883,7 +1009,8 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if env_index is not None:
             if self._slot_exchange is None:
-                return self._per_env_step_reset_queues[env_index].get()
+                result, next_result = self._per_env_step_reset_queues[env_index].get()
+                return result.clone(), next_result.clone()
             descriptor = self._slot_exchange.receive_one(
                 self._per_env_step_reset_queues[env_index], track_action=True
             )
@@ -910,7 +1037,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         r, r_ = zip(*r)
         r, r_, idx = self._sort_results(r, r_)
         self._busy.difference_update(idx)
-        return self._stack_func(r), self._stack_func(r_)
+        return self._stack_queue_results(r), self._stack_queue_results(r_)
 
     def async_reset_send(
         self,
@@ -943,7 +1070,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     ) -> TensorDictBase:
         if env_index is not None:
             if self._slot_exchange is None:
-                return self._per_env_reset_queues[env_index].get()
+                return self._per_env_reset_queues[env_index].get().clone()
             descriptor = self._slot_exchange.receive_one(
                 self._per_env_reset_queues[env_index], track_action=False
             )
@@ -969,7 +1096,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             return result
         r, idx = self._sort_results(r)
         self._busy.difference_update(idx)
-        return self._stack_func(r)
+        return self._stack_queue_results(r)
 
     def _async_private_reset_send(
         self,
@@ -1054,7 +1181,15 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         per_env_step_queue=None,
         per_env_reset_queue=None,
         per_env_step_reset_queue=None,
+        cpu_affinity=None,
     ):
+        if cpu_affinity is not None:
+            try:
+                os.sched_setaffinity(0, cpu_affinity)
+            except Exception as err:
+                output_queue.put(("affinity_error", repr(err)))
+                return
+            output_queue.put(("affinity_ready", None))
         if not isinstance(env_or_factory, EnvBase):
             env = env_or_factory(**create_env_kwargs)
         else:
@@ -1075,8 +1210,6 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             elif msg == "init_shm":
                 shared_slots = data
                 output_queue.put(True)
-            elif msg == "batch_size":
-                output_queue.put(env.batch_size)
             elif msg == "reset":
                 if shared_slots is not None:
                     data = shared_slots[0].select(*data, strict=True)
