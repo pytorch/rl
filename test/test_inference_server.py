@@ -2341,6 +2341,42 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert collected >= 50
 
+    @pytest.mark.parametrize(
+        ("env_backend", "env_exchange"),
+        [("threading", "queue"), ("multiprocessing", "shm")],
+    )
+    def test_pause_for_torch_compile(self, env_backend, env_exchange):
+        """Compilation can run while a started collector is quiescent."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 4,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=-1,
+            env_backend=env_backend,
+            env_exchange=env_exchange,
+        )
+        iterator = iter(collector)
+        next(iterator)
+
+        def unrelated_module(value):
+            return value.sin().cos()
+
+        try:
+            with collector.pause():
+                paused_requests = collector.server_stats()["requests"]
+                compiled_module = torch.compile(unrelated_module, backend="eager")
+                value = torch.randn(8)
+                torch.testing.assert_close(
+                    compiled_module(value), unrelated_module(value)
+                )
+                time.sleep(0.05)
+                assert collector.server_stats()["requests"] == paused_requests
+
+            next(iterator)
+            assert collector.server_stats()["requests"] > paused_requests
+        finally:
+            collector.shutdown()
+
     def test_num_envs(self):
         """The collector knows the number of environments."""
         policy = _make_counting_policy()

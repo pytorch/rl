@@ -72,6 +72,10 @@ class WandbLogger(Logger):
         project (str, optional): The name of the project where you're sending
             the new run. If the project is not specified, the run is put in
             an ``"Uncategorized"`` project.
+        base_url (str, optional): The W&B server URL used for authentication and
+            data synchronization. Construct the logger before other code imports
+            or calls W&B, because the W&B client reads ``WANDB_BASE_URL`` when it
+            is initialized.
         log_env_packages (bool, optional): if ``True``, logs the Python runtime,
             installed package versions, and editable source locations under
             ``wandb.config["env"]``. Defaults to ``True``.
@@ -94,6 +98,7 @@ class WandbLogger(Logger):
         save_dir: str | None = None,
         id: str | None = None,
         project: str | None = None,
+        base_url: str | None = None,
         *,
         video_fps: int = 32,
         log_env_packages: bool = True,
@@ -113,6 +118,7 @@ class WandbLogger(Logger):
         self.save_dir = save_dir
         self.id = id
         self.project = project
+        self.base_url = base_url
         self.video_fps = video_fps
         self.log_env_packages = log_env_packages
         self._step_registry: dict[str, int] = {}
@@ -169,6 +175,17 @@ class WandbLogger(Logger):
 
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
+        if self.base_url is not None:
+            settings = self._wandb_kwargs.get("settings")
+            if settings is None:
+                settings = wandb.Settings(base_url=self.base_url)
+            elif isinstance(settings, Mapping):
+                settings = wandb.Settings(**{**settings, "base_url": self.base_url})
+            else:
+                settings.base_url = self.base_url
+            self._wandb_kwargs["settings"] = settings
+            if not self.offline:
+                wandb.login(host=self.base_url, key=getattr(settings, "api_key", None))
 
         return wandb.init(**self._wandb_kwargs)
 
