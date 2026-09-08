@@ -276,6 +276,25 @@ reads its
 Because the input features stay attached, this term also trains the RSSM
 representation when the world-model loss returns live features.
 
+Reconstruction heads
+--------------------
+
+Vector and image reconstruction can be composed in the public model loss.
+Use symlog distance for vector observations and raw distance for normalized
+images. Integer images are scaled by 255 when symlog is disabled. Each head
+sums its event dimensions before the batch/time average, unless
+``global_average=True``; the resulting head losses are added together.
+
+.. code-block:: python
+
+    model_loss = DreamerV3ModelLoss(world_model, reco_symlog=[True, False])
+    model_loss.set_keys(
+        pixels=[("sensors", "vector"), ("sensors", "image")],
+        reco_pixels=["reco_vector", "reco_pixels"],
+    )
+    losses, posterior = model_loss(replay_sample)
+    losses["loss_model_reco"].backward()
+
 Optimization and training loop
 ------------------------------
 
