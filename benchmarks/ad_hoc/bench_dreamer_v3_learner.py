@@ -6,8 +6,8 @@
 
 The workload uses the maintained DMC Walker configuration and includes all
 model, actor, value, and replay-value losses, backward, the optimizer step,
-and the slow-value-target update. Replay sampling and environment collection
-are intentionally outside the learner timing.
+and the slow-value-target update. The optional replay workload uses the same
+native replay construction, prefetch, and conditional writeback as training.
 
 Example::
 
@@ -17,6 +17,7 @@ Example::
 from __future__ import annotations
 
 import argparse
+import functools as ft
 import json
 import runpy
 import statistics
@@ -71,6 +72,9 @@ def _make_data(
                 "terminated": torch.zeros(
                     batch, steps, 1, dtype=torch.bool, device=device
                 ),
+                "truncated": torch.zeros(
+                    batch, steps, 1, dtype=torch.bool, device=device
+                ),
             },
         },
         [batch, steps],
@@ -78,24 +82,80 @@ def _make_data(
     )
 
 
-def _measure(
-    learner_update,
-    data: TensorDict,
-    *,
-    device: torch.device,
-    warmup: int,
-    iterations: int,
-) -> list[float]:
+class _ReplayLearnerStep:
+    def __init__(
+        self,
+        example: dict,
+        cfg,
+        learner_update,
+        *,
+        device: torch.device,
+        replay_device: torch.device,
+        obs_dim: int,
+        action_dim: int,
+    ):
+        self.cfg = cfg
+        self.device = device
+        self.learner_update = learner_update
+        self.replay_context_update = example["replay_context_update"]
+        sequence_records = cfg.replay_buffer.seq_len + 1
+        num_streams = 4
+        records_per_stream = sequence_records * cfg.replay_buffer.batch_size
+        cfg.replay_buffer.buffer_size = records_per_stream * num_streams
+        cfg.replay_buffer.online = False
+        self.replay_buffer = example["_build_replay"](
+            cfg, num_streams, replay_device, device
+        )
+        replay_data = _make_data(
+            cfg,
+            replay_device,
+            batch=num_streams,
+            steps=records_per_stream,
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+        )
+        replay_data["is_init"][:, 0] = True
+        self.replay_buffer.extend(replay_data)
+
+    def __call__(self) -> None:
+        sequence_records = self.cfg.replay_buffer.seq_len + 1
+        replay_sample = self.replay_buffer.sample().reshape(
+            self.cfg.replay_buffer.batch_size, sequence_records
+        )
+        sample_info = replay_sample.select("index", "index_generation")
+        sample = replay_sample.exclude("index", "index_generation")
+        sample = sample.to(self.device, non_blocking=True)[:, :-1]
+        if self.learner_update.replay_must_be_idle:
+            self.replay_buffer.synchronize()
+        _, state, belief = self.learner_update(sample)
+        if self.cfg.optimization.cudagraph_train_step:
+            state = state.clone()
+            belief = belief.clone()
+        index, generation, patch = self.replay_context_update(
+            sample_info, state, belief
+        )
+        self.replay_buffer.submit_update_if_present(
+            index=index, generation=generation, patch=patch
+        )
+
+    def synchronize(self) -> None:
+        self.replay_buffer.synchronize()
+        if self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+
+    def close(self) -> None:
+        self.replay_buffer.shutdown()
+
+
+def _measure(step, synchronize, *, warmup: int, iterations: int) -> list[float]:
     for _ in range(warmup):
-        learner_update(data)
-    torch.cuda.synchronize(device)
-    samples = []
+        step()
+    synchronize()
+    started = time.perf_counter()
     for _ in range(iterations):
-        started = time.perf_counter()
-        learner_update(data)
-        torch.cuda.synchronize(device)
-        samples.append((time.perf_counter() - started) * 1000)
-    return samples
+        step()
+    synchronize()
+    return [(time.perf_counter() - started) * 1000 / iterations]
 
 
 def main() -> None:
@@ -105,6 +165,11 @@ def main() -> None:
     parser.add_argument("--unroll", type=int, default=8)
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--iterations", type=int, default=50)
+    parser.add_argument(
+        "--replay-device",
+        choices=("cpu", "cuda"),
+        help="Include native replay sampling and writeback on this device.",
+    )
     parser.add_argument(
         "--variants",
         nargs="+",
@@ -163,18 +228,40 @@ def main() -> None:
                     example["LEARNER_RNG_STREAM"],
                 )
             )
-        samples = _measure(
-            learner_update,
-            data.clone(),
-            device=device,
-            warmup=args.warmup,
-            iterations=args.iterations,
-        )
+        replay_step = None
+        if args.replay_device is None:
+            step = ft.partial(learner_update, data.clone())
+            synchronize = ft.partial(torch.cuda.synchronize, device)
+            workload = "complete_learner_update"
+        else:
+            replay_step = _ReplayLearnerStep(
+                example,
+                cfg,
+                learner_update,
+                device=device,
+                replay_device=torch.device(args.replay_device),
+                obs_dim=obs_dim,
+                action_dim=action_dim,
+            )
+            step = replay_step
+            synchronize = replay_step.synchronize
+            workload = "complete_learner_update_with_replay"
+        try:
+            samples = _measure(
+                step,
+                synchronize,
+                warmup=args.warmup,
+                iterations=args.iterations,
+            )
+        finally:
+            if replay_step is not None:
+                replay_step.close()
         median_ms = statistics.median(samples)
         result = {
             "variant": variant,
-            "workload": "complete_learner_update",
+            "workload": workload,
             "device": torch.cuda.get_device_name(device),
+            "replay_device": args.replay_device,
             "torch_version": torch.__version__,
             "cuda_version": torch.version.cuda,
             "batch": args.batch,

@@ -15,15 +15,17 @@ Usage::
     python sota-implementations/dreamer_v3/train.py \\
         --config-name=config_dmc_walker
 """
+
 from __future__ import annotations
 
 import copy
+import functools as ft
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
 import hydra
 import torch
-
 from dreamer_v3_agent import (
     build_actor,
     build_continuation_model,
@@ -39,12 +41,9 @@ from dreamer_v3_agent import (
 )
 from dreamer_v3_replay import (
     collector_action_budget,
-    DreamerV3ReplayPipeline,
-    DreamerV3ReplayRecordBuilder,
-    DreamerV3ReplaySampler,
-    DreamerV3ShiftedRecordExtender,
     DreamerV3UpdateRatio,
     driver_step_for_action,
+    replay_context_update,
 )
 from dreamer_v3_utils import (
     append_jsonl,
@@ -62,10 +61,18 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import CudaGraphModule, TensorDictModuleBase
 from torchrl import timeit
 from torchrl._utils import get_available_device, logger as torchrl_logger
-from torchrl.collectors import Collector
-from torchrl.data import LazyTensorStorage, ReplayBuffer, RoundRobinWriter
-from torchrl.envs import SerialEnv
+from torchrl.collectors import AsyncBatchedCollector, Collector
+from torchrl.data import (
+    LazyTensorStorage,
+    ReplayBufferEnsemble,
+    SliceSampler,
+    StreamingSliceSampler,
+    TensorDictReplayBuffer,
+    TensorDictRoundRobinWriter,
+)
+from torchrl.envs import SelectTransform, SerialEnv
 from torchrl.envs.utils import ExplorationType
+from torchrl.modules.inference_server import InferenceDeviceConfig
 from torchrl.objectives import (
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
@@ -105,6 +112,9 @@ class _LearnerUpdate:
         self.value_target_updater = learner.value_target_updater
         self.state_dim = latent_state_dim(cfg)
         self.use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
+        self._cudagraph_warmup_remaining = (
+            cudagraph_warmup if cfg.optimization.cudagraph_train_step else 0
+        )
         train_step = self._forward_backward
         if cfg.optimization.cudagraph_train_step:
             if device.type != "cuda":
@@ -117,6 +127,11 @@ class _LearnerUpdate:
                 device=device,
             )
         self.train_step = train_step
+
+    @property
+    def replay_must_be_idle(self) -> bool:
+        """Whether replay work must finish before the next learner call."""
+        return self._cudagraph_warmup_remaining > 0
 
     def _forward_backward(
         self,
@@ -201,6 +216,8 @@ class _LearnerUpdate:
         sample: TensorDictBase,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         result = self.train_step(sample)
+        if self._cudagraph_warmup_remaining:
+            self._cudagraph_warmup_remaining -= 1
         self.optimizer.step()
         self.value_target_updater.step()
         return result
@@ -210,7 +227,12 @@ def _validated_action_budget(cfg: DictConfig) -> int:
     num_envs = cfg.collector.num_envs
     if num_envs <= 0:
         raise ValueError(f"collector.num_envs must be positive, got {num_envs}.")
-    if cfg.collector.frames_per_batch % num_envs:
+    if cfg.collector.backend not in ("sync", "async"):
+        raise ValueError(
+            "collector.backend must be 'sync' or 'async', got "
+            f"{cfg.collector.backend!r}."
+        )
+    if cfg.collector.backend == "sync" and cfg.collector.frames_per_batch % num_envs:
         raise ValueError(
             "collector.frames_per_batch must be divisible by collector.num_envs, "
             f"got {cfg.collector.frames_per_batch} and {num_envs}."
@@ -339,10 +361,18 @@ def _build_collection(
     state_dim: int,
     action_dim: int,
     collector_action_frames: int,
-) -> tuple[Collector, DreamerV3BehaviorPolicySync | None]:
+    replay_buffer: ReplayBufferEnsemble,
+    post_collect_hook: Callable[[TensorDictBase], None],
+) -> tuple[Collector | AsyncBatchedCollector, DreamerV3BehaviorPolicySync | None]:
     num_envs = cfg.collector.num_envs
+    collector_backend = cfg.collector.backend
+    if collector_backend not in ("sync", "async"):
+        raise ValueError(
+            "collector.backend must be 'sync' or 'async', got "
+            f"{collector_backend!r}."
+        )
     real_world_actor = learner.real_world_actor
-    if cfg.optimization.deferred_policy_sync:
+    if cfg.optimization.deferred_policy_sync and collector_backend == "sync":
         collector_actor = copy.deepcopy(real_world_actor)
         # The decoder cannot act, but the reference syncs both parameter trees.
         behavior_decoder = copy.deepcopy(learner.world_model[2])
@@ -353,6 +383,11 @@ def _build_collection(
         behavior_policy_sync = DreamerV3BehaviorPolicySync(
             learner_policy_tree, behavior_policy_tree
         )
+    elif collector_backend == "async":
+        # The inference server owns a separate actor that is refreshed through
+        # the collector's synchronized policy-update path after each train batch.
+        collector_actor = copy.deepcopy(real_world_actor)
+        behavior_policy_sync = None
     else:
         collector_actor = real_world_actor
         behavior_policy_sync = None
@@ -361,34 +396,67 @@ def _build_collection(
         if cfg.optimization.separate_policy_rng
         else collector_actor
     )
-
-    def make_explore_env(index: int):
-        seed = cfg.env.seed + 2 + index if cfg.env.use_seed else None
-        return make_primed_env(cfg, seed, state_dim, action_dim)
-
-    if num_envs == 1:
-        explore_env = make_explore_env(0)
-    else:
-        explore_env = SerialEnv(
-            num_envs,
-            [
-                (lambda index=index: make_explore_env(index))
-                for index in range(num_envs)
-            ],
+    create_env_fns = [
+        ft.partial(
+            make_primed_env,
+            cfg,
+            cfg.env.seed + 2 + index if cfg.env.use_seed else None,
+            state_dim,
+            action_dim,
         )
-
-    collector = Collector(
-        explore_env,
-        collector_policy,
-        frames_per_batch=cfg.collector.frames_per_batch,
-        total_frames=collector_action_frames,
-        policy_device=device,
-        env_device="cpu",
-        storing_device="cpu",
-        exploration_type=ExplorationType.RANDOM
-        if cfg.collector.exploration == "random"
-        else ExplorationType.MODE,
+        for index in range(num_envs)
+    ]
+    replay_postproc = SelectTransform(
+        "action",
+        "is_init",
+        "state",
+        "belief",
+        "env_index",
+        ("next", "observation"),
+        ("next", "reward"),
+        ("next", "done"),
+        ("next", "terminated"),
+        ("next", "truncated"),
+        keep_rewards=False,
+        keep_dones=False,
     )
+
+    collector_kwargs = {
+        "frames_per_batch": cfg.collector.frames_per_batch,
+        "total_frames": collector_action_frames,
+        "postproc": replay_postproc,
+        "post_collect_hook": post_collect_hook,
+        "replay_buffer": replay_buffer,
+    }
+    if collector_backend == "async":
+        collector = AsyncBatchedCollector(
+            create_env_fns,
+            policy=collector_policy,
+            max_batch_size=num_envs,
+            env_backend=cfg.collector.async_env_backend,
+            device_config=InferenceDeviceConfig(
+                policy_device=device,
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+            policy_version_key=None,
+            **collector_kwargs,
+        )
+    else:
+        collector = Collector(
+            SerialEnv(num_envs, create_env_fns),
+            collector_policy,
+            policy_device=device,
+            env_device="cpu",
+            storing_device="cpu",
+            exploration_type=(
+                ExplorationType.RANDOM
+                if cfg.collector.exploration == "random"
+                else ExplorationType.MODE
+            ),
+            **collector_kwargs,
+        )
     if cfg.optimization.separate_policy_rng:
         # The collector's construction-time policy call is not an action.
         collector_policy.reset_counter()
@@ -396,46 +464,45 @@ def _build_collection(
 
 
 def _build_replay(
-    cfg: DictConfig, num_envs: int, replay_device: torch.device
-) -> tuple[
-    ReplayBuffer,
-    DreamerV3ReplaySampler,
-    DreamerV3ReplayRecordBuilder,
-    DreamerV3ShiftedRecordExtender | None,
-    DreamerV3ReplayPipeline,
-]:
-    replay_sampler = DreamerV3ReplaySampler(
-        # The extra record receives the last refreshed posterior.
-        slice_len=cfg.replay_buffer.seq_len + 1,
-        online=cfg.replay_buffer.online,
-    )
-    rb = ReplayBuffer(
-        storage=LazyTensorStorage(
-            max_size=cfg.replay_buffer.buffer_size,
-            ndim=2 if num_envs > 1 else 1,
-            device=replay_device,
-        ),
-        dim_extend=1 if num_envs > 1 else 0,
-        writer=RoundRobinWriter(track_generations=True),
-        sampler=replay_sampler,
-        batch_size=cfg.replay_buffer.batch_size * (cfg.replay_buffer.seq_len + 1),
+    cfg: DictConfig,
+    num_envs: int,
+    replay_device: torch.device,
+    device: torch.device,
+) -> ReplayBufferEnsemble:
+    sequence_records = cfg.replay_buffer.seq_len + 1
+    base_capacity, remainder = divmod(cfg.replay_buffer.buffer_size, num_envs)
+    capacities = [base_capacity + (index < remainder) for index in range(num_envs)]
+    if min(capacities) < sequence_records:
+        raise ValueError(
+            f"replay_buffer.buffer_size={cfg.replay_buffer.buffer_size} split "
+            f"across {num_envs} streams cannot hold one {sequence_records}-record "
+            "sequence per stream."
+        )
+
+    sampler_type = StreamingSliceSampler if cfg.replay_buffer.online else SliceSampler
+    members = [
+        TensorDictReplayBuffer(
+            storage=LazyTensorStorage(capacity, device=replay_device),
+            sampler=sampler_type(
+                slice_len=sequence_records,
+                end_key=("next", "done"),
+            ),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+        )
+        for capacity in capacities
+    ]
+    return ReplayBufferEnsemble(
+        *members,
+        p="sampleable",
+        num_buffer_sampled=cfg.replay_buffer.batch_size,
+        routing_key="env_index" if cfg.collector.backend == "async" else None,
+        routing_dim=0 if cfg.collector.backend == "sync" else None,
+        batch_size=cfg.replay_buffer.batch_size * sequence_records,
         generator=torch.Generator().manual_seed(
             stream_seed(cfg.env.seed, 0, REPLAY_RNG_STREAM)
         ),
-    )
-    replay_record_builder = DreamerV3ReplayRecordBuilder(num_envs)
-    shifted_record_extender = (
-        DreamerV3ShiftedRecordExtender(num_envs)
-        if cfg.collector.count_reset_records
-        else None
-    )
-    replay_pipeline = DreamerV3ReplayPipeline()
-    return (
-        rb,
-        replay_sampler,
-        replay_record_builder,
-        shifted_record_extender,
-        replay_pipeline,
+        pin_memory=replay_device.type == "cpu" and device.type == "cuda",
+        prefetch=1,
     )
 
 
@@ -444,10 +511,21 @@ def _log_train_episodes(
     metrics_jsonl_path: Path | None,
     completed_episodes: list[tuple[int, int, float]],
     batch_start_action_step: int,
+    batch_start_record_step: int,
+    batch_reset_prefix: list[int],
 ) -> None:
     num_envs = cfg.collector.num_envs
     for time_index, env_index, score in completed_episodes:
-        if cfg.collector.count_reset_records:
+        if cfg.collector.backend == "async":
+            episode_step = batch_start_action_step + time_index + 1
+            if cfg.collector.count_reset_records:
+                episode_step = (
+                    batch_start_record_step
+                    + time_index
+                    + 1
+                    + batch_reset_prefix[time_index]
+                )
+        elif cfg.collector.count_reset_records:
             action_index = batch_start_action_step // num_envs + time_index + 1
             episode_step = driver_step_for_action(
                 action_index,
@@ -516,8 +594,9 @@ def _evaluate(
     latest_losses: torch.Tensor,
 ) -> torch.Tensor:
     # Evaluation samples RSSM latents, thus a fork keeps training unchanged.
-    with timeit("dreamer_v3/evaluation"), torch.random.fork_rng(
-        devices=[device] if device.type == "cuda" else []
+    with (
+        timeit("dreamer_v3/evaluation"),
+        torch.random.fork_rng(devices=[device] if device.type == "cuda" else []),
     ):
         r = eval_episode_reward(
             eval_env,
@@ -580,6 +659,7 @@ def main(cfg: DictConfig):
     real_env = make_env(cfg, cfg.env.seed)
     obs_dim = real_env.observation_spec["observation"].shape[0]
     action_dim = real_env.action_spec.shape[0]
+    real_env.close()
     state_dim = latent_state_dim(cfg)
     metrics_jsonl_path = (
         Path(cfg.logger.metrics_jsonl).resolve() if cfg.logger.metrics_jsonl else None
@@ -592,23 +672,54 @@ def main(cfg: DictConfig):
 
     learner = _build_learner(cfg, device, obs_dim, action_dim)
     learner_update = _LearnerUpdate(cfg, device, learner)
-
-    collector, behavior_policy_sync = _build_collection(
-        cfg, device, learner, state_dim, action_dim, collector_action_frames
-    )
-    (
-        rb,
-        replay_sampler,
-        replay_record_builder,
-        shifted_record_extender,
-        replay_pipeline,
-    ) = _build_replay(cfg, num_envs, replay_device)
-
+    rb = _build_replay(cfg, num_envs, replay_device, device)
     action_step = 0
-    # Each worker sends a reset record before its first control transition.
-    record_step = num_envs if count_reset_records else 0
+    reset_records = num_envs
+    record_step = reset_records if count_reset_records else 0
     update_step = 0
     running_training_return = torch.zeros(num_envs)
+    seen_stream = torch.zeros(num_envs, dtype=torch.bool)
+    completed_episodes: list[tuple[int, int, float]] = []
+    batch_reset_prefix: list[int] = []
+
+    def post_collect_hook(data: TensorDictBase) -> None:
+        nonlocal reset_records
+        completed_episodes.clear()
+        completed_episodes.extend(
+            training_episode_returns(data, running_training_return, num_envs)
+        )
+        if not count_reset_records:
+            return
+        is_init = data.get("is_init").reshape(-1).cpu()
+        env_index = data.get("env_index", default=None)
+        if env_index is None:
+            env_index = torch.arange(num_envs).reshape(num_envs, 1)
+            env_index = env_index.expand(data.batch_size).reshape(-1)
+        else:
+            env_index = env_index.reshape(-1).cpu()
+        batch_reset_prefix.clear()
+        batch_resets = 0
+        for stream, reset in zip(env_index, is_init):
+            if reset:
+                stream = int(stream)
+                if seen_stream[stream]:
+                    reset_records += 1
+                    batch_resets += 1
+                else:
+                    seen_stream[stream] = True
+            batch_reset_prefix.append(batch_resets)
+
+    collector, behavior_policy_sync = _build_collection(
+        cfg,
+        device,
+        learner,
+        state_dim,
+        action_dim,
+        collector_action_frames,
+        rb,
+        post_collect_hook,
+    )
+
     history_steps: list[int] = []
     history_eval: list[torch.Tensor] = []
     loss_history: list[torch.Tensor] = []
@@ -641,119 +752,138 @@ def main(cfg: DictConfig):
         # Keep the learner draws in a range apart from the policy stream.
         torch.manual_seed(stream_seed(cfg.env.seed, 0, LEARNER_RNG_STREAM))
 
-    for data in collector:
-        # The next action is already computed, thus it keeps the older policy.
-        if behavior_policy_sync is not None:
-            behavior_policy_sync.apply_after_action()
-        batch_start_action_step = action_step
-        completed_episodes = training_episode_returns(
-            data, running_training_return, num_envs
-        )
-        _log_train_episodes(
-            cfg, metrics_jsonl_path, completed_episodes, batch_start_action_step
-        )
-        replay_data = replay_record_builder(data)
-        with timeit("dreamer_v3/replay_extend"):
-            if shifted_record_extender is not None:
-                shifted_record_extender.extend(rb, replay_sampler, replay_data)
-            else:
-                replay_indices = rb.extend(
-                    replay_data if num_envs > 1 else replay_data.reshape(-1)
-                )
-                replay_sampler.observe_extend(replay_indices, rb.storage)
-        if (
-            not replay_pipeline.has_prefetched
-            and update_step == 0
-            and len(rb) >= num_envs * (cfg.replay_buffer.seq_len + 1)
-        ):
-            # Prefetch one batch ahead of the learner warmup gate below.
-            with timeit("dreamer_v3/replay_sample"):
-                replay_pipeline.prefetch(rb)
-        action_step += data.numel()
-        record_step += replay_data.numel() if count_reset_records else data.numel()
-
-        if len(rb) < warmup:
-            continue
-
-        batch_updates = (
-            update_ratio(record_step) if update_ratio is not None else updates_per_batch
-        )
-        if not batch_updates:
-            continue
-
-        if behavior_policy_sync is not None:
-            # Stage one time per batch; more updates keep the pending snapshot.
-            behavior_policy_sync.stage_before_training()
-
-        batch_losses = torch.empty((batch_updates, 6), device=device)
-        for update_index in range(batch_updates):
-            with timeit("dreamer_v3/replay_sample"):
-                replay_sample, sample_info = replay_pipeline.take(rb)
-                replay_sample = replay_sample.reshape(
-                    cfg.replay_buffer.batch_size,
-                    cfg.replay_buffer.seq_len + 1,
-                )
-                sample = replay_sample[:, :-1].to(device)
-            with timeit("dreamer_v3/replay_update"):
-                # Apply the older refresh, thus replay stays one sample ahead.
-                replay_pipeline.apply_pending_context(rb)
-            with timeit("dreamer_v3/train_update"):
-                (
-                    update_losses,
-                    refreshed_state,
-                    refreshed_belief,
-                ) = learner_update(sample)
-                batch_losses[update_index].copy_(update_losses)
-                loss_window_sum += update_losses
-                loss_window_updates += 1
-            with timeit("dreamer_v3/replay_update"):
-                replay_pipeline.stage_context(
-                    sample_info,
-                    refreshed_state,
-                    refreshed_belief,
-                )
-            update_step += 1
-
-        if record_loss_history:
-            loss_history.append(batch_losses.cpu())
-
-        train_log_due = bool(
-            metrics_jsonl_path is not None
-            and cfg.logger.train_every
-            and (
-                record_step >= next_train_log or action_step >= collector_action_frames
+    try:
+        for _ in collector:
+            # The collector writes canonical transitions directly into replay.
+            if behavior_policy_sync is not None:
+                behavior_policy_sync.apply_after_action()
+            batch_start_action_step = action_step
+            batch_start_record_step = record_step
+            action_step = int(collector.stats()["frames"])
+            record_step = (
+                action_step + reset_records if count_reset_records else action_step
             )
-        )
-        eval_due = bool(cfg.logger.eval_every and record_step >= next_eval)
-        latest_losses = batch_losses[-1].cpu() if eval_due else None
-        if train_log_due:
-            _log_train_window(
-                cfg=cfg,
-                metrics_jsonl_path=metrics_jsonl_path,
-                run_timer=run_timer,
-                record_step=record_step,
-                update_step=update_step,
-                loss_window_sum=loss_window_sum,
-                loss_window_updates=loss_window_updates,
+            _log_train_episodes(
+                cfg,
+                metrics_jsonl_path,
+                completed_episodes,
+                batch_start_action_step,
+                batch_start_record_step,
+                batch_reset_prefix,
             )
-            loss_window_sum.zero_()
-            loss_window_updates = 0
-            next_train_log = record_step + cfg.logger.train_every
 
-        if eval_due:
-            r = _evaluate(
-                cfg=cfg,
-                device=device,
-                eval_env=eval_env,
-                real_world_actor=learner.real_world_actor,
-                metrics_jsonl_path=metrics_jsonl_path,
-                run_timer=run_timer,
-                record_step=record_step,
-                latest_losses=latest_losses,
+            replay_stats = rb.stats()
+            if replay_stats["size"] < warmup or not rb.can_sample():
+                continue
+
+            batch_updates = (
+                update_ratio(record_step)
+                if update_ratio is not None
+                else updates_per_batch
             )
-            history_steps.append(record_step)
-            history_eval.append(r)
-            next_eval = record_step + cfg.logger.eval_every
+            if not batch_updates:
+                continue
+
+            if behavior_policy_sync is not None:
+                # Stage one time per batch; more updates keep the pending snapshot.
+                behavior_policy_sync.stage_before_training()
+
+            batch_losses = torch.empty((batch_updates, 6), device=device)
+            for update_index in range(batch_updates):
+                with timeit("dreamer_v3/replay_sample"):
+                    replay_sample = rb.sample().reshape(
+                        cfg.replay_buffer.batch_size,
+                        cfg.replay_buffer.seq_len + 1,
+                    )
+                    sample_info = replay_sample.select("index", "index_generation")
+                    sample = replay_sample.exclude("index", "index_generation")
+                    sample = sample.to(device, non_blocking=True)[:, :-1]
+                if learner_update.replay_must_be_idle:
+                    # CUDA graph capture rejects CUDA API calls from other threads.
+                    with timeit("dreamer_v3/replay_wait"):
+                        rb.synchronize()
+                with timeit("dreamer_v3/train_update"):
+                    (
+                        update_losses,
+                        refreshed_state,
+                        refreshed_belief,
+                    ) = learner_update(sample)
+                    batch_losses[update_index].copy_(update_losses)
+                    loss_window_sum += update_losses
+                    loss_window_updates += 1
+                if cfg.optimization.cudagraph_train_step:
+                    # CudaGraphModule reuses static output buffers across replays.
+                    refreshed_state = refreshed_state.clone()
+                    refreshed_belief = refreshed_belief.clone()
+                with timeit("dreamer_v3/replay_submit"):
+                    index, generation, patch = replay_context_update(
+                        sample_info, refreshed_state, refreshed_belief
+                    )
+                    rb.submit_update_if_present(
+                        index=index,
+                        generation=generation,
+                        patch=patch,
+                    )
+                update_step += 1
+
+            if isinstance(collector, AsyncBatchedCollector):
+                policy_weights = learner.real_world_actor
+                if cfg.optimization.separate_policy_rng:
+                    policy_weights = TensorDict(
+                        {"module": TensorDict.from_module(policy_weights)}, []
+                    )
+                collector.update_policy_weights_(policy_weights)
+
+            if record_loss_history:
+                loss_history.append(batch_losses.cpu())
+
+            train_log_due = bool(
+                metrics_jsonl_path is not None
+                and cfg.logger.train_every
+                and (
+                    record_step >= next_train_log
+                    or action_step >= collector_action_frames
+                )
+            )
+            eval_due = bool(cfg.logger.eval_every and record_step >= next_eval)
+            latest_losses = batch_losses[-1].cpu() if eval_due else None
+            if train_log_due:
+                _log_train_window(
+                    cfg=cfg,
+                    metrics_jsonl_path=metrics_jsonl_path,
+                    run_timer=run_timer,
+                    record_step=record_step,
+                    update_step=update_step,
+                    loss_window_sum=loss_window_sum,
+                    loss_window_updates=loss_window_updates,
+                )
+                loss_window_sum.zero_()
+                loss_window_updates = 0
+                next_train_log = record_step + cfg.logger.train_every
+
+            if eval_due:
+                r = _evaluate(
+                    cfg=cfg,
+                    device=device,
+                    eval_env=eval_env,
+                    real_world_actor=learner.real_world_actor,
+                    metrics_jsonl_path=metrics_jsonl_path,
+                    run_timer=run_timer,
+                    record_step=record_step,
+                    latest_losses=latest_losses,
+                )
+                history_steps.append(record_step)
+                history_eval.append(r)
+                next_eval = record_step + cfg.logger.eval_every
+
+    finally:
+        try:
+            collector.shutdown()
+        finally:
+            try:
+                eval_env.close()
+            finally:
+                rb.shutdown()
 
     if cfg.logger.output_plot:
         save_run_plot(cfg, history_steps, history_eval, loss_history)

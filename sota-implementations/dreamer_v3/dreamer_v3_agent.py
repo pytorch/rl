@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 """The DreamerV3 networks, acting policy, optimizer and builders."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -20,7 +21,6 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from tensordict.utils import NestedKey
-
 from torchrl.data import Unbounded
 from torchrl.envs import EnvBase, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
@@ -394,8 +394,9 @@ def build_world_model(
         out_keys=[("next", "posterior_logits"), ("next", "state")],
     )
 
-    # Only the reset record of an episode has is_init set, thus a sampled
-    # window can cross an episode boundary.
+    # Canonical collector transitions retain is_init. Slice sampling keeps a
+    # training window within one episode, while the rollout still handles a
+    # reset at its first transition.
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior, reset_key="is_init")
     if cfg.optimization.compile_rssm:
         rollout.compile_rollout(
