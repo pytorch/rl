@@ -18,6 +18,11 @@ from torch import nn
 
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.envs.libs.lbforaging import (
+    _has_lbforaging,
+    LBForagingEnv,
+    LBForagingWrapper,
+)
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.pettingzoo import (
     _has_pettingzoo,
@@ -585,6 +590,69 @@ class TestSmacv2:
             in_keys={"logits": ("agents", "logits"), "mask": ("agents", "action_mask")},
             out_keys=[("agents", "action")],
             distribution_class=MaskedCategorical,
+        )
+        actor = TensorDictSequential(module, prob)
+
+        collector = Collector(env, policy=actor, frames_per_batch=20, total_frames=40)
+        for _ in collector:
+            break
+        collector.shutdown()
+
+
+@pytest.mark.skipif(not _has_lbforaging, reason="lbforaging not found")
+class TestLBForaging:
+    @pytest.mark.parametrize("categorical_actions", [True, False])
+    @pytest.mark.parametrize("env_name", ["Foraging-8x8-2p-3f-v3", "Foraging-5x5-3p-2f-v3"])
+    def test_env(self, env_name, categorical_actions):
+        env = LBForagingEnv(
+            env_name, categorical_actions=categorical_actions, seed=0
+        )
+        check_env_specs(env, seed=None)
+        env.close()
+
+    def test_wrapper(self):
+        import gymnasium
+        import lbforaging  # noqa: F401 - registers the Foraging-* Gymnasium environments.
+
+        base_env = gymnasium.make("Foraging-8x8-2p-3f-v3", disable_env_checker=True)
+        env = LBForagingWrapper(base_env, categorical_actions=False, seed=0)
+        check_env_specs(env, seed=None)
+        env.close()
+
+    def test_reward_and_grouping(self):
+        env = LBForagingEnv("Foraging-8x8-2p-3f-v3", seed=0)
+        assert env.group_map == {"agents": ["0", "1"]}
+        rollout = env.rollout(5)
+        # Rewards are per-agent, not a single team-shared scalar.
+        assert rollout["next", "agents", "reward"].shape == (5, env.n_agents, 1)
+        # done/terminated/truncated are shared by the whole team.
+        assert rollout["next", "done"].shape == (5, 1)
+        env.close()
+
+    def test_truncation_vs_termination(self):
+        # A step limit much shorter than an episode could otherwise take
+        # guarantees a truncation (done but not a real terminal state).
+        env = LBForagingEnv(
+            "Foraging-5x5-2p-1f-v3", seed=0, max_episode_steps=5
+        )
+        rollout = env.rollout(50, break_when_any_done=False)
+        assert rollout["next", "truncated"].any()
+        env.close()
+
+    def test_collector(self):
+        env = LBForagingEnv("Foraging-8x8-2p-3f-v3", seed=0, categorical_actions=False)
+        in_feats = env.observation_spec["agents", "observation"].shape[-1]
+        out_feats = env.full_action_spec[env.action_key].shape[-1]
+
+        module = TensorDictModule(
+            nn.Linear(in_feats, out_feats),
+            in_keys=[("agents", "observation")],
+            out_keys=[("agents", "logits")],
+        )
+        prob = ProbabilisticTensorDictModule(
+            in_keys={"logits": ("agents", "logits")},
+            out_keys=[("agents", "action")],
+            distribution_class=torch.distributions.OneHotCategorical,
         )
         actor = TensorDictSequential(module, prob)
 
