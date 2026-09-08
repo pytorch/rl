@@ -1202,6 +1202,8 @@ def main(cfg: DictConfig):
             },
         )
     finally:
+        # Let setup cycles be collected between Hydra multirun jobs.
+        gc.unfreeze()
         for signum, handler in previous_handlers.items():
             signal.signal(signum, handler)
         try:
