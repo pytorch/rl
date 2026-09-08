@@ -6,9 +6,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
+from tensordict import TensorDictBase
+from tensordict.nn import CudaGraphModule
+
+from torchrl.checkpoint import GlobalRNGState
+from torchrl.objectives.dreamer_v3 import DreamerV3Loss
+from torchrl.objectives.utils import TargetNetUpdater
+from torchrl.trainers.trainers import OptimizationStepper
+
+if TYPE_CHECKING:
+    from torchrl.trainers import Trainer
 
 
 class DreamerV3Optimizer(torch.optim.Optimizer):
@@ -177,3 +187,227 @@ class DreamerV3Optimizer(torch.optim.Optimizer):
                     ]
                 torch._foreach_add_(parameters, momentum_hat, alpha=-learning_rate)
         return loss
+
+
+class DreamerV3OptimizationStepper(OptimizationStepper):
+    """Execute a complete DreamerV3 forward/backward and optimizer update.
+
+    One optional compile scope owns all shared loss modules. CUDA graph capture
+    covers forward/backward only; optimizer and target updates run afterwards.
+    Call :meth:`warmup` with a representative replay sample before starting
+    collection when compilation or capture is enabled. Warm-up preserves model
+    buffers and global RNG state and never advances the optimizer or targets.
+    Returned scalar metrics and posterior features written to the input's
+    ``replay_context`` key retain their values after later captured updates.
+
+    Args:
+        loss_module (DreamerV3Loss): Complete learner objective.
+        optimizer (torch.optim.Optimizer): Optimizer owning the shared learner
+            parameters once each.
+        target_updater (TargetNetUpdater, optional): Target update performed
+            after each optimizer step. Default: ``None``.
+
+    Keyword Args:
+        compile_train_step (bool, optional): Compile the complete
+            forward/backward pass. Requires PyTorch's
+            ``torch._dynamo.config.inline_inbuilt_nn_modules`` support to be
+            enabled for functional parameter contexts. Default: ``False``.
+        compile_mode (str, optional): PyTorch compile mode. Default: ``"default"``.
+        cudagraph (bool, optional): Capture forward/backward on CUDA.
+            Default: ``False``.
+        warmup_steps (int, optional): Representative forward/backward calls
+            before training. Must be positive. Default: ``5``.
+        mixed_precision (bool, optional): Use bfloat16 autocast for CUDA
+            forward/backward. Default: ``False``.
+
+    .. note::
+        Shared modules must not also have an independently compiled execution
+        scope. Pause collection and synchronize pending replay operations before
+        warm-up or checkpointing. Distributed execution is outside this stepper's
+        supported modes.
+
+    Examples:
+        Continue from the runnable :class:`~torchrl.objectives.DreamerV3Loss`
+        example, which constructs ``loss_module``, ``target_updater`` and
+        ``sample`` from public components:
+
+        >>> from torchrl.trainers.algorithms import (
+        ...     DreamerV3OptimizationStepper, DreamerV3Optimizer,
+        ... )
+        >>> optimizer = DreamerV3Optimizer(loss_module.parameters(), warmup_steps=0)
+        >>> stepper = DreamerV3OptimizationStepper(
+        ...     loss_module, optimizer, target_updater, warmup_steps=1,
+        ... )
+        >>> stepper.warmup(sample)
+        >>> before = [parameter.detach().clone() for parameter in loss_module.parameters()]
+        >>> metrics = stepper.step(None, sample)
+        >>> assert any(
+        ...     not torch.equal(parameter, previous)
+        ...     for parameter, previous in zip(loss_module.parameters(), before)
+        ... )
+        >>> assert not sample["replay_context", "state"].requires_grad
+
+    See also :class:`~torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig`.
+    """
+
+    def __init__(
+        self,
+        loss_module: DreamerV3Loss,
+        optimizer: torch.optim.Optimizer,
+        target_updater: TargetNetUpdater | None = None,
+        *,
+        compile_train_step: bool = False,
+        compile_mode: Literal[
+            "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"
+        ] = "default",
+        cudagraph: bool = False,
+        warmup_steps: int = 5,
+        mixed_precision: bool = False,
+    ):
+        if warmup_steps < 1:
+            raise ValueError("warmup_steps must be positive.")
+        if compile_train_step and not getattr(
+            torch._dynamo.config, "inline_inbuilt_nn_modules", False
+        ):
+            raise RuntimeError(
+                "Whole-step compilation requires a PyTorch runtime with "
+                "torch._dynamo.config.inline_inbuilt_nn_modules enabled."
+            )
+        self.loss_module = loss_module
+        self.optimizer = optimizer
+        self.target_updater = target_updater
+        self.compile_train_step = compile_train_step
+        self.compile_mode = compile_mode
+        self.cudagraph = cudagraph
+        self.warmup_steps = warmup_steps
+        self.mixed_precision = mixed_precision
+        self._ready = not (compile_train_step or cudagraph)
+        self._train_step = self._forward_backward
+
+    def _prepare_sample(self, sample: TensorDictBase) -> TensorDictBase:
+        sample = sample.select(*self.loss_module.in_keys, strict=False)
+        for key in (
+            self.loss_module.tensor_keys.is_init,
+            ("next", self.loss_module.value_loss.tensor_keys.done),
+            ("next", self.loss_module.value_loss.tensor_keys.terminated),
+        ):
+            value = sample.get(key, None)
+            if value is not None:
+                sample.set(key, value.reshape(*sample.batch_size, 1))
+        return sample
+
+    def _forward_backward(self, sample: TensorDictBase) -> TensorDictBase:
+        reference = sample.get(self.loss_module.in_keys[0])
+        with torch.autocast(
+            device_type=reference.device.type,
+            dtype=torch.bfloat16,
+            enabled=self.mixed_precision and reference.device.type == "cuda",
+        ):
+            losses = self.loss_module(sample)
+            total = sum(
+                value
+                for key, value in losses.items()
+                if isinstance(key, str) and key.startswith("loss_")
+            )
+        self.optimizer.zero_grad(set_to_none=False)
+        total.backward()
+        return losses.detach()
+
+    def warmup(self, sample: TensorDictBase) -> None:
+        """Prepare execution using representative data without training updates.
+
+        Args:
+            sample (TensorDictBase): Sample with the shape, keys, dtype and
+                device used for subsequent updates. Collection and replay
+                operations must be quiescent for CUDA capture.
+        """
+        sample = self._prepare_sample(sample)
+        reference = sample.get(self.loss_module.in_keys[0])
+        if self.cudagraph and reference.device.type != "cuda":
+            raise RuntimeError("CUDA graph learner updates require CUDA inputs.")
+        self._ready = False
+        train_step = self._forward_backward
+        if self.compile_train_step:
+            train_step = torch.compile(train_step, mode=self.compile_mode)
+        if self.cudagraph:
+            train_step = CudaGraphModule(
+                train_step, warmup=self.warmup_steps, device=reference.device
+            )
+        rng = GlobalRNGState()
+        rng_state = rng.state_dict()
+        buffers = [
+            (buffer, buffer.detach().clone()) for buffer in self.loss_module.buffers()
+        ]
+        try:
+            for _ in range(self.warmup_steps):
+                train_step(sample)
+            self.optimizer.zero_grad(set_to_none=False)
+        finally:
+            with torch.no_grad():
+                for buffer, saved in buffers:
+                    buffer.copy_(saved)
+            rng.load_state_dict(rng_state)
+        self._train_step = train_step
+        self._ready = True
+
+    def step(
+        self, trainer: Trainer | None, sub_batch: TensorDictBase
+    ) -> TensorDictBase:
+        """Update learner parameters and targets, returning detached metrics.
+
+        Args:
+            trainer (Trainer or None): Owning trainer, or ``None`` for a custom
+                training loop. An owning trainer must use this stepper's loss.
+            sub_batch (TensorDictBase): Real transition sequences with the
+                schema supplied to :meth:`warmup` when capture is enabled.
+                Detached posterior features are written under the loss's
+                configured ``replay_context`` key for subsequent replay updates.
+
+        Returns:
+            Detached scalar metrics suitable for Trainer logging.
+        """
+        if trainer is not None:
+            if trainer.loss_module is not self.loss_module:
+                raise ValueError(
+                    "The trainer and stepper must share the same loss module."
+                )
+            if getattr(trainer, "process_group", None) is not None:
+                raise NotImplementedError(
+                    "Distributed DreamerV3 updates are not supported."
+                )
+        if not self._ready:
+            raise RuntimeError(
+                "Call warmup(sample) before compiled or captured learner updates."
+            )
+        result = self._train_step(self._prepare_sample(sub_batch))
+        if not any(
+            parameter.grad is not None
+            for group in self.optimizer.param_groups
+            for parameter in group["params"]
+        ):
+            raise RuntimeError("The learner update produced no parameter gradients.")
+        self.optimizer.step()
+        if self.target_updater is not None:
+            self.target_updater.step()
+        # CudaGraphModule returns owned outputs for this callable, whose result
+        # is distinct from its input. Keep that ownership through the batch view.
+        sub_batch.set(
+            self.loss_module.tensor_keys.replay_context,
+            result.get(self.loss_module.tensor_keys.replay_context),
+        )
+        return result.select(
+            *(key for key, value in result.items() if isinstance(value, torch.Tensor))
+        )
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return optimizer and target-update progress; checkpoint the loss separately."""
+        state = {"optimizer": self.optimizer.state_dict()}
+        if self.target_updater is not None:
+            state["target_updater"] = self.target_updater.state_dict()
+        return state
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Restore optimizer state without replacing captured gradient buffers."""
+        self.optimizer.load_state_dict(state_dict["optimizer"])
+        if self.target_updater is not None:
+            self.target_updater.load_state_dict(state_dict["target_updater"])

@@ -298,6 +298,26 @@ sums its event dimensions before the batch/time average, unless
 Optimization and training loop
 ------------------------------
 
+The public :class:`~torchrl.objectives.DreamerV3Loss` composes the model, actor,
+critic and replay-value objectives. Its detached ``replay_context`` output can
+be written back through native replay's generation-checked update operation.
+:class:`~torchrl.trainers.algorithms.DreamerV3OptimizationStepper` owns the
+forward/backward, optimizer and target-update sequence. It can run inside a
+``Trainer`` or a custom loop using ``step(None, sample)``. It returns scalar
+metrics and writes detached posterior features to ``sample["replay_context"]``
+for replay updates. Its ``warmup(sample)``
+method prepares compilation and capture before collection starts, preserving
+normalization buffers, RNG state and captured gradient storage. Keep shared
+modules in one compile scope; do not compile the RSSM separately when using
+whole-step compilation.
+
+.. autosummary::
+   :toctree: generated/
+   :template: rl_template_noinherit.rst
+
+   ~torchrl.objectives.DreamerV3Loss
+   ~torchrl.trainers.algorithms.configs.DreamerV3LossConfig
+
 The loss modules do not create optimizers. This keeps optimizer ownership and
 the update schedule explicit. A typical update cycle is:
 
