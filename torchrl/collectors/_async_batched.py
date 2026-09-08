@@ -180,17 +180,31 @@ def _env_batch_loop(
     try:
         env_ids = list(range(pool.num_envs))
         pool.async_reset_send(env_index=env_ids)
-        observations = pool.async_reset_recv(min_get=pool.num_envs)
-        for env_id, observation in zip(_env_ids(observations), observations.unbind(0)):
-            ready_observations[env_id] = observation
+        resetting = pool.num_envs
 
         while not shutdown_event.is_set():
+            if resetting:
+                try:
+                    observations = pool.async_reset_recv(
+                        min_get=1, max_get=resetting, timeout=poll_interval
+                    )
+                except TimeoutError:
+                    pass
+                else:
+                    reset_ids = _env_ids(observations)
+                    resetting -= len(reset_ids)
+                    ready_observations.update(zip(reset_ids, observations.unbind(0)))
             if pause_request[0] is None and ready_observations:
                 for env_id, observation in ready_observations.items():
                     pending_actions[env_id] = clients[env_id].submit(observation)
                 ready_observations.clear()
 
-            if pause_request[0] is not None and not pending_actions and not stepping:
+            if (
+                pause_request[0] is not None
+                and not resetting
+                and not pending_actions
+                and not stepping
+            ):
                 _wait_while_paused(pause_request)
                 continue
 
@@ -204,7 +218,11 @@ def _env_batch_loop(
                     if env_device is not None:
                         action = action.to(env_device)
                     policy_outputs[env_id] = action
-                    env_inputs.append(action.select(*exchange_keys, strict=False))
+                    env_inputs.append(
+                        action.select(*exchange_keys, strict=False)
+                        if exchange_keys
+                        else action
+                    )
                 pool.async_step_and_maybe_reset_send(
                     lazy_stack(env_inputs), env_index=ready_ids
                 )
@@ -220,7 +238,7 @@ def _env_batch_loop(
                 transitions, next_observations = pool.async_step_and_maybe_reset_recv(
                     min_get=1,
                     max_get=pool.num_envs,
-                    timeout=poll_interval if pending_actions else None,
+                    timeout=poll_interval,
                 )
             except TimeoutError:
                 continue
@@ -267,7 +285,7 @@ class AsyncBatchedCollector(BaseCollector):
     * An :class:`~torchrl.envs.AsyncEnvPool` runs *N* environments using
       whatever backend the user chooses (``"threading"``,
       ``"multiprocessing"``).
-    * With a shared-memory environment exchange, one coordinator thread drains
+    * With a shared-memory exchange or grouped workers, one coordinator drains
       whichever environments are ready and submits their observations without
       blocking. Other exchanges use one lightweight coordinator thread per
       environment.
@@ -345,6 +363,10 @@ class AsyncBatchedCollector(BaseCollector):
             :class:`~torchrl.envs.AsyncEnvPool`, one of ``"queue"``, ``"shm"``
             or ``"auto"``. The shared-memory exchange also enables batched
             coordination from one thread. Defaults to ``"queue"``.
+        envs_per_worker (int, optional): Number of environments hosted by each
+            multiprocessing worker. Grouped workers share one coordinator that
+            drains ready environments without waiting for a complete group.
+            Defaults to ``1``.
         policy_backend (str, optional): backend for the inference transport
             used to communicate with the
             :class:`~torchrl.modules.InferenceServer`.  One of
@@ -380,12 +402,12 @@ class AsyncBatchedCollector(BaseCollector):
             step-time jitter; most users should leave it unset. TorchRL knows
             which CPUs are available, but not the application's intended CPU
             partition or each environment's thread requirements, so it cannot
-            choose these masks automatically. Provide one mask per environment,
-            or a callable mapping each environment index to its mask. Defaults
+            choose these masks automatically. Provide one mask per worker process,
+            or a callable mapping each worker index to its mask. Defaults
             to ``None``. See :ref:`async_batched_collector_cpu_affinity` for a
             complete collector example.
         driver_affinity (Sequence[int], optional): Linux CPU affinity mask for
-            the inference-server and per-environment coordinator threads, plus
+            the inference-server and coordinator threads, plus
             parent-side multiprocessing queue feeder threads. Dedicated
             process-backed inference servers are not covered. The thread
             constructing the collector is restored to its original affinity
@@ -430,6 +452,7 @@ class AsyncBatchedCollector(BaseCollector):
         ] = "threading",
         env_backend: Literal["threading", "multiprocessing"] | None = None,
         env_exchange: Literal["queue", "shm", "auto"] = "queue",
+        envs_per_worker: int = 1,
         policy_backend: (
             Literal["threading", "multiprocessing", "ray", "monarch"] | None
         ) = None,
@@ -522,27 +545,43 @@ class AsyncBatchedCollector(BaseCollector):
                 "env_exchange='shm' requires env_backend='multiprocessing'."
             )
         self._env_exchange = env_exchange
+        if (
+            isinstance(envs_per_worker, bool)
+            or not isinstance(envs_per_worker, int)
+            or envs_per_worker < 1
+        ):
+            raise ValueError(
+                "envs_per_worker must be a positive integer, got "
+                f"{envs_per_worker!r}."
+            )
+        if envs_per_worker != 1 and effective_env_backend != "multiprocessing":
+            raise ValueError(
+                "envs_per_worker is only supported with "
+                "env_backend='multiprocessing'."
+            )
+        self._envs_per_worker = envs_per_worker
         if worker_affinity is None:
             self._worker_affinity = None
         else:
+            num_workers = (self._num_envs + envs_per_worker - 1) // envs_per_worker
             if callable(worker_affinity):
                 affinity_masks = [
-                    worker_affinity(env_index) for env_index in range(self._num_envs)
+                    worker_affinity(worker_index) for worker_index in range(num_workers)
                 ]
             else:
                 affinity_masks = list(worker_affinity)
-                if len(affinity_masks) != self._num_envs:
+                if len(affinity_masks) != num_workers:
                     raise ValueError(
                         "worker_affinity must provide one CPU mask per "
-                        f"environment, got {len(affinity_masks)} masks for "
-                        f"{self._num_envs} environments."
+                        f"worker process, got {len(affinity_masks)} masks for "
+                        f"{num_workers} worker processes."
                     )
             self._worker_affinity = [
                 _validate_cpu_affinity(
                     affinity,
-                    option_name=f"worker_affinity[{env_index}]",
+                    option_name=f"worker_affinity[{worker_index}]",
                 )
-                for env_index, affinity in enumerate(affinity_masks)
+                for worker_index, affinity in enumerate(affinity_masks)
             ]
         self._driver_affinity = (
             _validate_cpu_affinity(driver_affinity, option_name="driver_affinity")
@@ -655,6 +694,7 @@ class AsyncBatchedCollector(BaseCollector):
             self._env_pool = AsyncEnvPool(
                 self._create_env_fn,
                 backend=self._env_backend,
+                envs_per_worker=self._envs_per_worker,
                 # Explicit so the pool's default-change FutureWarning is not
                 # emitted from library code.
                 exchange=self._env_exchange,
@@ -687,7 +727,7 @@ class AsyncBatchedCollector(BaseCollector):
             self._shutdown_event = threading.Event()
 
             self._workers = []
-            if self._env_pool.resolved_exchange == "shm":
+            if self._env_pool.resolved_exchange == "shm" or self._envs_per_worker > 1:
                 self._uses_batched_coordinator = True
                 thread = threading.Thread(
                     target=_env_batch_loop,

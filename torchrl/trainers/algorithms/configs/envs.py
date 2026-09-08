@@ -39,6 +39,7 @@ class BatchedEnvConfig(EnvConfig):
     stack: str = "dense"
     exchange: str = "queue"
     worker_affinity: list[list[int]] | None = None
+    envs_per_worker: int = 1
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_batched_env"
 
     def __post_init__(self) -> None:
@@ -70,6 +71,7 @@ def make_batched_env(
     worker_affinity: Sequence[Sequence[int]]
     | Callable[[int], Sequence[int]]
     | None = None,
+    envs_per_worker: int = 1,
     **kwargs: Any,
 ) -> EnvBase:
     """Create a batched environment.
@@ -84,6 +86,8 @@ def make_batched_env(
         exchange: Async multiprocessing exchange mode.
         worker_affinity: Optional Linux CPU affinity masks for async
             multiprocessing workers.
+        envs_per_worker: Environments hosted by each async multiprocessing
+            worker process.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -142,6 +146,7 @@ def make_batched_env(
         kwargs["exchange"] = exchange
         if worker_affinity is not None:
             kwargs["worker_affinity"] = worker_affinity
+        kwargs["envs_per_worker"] = envs_per_worker
         return AsyncEnvPool([env_fn] * num_workers, **kwargs)
     else:
         raise ValueError(f"Unknown batched_env_type: {batched_env_type}")
