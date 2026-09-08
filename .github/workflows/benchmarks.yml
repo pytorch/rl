@@ -271,9 +271,13 @@ jobs:
           tool: ${{ env.BENCHMARK_SUITE == 'async' && 'customBiggerIsBetter' || 'pytest' }}
           output-file-path: results/CPU-benchmark-results/${{ env.BENCHMARK_SUITE == 'async' && 'trend.json' || 'output.json' }}
           benchmark-data-dir-path: ${{ env.BENCHMARK_SUITE == 'async' && 'dev/bench/async' || 'dev/bench' }}
-          fail-on-alert: true
+          # A performance alert must not fail publication: the red upload job
+          # hid a month-long publication outage. The job summary compares every
+          # series against its previous point instead.
+          fail-on-alert: false
           alert-threshold: '200%'
           comment-on-alert: false
+          summary-always: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
@@ -286,9 +290,13 @@ jobs:
           tool: ${{ env.BENCHMARK_SUITE == 'async' && 'customBiggerIsBetter' || 'pytest' }}
           output-file-path: results/GPU-benchmark-results/${{ env.BENCHMARK_SUITE == 'async' && 'trend.json' || 'output.json' }}
           benchmark-data-dir-path: ${{ env.BENCHMARK_SUITE == 'async' && 'dev/bench/async' || 'dev/bench' }}
-          fail-on-alert: true
+          # A performance alert must not fail publication: the red upload job
+          # hid a month-long publication outage. The job summary compares every
+          # series against its previous point instead.
+          fail-on-alert: false
           alert-threshold: '200%'
           comment-on-alert: false
+          summary-always: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
