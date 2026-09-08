@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 from collections.abc import Callable
+from typing import Literal
 
 import torch
 from dreamer_v3_utils import latent_state_dim
@@ -332,6 +333,8 @@ def build_world_model(
     action_dim: int,
     pixels_shape: tuple[int, int, int] | None = None,
     compile_rollout: bool = True,
+    rssm_backend: Literal["step", "scan"] | None = None,
+    rssm_scan_unroll: int = 8,
 ) -> tuple[TensorDictSequential, RSSMPriorV3, DreamerV3MLP, SymExpTwoHot, DreamerV3MLP]:
     """Build the world model: encoder, RSSM rollout, decoder and two heads.
 
@@ -341,7 +344,10 @@ def build_world_model(
     ``cfg.env.pixels_key``; ``None`` disables the image path. The decoded
     vector is written to ``("next", "reco_pixels")`` without an image, which
     keeps the vector-only keys unchanged, and to ``("next", "reco_vector")``
-    next to the decoded image otherwise.
+    next to the decoded image otherwise. ``rssm_backend`` is the resolved
+    recurrence backend; with ``compile_rollout`` it is wrapped in its own
+    :func:`torch.compile`. Pass ``compile_rollout=False`` when the whole
+    learner step is compiled: the stepper then selects the scan itself.
     """
     state_dim = latent_state_dim(cfg)
     vector = _normalize_hydra_key(cfg.env.vector_key) if obs_dim else None
@@ -457,14 +463,12 @@ def build_world_model(
     # Canonical transitions retain is_init. Native replay slices stay within
     # one episode, and the rollout handles a reset at the first transition.
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior, reset_key="is_init")
-    if compile_rollout and cfg.optimization.compile_rssm:
+    if compile_rollout and rssm_backend:
+        # Without compile_rollout the rollout stays eager here: the compiled
+        # learner step selects the higher-order scan for it before tracing.
         rollout.compile_rollout(
-            cfg.optimization.compile_rssm,
-            unroll=(
-                cfg.optimization.rssm_scan_unroll
-                if cfg.optimization.compile_rssm == "scan"
-                else 1
-            ),
+            rssm_backend,
+            unroll=rssm_scan_unroll if rssm_backend == "scan" else 1,
         )
 
     decoder_modules = []

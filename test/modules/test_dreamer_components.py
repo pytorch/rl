@@ -1143,6 +1143,27 @@ class TestDreamerV3Components:
         ).backward()
         assert all(parameter.grad is not None for parameter in rollout.parameters())
 
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.6.0"),
+        reason="the higher-order scan backend requires Torch >= 2.6.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_rssm_rollout_scan_backend_inside_outer_compile(self):
+        """``compile=False`` selects the scan for an enclosing compiled region."""
+        rollout = self._make_rollout(torch.device("cpu"))
+        rollout.compile_rollout("scan", unroll=2, compile=False)
+        assert isinstance(rollout._scan_fn, ft.partial)
+        assert rollout._scan_fn.keywords == {"unroll": 2}
+
+        data = self._make_rollout_data(torch.device("cpu"))
+        compiled = torch.compile(rollout, backend=_compile_backend)
+        output = compiled(data)
+        (
+            output["next", "posterior_logits"].square().mean()
+            + output["next", "prior_logits"].square().mean()
+        ).backward()
+        assert all(parameter.grad is not None for parameter in rollout.parameters())
+
 
 def test_public_block_gru_triton_errors():
     with mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", False):

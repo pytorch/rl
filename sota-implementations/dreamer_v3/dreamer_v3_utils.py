@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import torch
@@ -53,6 +54,62 @@ def append_jsonl(path: Path | None, record: dict[str, object]) -> None:
 
 def latent_state_dim(cfg: DictConfig) -> int:
     return cfg.networks.num_categoricals * cfg.networks.num_classes
+
+
+class CompileSettings(NamedTuple):
+    """The resolved compile decisions of one run."""
+
+    strategy: str
+    train_step: bool
+    rssm: str | None
+    scan_unroll: int
+    cudagraph: bool
+    mode: str
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.train_step or self.rssm or self.cudagraph)
+
+
+def resolve_compile_settings(cfg: DictConfig, device: torch.device) -> CompileSettings:
+    """Turn ``optimization.compile`` and its overrides into concrete decisions.
+
+    ``auto`` takes the fastest supported path for ``device``: on CUDA the
+    complete learner step is compiled around a higher-order scan of the
+    recurrence and captured in a CUDA graph, elsewhere everything runs eagerly.
+    ``off`` disables all of it. ``compile_train_step``, ``compile_rssm`` and
+    ``cudagraph_train_step`` default to ``null``, which follows the strategy;
+    an explicit value overrides that single decision.
+    """
+    strategy = cfg.optimization.get("compile", "auto")
+    if strategy not in ("auto", "off"):
+        raise ValueError(
+            f"optimization.compile must be 'auto' or 'off', got {strategy!r}."
+        )
+    fast = strategy == "auto" and device.type == "cuda"
+    train_step = cfg.optimization.compile_train_step
+    train_step = fast if train_step is None else bool(train_step)
+    rssm = cfg.optimization.compile_rssm
+    if rssm is None and fast:
+        rssm = "scan"
+    if rssm not in (None, "step", "scan"):
+        raise ValueError(
+            f"optimization.compile_rssm must be null, 'step' or 'scan', got {rssm!r}."
+        )
+    cudagraph = cfg.optimization.cudagraph_train_step
+    cudagraph = fast if cudagraph is None else bool(cudagraph)
+    if cudagraph and device.type != "cuda":
+        raise ValueError(
+            "optimization.cudagraph_train_step requires a CUDA training device."
+        )
+    return CompileSettings(
+        strategy=strategy,
+        train_step=train_step,
+        rssm=rssm,
+        scan_unroll=cfg.optimization.rssm_scan_unroll,
+        cudagraph=cudagraph,
+        mode=cfg.optimization.compile_train_step_mode,
+    )
 
 
 def training_episode_returns(
