@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools as ft
 import multiprocessing as mp
 import os
 import queue
@@ -20,6 +21,7 @@ from tensordict import (
     LazyStackedTensorDict,
     maybe_dense_stack,
     NestedKey,
+    TensorDict,
     TensorDictBase,
 )
 from torchrl._comm import MailboxTransportError
@@ -30,6 +32,8 @@ from torchrl._utils import (
     timeit,
 )
 from torchrl.collectors._base import BaseCollector
+from torchrl.collectors.utils import _maybe_normalize_replay_buffer_tensordict_device
+from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import AsyncEnvPool, EnvBase, EnvCreator
 from torchrl.envs.async_envs import _validate_cpu_affinity
@@ -44,6 +48,7 @@ from torchrl.modules.inference_server import (
 )
 from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._transport import InferenceTransport
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
 _ENV_IDX_KEY = "env_index"
 
@@ -101,6 +106,21 @@ def _wait_while_paused(pause_request: list[_PauseRequest | None]) -> None:
     resume_event.wait()
 
 
+def _put_result(result_queue, item, shutdown_event, *, pause=None) -> bool:
+    """Retain a completed result through backpressure and pause."""
+    while not shutdown_event.is_set():
+        if pause is not None:
+            pause()
+        if shutdown_event.is_set():
+            break
+        try:
+            result_queue.put(item, timeout=0.1)
+            return True
+        except queue.Full:
+            continue
+    return False
+
+
 def _env_loop(
     pool: AsyncEnvPool,
     env_id: int,
@@ -144,10 +164,16 @@ def _env_loop(
             cur_td.set(_ENV_IDX_KEY, env_id)
             if storing_device is not None:
                 cur_td = cur_td.to(storing_device)
-            result_queue.put(cur_td)
+            if not _put_result(
+                result_queue,
+                cur_td,
+                shutdown_event,
+                pause=ft.partial(_wait_while_paused, pause_request),
+            ):
+                break
     except Exception as exc:
         if not shutdown_event.is_set():
-            result_queue.put(exc)
+            _put_result(result_queue, exc, shutdown_event)
 
 
 def _process_env_loop(
@@ -248,6 +274,7 @@ def _env_batch_loop(
     exchange_keys = pool.exchange_keys
     ready_observations = {}
     pending_actions = {}
+    pending_results = deque()
     policy_outputs = {}
     stepping = 0
     poll_interval = 0.001
@@ -258,6 +285,15 @@ def _env_batch_loop(
         resetting = pool.num_envs
 
         while not shutdown_event.is_set():
+            while pending_results:
+                try:
+                    result_queue.put_nowait(pending_results[0])
+                except queue.Full:
+                    break
+                pending_results.popleft()
+            if pending_results and pause_request[0] is None:
+                shutdown_event.wait(poll_interval)
+                continue
             if resetting:
                 try:
                     observations = pool.async_reset_recv(
@@ -339,12 +375,18 @@ def _env_batch_loop(
             if isinstance(transitions, LazyStackedTensorDict):
                 transitions = transitions.clone()
             transitions.update(outputs.exclude(*transitions.keys(True, True)))
+            transitions.set(
+                _ENV_IDX_KEY,
+                torch.tensor(completed_ids, device=transitions.device, dtype=torch.long)
+                .reshape(-1, *([1] * (transitions.ndim - 1)))
+                .expand(transitions.batch_size),
+            )
             if storing_device is not None:
                 transitions = transitions.to(storing_device)
-            result_queue.put(transitions)
+            pending_results.append(transitions)
     except Exception as exc:
         if not shutdown_event.is_set():
-            result_queue.put(exc)
+            _put_result(result_queue, exc, shutdown_event)
 
 
 class AsyncBatchedCollector(BaseCollector):
@@ -460,6 +502,14 @@ class AsyncBatchedCollector(BaseCollector):
             start of every collection batch.  Defaults to ``False``.
         postproc (Callable, optional): post-processing transform applied to
             each collected batch before yielding.  Defaults to ``None``.
+        replay_buffer (ReplayBuffer, optional): replay buffer to extend in the
+            collector's parent thread after post-processing. When provided,
+            iteration yields ``None`` instead of full rollout batches.
+            Defaults to ``None``.
+        post_collect_hook (Callable, optional): callback invoked with each
+            post-processed batch before it is normalized and written to replay
+            (or yielded when no replay buffer is configured). Defaults to
+            ``None``.
         yield_completed_trajectories (bool, optional): if ``True``, the
             collector yields individual completed trajectories as they finish
             rather than fixed-size batches.  ``frames_per_batch`` acts as the
@@ -541,6 +591,8 @@ class AsyncBatchedCollector(BaseCollector):
         ) = None,
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+        replay_buffer: ReplayBuffer | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
         yield_completed_trajectories: bool = False,
         weight_sync=None,
         weight_sync_model_id: str = "policy",
@@ -555,6 +607,7 @@ class AsyncBatchedCollector(BaseCollector):
         policy_version: int = 0,
         policy_version_key: NestedKey | None = "policy_version",
     ):
+        super().__init__(post_collect_hook=post_collect_hook)
         if policy is not None and policy_factory is not None:
             raise TypeError("policy and policy_factory are mutually exclusive.")
         if policy is None and policy_factory is None:
@@ -778,6 +831,7 @@ class AsyncBatchedCollector(BaseCollector):
         self.reset_at_each_iter = reset_at_each_iter
         self.yield_completed_trajectories = yield_completed_trajectories
         self._postproc = postproc
+        self.replay_buffer = replay_buffer
         self.verbose = verbose
 
         self._frames = 0
@@ -942,7 +996,17 @@ class AsyncBatchedCollector(BaseCollector):
 
             # Start coordinator threads. Shared slots can be drained safely in
             # ready batches, avoiding one Python thread and one clone per env.
-            self._result_queue = queue.Queue()
+            self._uses_batched_coordinator = (
+                self._env_pool.resolved_exchange == "shm" or self._envs_per_worker > 1
+            )
+            # A ready packet contains at most one transition per environment.
+            # Bound the queue by roughly one rollout, plus in-flight completions.
+            queue_size = self.frames_per_batch
+            if self._uses_batched_coordinator:
+                queue_size = max(
+                    1, queue_size // self._env_pool.fake_tensordict().numel()
+                )
+            self._result_queue = queue.Queue(maxsize=queue_size)
             self._shutdown_event = threading.Event()
 
             self._workers = []
@@ -1116,6 +1180,34 @@ class AsyncBatchedCollector(BaseCollector):
     def policy_version(self) -> int:
         """The live behavior-policy version of the inference server."""
         return self._server.policy_version
+
+    def _maybe_fallback_update(
+        self,
+        policy_or_weights=None,
+        *,
+        model_id: str | None = None,
+    ) -> None:
+        if model_id not in (None, "policy"):
+            raise KeyError(f"Unknown AsyncBatchedCollector model_id {model_id!r}.")
+        if isinstance(policy_or_weights, torch.nn.Module):
+            weights = TensorDict.from_module(policy_or_weights)
+        elif isinstance(policy_or_weights, TensorDictBase):
+            weights = policy_or_weights
+        elif isinstance(policy_or_weights, dict):
+            weights = TensorDict.from_dict(policy_or_weights, batch_size=[])
+        else:
+            raise TypeError(
+                "AsyncBatchedCollector policy updates require an nn.Module, "
+                "TensorDict, or state dictionary."
+            )
+        weights = weights.detach().clone()
+        update_model_weights = getattr(self._server, "update_model_weights", None)
+        if update_model_weights is not None:
+            update_model_weights(weights)
+        else:
+            self._server.update_model(
+                ft.partial(WeightStrategy().apply_weights, weights=weights)
+            )
 
     # ------------------------------------------------------------------
     # Rollout: drain the result queue
@@ -1323,7 +1415,7 @@ class AsyncBatchedCollector(BaseCollector):
     # BaseCollector interface
     # ------------------------------------------------------------------
 
-    def iterator(self) -> Iterator[TensorDictBase]:
+    def iterator(self) -> Iterator[TensorDictBase | None]:
         """Iterate over collected batches."""
         self._ensure_started()
 
@@ -1338,7 +1430,16 @@ class AsyncBatchedCollector(BaseCollector):
             self._frames += td.numel()
             if self._postproc is not None:
                 td = self._postproc(td)
-            yield td
+            if self.post_collect_hook is not None:
+                self.post_collect_hook(td)
+            if self.replay_buffer is not None:
+                td = _maybe_normalize_replay_buffer_tensordict_device(
+                    td, self.replay_buffer
+                )
+                self.replay_buffer.extend(td)
+                yield None
+            else:
+                yield td
 
     def shutdown(
         self,
