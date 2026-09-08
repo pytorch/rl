@@ -279,6 +279,9 @@ jobs:
           comment-on-alert: false
           summary-always: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Label the point with the benchmarked commit. Without this, dispatched
+          # and scheduled runs record whatever main's head is at upload time.
+          ref: ${{ github.sha }}
           gh-pages-branch: gh-pages
           auto-push: true
           max-items-in-chart: 250
@@ -298,6 +301,9 @@ jobs:
           comment-on-alert: false
           summary-always: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Label the point with the benchmarked commit. Without this, dispatched
+          # and scheduled runs record whatever main's head is at upload time.
+          ref: ${{ github.sha }}
           gh-pages-branch: gh-pages
           auto-push: true
           max-items-in-chart: 250
