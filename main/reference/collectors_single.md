@@ -180,7 +180,14 @@ with `env_backend="multiprocessing"` and an
 [`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) whose
 `service_backend` is `"process"`. Each environment process then performs
 its own reset/infer/step loop against a fixed shared-memory inference slot; the
-driver receives completed transitions only.
+driver receives completed transitions only. This mode bounds completed and
+in-flight transitions together to twice the environment count. Workers park
+before reserving capacity when the driver stops consuming, and `pause()`
+still works with a full buffer. Environment workers are daemonic and both the
+workers and inference server exit if their owning process dies, including
+while environment or policy calls are blocked. Call `shutdown()` for normal
+cleanup; abrupt owner death cannot guarantee environment cleanup hooks run.
+Environment factories in this mode must not start multiprocessing children.
 
 ## Scaling `Collector` across local processes
 

@@ -21,6 +21,8 @@ environment.
 - With a [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport),
 each multiprocessing environment worker talks directly to the dedicated
 inference process; the driver receives completed transitions only.
+Completed and in-flight transitions are bounded to twice the environment
+count. Workers and the inference server exit when their owner dies.
 - The `InferenceServer` running in a background
 thread continuously drains observation submissions, batches them, runs
 a single forward pass, and fans actions back out.
@@ -365,9 +367,11 @@ pause(*timeout: float | None = 30.0*) → Iterator[None][[source]](../../_module
 Pause environment coordination and policy inference.
 
 In-flight policy and environment requests finish before the context is
-entered. The coordinator threads then remain parked until the context
-exits, leaving the inference server idle. This provides a quiescent
-boundary for operations such as a lazy [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) call.
+entered. The coordinator threads or environment processes then remain
+parked until the context exits, leaving the inference server idle.
+Completed transitions can remain buffered for the next iteration.
+This provides a quiescent boundary for operations such as a lazy
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) call.
 
 Compile and warm up modules before starting collection whenever
 possible. Use this context when compilation after collection has
