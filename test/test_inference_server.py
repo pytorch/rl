@@ -20,7 +20,12 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from tensordict import lazy_stack, TensorDict
+from tensordict import (
+    lazy_stack,
+    NonTensorData,
+    set_capture_non_tensor_stack,
+    TensorDict,
+)
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.nn.probabilistic import (
@@ -416,6 +421,33 @@ class TestInferenceServerCore:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
 
+    @pytest.mark.parametrize("capture", [False, True])
+    def test_static_batch_preserves_non_tensor_metadata(self, capture):
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        server = InferenceServer(policy, _MockTransport(), max_batch_size=4)
+        # Exercise padding on CPU without preparing a CUDA graph.
+        server.static_batch_size = 4
+        items = [
+            TensorDict(
+                {
+                    "observation": torch.tensor([value]),
+                    "env_index": NonTensorData(index),
+                    "metadata": {"label": NonTensorData(str(index))},
+                }
+            )
+            for index, value in enumerate((1.0, 2.0))
+        ]
+        with set_capture_non_tensor_stack(capture):
+            batch = server._collate_model_batch(items, pad_to_static=True)
+        assert batch.batch_size == (4,)
+        assert [batch[i]["env_index"] for i in range(4)] == [0, 1, 1, 1]
+        assert [batch[i]["metadata", "label"] for i in range(4)] == ["0", "1", "1", "1"]
+        torch.testing.assert_close(
+            policy(batch)["action"], torch.tensor([[5.0], [6.0], [6.0], [6.0]])
+        )
+
     def test_static_batch_requires_cuda_policy_device(self):
         policy = TensorDictModule(
             _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
@@ -432,7 +464,9 @@ class TestInferenceServerCore:
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-    def test_static_batch_pads_slices_and_owns_results(self):
+    @pytest.mark.parametrize("metadata", [False, True])
+    @set_capture_non_tensor_stack(True)
+    def test_static_batch_pads_slices_and_owns_results(self, metadata):
         policy = TensorDictModule(
             _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
         )
@@ -446,10 +480,13 @@ class TestInferenceServerCore:
             policy_device="cuda:0",
         )
         transport = server.transport
-        futures = [
-            transport.submit(TensorDict({"observation": torch.tensor([value])}))
-            for value in (1.0, 2.0)
+        requests = [
+            TensorDict({"observation": torch.tensor([value])}) for value in (1.0, 2.0)
         ]
+        if metadata:
+            for index, request in enumerate(requests):
+                request.set("env_index", NonTensorData(index))
+        futures = [transport.submit(request) for request in requests]
 
         with server:
             results = [future.result(timeout=5.0) for future in futures]
