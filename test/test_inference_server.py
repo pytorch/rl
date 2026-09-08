@@ -20,7 +20,7 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from tensordict import lazy_stack, TensorDict
+from tensordict import lazy_stack, NonTensorData, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
 from tensordict.nn.probabilistic import (
@@ -415,6 +415,39 @@ class TestInferenceServerCore:
             for r in results:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_batch_pads_requests_with_non_tensor_leaves(self):
+        """Padding must not choke on the pool's non-tensor env_index leaf."""
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        server = InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=4,
+            static_batch_size=4,
+            request_spec=TensorDict({"observation": torch.zeros(1)}),
+            policy_device="cuda:0",
+        )
+        transport = server.transport
+        futures = [
+            transport.submit(
+                TensorDict(
+                    {
+                        "observation": torch.tensor([value]),
+                        "env_index": NonTensorData(data=index),
+                    }
+                )
+            )
+            for index, value in enumerate((1.0, 2.0))
+        ]
+        with server:
+            results = [future.result(timeout=5.0) for future in futures]
+        assert len(results) == 2
+        for result in results:
+            assert result["action"].shape == (2,)
 
     def test_static_batch_requires_cuda_policy_device(self):
         policy = TensorDictModule(

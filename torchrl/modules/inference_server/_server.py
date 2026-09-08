@@ -780,7 +780,14 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         # Materialize them before capture so the graph owns stable input storage.
         # Transfer real requests before padding so host-to-device traffic scales
         # with the ready batch rather than the configured graph capacity.
-        batch = self.collate_fn(items).contiguous().to(self.policy_device)
+        # Non-tensor leaves (the environment pool's env_index) have no static
+        # shape to pad to and are not policy inputs: drop them here.
+        batch = (
+            self.collate_fn(items)
+            .filter_non_tensor_data()
+            .contiguous()
+            .to(self.policy_device)
+        )
         padding = self.static_batch_size - len(items)
         if padding:
             batch = torch.cat(
