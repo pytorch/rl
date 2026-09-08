@@ -328,7 +328,11 @@ def make_primed_env(
 
 
 def build_world_model(
-    *, cfg: DictConfig, obs_dim: int, action_dim: int
+    *,
+    cfg: DictConfig,
+    obs_dim: int,
+    action_dim: int,
+    compile_rollout: bool = True,
 ) -> tuple[TensorDictSequential, RSSMPriorV3, DreamerV3MLP, SymExpTwoHot, DreamerV3MLP]:
     """Build the world model: encoder, RSSM rollout, decoder and two heads."""
     state_dim = latent_state_dim(cfg)
@@ -398,7 +402,7 @@ def build_world_model(
     # training window within one episode, while the rollout still handles a
     # reset at its first transition.
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior, reset_key="is_init")
-    if cfg.optimization.compile_rssm:
+    if compile_rollout and cfg.optimization.compile_rssm:
         rollout.compile_rollout(
             cfg.optimization.compile_rssm,
             unroll=(

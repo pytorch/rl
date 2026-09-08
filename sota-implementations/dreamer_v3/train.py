@@ -104,6 +104,16 @@ class _LearnerUpdate:
         cudagraph_warmup: int = 5,
     ):
         self.cfg = cfg
+        self._sample_keys = [
+            "action",
+            "is_init",
+            "state",
+            "belief",
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "done"),
+            ("next", "terminated"),
+        ]
         self.device = device
         self.model_loss = learner.model_loss
         self.actor_loss = learner.actor_loss
@@ -112,10 +122,24 @@ class _LearnerUpdate:
         self.value_target_updater = learner.value_target_updater
         self.state_dim = latent_state_dim(cfg)
         self.use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
+        self._warmup_steps = (
+            cudagraph_warmup
+            if cfg.optimization.cudagraph_train_step
+            else int(
+                bool(
+                    cfg.optimization.compile_train_step or cfg.optimization.compile_rssm
+                )
+            )
+        )
         self._cudagraph_warmup_remaining = (
             cudagraph_warmup if cfg.optimization.cudagraph_train_step else 0
         )
         train_step = self._forward_backward
+        if cfg.optimization.compile_train_step:
+            train_step = torch.compile(
+                train_step,
+                mode=cfg.optimization.compile_train_step_mode,
+            )
         if cfg.optimization.cudagraph_train_step:
             if device.type != "cuda":
                 raise RuntimeError(
@@ -193,7 +217,7 @@ class _LearnerUpdate:
                 + cfg.optimization.replay_value_loss_weight * replay_loss
             )
 
-        self.optimizer.zero_grad(set_to_none=True)
+        self.optimizer.zero_grad(set_to_none=False)
         total_loss.backward()
         metrics = torch.stack(
             (
@@ -215,12 +239,69 @@ class _LearnerUpdate:
         self,
         sample: TensorDictBase,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        sample = sample.select(*self._sample_keys)
+        # Replay sampling may squeeze boolean feature axes. Match capture inputs.
+        for key in ("is_init", ("next", "done"), ("next", "terminated")):
+            sample.set(key, sample.get(key).reshape(*sample.batch_size, 1))
         result = self.train_step(sample)
         if self._cudagraph_warmup_remaining:
             self._cudagraph_warmup_remaining -= 1
         self.optimizer.step()
         self.value_target_updater.step()
         return result
+
+
+def _fake_learner_sample(
+    cfg: DictConfig,
+    device: torch.device,
+    obs_dim: int,
+    action_dim: int,
+) -> TensorDict:
+    batch_size = (cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len)
+    return TensorDict(
+        {
+            "state": torch.zeros(*batch_size, latent_state_dim(cfg)),
+            "belief": torch.zeros(*batch_size, cfg.networks.rnn_hidden_dim),
+            "action": torch.zeros(*batch_size, action_dim),
+            "is_init": torch.zeros(*batch_size, 1, dtype=torch.bool),
+            "next": {
+                "observation": torch.zeros(*batch_size, obs_dim),
+                "reward": torch.zeros(*batch_size, 1),
+                "done": torch.zeros(*batch_size, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch_size, 1, dtype=torch.bool),
+            },
+        },
+        batch_size,
+        device=device,
+    )
+
+
+def _warm_up_learner(
+    cfg: DictConfig,
+    device: torch.device,
+    learner_update: _LearnerUpdate,
+    obs_dim: int,
+    action_dim: int,
+) -> None:
+    if not learner_update._warmup_steps:
+        return
+
+    cpu_rng_state = torch.get_rng_state()
+    cuda_rng_state = torch.cuda.get_rng_state(device) if device.type == "cuda" else None
+    return_low = learner_update.actor_loss.retnorm.low.detach().clone()
+    return_high = learner_update.actor_loss.retnorm.high.detach().clone()
+    sample = _fake_learner_sample(cfg, device, obs_dim, action_dim)
+    try:
+        for _ in range(learner_update._warmup_steps):
+            learner_update.train_step(sample.select(*learner_update._sample_keys))
+        learner_update._cudagraph_warmup_remaining = 0
+        learner_update.optimizer.zero_grad(set_to_none=False)
+    finally:
+        learner_update.actor_loss.retnorm.low.copy_(return_low)
+        learner_update.actor_loss.retnorm.high.copy_(return_high)
+        torch.set_rng_state(cpu_rng_state)
+        if cuda_rng_state is not None:
+            torch.cuda.set_rng_state(cuda_rng_state, device)
 
 
 def _validated_action_budget(cfg: DictConfig) -> int:
@@ -264,14 +345,22 @@ def _build_learner(
         reward_net,
         reward_decoder,
         continuation_net,
-    ) = build_world_model(cfg=cfg, obs_dim=obs_dim, action_dim=action_dim)
+    ) = build_world_model(
+        cfg=cfg,
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        compile_rollout=not cfg.optimization.compile_train_step,
+    )
     world_model = world_model.to(device)
     imagination_model = build_imagination_model(
         prior_net=prior_net,
         reward_net=reward_net,
         reward_decoder=reward_decoder,
-        # Compiling changes the categorical draws; "step" must match eager.
-        compile_prior=cfg.optimization.compile_rssm == "scan",
+        # The whole-step compile owns shared modules and subsumes RSSM compile.
+        compile_prior=(
+            cfg.optimization.compile_rssm == "scan"
+            and not cfg.optimization.compile_train_step
+        ),
     ).to(device)
     continuation_model = build_continuation_model(continuation_net=continuation_net).to(
         device
@@ -641,7 +730,8 @@ def main(cfg: DictConfig):
     use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
     torchrl_logger.info(
         "DreamerV3 execution: device=%s, replay_device=%s, rssm_backend=%s, "
-        "rssm_scan_unroll=%s, mixed_precision=%s, cudagraph_train_step=%s",
+        "rssm_scan_unroll=%s, mixed_precision=%s, compile_train_step=%s, "
+        "cudagraph_train_step=%s",
         device,
         replay_device,
         cfg.optimization.compile_rssm or "eager",
@@ -651,6 +741,7 @@ def main(cfg: DictConfig):
             else "n/a"
         ),
         use_bfloat16,
+        cfg.optimization.compile_train_step,
         cfg.optimization.cudagraph_train_step,
     )
     num_envs = cfg.collector.num_envs
@@ -672,6 +763,7 @@ def main(cfg: DictConfig):
 
     learner = _build_learner(cfg, device, obs_dim, action_dim)
     learner_update = _LearnerUpdate(cfg, device, learner)
+    _warm_up_learner(cfg, device, learner_update, obs_dim, action_dim)
     rb = _build_replay(cfg, num_envs, replay_device, device)
     action_step = 0
     reset_records = num_envs
@@ -802,7 +894,9 @@ def main(cfg: DictConfig):
                     # CUDA graph capture rejects CUDA API calls from other threads.
                     with timeit("dreamer_v3/replay_wait"):
                         rb.synchronize()
-                with timeit("dreamer_v3/train_update"):
+                with timeit(
+                    "dreamer_v3/train_update", sync=cfg.optimization.sync_timers
+                ):
                     (
                         update_losses,
                         refreshed_state,

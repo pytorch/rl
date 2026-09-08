@@ -147,15 +147,52 @@ class _ReplayLearnerStep:
         self.replay_buffer.shutdown()
 
 
-def _measure(step, synchronize, *, warmup: int, iterations: int) -> list[float]:
+def _measure(step, synchronize, *, warmup: int, iterations: int):
     for _ in range(warmup):
         step()
     synchronize()
+    torch.cuda.reset_peak_memory_stats()
+    host_latencies = []
     started = time.perf_counter()
     for _ in range(iterations):
+        before_update = time.perf_counter()
         step()
+        host_latencies.append((time.perf_counter() - before_update) * 1000)
     synchronize()
-    return [(time.perf_counter() - started) * 1000 / iterations]
+    return (time.perf_counter() - started) * 1000 / iterations, host_latencies
+
+
+def _profile_update(step, synchronize) -> dict:
+    with torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ]
+    ) as profile:
+        step()
+        synchronize()
+
+    events = profile.events()
+    kernel_events = [
+        event
+        for event in events
+        if event.device_type == torch.autograd.DeviceType.CUDA
+        and not event.name.startswith(("Memcpy", "Memset"))
+    ]
+    launch_events = [
+        event
+        for event in events
+        if event.name.startswith("cudaLaunchKernel") or event.name == "cudaGraphLaunch"
+    ]
+    return {
+        "profile_kernel_count": len(kernel_events),
+        "profile_gpu_time_ms": sum(event.device_time_total for event in kernel_events)
+        / 1000,
+        "profile_cpu_launch_time_ms": sum(
+            event.self_cpu_time_total for event in launch_events
+        )
+        / 1000,
+    }
 
 
 def main() -> None:
@@ -173,8 +210,17 @@ def main() -> None:
     parser.add_argument(
         "--variants",
         nargs="+",
-        choices=("compiled_scan", "cuda_graph"),
-        default=("compiled_scan", "cuda_graph"),
+        choices=(
+            "eager",
+            "compiled_scan",
+            "cuda_graph",
+            "compiled_train_step",
+            "compiled_train_step_cuda_graph",
+        ),
+        default=(
+            "cuda_graph",
+            "compiled_train_step_cuda_graph",
+        ),
     )
     args = parser.parse_args()
     if not torch.cuda.is_available():
@@ -204,9 +250,18 @@ def main() -> None:
         cfg = _load_config(repo_root)
         cfg.replay_buffer.batch_size = args.batch
         cfg.replay_buffer.seq_len = args.steps
-        cfg.optimization.compile_rssm = "scan"
+        cfg.optimization.compile_rssm = (
+            "scan" if variant in ("compiled_scan", "cuda_graph") else None
+        )
         cfg.optimization.rssm_scan_unroll = args.unroll
-        cfg.optimization.cudagraph_train_step = variant == "cuda_graph"
+        cfg.optimization.compile_train_step = variant in (
+            "compiled_train_step",
+            "compiled_train_step_cuda_graph",
+        )
+        cfg.optimization.cudagraph_train_step = variant in (
+            "cuda_graph",
+            "compiled_train_step_cuda_graph",
+        )
         torch.manual_seed(0)
         learner = example["_build_learner"](
             cfg,
@@ -247,16 +302,17 @@ def main() -> None:
             synchronize = replay_step.synchronize
             workload = "complete_learner_update_with_replay"
         try:
-            samples = _measure(
+            mean_ms, host_latencies = _measure(
                 step,
                 synchronize,
                 warmup=args.warmup,
                 iterations=args.iterations,
             )
+            peak_memory = torch.cuda.max_memory_allocated(device) / 2**20
+            profile_metrics = _profile_update(step, synchronize)
         finally:
             if replay_step is not None:
                 replay_step.close()
-        median_ms = statistics.median(samples)
         result = {
             "variant": variant,
             "workload": workload,
@@ -270,10 +326,16 @@ def main() -> None:
             "warmup": args.warmup,
             "iterations": args.iterations,
             "mixed_precision": cfg.optimization.mixed_precision,
-            "median_ms": median_ms,
-            "transitions_per_second": args.batch * args.steps * 1000 / median_ms,
-            "min_ms": min(samples),
-            "max_ms": max(samples),
+            "warmup_updates": args.warmup,
+            "measured_updates": args.iterations,
+            "mean_update_ms": mean_ms,
+            "transitions_per_second": args.batch * args.steps * 1000 / mean_ms,
+            "p50_host_update_ms": statistics.median(host_latencies),
+            "p95_host_update_ms": statistics.quantiles(
+                host_latencies, n=20, method="inclusive"
+            )[18],
+            "peak_cuda_allocated_mib": peak_memory,
+            **profile_metrics,
         }
         print(json.dumps(result, sort_keys=True), flush=True)
 

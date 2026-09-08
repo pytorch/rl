@@ -154,7 +154,31 @@ recurrence and the imagination prior, and is faster, but its draws fall inside
 the compiled region, so a seeded run diverges from an eager one. The scan uses
 `optimization.rssm_scan_unroll=8` by default; lower values reduce compilation
 time and graph size, while `1` disables manual unrolling.
+`optimization.compile_train_step=true` compiles the complete learner forward
+and backward with TorchInductor, including the model, actor, value, and replay
+value losses. It subsumes `optimization.compile_rssm`, which is ignored to avoid
+nested compilation of shared RSSM modules. The compile mode defaults to
+`optimization.compile_train_step_mode=default`; autotuning modes are opt-in.
+Compilation and CUDA-graph warmup use a fixed-shape synthetic batch before the
+collector is constructed, so async collection is not live while Dynamo runs.
+When combined with `optimization.cudagraph_train_step=true`, the
+Inductor-compiled function is warmed up before CUDA graph capture.
 `optimization.cudagraph_train_step=true` captures the learner forward and
 backward after five warmup calls. It requires CUDA and fixed input shapes;
 optimizer and target-network steps remain outside capture so their schedules
 continue to advance normally.
+
+Train-update timing remains asynchronous by default. Set
+`optimization.sync_timers=true` when completed GPU timing is needed; this
+synchronizes around each measured update and intentionally disables CPU/GPU
+overlap.
+
+To compare the existing CUDA-graph path with whole-step compilation, run:
+
+```bash
+python benchmarks/ad_hoc/bench_dreamer_v3_learner.py \
+  --variants cuda_graph compiled_train_step_cuda_graph
+```
+
+Each variant reports the median synchronized update time plus a one-update
+profiler sample with kernel count, summed GPU kernel time, and CPU launch time.
