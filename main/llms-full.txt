@@ -153,6 +153,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Quick Example](reference/data.html#quick-example)
 - [CUDA prioritized replay buffers](reference/data.html#cuda-prioritized-replay-buffers)
 - [Documentation Sections](reference/data.html#documentation-sections)
+- [Ending replay streams on restart](reference/data.html#ending-replay-streams-on-restart)
 - [Data layout: contiguous trajectories](reference/data_layout.html)
 
 - [Trajectory boundary keys](reference/data_layout.html#trajectory-boundary-keys)
@@ -3167,6 +3168,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig)(_partial_, in_features, ...) | A class to configure a multi-layer perceptron. |
 | [`DreamerV3MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig)([_partial_, in_features, ...]) | A class to configure a DreamerV3 multilayer perceptron. |
 | [`DreamerV3DiscreteActorConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig)([_partial_, ...]) | Hydra configuration for `DreamerV3DiscreteActor`. |
+| [`DreamerV3SeededPolicyConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig)([_partial_, ...]) | Hydra configuration for `DreamerV3SeededPolicy`. |
 | [`DreamerV3ImageEncoderConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig)(_partial_, ...) | Hydra configuration for [`DreamerV3ImageEncoder`](generated/torchrl.modules.DreamerV3ImageEncoder.html#torchrl.modules.DreamerV3ImageEncoder). |
 | [`DreamerV3ImageDecoderConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig)(_partial_, ...) | Hydra configuration for [`DreamerV3ImageDecoder`](generated/torchrl.modules.DreamerV3ImageDecoder.html#torchrl.modules.DreamerV3ImageDecoder). |
 | [`ConvNetConfig`](generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html#torchrl.trainers.algorithms.configs.modules.ConvNetConfig)(_partial_, in_features, depth, ...) | A class to configure a convolutional network. |
@@ -3618,6 +3620,15 @@ rb.update_tensordict_priority(sample)
 - [UnboundedContinuous](generated/torchrl.data.UnboundedContinuous.html)
 - [UnboundedDiscrete](generated/torchrl.data.UnboundedDiscrete.html)
 - [Supported PyTorch Operations](data_specs.html#supported-pytorch-operations)
+
+## Ending replay streams on restart
+
+[`end_streams()`](generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble.end_streams) closes each member's current
+trajectory before restarted environments append new data. It drains pending
+replay work, preserves row generations and terminal flags, and resets incomplete
+fresh windows and cached uniform boundaries. Call it with collection paused and
+before resuming producers. See its API documentation for supported member storage,
+writer and sampler combinations and configurable nested boundary keys.
 
 ---
 
@@ -5249,6 +5260,33 @@ can substitute another optimizer or schedule without changing the objectives.
 
 For a complete training setup, see the
 [DreamerV3 example](https://github.com/pytorch/rl/tree/main/sota-implementations/dreamer_v3).
+
+## Checkpoint ownership
+
+Register the composed [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss) and
+[`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper) separately with
+[`Checkpoint`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint). The loss owns network and normalization
+state; the stepper owns optimizer and target-update progress. Restore both after
+compile/capture warm-up, which may modify parameters or running statistics.
+
+`DreamerV3SeededPolicy` includes its seed and next-draw
+counter in its module state. Register the policy and
+[`DreamerV3UpdateRatio`](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html#torchrl.trainers.algorithms.DreamerV3UpdateRatio) directly to preserve
+policy RNG progress and fractional update scheduling. When replay is omitted,
+call the ratio's `reset(record_count)` while refilling it to discard owed updates.
+Restore global RNG state last, before collection begins.
+
+After loading native replay, call
+[`end_streams()`](generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble.end_streams) before new environments
+append transitions. This closes unfinished tails and resets incomplete streaming
+windows without inventing terminal transitions. Environments restart; checkpoint
+resume does not guarantee identical trajectories.
+
+Pass saved logger state to [`get_logger()`](generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger) through
+`state_dict=...`. The logger layer reopens saved local logs or strictly resumes
+the saved W&B run ID, then restores its counters. The recipe chooses checkpoint
+paths, cadence, optional replay and when to quiesce collection; it does not inspect
+component internals to reconstruct their state.
 
 ---
 
@@ -30240,6 +30278,58 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
+end_streams(***, *end_key: NestedKey = ('next', 'done')*, *terminated_key: NestedKey | None = ('next', 'terminated')*, *truncated_key: NestedKey | None = ('next', 'truncated')*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.end_streams)
+
+Close each member's current stream before restarted producers append.
+
+Each member must hold one chronological stream in a one-dimensional
+tensor storage, with a generation-tracking round-robin writer and a
+`SliceSampler` (including `StreamingSliceSampler`) configured
+to read `end_key`. Trajectory-ID sampling is not supported by this
+operation because restarted producers may reuse old IDs.
+
+Pending samples and conditional updates finish before tail selection.
+Tail patches keep write counts and slot generations unchanged. Existing
+terminal/truncated flags are preserved; unfinished tails become done and,
+when the field exists, truncated. Uniform boundary caches and unfinished
+fresh windows are reset. Completed fresh windows and previously prefetched
+results retain their order; those results precede this operation.
+
+Quiesce collection before calling this method and until it returns.
+Empty members are skipped. Unsupported members are rejected before any
+tail is changed.
+
+Keyword Arguments:
+
+- **end_key** (*NestedKey**,**optional*) - Stored boolean boundary field and
+sampler end key. Defaults to `("next", "done")`.
+- **terminated_key** (*NestedKey**or**None**,**optional*) - Stored terminal field,
+never modified. Missing fields are treated as false. Defaults
+to `("next", "terminated")`.
+- **truncated_key** (*NestedKey**or**None**,**optional*) - Existing boolean field
+to set for unfinished nonterminal tails. `None` disables this
+patch. Defaults to `("next", "truncated")`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage, ReplayBufferEnsemble, SliceSampler,
+... TensorDictReplayBuffer, TensorDictRoundRobinWriter,
+... )
+>>> member = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(8), sampler=SliceSampler(slice_len=2, end_key=("next", "done")),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... )
+>>> _ = member.extend(TensorDict({("next", "done"): torch.zeros(3, 1, dtype=torch.bool)}, [3]))
+>>> replay = ReplayBufferEnsemble(member)
+>>> replay.end_streams()
+>>> member[:]["next", "done"].flatten().tolist()
+[False, False, True]
+```
+
 extend(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.extend)
 
 Routes and writes a batch, returning member-local write metadata.
@@ -33929,7 +34019,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f0b07efc9f0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fb9f2d9be20>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47201,7 +47291,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0b09ce0400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fb9f5e70400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -231859,6 +231949,70 @@ See also
 
 ---
 
+# DreamerV3SeededPolicy
+
+*class*torchrl.modules.tensordict_module.DreamerV3SeededPolicy(**args*, ***kwargs*)[[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#DreamerV3SeededPolicy)
+
+Run a DreamerV3 policy with an independent, checkpointable random stream.
+
+Each call derives a seed from the initial seed and call count, restoring the
+caller's torch RNG state afterwards. The seed and count are included in the
+module's `state_dict` alongside its parameters. Calls must be serialized;
+Python seeding is not compatible with CUDA-graph capture of this wrapper.
+
+Parameters:
+
+- **module** (*TensorDictModuleBase*) - Policy to execute, with declared input keys.
+- **seed** (*int*) - Initial non-negative seed for the policy stream.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.modules import DreamerV3DiscreteActor, DreamerV3SeededPolicy
+>>> actor = DreamerV3DiscreteActor(6, 3, depth=1, num_cells=8)
+>>> policy = DreamerV3SeededPolicy(actor, seed=7)
+>>> data = TensorDict({"state": torch.zeros(2, 4), "belief": torch.zeros(2, 2)}, [2])
+>>> _ = policy(data.clone())
+>>> saved = policy.state_dict()
+>>> expected = policy(data.clone())["action"]
+>>> _ = policy.load_state_dict(saved)
+>>> torch.equal(policy(data.clone())["action"], expected)
+True
+```
+
+See also
+
+`DreamerV3SeededPolicyConfig`
+
+forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#DreamerV3SeededPolicy.forward)
+
+Define the computation performed at every call.
+
+Should be overridden by all subclasses.
+
+Note
+
+Although the recipe for forward pass needs to be defined within
+this function, one should call the `Module` instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.
+
+get_extra_state() → dict[str, int][[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#DreamerV3SeededPolicy.get_extra_state)
+
+Return the policy's seed and call count for module checkpointing.
+
+reset_counter() → None[[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#DreamerV3SeededPolicy.reset_counter)
+
+Restart the counter, because a setup call can move it before step 0.
+
+set_extra_state(*state: Mapping[str, int]*) → None[[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#DreamerV3SeededPolicy.set_extra_state)
+
+Restore the next policy draw without changing the caller's RNG.
+
+---
+
 # MultiStepActorWrapper
 
 *class*torchrl.modules.tensordict_module.MultiStepActorWrapper(**args*, ***kwargs*)[[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#MultiStepActorWrapper)
@@ -262116,7 +262270,7 @@ Generates an ID (str) for the described experiment using UUID and current date.
 
 # get_logger
 
-torchrl.record.loggers.get_logger(*logger_type: Literal['tensorboard', 'csv', 'wandb', 'mlflow', 'trackio', ''] | None*, *logger_name: str*, *experiment_name: str*, ***, *service_backend: Literal['direct', 'process', 'ray'] = 'direct'*, *service_backend_options: dict[str, Any] | None = None*, *use_ray_service: bool = False*, *ray_actor_options: dict[str, Any] | None = None*, ***kwargs*) → Logger | None[[source]](../../_modules/torchrl/record/loggers/utils.html#get_logger)
+torchrl.record.loggers.get_logger(*logger_type: Literal['tensorboard', 'csv', 'wandb', 'mlflow', 'trackio', ''] | None*, *logger_name: str*, *experiment_name: str*, ***, *state_dict: Mapping[str, Any] | None = None*, *service_backend: Literal['direct', 'process', 'ray'] = 'direct'*, *service_backend_options: dict[str, Any] | None = None*, *use_ray_service: bool = False*, *ray_actor_options: dict[str, Any] | None = None*, ***kwargs*) → Logger | None[[source]](../../_modules/torchrl/record/loggers/utils.html#get_logger)
 
 Get a logger instance of the provided logger_type.
 
@@ -262126,6 +262280,15 @@ Parameters:
 If empty, `None` is returned.
 - **logger_name** (*str*) - Name to be used as a log_dir
 - **experiment_name** (*str*) - Name of the experiment
+
+Keyword Arguments:
+
+- **state_dict** (*Mapping**[**str**,**Any**] or**None**,**optional*) - Saved logger state from
+`state_dict()`. Restores the saved
+name, directory and counters for CSV/TensorBoard, or resumes the
+saved W&B run with strict `resume="must"` semantics. Other logger
+types currently reject this option before opening a service.
+Defaults to `None` (create a logger normally).
 - **service_backend** - One of `"direct"`, `"process"`, or `"ray"`.
 - **service_backend_options** - Process or Ray initialization options.
 - **use_ray_service** - Deprecated compatibility flag for the Ray backend.
@@ -265359,6 +265522,55 @@ The closure's loss, or `None` when no closure is supplied.
 
 ---
 
+# DreamerV3UpdateRatio
+
+*class*torchrl.trainers.algorithms.DreamerV3UpdateRatio(*ratio: float*)[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3UpdateRatio)
+
+Schedule learner updates from a ratio of updates to driver records.
+
+Each call truncates the count from the cumulative driver-record count and
+keeps the remainder. The first call returns one update.
+
+Parameters:
+
+**ratio** (*float*) - Learner updates for each driver record. Non-positive values
+disable updates.
+
+Examples
+
+```
+>>> from torchrl.trainers.algorithms import DreamerV3UpdateRatio
+>>> schedule = DreamerV3UpdateRatio(0.25)
+>>> schedule(4), schedule(6)
+(1, 0)
+>>> saved = schedule.state_dict()
+>>> expected = schedule(8)
+>>> schedule.load_state_dict(saved)
+>>> schedule(8) == expected
+True
+```
+
+See also
+
+[`DreamerV3UpdateRatioConfig`](torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html#torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig)
+
+load_state_dict(*state_dict: Mapping[str, float | None]*) → None[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3UpdateRatio.load_state_dict)
+
+Restore the update schedule's progress and ratio.
+
+reset(*record_count: int*) → None[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3UpdateRatio.reset)
+
+Discard owed updates and start counting after `record_count` records.
+
+Use when rebuilding replay after a resume without saved replay, so
+collection warm-up does not accumulate a catch-up update burst.
+
+state_dict() → dict[str, float | None][[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3UpdateRatio.state_dict)
+
+Return the ratio and cumulative progress, including fractional updates.
+
+---
+
 # GRPOTrainer
 
 *class*torchrl.trainers.algorithms.GRPOTrainer(**args*, ***kwargs*)[[source]](../../_modules/torchrl/trainers/algorithms/grpo.html#GRPOTrainer)
@@ -266362,6 +266574,24 @@ True
 
 ---
 
+# DreamerV3UpdateRatioConfig
+
+*class*torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig(*ratio: float = '???'*, *_target_: str = 'torchrl.trainers.algorithms.DreamerV3UpdateRatio'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#DreamerV3UpdateRatioConfig)
+
+Hydra configuration for [`DreamerV3UpdateRatio`](torchrl.trainers.algorithms.DreamerV3UpdateRatio.html#torchrl.trainers.algorithms.DreamerV3UpdateRatio).
+
+Examples
+
+```
+>>> from hydra.utils import instantiate
+>>> from torchrl.trainers.algorithms.configs import DreamerV3UpdateRatioConfig
+>>> schedule = instantiate(DreamerV3UpdateRatioConfig(ratio=0.25))
+>>> schedule(4), schedule(8)
+(1, 1)
+```
+
+---
+
 # torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig
 
 *class*torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig(*create_env_fn: ~torchrl.trainers.algorithms.configs.common.ConfigBase = <factory>*, *policy: ~typing.Any = None*, *policy_factory: ~typing.Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = 0*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *split_trajs: bool = False*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *set_truncated: bool = False*, *use_buffers: bool = False*, *replay_buffer: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *extend_buffer: bool = False*, *trust_policy: bool = True*, *compile_policy: ~typing.Any = None*, *cudagraph_policy: ~typing.Any = None*, *no_cuda_sync: bool = False*, *weight_updater: ~typing.Any = None*, *weight_sync_schemes: ~typing.Any = None*, *track_policy_version: bool = False*, *_target_: str = 'torchrl.collectors.AsyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#AsyncCollectorConfig)
@@ -267089,6 +267319,27 @@ Example
 See also
 
 [`DreamerV3MLP`](torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP)
+
+---
+
+# torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig
+
+*class*torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig(*_partial_: bool = False*, *module: Any = '???'*, *seed: int = '???'*, *_target_: str = 'torchrl.modules.DreamerV3SeededPolicy'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/modules.html#DreamerV3SeededPolicyConfig)
+
+Hydra configuration for `DreamerV3SeededPolicy`.
+
+Examples
+
+```
+>>> from hydra.utils import instantiate
+>>> from torchrl.trainers.algorithms.configs import DreamerV3DiscreteActorConfig, DreamerV3SeededPolicyConfig
+>>> config = DreamerV3SeededPolicyConfig(
+... module=DreamerV3DiscreteActorConfig(in_features=6, out_features=3), seed=7,
+... )
+>>> policy = instantiate(config)
+>>> policy.get_extra_state()
+{'seed': 7, 'counter': 0}
+```
 
 ---
 
@@ -272462,6 +272713,7 @@ in the rollout loop
 - [Sampling Strategies](data_samplers.html)
 - [Datasets](data_datasets.html)
 - [TensorSpec System](data_specs.html)
+- [Ending replay streams on restart](data.html#ending-replay-streams-on-restart)
 - [Data layout: contiguous trajectories](data_layout.html)
 
 - [Trajectory boundary keys](data_layout.html#trajectory-boundary-keys)
@@ -272665,6 +272917,8 @@ in the rollout loop
 
 - [DreamerV3Optimizer](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html)
 - [DreamerV3OptimizerConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html)
+- [DreamerV3UpdateRatio](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html)
+- [DreamerV3UpdateRatioConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html)
 - [DreamerV3OptimizationStepper](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html)
 - [DreamerV3OptimizationStepperConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html)
 - [torchrl._utils package](utils.html)
@@ -274432,6 +274686,7 @@ or stochastically.
 | [`ProbabilisticActor`](generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor)(*args, **kwargs) | General class for probabilistic actors in RL. |
 | --- | --- |
 | [`DreamerV3DiscreteActor`](generated/torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html#torchrl.modules.tensordict_module.DreamerV3DiscreteActor)(*args, **kwargs) | DreamerV3 one-hot categorical policy over stochastic state and belief. |
+| [`DreamerV3SeededPolicy`](generated/torchrl.modules.tensordict_module.DreamerV3SeededPolicy.html#torchrl.modules.tensordict_module.DreamerV3SeededPolicy)(*args, **kwargs) | Run a DreamerV3 policy with an independent, checkpointable random stream. |
 | [`SafeProbabilisticModule`](generated/torchrl.modules.tensordict_module.SafeProbabilisticModule.html#torchrl.modules.tensordict_module.SafeProbabilisticModule)(*args, **kwargs) | [`tensordict.nn.ProbabilisticTensorDictModule`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) subclass that accepts a `TensorSpec` as an argument to control the output domain. |
 | [`SafeProbabilisticTensorDictSequential`](generated/torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html#torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential)(*args, ...) | [`tensordict.nn.ProbabilisticTensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential) subclass that accepts a `TensorSpec` as argument to control the output domain. |
 
@@ -275278,6 +275533,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [Reconstruction heads](dreamer_v3.html#reconstruction-heads)
 - [Optimization and training loop](dreamer_v3.html#optimization-and-training-loop)
 - [API map](dreamer_v3.html#api-map)
+- [Checkpoint ownership](dreamer_v3.html#checkpoint-ownership)
 
 ---
 
@@ -277512,6 +277768,8 @@ example script. See [DreamerV3 in a nutshell](dreamer_v3.html) for the loss and 
 | [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer)(parameters, *[, lr, agc, ...]) | DreamerV3 adaptive gradient clipping, RMS scaling and momentum. |
 | --- | --- |
 | [`DreamerV3OptimizerConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig)([lr, agc, ...]) | Hydra configuration for [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer). |
+| [`DreamerV3UpdateRatio`](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html#torchrl.trainers.algorithms.DreamerV3UpdateRatio)(ratio) | Schedule learner updates from a ratio of updates to driver records. |
+| [`DreamerV3UpdateRatioConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html#torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig)([ratio, _target_]) | Hydra configuration for [`DreamerV3UpdateRatio`](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html#torchrl.trainers.algorithms.DreamerV3UpdateRatio). |
 | [`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper)(loss_module, ...) | Execute a complete DreamerV3 forward/backward and optimizer update. |
 | [`DreamerV3OptimizationStepperConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig)([...]) | Hydra configuration for [`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper). |
 

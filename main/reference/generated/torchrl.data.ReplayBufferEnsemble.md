@@ -275,6 +275,58 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
+end_streams(***, *end_key: NestedKey = ('next', 'done')*, *terminated_key: NestedKey | None = ('next', 'terminated')*, *truncated_key: NestedKey | None = ('next', 'truncated')*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.end_streams)
+
+Close each member's current stream before restarted producers append.
+
+Each member must hold one chronological stream in a one-dimensional
+tensor storage, with a generation-tracking round-robin writer and a
+`SliceSampler` (including `StreamingSliceSampler`) configured
+to read `end_key`. Trajectory-ID sampling is not supported by this
+operation because restarted producers may reuse old IDs.
+
+Pending samples and conditional updates finish before tail selection.
+Tail patches keep write counts and slot generations unchanged. Existing
+terminal/truncated flags are preserved; unfinished tails become done and,
+when the field exists, truncated. Uniform boundary caches and unfinished
+fresh windows are reset. Completed fresh windows and previously prefetched
+results retain their order; those results precede this operation.
+
+Quiesce collection before calling this method and until it returns.
+Empty members are skipped. Unsupported members are rejected before any
+tail is changed.
+
+Keyword Arguments:
+
+- **end_key** (*NestedKey**,**optional*) - Stored boolean boundary field and
+sampler end key. Defaults to `("next", "done")`.
+- **terminated_key** (*NestedKey**or**None**,**optional*) - Stored terminal field,
+never modified. Missing fields are treated as false. Defaults
+to `("next", "terminated")`.
+- **truncated_key** (*NestedKey**or**None**,**optional*) - Existing boolean field
+to set for unfinished nonterminal tails. `None` disables this
+patch. Defaults to `("next", "truncated")`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage, ReplayBufferEnsemble, SliceSampler,
+... TensorDictReplayBuffer, TensorDictRoundRobinWriter,
+... )
+>>> member = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(8), sampler=SliceSampler(slice_len=2, end_key=("next", "done")),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... )
+>>> _ = member.extend(TensorDict({("next", "done"): torch.zeros(3, 1, dtype=torch.bool)}, [3]))
+>>> replay = ReplayBufferEnsemble(member)
+>>> replay.end_streams()
+>>> member[:]["next", "done"].flatten().tolist()
+[False, False, True]
+```
+
 extend(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.extend)
 
 Routes and writes a batch, returning member-local write metadata.

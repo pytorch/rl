@@ -146,6 +146,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Quick Example](reference/data.html#quick-example)
 - [CUDA prioritized replay buffers](reference/data.html#cuda-prioritized-replay-buffers)
 - [Documentation Sections](reference/data.html#documentation-sections)
+- [Ending replay streams on restart](reference/data.html#ending-replay-streams-on-restart)
 - [Data layout: contiguous trajectories](reference/data_layout.html)
 
 - [Trajectory boundary keys](reference/data_layout.html#trajectory-boundary-keys)

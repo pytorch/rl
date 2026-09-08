@@ -323,3 +323,30 @@ can substitute another optimizer or schedule without changing the objectives.
 
 For a complete training setup, see the
 [DreamerV3 example](https://github.com/pytorch/rl/tree/main/sota-implementations/dreamer_v3).
+
+## Checkpoint ownership
+
+Register the composed [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss) and
+[`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper) separately with
+[`Checkpoint`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint). The loss owns network and normalization
+state; the stepper owns optimizer and target-update progress. Restore both after
+compile/capture warm-up, which may modify parameters or running statistics.
+
+`DreamerV3SeededPolicy` includes its seed and next-draw
+counter in its module state. Register the policy and
+[`DreamerV3UpdateRatio`](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html#torchrl.trainers.algorithms.DreamerV3UpdateRatio) directly to preserve
+policy RNG progress and fractional update scheduling. When replay is omitted,
+call the ratio's `reset(record_count)` while refilling it to discard owed updates.
+Restore global RNG state last, before collection begins.
+
+After loading native replay, call
+[`end_streams()`](generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble.end_streams) before new environments
+append transitions. This closes unfinished tails and resets incomplete streaming
+windows without inventing terminal transitions. Environments restart; checkpoint
+resume does not guarantee identical trajectories.
+
+Pass saved logger state to [`get_logger()`](generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger) through
+`state_dict=...`. The logger layer reopens saved local logs or strictly resumes
+the saved W&B run ID, then restores its counters. The recipe chooses checkpoint
+paths, cadence, optional replay and when to quiesce collection; it does not inspect
+component internals to reconstruct their state.

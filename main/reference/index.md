@@ -52,6 +52,7 @@
 - [Sampling Strategies](data_samplers.html)
 - [Datasets](data_datasets.html)
 - [TensorSpec System](data_specs.html)
+- [Ending replay streams on restart](data.html#ending-replay-streams-on-restart)
 - [Data layout: contiguous trajectories](data_layout.html)
 
 - [Trajectory boundary keys](data_layout.html#trajectory-boundary-keys)
@@ -255,6 +256,8 @@
 
 - [DreamerV3Optimizer](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html)
 - [DreamerV3OptimizerConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html)
+- [DreamerV3UpdateRatio](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html)
+- [DreamerV3UpdateRatioConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html)
 - [DreamerV3OptimizationStepper](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html)
 - [DreamerV3OptimizationStepperConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html)
 - [torchrl._utils package](utils.html)
