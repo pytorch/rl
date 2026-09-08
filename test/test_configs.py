@@ -1572,6 +1572,33 @@ class TestCollectorsConfig:
         finally:
             collector.shutdown()
 
+    @pytest.mark.parametrize("collector", ["multi_sync", "multi_async"])
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_multi_collector_config_without_policy(self, collector):
+        """Leaving ``policy`` unset falls back to a random policy, as in the constructor."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import (
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg_cls = {
+            "multi_sync": MultiSyncCollectorConfig,
+            "multi_async": MultiAsyncCollectorConfig,
+        }[collector]
+        cfg = cfg_cls(
+            create_env_fn=[GymEnvConfig(env_name="Pendulum-v1")],
+            frames_per_batch=10,
+            total_frames=10,
+        )
+        collector_instance = instantiate(cfg)
+        try:
+            assert next(iter(collector_instance)).numel() == 10
+        finally:
+            collector_instance.shutdown(timeout=10)
+
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")

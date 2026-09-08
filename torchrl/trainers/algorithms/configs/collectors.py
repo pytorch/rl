@@ -159,7 +159,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     policy: Any = None
     policy_factory: Any = None
     frames_per_batch: int | None = None
-    init_random_frames: int | None = 0
+    init_random_frames: int | None = None
     total_frames: int = -1
     device: str | None = None
     storing_device: str | None = None
@@ -170,7 +170,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     max_frames_per_traj: int | None = None
     reset_at_each_iter: bool = False
     postproc: ConfigBase | None = None
-    split_trajs: bool = False
+    split_trajs: bool | None = None
     exploration_type: str = "RANDOM"
     reset_when_done: bool = True
     update_at_each_batch: bool = False
@@ -179,10 +179,10 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     num_sub_threads: int = 1
     cat_results: Any = None
     set_truncated: bool = False
-    use_buffers: bool = False
+    use_buffers: bool | None = None
     replay_buffer: ConfigBase | None = None
-    extend_buffer: bool = False
-    trust_policy: bool = True
+    extend_buffer: bool = True
+    trust_policy: bool | None = None
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
@@ -226,7 +226,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     policy: Any = None
     policy_factory: Any = None
     frames_per_batch: int | None = None
-    init_random_frames: int | None = 0
+    init_random_frames: int | None = None
     total_frames: int = -1
     device: str | None = None
     storing_device: str | None = None
@@ -237,7 +237,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     max_frames_per_traj: int | None = None
     reset_at_each_iter: bool = False
     postproc: ConfigBase | None = None
-    split_trajs: bool = False
+    split_trajs: bool | None = None
     exploration_type: str = "RANDOM"
     reset_when_done: bool = True
     update_at_each_batch: bool = False
@@ -246,10 +246,10 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     num_sub_threads: int = 1
     cat_results: Any = None
     set_truncated: bool = False
-    use_buffers: bool = False
+    use_buffers: bool | None = None
     replay_buffer: ConfigBase | None = None
-    extend_buffer: bool = False
-    trust_policy: bool = True
+    extend_buffer: bool = True
+    trust_policy: bool | None = None
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
