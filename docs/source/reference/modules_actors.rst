@@ -31,6 +31,7 @@ Probabilistic actors
     :template: rl_template_noinherit.rst
 
     ProbabilisticActor
+    DreamerV3DiscreteActor
     SafeProbabilisticModule
     SafeProbabilisticTensorDictSequential
 

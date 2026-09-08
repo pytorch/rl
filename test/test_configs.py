@@ -55,6 +55,7 @@ from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.modules import (
     ConvNet,
+    DreamerV3DiscreteActor,
     DreamerV3MLP,
     MLP,
     RSSMPosteriorV3,
@@ -1216,6 +1217,41 @@ class TestModuleConfigs:
         assert isinstance(module, DreamerV3MLP)
         output = module(torch.randn(3, 2), torch.randn(3, 4))
         assert output.shape == (3, expected_features)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_dreamer_v3_discrete_actor_nested_config(self):
+        options = {
+            "in_features": 12,
+            "out_features": 3,
+            "depth": 2,
+            "num_cells": 16,
+            "norm_eps": 1e-5,
+            "unimix": 0.2,
+            "device": "cpu",
+        }
+        configured = instantiate_config(
+            algorithm_configs.DreamerV3DiscreteActorConfig(
+                **options,
+                in_keys=[["latent", "state"], ["latent", "belief"]],
+                action_key=["policy", "action"],
+                logits_key=["policy", "logits"],
+                log_prob_key=["policy", "log_prob"],
+            )
+        )
+        actor = DreamerV3DiscreteActor(**options)
+        actor.load_state_dict(configured.state_dict())
+        data = TensorDict(
+            {"state": torch.randn(4, 8), "belief": torch.randn(4, 4)}, [4]
+        )
+        expected = actor.get_dist(data.clone())
+        torch.manual_seed(0)
+        actual = configured(TensorDict({"latent": data}, [4]))
+        torch.testing.assert_close(
+            actual["policy", "logits"].softmax(-1), expected.probs
+        )
+        torch.testing.assert_close(
+            actual["policy", "log_prob"], expected.log_prob(actual["policy", "action"])
+        )
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_rssm_state_estimator_nested_config(self):

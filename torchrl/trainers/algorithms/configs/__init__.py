@@ -100,6 +100,7 @@ from torchrl.trainers.algorithms.configs.logging import (
 from torchrl.trainers.algorithms.configs.modules import (
     AdditiveGaussianModuleConfig,
     ConvNetConfig,
+    DreamerV3DiscreteActorConfig,
     DreamerV3ImageDecoderConfig,
     DreamerV3ImageEncoderConfig,
     DreamerV3MLPConfig,
@@ -311,6 +312,7 @@ __all__ = [
     "DreamerV3ImageDecoderConfig",
     "DreamerV3ImageEncoderConfig",
     "DreamerV3MLPConfig",
+    "DreamerV3DiscreteActorConfig",
     "RSSMStateEstimatorV3Config",
     "MLPConfig",
     "ModelConfig",
@@ -529,6 +531,11 @@ def _register_configs():
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
     cs.store(group="network", name="dreamer_v3_mlp", node=DreamerV3MLPConfig)
+    cs.store(
+        group="network",
+        name="dreamer_v3_discrete_actor",
+        node=DreamerV3DiscreteActorConfig,
+    )
     cs.store(
         group="network", name="rssm_state_estimator_v3", node=RSSMStateEstimatorV3Config
     )

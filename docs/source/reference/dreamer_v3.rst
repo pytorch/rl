@@ -91,6 +91,11 @@ For acting in a real environment, compose the encoder,
 :class:`~tensordict.nn.TensorDictSequential`. The estimator resets recurrent
 context per stream and samples only the observation-conditioned posterior.
 The collector carries its state, belief and action into the next step.
+For discrete actions, :class:`~torchrl.modules.DreamerV3DiscreteActor` provides
+an importable one-hot policy with DreamerV3 initialization, uniform probability
+mixing and float32 logits under autocast. Its ``get_dist()`` method supports
+straight-through sampling for imagination, and its input and output keys can
+be nested. Network construction and sampling require no recipe imports.
 
 How the RSSM works
 ------------------
