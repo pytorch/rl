@@ -4,9 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
+import numpy as np
 import torch
 from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
@@ -562,6 +563,69 @@ class DreamerV3DiscreteActor(ProbabilisticTensorDictSequential):
                 log_prob_key=log_prob_key,
             ),
         )
+
+
+class DreamerV3SeededPolicy(TensorDictModuleBase):
+    """Run a DreamerV3 policy with an independent, checkpointable random stream.
+
+    Each call derives a seed from the initial seed and call count, restoring the
+    caller's torch RNG state afterwards. The seed and count are included in the
+    module's ``state_dict`` alongside its parameters. Calls must be serialized;
+    Python seeding is not compatible with CUDA-graph capture of this wrapper.
+
+    Args:
+        module (TensorDictModuleBase): Policy to execute, with declared input keys.
+        seed (int): Initial non-negative seed for the policy stream.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import DreamerV3DiscreteActor, DreamerV3SeededPolicy
+        >>> actor = DreamerV3DiscreteActor(6, 3, depth=1, num_cells=8)
+        >>> policy = DreamerV3SeededPolicy(actor, seed=7)
+        >>> data = TensorDict({"state": torch.zeros(2, 4), "belief": torch.zeros(2, 2)}, [2])
+        >>> _ = policy(data.clone())
+        >>> saved = policy.state_dict()
+        >>> expected = policy(data.clone())["action"]
+        >>> _ = policy.load_state_dict(saved)
+        >>> torch.equal(policy(data.clone())["action"], expected)
+        True
+
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.DreamerV3SeededPolicyConfig`
+    """
+
+    def __init__(self, module: TensorDictModuleBase, seed: int):
+        super().__init__()
+        self.module = module
+        self.seed = seed
+        self.counter = 0
+        self.in_keys = module.in_keys
+        self.out_keys = module.out_keys
+
+    def get_extra_state(self) -> dict[str, int]:
+        """Return the policy's seed and call count for module checkpointing."""
+        return {"seed": self.seed, "counter": self.counter}
+
+    def set_extra_state(self, state: Mapping[str, int]) -> None:
+        """Restore the next policy draw without changing the caller's RNG."""
+        self.seed = state["seed"]
+        self.counter = state["counter"]
+
+    def reset_counter(self) -> None:
+        """Restart the counter, because a setup call can move it before step 0."""
+        self.counter = 0
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        reference = tensordict.get("state", None)
+        if reference is None:
+            reference = tensordict.get(self.in_keys[0])
+        devices = [reference.device] if reference.device.type == "cuda" else []
+        with torch.random.fork_rng(devices=devices):
+            rng = np.random.default_rng(seed=[self.seed, self.counter, 0])
+            words = rng.integers(0, np.iinfo(np.uint32).max, (2,), np.uint32)
+            torch.manual_seed((int(words[0]) << 32) | int(words[1]))
+            self.counter += 1
+            return self.module(tensordict)
 
 
 class ValueOperator(TensorDictModule):

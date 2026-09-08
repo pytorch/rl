@@ -2648,6 +2648,7 @@ def test_dreamer_v3_checkpoint_resume_processes(
     cfg.optimization.checkpoint_dir = str(tmp_path / "checkpoints")
     cfg.optimization.checkpoint_every = 1
     cfg.optimization.checkpoint_keep_last = 20
+    cfg.optimization.train_ratio = 1.5
     cfg.optimization.checkpoint_include_replay = include_replay
     cfg.collector.backend = collector_backend
     cfg.collector.num_envs = 2
@@ -2717,9 +2718,12 @@ def test_dreamer_v3_checkpoint_resume_processes(
     assert first_state["updates"] > 0
     assert ("replay" in Checkpoint.manifest(first_path)["components"]) == include_replay
     first_learner = example["_build_learner"](cfg, torch.device("cpu"), 3, 1)
-    modules = nn.ModuleList(
-        [first_learner.model_loss, first_learner.actor_loss, first_learner.value_loss]
-    )
+    stepper = example["_make_learner_update"](cfg, torch.device("cpu"), first_learner)
+    modules = stepper.loss_module
+    policy = example["DreamerV3SeededPolicy"](first_learner.real_world_actor, seed=0)
+    schedule = example["DreamerV3UpdateRatio"](0.0)
+    Checkpoint(policy=policy, update_ratio=schedule).load(first_path)
+    first_policy_counter = policy.get_extra_state()["counter"]
     Checkpoint(learner=modules).load(first_path)
     before = [parameter.detach().clone() for parameter in modules.parameters()]
     tails = []
@@ -2749,7 +2753,8 @@ def test_dreamer_v3_checkpoint_resume_processes(
     assert second_state["action_steps"] == first_steps + 16
     assert second_state["updates"] > first_state["updates"]
     assert second_state["elapsed_seconds"] > first_state["elapsed_seconds"]
-    assert second_state["policy_rng_counter"] > first_state["policy_rng_counter"]
+    Checkpoint(policy=policy, update_ratio=schedule).load(second_path)
+    assert policy.get_extra_state()["counter"] > first_policy_counter
     for key in ("exp_name", "log_dir"):
         assert second_state["logger"][key] == first_state["logger"][key]
     previous_logs = first_state["logger"]["local"]["scalars"]["train/updates"]

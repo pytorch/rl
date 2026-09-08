@@ -300,9 +300,10 @@ CSV logging append to their saved paths. W&B resumes the saved run ID with
 Environments restart. Saved unfinished replay tails become truncation boundaries
 before new transitions arrive, and incomplete episode returns restart at zero.
 Initial reset records are counted again when reset-record reporting is enabled.
-Queued collector results that were not emitted are not checkpointed; the acting
-policy is rebuilt from the restored learner. Consequently resumed trajectories
-are not promised to match an uninterrupted run. Without a replay payload,
+Queued collector results that were not emitted are not checkpointed. The acting
+policy is rebuilt from the restored learner; when using a separate policy RNG,
+its saved module state and counter are then restored. Consequently resumed
+trajectories are not promised to match an uninterrupted run. Without a replay payload,
 collection refills native replay before training continues, without accumulating
 a catch-up update burst. Counters and logger identity still continue.
 
@@ -310,3 +311,12 @@ SIGINT and SIGTERM request a stop after the current collection/update batch.
 The final checkpoint is written before replay, environments and loggers close.
 Abrupt process termination cannot take a final snapshot; resume from the latest
 completed checkpoint instead.
+
+
+Checkpoint ownership is provided by core components: `DreamerV3Loss` stores
+learner and normalization state; `DreamerV3OptimizationStepper` stores optimizer
+and target-update progress. `DreamerV3SeededPolicy` and `DreamerV3UpdateRatio`
+serialize their own RNG counter and fractional scheduling progress. The recipe
+registers these objects with `Checkpoint` directly. Native replay closes restored
+stream tails through `ReplayBufferEnsemble.end_streams()`, and
+`get_logger(..., state_dict=saved_state)` owns logger identity and counter restoration.

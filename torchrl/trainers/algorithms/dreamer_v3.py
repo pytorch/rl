@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
@@ -411,3 +411,59 @@ class DreamerV3OptimizationStepper(OptimizationStepper):
         self.optimizer.load_state_dict(state_dict["optimizer"])
         if self.target_updater is not None:
             self.target_updater.load_state_dict(state_dict["target_updater"])
+
+
+class DreamerV3UpdateRatio:
+    """Schedule learner updates from a ratio of updates to driver records.
+
+    Each call truncates the count from the cumulative driver-record count and
+    keeps the remainder. The first call returns one update.
+
+    Args:
+        ratio (float): Learner updates for each driver record. Non-positive values
+            disable updates.
+
+    Examples:
+        >>> from torchrl.trainers.algorithms import DreamerV3UpdateRatio
+        >>> schedule = DreamerV3UpdateRatio(0.25)
+        >>> schedule(4), schedule(6)
+        (1, 0)
+        >>> saved = schedule.state_dict()
+        >>> expected = schedule(8)
+        >>> schedule.load_state_dict(saved)
+        >>> schedule(8) == expected
+        True
+
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig`
+    """
+
+    def __init__(self, ratio: float):
+        self.ratio = ratio
+        self._previous: float | None = None
+
+    def __call__(self, record_count: int) -> int:
+        if self.ratio <= 0:
+            return 0
+        if self._previous is None:
+            self._previous = float(record_count)
+            return 1
+        repeats = int((record_count - self._previous) * self.ratio)
+        self._previous += repeats / self.ratio
+        return repeats
+
+    def reset(self, record_count: int) -> None:
+        """Discard owed updates and start counting after ``record_count`` records.
+
+        Use when rebuilding replay after a resume without saved replay, so
+        collection warm-up does not accumulate a catch-up update burst.
+        """
+        self._previous = float(record_count)
+
+    def state_dict(self) -> dict[str, float | None]:
+        """Return the ratio and cumulative progress, including fractional updates."""
+        return {"ratio": self.ratio, "previous": self._previous}
+
+    def load_state_dict(self, state_dict: Mapping[str, float | None]) -> None:
+        """Restore the update schedule's progress and ratio."""
+        self.ratio = state_dict["ratio"]
+        self._previous = state_dict["previous"]

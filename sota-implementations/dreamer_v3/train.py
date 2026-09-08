@@ -38,15 +38,10 @@ from dreamer_v3_agent import (
     build_value,
     build_world_model,
     DreamerV3BehaviorPolicySync,
-    DreamerV3SeededPolicy,
     make_env,
     make_primed_env,
 )
-from dreamer_v3_replay import (
-    collector_action_budget,
-    DreamerV3UpdateRatio,
-    replay_context_update,
-)
+from dreamer_v3_replay import collector_action_budget, replay_context_update
 from dreamer_v3_utils import (
     append_jsonl,
     eval_episode_reward,
@@ -76,6 +71,7 @@ from torchrl.data import (
 )
 from torchrl.envs import SelectTransform, SerialEnv
 from torchrl.envs.utils import ExplorationType
+from torchrl.modules import DreamerV3SeededPolicy
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServerConfig,
@@ -88,7 +84,11 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 from torchrl.record.loggers import get_logger
-from torchrl.trainers.algorithms import DreamerV3OptimizationStepper, DreamerV3Optimizer
+from torchrl.trainers.algorithms import (
+    DreamerV3OptimizationStepper,
+    DreamerV3Optimizer,
+    DreamerV3UpdateRatio,
+)
 from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key
 
 
@@ -126,29 +126,6 @@ def _resolve_resume_path(requested: str | None) -> Path | None:
     raise FileNotFoundError(f"No checkpoint was found at {candidate}.")
 
 
-def _restart_replay_streams(replay: ReplayBufferEnsemble, num_envs: int) -> None:
-    """Close saved stream tails before restarted environments append new rows."""
-    replay.synchronize()
-    for stream in range(num_envs):
-        member = replay[stream]
-        if not len(member):
-            continue
-        tail = (member.write_count - 1) % len(member)
-        index = torch.tensor([tail], device=member.storage.device)
-        last = member[index]
-        done = last.get(("next", "done"))
-        patch = {("next", "done"): torch.ones_like(done)}
-        if ("next", "truncated") in last.keys(True):
-            patch[("next", "truncated")] = ~last.get(("next", "terminated"))
-        # A restart truncates an unfinished episode; it does not make it terminal.
-        # These samplers do not cache boundaries, and fresh windows also honor is_init.
-        member.update_if_present(
-            index=index,
-            generation=member.writer.generations_of(index),
-            patch=patch,
-        )
-
-
 class _RunLogger:
     """Write consistent records to JSONL and a selected TorchRL logger."""
 
@@ -162,7 +139,6 @@ class _RunLogger:
             raise ValueError(
                 "logger.base_url is only supported with logger.backend='wandb'."
             )
-        state = state or {}
         kwargs = {}
         if self.backend == "wandb":
             kwargs["wandb_kwargs"] = {
@@ -173,20 +149,15 @@ class _RunLogger:
                 "mode": cfg.logger.mode,
                 "config": OmegaConf.to_container(cfg, resolve=True),
             }
-            if state.get("local", {}).get("id"):
-                kwargs["wandb_kwargs"].update(id=state["local"]["id"], resume="must")
             if cfg.logger.base_url:
                 kwargs["wandb_kwargs"]["base_url"] = cfg.logger.base_url
         self.logger = get_logger(
             self.backend,
-            logger_name=state.get("log_dir", cfg.logger.log_dir),
-            experiment_name=state.get("exp_name")
-            or cfg.logger.exp_name
-            or f"dreamer_v3_{cfg.env.name}",
+            logger_name=cfg.logger.log_dir,
+            experiment_name=cfg.logger.exp_name or f"dreamer_v3_{cfg.env.name}",
+            state_dict=state or None,
             **kwargs,
         )
-        if state and self.logger is not None:
-            self.logger.load_state_dict(state)
         if self.backend == "wandb":
             self.logger.experiment.define_metric("environment_steps")
             self.logger.experiment.define_metric("*", step_metric="environment_steps")
@@ -876,11 +847,8 @@ def main(cfg: DictConfig):
     )
     rb = _build_replay(cfg, num_envs, replay_device, device, generator=replay_rng)
     checkpoint = Checkpoint(
-        learner=torch.nn.ModuleList(
-            [learner.model_loss, learner.actor_loss, learner.value_loss]
-        ),
-        optimizer=learner.optimizer,
-        target_updater=learner.value_target_updater,
+        learner=learner_update.loss_module,
+        learner_update=learner_update,
         replay=rb,
         run_state=run_state,
         rng=GlobalRNGState(),
@@ -890,12 +858,12 @@ def main(cfg: DictConfig):
     if resume_path is not None:
         checkpoint.load(
             resume_path,
-            components={"learner", "optimizer", "target_updater"},
+            components={"learner", "learner_update"},
             map_location=device,
         )
         if "replay" in Checkpoint.manifest(resume_path)["components"]:
             checkpoint.load(resume_path, components={"replay"})
-            _restart_replay_streams(rb, num_envs)
+            rb.end_streams()
             replay_restored = True
         replay_rng.set_state(torch.tensor(run_state["replay_rng"], dtype=torch.uint8))
         rb.set_rng(replay_rng)
@@ -997,11 +965,18 @@ def main(cfg: DictConfig):
         # Keep the learner draws in a range apart from the policy stream.
         torch.manual_seed(stream_seed(cfg.env.seed, 0, LEARNER_RNG_STREAM))
 
+    stateful_components = set()
     if update_ratio is not None:
-        update_ratio._previous = run_state.get("update_ratio_previous")
+        checkpoint.register("update_ratio", update_ratio)
+        stateful_components.add("update_ratio")
+    if isinstance(collector.policy, DreamerV3SeededPolicy):
+        checkpoint.register("policy", collector.policy)
+        stateful_components.add("policy")
     if resume_path is not None:
-        if isinstance(collector.policy, DreamerV3SeededPolicy):
-            collector.policy.counter = int(run_state.get("policy_rng_counter", 0))
+        if stateful_components:
+            checkpoint.load(
+                resume_path, components=stateful_components, map_location=device
+            )
         # Construction and compile/capture warm-up may consume RNG and update
         # normalization. Restore training state after warm-up, and RNG last.
         checkpoint.load(resume_path, components={"rng"})
@@ -1040,14 +1015,6 @@ def main(cfg: DictConfig):
                 next_train_log=next_train_log,
                 loss_window_sum=loss_window_sum.cpu().tolist(),
                 loss_window_updates=loss_window_updates,
-                policy_rng_counter=(
-                    collector.policy.counter
-                    if isinstance(collector.policy, DreamerV3SeededPolicy)
-                    else 0
-                ),
-                update_ratio_previous=(
-                    update_ratio._previous if update_ratio is not None else None
-                ),
                 replay_rng=replay_rng.get_state().cpu().tolist(),
                 logger_backend=cfg.logger.backend,
                 logger=run_logger.logger.state_dict()
@@ -1102,7 +1069,7 @@ def main(cfg: DictConfig):
                     and update_ratio is not None
                 ):
                     # New replay must warm up without accumulating a learner catch-up burst.
-                    update_ratio._previous = float(record_step)
+                    update_ratio.reset(record_step)
                 continue
 
             batch_updates = (

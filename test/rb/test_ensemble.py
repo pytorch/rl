@@ -46,6 +46,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -232,6 +233,97 @@ class TestEnsemble:
             release.set()
             for buffer in buffers:
                 buffer.shutdown()
+
+    @pytest.mark.parametrize("sampler_type", [SliceSampler, StreamingSliceSampler])
+    def test_end_streams_orders_updates_and_resets_windows(
+        self, sampler_type, monkeypatch
+    ):
+        done_key, terminal_key, cut_key = (
+            ("flags", "end"),
+            ("flags", "terminal"),
+            ("flags", "cut"),
+        )
+        members = [
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(9),
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+                sampler=sampler_type(slice_len=3, end_key=done_key, cache_values=True),
+                batch_size=3,
+            )
+            for _ in range(3)
+        ]
+        replay = ReplayBufferEnsemble(*members, routing_key="stream")
+        data = TensorDict(
+            {
+                "stream": torch.zeros(11, dtype=torch.long),
+                "value": torch.arange(11),
+                done_key: torch.zeros(11, 1, dtype=torch.bool),
+                terminal_key: torch.zeros(11, 1, dtype=torch.bool),
+                cut_key: torch.zeros(11, 1, dtype=torch.bool),
+            },
+            [11],
+        )
+        replay.extend(data)
+        terminal = data[:3].clone()
+        terminal["stream"] = torch.ones(3, dtype=torch.long)
+        terminal[done_key][-1] = True
+        terminal[terminal_key][-1] = True
+        replay.extend(terminal)
+        # Populate the uniform boundary cache; keep an unfinished fresh window.
+        members[0].sample()
+        generation = members[0].writer.generations_of(torch.arange(9)).clone()
+        writes = replay.stats()["write_count"]
+        entered, release = threading.Event(), threading.Event()
+        original_update = replay.update_if_present
+
+        def delayed_update(**kwargs):
+            entered.set()
+            if not release.wait(10):
+                raise TimeoutError("Stream-finalization update was not released.")
+            return original_update(**kwargs)
+
+        monkeypatch.setattr(replay, "update_if_present", delayed_update)
+        update = replay.submit_update_if_present(
+            index=TensorDict(
+                {"buffer_ids": torch.tensor([0]), "index": torch.tensor([1])}, [1]
+            ),
+            generation=generation[1:2],
+            patch={done_key: torch.zeros(1, 1, dtype=torch.bool)},
+        )
+        try:
+            assert entered.wait(5)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                ended = executor.submit(
+                    replay.end_streams,
+                    end_key=done_key,
+                    terminated_key=terminal_key,
+                    truncated_key=cut_key,
+                )
+                with pytest.raises(FuturesTimeoutError):
+                    ended.result(timeout=0.05)
+                release.set()
+                ended.result(timeout=10)
+            assert update.result().updated.all()
+            assert replay.stats()["write_count"] == writes
+            torch.testing.assert_close(
+                members[0].writer.generations_of(torch.arange(9)), generation
+            )
+            assert members[0][1][done_key].all() and members[0][1][cut_key].all()
+            assert not members[0][1][terminal_key].any()
+            assert (
+                members[1][2][terminal_key].all() and not members[1][2][cut_key].any()
+            )
+            assert len(members[2]) == 0
+            new = data[:3].clone()
+            new["value"] = torch.arange(100, 103)
+            replay.extend(new)
+            for _ in range(12):
+                values = members[0].sample()["value"]
+                assert (values < 100).all() or (values >= 100).all()
+                assert (values.diff() == 1).all()
+        finally:
+            release.set()
+            replay.shutdown()
 
     def test_routing_dim_preserves_member_order(self):
         members = [self._make_routed_member() for _ in range(2)]

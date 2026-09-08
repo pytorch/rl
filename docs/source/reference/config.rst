@@ -349,6 +349,7 @@ Model and Network Configurations
     MLPConfig
     DreamerV3MLPConfig
     DreamerV3DiscreteActorConfig
+    DreamerV3SeededPolicyConfig
     DreamerV3ImageEncoderConfig
     DreamerV3ImageDecoderConfig
     ConvNetConfig

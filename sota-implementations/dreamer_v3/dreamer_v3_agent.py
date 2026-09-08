@@ -11,7 +11,7 @@ import importlib.util
 from collections.abc import Callable
 
 import torch
-from dreamer_v3_utils import latent_state_dim, POLICY_RNG_STREAM, stream_seed
+from dreamer_v3_utils import latent_state_dim
 from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDictBase
 from tensordict.nn import (
@@ -228,32 +228,6 @@ class DreamerV3BehaviorPolicySync:
         for target, source in zip(self._behavior_parameters, self._pending):
             target.copy_(source)
         self._pending = None
-
-
-class DreamerV3SeededPolicy(TensorDictModuleBase):
-    """Give the policy its own random stream, with a new seed for each call."""
-
-    def __init__(self, module: TensorDictModuleBase, seed: int):
-        super().__init__()
-        self.module = module
-        self.seed = seed
-        self.counter = 0
-        self.in_keys = module.in_keys
-        self.out_keys = module.out_keys
-
-    def reset_counter(self) -> None:
-        """Restart the counter, because a setup call can move it before step 0."""
-        self.counter = 0
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        reference = tensordict.get("state", None)
-        if reference is None:
-            reference = tensordict.get(self.in_keys[0])
-        devices = [reference.device] if reference.device.type == "cuda" else []
-        with torch.random.fork_rng(devices=devices):
-            torch.manual_seed(stream_seed(self.seed, self.counter, POLICY_RNG_STREAM))
-            self.counter += 1
-            return self.module(tensordict)
 
 
 # --- Builders ---

@@ -219,6 +219,22 @@ class TestCSVLogger:
         assert restored.experiment.scalars["reward"] == [(0, 2.0)]
         assert restored.experiment.videos_counter["evaluation"] == 3
 
+    def test_factory_resume_appends_same_run(self, tmp_path):
+        logger = get_logger("csv", str(tmp_path), "saved")
+        logger.log_scalar("reward", 1.0)
+        state = logger.state_dict()
+        logger.close()
+        resumed = get_logger(
+            "csv", str(tmp_path / "unused"), "unused", state_dict=state
+        )
+        resumed.log_scalar("reward", 2.0)
+        resumed.close()
+        assert (tmp_path / "saved/scalars/reward.csv").read_text().splitlines() == [
+            "0,1.0",
+            "1,2.0",
+        ]
+        assert not (tmp_path / "unused").exists()
+
     def test_direct_service_client_is_identity(self, tmpdir):
         logger = CSVLogger(log_dir=tmpdir, exp_name="direct")
         assert logger.client() is logger
@@ -402,7 +418,17 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
 
     if source == "logger":
         logger = WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
-        assert logger.state_dict()["local"]["id"] == "generated-run"
+        state = logger.state_dict()
+        resumed = get_logger(
+            "wandb",
+            "ignored",
+            "ignored",
+            state_dict=state,
+            wandb_kwargs={"base_url": base_url, "log_env_packages": False},
+        )
+        assert initializations[-1]["id"] == "generated-run"
+        assert initializations[-1]["resume"] == "must"
+        resumed.close()
     else:
         if not (_has_hydra and _has_omegaconf):
             pytest.skip("requires hydra and omegaconf")
@@ -431,9 +457,7 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
         )
         resumed.finish()
 
-    assert calls == [("login", base_url), ("init", base_url)] * (
-        1 if source == "logger" else 2
-    )
+    assert calls == [("login", base_url), ("init", base_url)] * 2
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")

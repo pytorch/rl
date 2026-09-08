@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import textwrap
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack
 
 from typing import Any, Literal, TYPE_CHECKING, TypeVar
 
@@ -34,13 +35,13 @@ except ImportError:
         return tree_flat
 
 
-from torchrl.data.replay_buffers.samplers import SamplerEnsemble
+from torchrl.data.replay_buffers.samplers import SamplerEnsemble, SliceSampler
 from torchrl.data.replay_buffers.storages import (
     _get_default_collate,
     _stack_anything,
     StorageEnsemble,
 )
-from torchrl.data.replay_buffers.writers import WriterEnsemble
+from torchrl.data.replay_buffers.writers import RoundRobinWriter, WriterEnsemble
 from torchrl.envs.transforms.transforms import Transform
 
 T = TypeVar("T")
@@ -563,6 +564,124 @@ class ReplayBufferEnsemble(ReplayBuffer):
             ),
             batch_size=leading_shape,
         )
+
+    def end_streams(
+        self,
+        *,
+        end_key: NestedKey = ("next", "done"),
+        terminated_key: NestedKey | None = ("next", "terminated"),
+        truncated_key: NestedKey | None = ("next", "truncated"),
+    ) -> None:
+        """Close each member's current stream before restarted producers append.
+
+        Each member must hold one chronological stream in a one-dimensional
+        tensor storage, with a generation-tracking round-robin writer and a
+        :class:`SliceSampler` (including :class:`StreamingSliceSampler`) configured
+        to read ``end_key``. Trajectory-ID sampling is not supported by this
+        operation because restarted producers may reuse old IDs.
+
+        Pending samples and conditional updates finish before tail selection.
+        Tail patches keep write counts and slot generations unchanged. Existing
+        terminal/truncated flags are preserved; unfinished tails become done and,
+        when the field exists, truncated. Uniform boundary caches and unfinished
+        fresh windows are reset. Completed fresh windows and previously prefetched
+        results retain their order; those results precede this operation.
+
+        Quiesce collection before calling this method and until it returns.
+        Empty members are skipped. Unsupported members are rejected before any
+        tail is changed.
+
+        Keyword Args:
+            end_key (NestedKey, optional): Stored boolean boundary field and
+                sampler end key. Defaults to ``("next", "done")``.
+            terminated_key (NestedKey or None, optional): Stored terminal field,
+                never modified. Missing fields are treated as false. Defaults
+                to ``("next", "terminated")``.
+            truncated_key (NestedKey or None, optional): Existing boolean field
+                to set for unfinished nonterminal tails. ``None`` disables this
+                patch. Defaults to ``("next", "truncated")``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import (
+            ...     LazyTensorStorage, ReplayBufferEnsemble, SliceSampler,
+            ...     TensorDictReplayBuffer, TensorDictRoundRobinWriter,
+            ... )
+            >>> member = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(8), sampler=SliceSampler(slice_len=2, end_key=("next", "done")),
+            ...     writer=TensorDictRoundRobinWriter(track_generations=True),
+            ... )
+            >>> _ = member.extend(TensorDict({("next", "done"): torch.zeros(3, 1, dtype=torch.bool)}, [3]))
+            >>> replay = ReplayBufferEnsemble(member)
+            >>> replay.end_streams()
+            >>> member[:]["next", "done"].flatten().tolist()
+            [False, False, True]
+        """
+        end_key = unravel_key(end_key)
+        terminated_key = (
+            unravel_key(terminated_key) if terminated_key is not None else None
+        )
+        truncated_key = (
+            unravel_key(truncated_key) if truncated_key is not None else None
+        )
+        keys = [
+            key for key in (end_key, terminated_key, truncated_key) if key is not None
+        ]
+        if len(set(keys)) != len(keys):
+            raise ValueError("end, terminated and truncated keys must be distinct.")
+        with self._futures_lock, ExitStack() as locks:
+            self._synchronize_futures_locked()
+            for member in self._rbs:
+                locks.enter_context(member._futures_lock)
+                member._synchronize_futures_locked()
+            locks.enter_context(self._replay_lock)
+            locks.enter_context(self._write_lock)
+            for member in self._rbs:
+                locks.enter_context(member._replay_lock)
+                locks.enter_context(member._write_lock)
+            patches = []
+            for member in self._rbs:
+                storage, writer, sampler = member.storage, member.writer, member.sampler
+                if (
+                    storage.ndim != 1
+                    or not getattr(storage, "supports_conditional_update", False)
+                    or not isinstance(writer, RoundRobinWriter)
+                    or not writer.tracks_generations
+                    or not isinstance(sampler, SliceSampler)
+                    or sampler.traj_key is not None
+                    or end_key not in (sampler.end_keys or [sampler.end_key])
+                ):
+                    raise RuntimeError(
+                        "end_streams requires one-dimensional conditional-update storage, "
+                        "generation-tracking round-robin writers and end-key slice samplers."
+                    )
+                if not len(member):
+                    continue
+                index = torch.tensor(
+                    [(int(writer._cursor) - 1) % len(member)], device=storage.device
+                )
+                last = storage.get(index)
+                done = last.get(end_key)
+                if done.dtype != torch.bool:
+                    raise TypeError("end_streams requires a boolean end_key field.")
+                patch = {end_key: torch.ones_like(done)}
+                if truncated_key is not None and truncated_key in last.keys(True):
+                    terminated = (
+                        last.get(terminated_key, None)
+                        if terminated_key is not None
+                        else None
+                    )
+                    unfinished = ~done
+                    if terminated is not None:
+                        unfinished = unfinished & ~terminated
+                    patch[truncated_key] = last.get(truncated_key) | unfinished
+                patches.append((member, index, writer.generations_of(index), patch))
+            for member, index, generation, patch in patches:
+                member.update_if_present(
+                    index=index, generation=generation, patch=patch
+                )
+                member.sampler._end_stream(index, storage=member.storage)
 
     def stats(self) -> dict[str, int | float | bool]:
         """Returns aggregate scalar statistics across ensemble members."""

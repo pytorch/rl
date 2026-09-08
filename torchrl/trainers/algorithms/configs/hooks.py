@@ -203,3 +203,22 @@ class DreamerV3OptimizationStepperConfig(HookConfig):
     warmup_steps: int = 5
     mixed_precision: bool = False
     _target_: str = "torchrl.trainers.algorithms.DreamerV3OptimizationStepper"
+
+
+@dataclass
+class DreamerV3UpdateRatioConfig(ConfigBase):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DreamerV3UpdateRatio`.
+
+    Examples:
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3UpdateRatioConfig
+        >>> schedule = instantiate(DreamerV3UpdateRatioConfig(ratio=0.25))
+        >>> schedule(4), schedule(8)
+        (1, 1)
+    """
+
+    ratio: float = MISSING
+    _target_: str = "torchrl.trainers.algorithms.DreamerV3UpdateRatio"
+
+    def __post_init__(self) -> None:
+        """Initialize the update-ratio configuration."""
