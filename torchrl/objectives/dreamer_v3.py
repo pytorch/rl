@@ -256,7 +256,14 @@ class DreamerV3ModelLoss(LossModule):
             Default: 0.8.
         free_bits (float, optional): Minimum KL per categorical in nats.
             Default: 1.0.
-        reco_loss ("l1" or "l2", optional): Loss type. Default: ``"l2"``.
+        reco_loss ("l1" or "l2", optional): Reconstruction distance for each
+            observation head. Default: ``"l2"``.
+        reco_symlog (bool or list of bool, optional): Apply symlog to targets
+            and predictions before computing reconstruction distance. A bool
+            applies to all heads; a list follows the order of ``pixels`` and
+            ``reco_pixels`` in :meth:`set_keys`. For heads set to ``False``,
+            integer image targets are converted to float and divided by 255;
+            floating targets are used unchanged. Default: ``True``.
         reward_two_hot (bool, optional): If ``True``, the reward head is
             expected to output **logits over** ``num_reward_bins`` and the loss
             is two-hot cross-entropy. If ``False``, the reward head outputs a
@@ -330,10 +337,12 @@ class DreamerV3ModelLoss(LossModule):
                 RSSM. Defaults to ``"prior_logits"``.
             posterior_logits (NestedKey): Posterior categorical logits.
                 Defaults to ``"posterior_logits"``.
-            pixels (NestedKey): Ground-truth pixel observation.
-                Defaults to ``"pixels"``.
-            reco_pixels (NestedKey): Predicted pixel observation.
-                Defaults to ``"reco_pixels"``.
+            pixels (NestedKey or list of NestedKey): Ground-truth observation
+                keys. A list defines multiple reconstruction heads, whose losses
+                are summed. Defaults to ``"pixels"``.
+            reco_pixels (NestedKey or list of NestedKey): Predicted observation
+                keys, paired in order with ``pixels``. The list lengths must
+                match. Defaults to ``"reco_pixels"``.
             continue_pred (NestedKey): Predicted continue logit (optional).
                 Defaults to ``"continue_pred"``.
             done (NestedKey): Ground-truth done flag (optional).
@@ -347,8 +356,8 @@ class DreamerV3ModelLoss(LossModule):
         true_reward: NestedKey = "true_reward"
         prior_logits: NestedKey = "prior_logits"
         posterior_logits: NestedKey = "posterior_logits"
-        pixels: NestedKey = "pixels"
-        reco_pixels: NestedKey = "reco_pixels"
+        pixels: NestedKey | list[NestedKey] = "pixels"
+        reco_pixels: NestedKey | list[NestedKey] = "reco_pixels"
         continue_pred: NestedKey = "continue_pred"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
@@ -372,6 +381,7 @@ class DreamerV3ModelLoss(LossModule):
         kl_alpha: float = 0.8,
         free_bits: float = 1.0,
         reco_loss: Literal["l1", "l2"] = "l2",
+        reco_symlog: bool | list[bool] = True,
         reward_two_hot: bool = True,
         num_reward_bins: int = _DEFAULT_NUM_BINS,
         global_average: bool = False,
@@ -397,6 +407,7 @@ class DreamerV3ModelLoss(LossModule):
         self.kl_alpha = kl_alpha
         self.free_bits = free_bits
         self.reco_loss = reco_loss
+        self.reco_symlog = reco_symlog
         self.reward_two_hot = reward_two_hot
         self.num_reward_bins = num_reward_bins
         self.global_average = global_average
@@ -442,18 +453,42 @@ class DreamerV3ModelLoss(LossModule):
             ).unsqueeze(-1)
 
         # ---- Reconstruction loss ----
-        pixels = tensordict.get(("next", self.tensor_keys.pixels)).contiguous()
-        reco_pixels = tensordict.get(
-            ("next", self.tensor_keys.reco_pixels)
-        ).contiguous()
-        # Apply symlog before computing distance
-        if self.reco_loss == "l2":
-            reco_loss = (symlog(pixels) - symlog(reco_pixels)).pow(2)
-        else:
-            reco_loss = (symlog(pixels) - symlog(reco_pixels)).abs()
-        if not self.global_average:
-            reco_loss = reco_loss.reshape(*tensordict.batch_size, -1).sum(-1)
-        reco_loss = reco_loss.mean().unsqueeze(-1)
+        observation_keys = self.tensor_keys.pixels
+        if not isinstance(observation_keys, list):
+            observation_keys = [observation_keys]
+        prediction_keys = self.tensor_keys.reco_pixels
+        if not isinstance(prediction_keys, list):
+            prediction_keys = [prediction_keys]
+        use_symlog = self.reco_symlog
+        if isinstance(use_symlog, bool):
+            use_symlog = [use_symlog] * len(observation_keys)
+        if not observation_keys or not (
+            len(observation_keys) == len(prediction_keys) == len(use_symlog)
+        ):
+            raise ValueError(
+                "pixels, reco_pixels and reco_symlog must describe the same "
+                "nonzero number of reconstruction heads."
+            )
+        reconstruction_losses = []
+        for observation_key, prediction_key, transform in zip(
+            observation_keys, prediction_keys, use_symlog
+        ):
+            target = tensordict.get(("next", observation_key)).contiguous()
+            prediction = tensordict.get(("next", prediction_key)).contiguous()
+            if transform:
+                target, prediction = symlog(target), symlog(prediction)
+            else:
+                if not target.is_floating_point():
+                    target = target.float() / 255.0
+                prediction = prediction.float()
+            error = target - prediction
+            reconstruction = error.pow(2) if self.reco_loss == "l2" else error.abs()
+            if not self.global_average:
+                reconstruction = reconstruction.reshape(*tensordict.batch_size, -1).sum(
+                    -1
+                )
+            reconstruction_losses.append(reconstruction.mean().unsqueeze(-1))
+        reco_loss = sum(reconstruction_losses)
 
         # ---- Reward loss ----
         true_reward = tensordict.get(("next", self.tensor_keys.true_reward))
