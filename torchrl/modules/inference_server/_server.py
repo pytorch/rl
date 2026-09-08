@@ -309,10 +309,10 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             or ``"nccl"``. Explicit selectors never fall back to another
             transport.
         request_spec (TensorDictBase, optional): static request layout for
-            shared-memory or process-owned distributed transports, and the
-            representative unbatched request used for CUDA-graph capture when
-            ``static_batch_size`` is set. Ray-owned distributed transports
-            infer and bind this layout on first use.
+            ``"shared_memory"``, ``"process_slot"``, or process-owned
+            distributed transports, and the representative unbatched request
+            used for CUDA-graph capture when ``static_batch_size`` is set.
+            Ray-owned distributed transports infer and bind this layout on first use.
         response_spec (TensorDictBase, optional): static response layout paired
             with ``request_spec``.
         num_clients (int, optional): expected concurrent client count for
@@ -400,6 +400,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             "process",
             "ray",
             "shared_memory",
+            "process_slot",
             "direct",
             "distributed",
         ] = "auto",
@@ -1356,7 +1357,11 @@ class ProcessInferenceServer:
             transport._set_peer_alive(peer_alive)
         self._peer_alive = peer_alive
         self._process_monitor: threading.Thread | None = None
-        self._service_client = transport.client()
+        self._service_client = (
+            transport.client()
+            if getattr(transport, "_clients_require_registration", True)
+            else None
+        )
         self._shutdown_event = self._ctx.Event()
         self._ready_queue = self._ctx.Queue()
         control_request_queue = self._ctx.Queue()
@@ -1483,19 +1488,22 @@ class ProcessInferenceServer:
 
     def shutdown(self, timeout: float | None = 5.0) -> None:
         """Signal the child process to stop and wait for it to exit."""
-        if self.is_alive:
-            try:
-                self._request_control("shutdown", timeout=timeout or 5.0)
-            except Exception:
-                pass
-        self._shutdown_event.set()
         process = self._process
         if process is None:
             return
+        if self.is_alive:
+            try:
+                self._request_control(
+                    "shutdown", timeout=5.0 if timeout is None else timeout
+                )
+            except Exception:
+                pass
+        if process.is_alive():
+            self._shutdown_event.set()
         process.join(timeout=timeout)
         if process.is_alive():
             process.terminate()
-            process.join(timeout=timeout)
+            process.join(timeout=max(1.0, timeout) if timeout is not None else None)
         monitor = self._process_monitor
         if monitor is not None:
             monitor.join(timeout=timeout)
@@ -1520,6 +1528,8 @@ class ProcessInferenceServer:
 
     def client(self) -> Any:
         """Return a restricted inference client from the owned transport."""
+        if self._service_client is None:
+            self._service_client = self.transport.client()
         return self._service_client
 
     def clients(self, num_clients: int) -> list[Any]:
@@ -1528,7 +1538,7 @@ class ProcessInferenceServer:
             raise TypeError("num_clients must be an integer.")
         if num_clients < 1:
             raise ValueError("num_clients must be at least 1.")
-        # MPTransport routes replies per client, so reserve a fresh endpoint.
+        # Transports may route replies per client, so reserve fresh endpoints.
         return [self.transport.client() for _ in range(num_clients)]
 
     def stats(
