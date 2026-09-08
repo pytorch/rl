@@ -5,14 +5,22 @@
 from __future__ import annotations
 
 import textwrap
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
-from typing import Any, TYPE_CHECKING, TypeVar
+from typing import Any, Literal, TYPE_CHECKING, TypeVar
 
 import numpy as np
 import torch
 
-from tensordict import LazyStackedTensorDict, TensorDictBase
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
+from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_right
 from torch import Tensor
 
@@ -42,7 +50,7 @@ else:
     Self = T
 
 
-from .base import ReplayBuffer
+from .base import ConditionalUpdateResult, ReplayBuffer
 
 
 class ReplayBufferEnsemble(ReplayBuffer):
@@ -54,8 +62,9 @@ class ReplayBufferEnsemble(ReplayBuffer):
     samplers (:class:`~torchrl.data.replay_buffers.samplers.SamplerEnsemble`).
 
     .. note::
-      Writing directly to this class is forbidden, but it can be indexed to retrieve
-      the nested nested-buffer and extending it.
+      Writing directly to this class is disabled by default. Pass exactly one
+      of ``routing_key`` or ``routing_dim`` to enable routed writes while
+      preserving the historical read-only behavior for existing ensembles.
 
     There are two distinct ways of constructing a :class:`~torchrl.data.ReplayBufferEnsemble`:
     one can either pass a list of replay buffers, or directly pass the components
@@ -81,10 +90,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
         collate_fns (list of callables, optional): collate_fn of each nested
             replay buffer. Retrieved from the :class:`~ReplayBuffer` instances
             if not provided.
-        p (list of float or Tensor, optional): a list of floating numbers
-            indicating the relative weight of each replay buffer. Can also
-            be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-            if the buffer is built explicitly.
+        p (list of float, Tensor, or ``"sampleable"``, optional): relative
+            weights of each replay buffer. ``"sampleable"`` dynamically
+            weights members by their available records or slice windows and
+            excludes members that are not ready.
         sample_from_all (bool, optional): if ``True``, each dataset will be sampled
             from. This is not compatible with the ``p`` argument. Defaults to ``False``.
             Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
@@ -95,6 +104,12 @@ class ReplayBufferEnsemble(ReplayBuffer):
             sampled according to the probabilities ``p``. Can also
             be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
             if the buffer is built explicitly.
+        routing_key (NestedKey, optional): key containing a member id for each
+            record. Routed input is flattened, grouped stably by member and
+            written to the corresponding nested replay buffer.
+        routing_dim (int, optional): batch dimension whose entries correspond
+            to ensemble members. The dimension size must equal the number of
+            members. Exclusive with ``routing_key``.
         generator (torch.Generator, optional): a generator to use for sampling.
             Using a dedicated generator for the replay buffer can allow a fine-grained control
             over seeding, for instance keeping the global seed different but the RB seed identical
@@ -197,13 +212,22 @@ class ReplayBufferEnsemble(ReplayBuffer):
         batch_size: int | None = None,
         collate_fn: Callable | None = None,
         collate_fns: list[Callable] | None = None,
-        p: Tensor = None,
+        p: Tensor | list[float] | Literal["sampleable"] | None = None,
         sample_from_all: bool = False,
         num_buffer_sampled: int | None = None,
+        routing_key: NestedKey | None = None,
+        routing_dim: int | None = None,
         generator: torch.Generator | None = None,
         shared: bool = False,
         **kwargs,
     ):
+
+        if routing_key is not None and routing_dim is not None:
+            raise ValueError("routing_key and routing_dim are mutually exclusive.")
+        if routing_key is not None:
+            routing_key = unravel_key(routing_key)
+        if routing_dim is not None and not isinstance(routing_dim, int):
+            raise TypeError("routing_dim must be an integer.")
 
         if collate_fn is None:
             collate_fn = _stack_anything
@@ -232,13 +256,32 @@ class ReplayBufferEnsemble(ReplayBuffer):
             if collate_fns is None:
                 collate_fns = [rb._collate_fn for rb in rbs]
         else:
-            rbs = None
             if collate_fns is None:
                 collate_fns = [
                     _get_default_collate(storage) for storage in storages._storages
                 ]
+            transforms = storages._transforms or [None] * len(storages._storages)
+            rbs = tuple(
+                ReplayBuffer(
+                    storage=storage,
+                    sampler=sampler,
+                    writer=writer,
+                    transform=member_transform,
+                    collate_fn=member_collate,
+                    checkpointer=storage.checkpointer,
+                )
+                for storage, sampler, writer, member_transform, member_collate in zip(
+                    storages._storages,
+                    samplers._samplers,
+                    writers._writers,
+                    transforms,
+                    collate_fns,
+                )
+            )
         self._rbs = rbs
         self._collate_fns = collate_fns
+        self.routing_key = routing_key
+        self.routing_dim = routing_dim
         super().__init__(
             storage=storages,
             sampler=samplers,
@@ -250,6 +293,303 @@ class ReplayBufferEnsemble(ReplayBuffer):
             shared=shared,
             **kwargs,
         )
+
+    def _route(self, data: TensorDictBase) -> tuple[TensorDictBase, torch.Tensor]:
+        if not isinstance(data, TensorDictBase):
+            raise TypeError("Routed replay writes require a TensorDict input.")
+        if self._transform is not None and len(self._transform):
+            with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
+                data = self._transform.inv(data)
+        flat_data = data.reshape(-1)
+        if self.routing_key is not None:
+            buffer_ids = flat_data.get(self.routing_key)
+            while buffer_ids.ndim > 1 and buffer_ids.shape[-1] == 1:
+                buffer_ids = buffer_ids.squeeze(-1)
+            if buffer_ids.shape != flat_data.batch_size:
+                raise ValueError(
+                    f"routing_key {self.routing_key!r} must contain one member id "
+                    f"per record, got shape {tuple(buffer_ids.shape)} for "
+                    f"batch size {tuple(flat_data.batch_size)}."
+                )
+        elif self.routing_dim is not None:
+            if not data.ndim:
+                raise ValueError("routing_dim requires batched input.")
+            routing_dim = self.routing_dim % data.ndim
+            if data.shape[routing_dim] != len(self._storage._storages):
+                raise ValueError(
+                    f"routing_dim {self.routing_dim} has size "
+                    f"{data.shape[routing_dim]}, expected "
+                    f"{len(self._storage._storages)} ensemble members."
+                )
+            id_shape = [1] * data.ndim
+            id_shape[routing_dim] = data.shape[routing_dim]
+            buffer_ids = (
+                torch.arange(data.shape[routing_dim], device=data.device)
+                .reshape(id_shape)
+                .expand(data.batch_size)
+                .reshape(-1)
+            )
+        else:
+            raise RuntimeError(
+                "ReplayBufferEnsemble writes are disabled. Configure routing_key "
+                "or routing_dim to enable routed writes."
+            )
+        if buffer_ids.dtype == torch.bool or buffer_ids.is_floating_point():
+            raise TypeError("ReplayBufferEnsemble member ids must be integers.")
+        buffer_ids = buffer_ids.to(torch.long)
+        if buffer_ids.numel() and (
+            (buffer_ids < 0).any() or (buffer_ids >= len(self._storage._storages)).any()
+        ):
+            raise ValueError(
+                f"ReplayBufferEnsemble member ids must lie in [0, "
+                f"{len(self._storage._storages) - 1}]."
+            )
+        return flat_data, buffer_ids
+
+    def extend(
+        self, data: TensorDictBase, *, update_priority: bool | None = None
+    ) -> TensorDictBase:
+        """Routes and writes a batch, returning member-local write metadata.
+
+        The returned tensordict is flat and aligned with ``data.reshape(-1)``.
+        It contains ``"buffer_ids"`` and member-local ``"index"`` entries,
+        plus ``"index_generation"`` when every member writer tracks
+        generations.
+        """
+        if update_priority is not None:
+            raise NotImplementedError(
+                "update_priority is not supported by routed ensemble writes."
+            )
+        flat_data, buffer_ids = self._route(data)
+        if not buffer_ids.numel():
+            return TensorDict(
+                {
+                    "buffer_ids": buffer_ids,
+                    "index": torch.empty(0, dtype=torch.long, device=buffer_ids.device),
+                },
+                batch_size=[0],
+            )
+
+        local_indices = None
+        local_generations = None
+        with self._replay_lock, self._write_lock:
+            for member_id, member_buffer in enumerate(self._rbs):
+                positions = (buffer_ids == member_id).nonzero().flatten()
+                if not positions.numel():
+                    continue
+                member_index = member_buffer.extend(flat_data[positions])
+                if isinstance(member_index, tuple):
+                    member_index = torch.stack(member_index, -1)
+                else:
+                    member_index = torch.as_tensor(member_index)
+                if member_index.ndim == 0:
+                    member_index = member_index.unsqueeze(0)
+                member_index = member_index.to(buffer_ids.device)
+                if local_indices is None:
+                    local_indices = torch.empty(
+                        (buffer_ids.numel(), *member_index.shape[1:]),
+                        dtype=member_index.dtype,
+                        device=buffer_ids.device,
+                    )
+                elif member_index.shape[1:] != local_indices.shape[1:]:
+                    raise RuntimeError(
+                        "All routed replay-buffer members must use compatible "
+                        "index shapes."
+                    )
+                local_indices[positions] = member_index
+
+                if self._writer.tracks_generations:
+                    generation = member_buffer.writer.generations_of(member_index)
+                    slots = (
+                        member_index[..., 0]
+                        if member_buffer.storage.ndim > 1
+                        else member_index
+                    ).reshape(-1)
+                    if slots.unique().numel() != slots.numel():
+                        later_occurrences = torch.empty_like(slots)
+                        seen = {}
+                        for position in range(slots.numel() - 1, -1, -1):
+                            slot = int(slots[position].cpu())
+                            later_occurrences[position] = seen.get(slot, 0)
+                            seen[slot] = seen.get(slot, 0) + 1
+                        generation = generation.reshape(-1) - later_occurrences.to(
+                            generation.device
+                        )
+                    generation = generation.to(buffer_ids.device)
+                    if local_generations is None:
+                        local_generations = torch.empty(
+                            buffer_ids.numel(),
+                            dtype=generation.dtype,
+                            device=buffer_ids.device,
+                        )
+                    local_generations[positions] = generation.reshape(-1)
+
+        metadata = TensorDict(
+            {"buffer_ids": buffer_ids, "index": local_indices},
+            batch_size=[buffer_ids.numel()],
+        )
+        if local_generations is not None:
+            metadata.set("index_generation", local_generations)
+        return metadata
+
+    def add(self, data: TensorDictBase) -> TensorDictBase:
+        """Routes one record through ``routing_key`` and returns its metadata."""
+        if self.routing_dim is not None:
+            raise RuntimeError("Use extend() for routing_dim writes.")
+        if data.ndim:
+            raise ValueError("add() expects a scalar TensorDict record.")
+        return self.extend(data.unsqueeze(0))[0]
+
+    def update_if_present(
+        self,
+        *,
+        index: TensorDictBase,
+        generation: torch.Tensor,
+        patch: Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+        version_key: NestedKey | None = None,
+        version: int | torch.Tensor | None = None,
+        require_newer: bool = False,
+    ) -> ConditionalUpdateResult:
+        """Routes a conditional update to the member named by each handle."""
+        if not isinstance(index, TensorDictBase):
+            raise TypeError(
+                "ReplayBufferEnsemble conditional updates require routed index metadata."
+            )
+        buffer_ids = index.get("buffer_ids")
+        local_index = index.get("index")
+        leading_shape = buffer_ids.shape
+        if local_index.shape[: len(leading_shape)] != leading_shape:
+            raise ValueError(
+                "Member-local indices must start with the buffer-id shape, got "
+                f"{tuple(local_index.shape)} and {tuple(leading_shape)}."
+            )
+        if buffer_ids.dtype == torch.bool or buffer_ids.is_floating_point():
+            raise TypeError("ReplayBufferEnsemble member ids must be integers.")
+        num_records = buffer_ids.numel()
+        flat_buffer_ids = buffer_ids.reshape(-1)
+        if num_records and (
+            (flat_buffer_ids < 0).any() or (flat_buffer_ids >= len(self._rbs)).any()
+        ):
+            raise ValueError(
+                f"ReplayBufferEnsemble member ids must lie in [0, "
+                f"{len(self._rbs) - 1}]."
+            )
+        if (version_key is None) != (version is None):
+            raise ValueError("version_key and version must be provided together.")
+        if not self._writer.tracks_generations:
+            raise RuntimeError(
+                "Conditional updates require every ensemble member writer to "
+                "track slot generations."
+            )
+        if any(
+            not getattr(member.storage, "supports_conditional_update", False)
+            for member in self._rbs
+        ):
+            raise RuntimeError(
+                "Conditional updates require every ensemble member storage to "
+                "support conditional patches."
+            )
+        flat_local_index = local_index.reshape(
+            num_records, *local_index.shape[len(leading_shape) :]
+        )
+        flat_generation = generation.reshape(-1)
+        if flat_generation.numel() != num_records:
+            raise ValueError(
+                "generation and routed index metadata must address the same "
+                "number of records."
+            )
+
+        if isinstance(patch, TensorDictBase):
+            if patch.batch_size != leading_shape:
+                raise ValueError(
+                    "The patch batch size must match the routed index metadata."
+                )
+            flat_patch = patch.reshape(-1)
+        else:
+            flat_patch = {}
+            for key, value in patch.items():
+                if value.shape[: len(leading_shape)] != leading_shape:
+                    raise ValueError(
+                        f"Patch entry {key!r} must start with shape "
+                        f"{tuple(leading_shape)}, got {tuple(value.shape)}."
+                    )
+                flat_patch[key] = value.reshape(
+                    num_records, *value.shape[len(leading_shape) :]
+                )
+
+        updated = torch.zeros(
+            num_records, dtype=torch.bool, device=flat_buffer_ids.device
+        )
+        version_rejected = (
+            torch.zeros_like(updated) if version_key is not None else None
+        )
+        with self._replay_lock, self._write_lock:
+            for member_id, member_buffer in enumerate(self._rbs):
+                member_mask = flat_buffer_ids == member_id
+                if not member_mask.any():
+                    continue
+                member_patch = (
+                    flat_patch[member_mask]
+                    if isinstance(flat_patch, TensorDictBase)
+                    else {
+                        key: value[member_mask.to(value.device)]
+                        for key, value in flat_patch.items()
+                    }
+                )
+                member_version = version
+                if isinstance(version, torch.Tensor) and version.numel() > 1:
+                    member_version = version.reshape(
+                        num_records, *version.shape[len(leading_shape) :]
+                    )[member_mask.to(version.device)]
+                result = member_buffer.update_if_present(
+                    index=flat_local_index[member_mask.to(flat_local_index.device)],
+                    generation=flat_generation[member_mask.to(flat_generation.device)],
+                    patch=member_patch,
+                    version_key=version_key,
+                    version=member_version,
+                    require_newer=require_newer,
+                )
+                updated[member_mask] = result.updated.to(updated.device)
+                if version_rejected is not None:
+                    version_rejected[member_mask] = result.version_rejected.to(
+                        version_rejected.device
+                    )
+        return ConditionalUpdateResult(
+            updated=updated.reshape(leading_shape),
+            version_rejected=(
+                version_rejected.reshape(leading_shape)
+                if version_rejected is not None
+                else None
+            ),
+            batch_size=leading_shape,
+        )
+
+    def stats(self) -> dict[str, int | float | bool]:
+        """Returns aggregate scalar statistics across ensemble members."""
+        if not self.initialized:
+            return {
+                "size": 0,
+                "write_count": 0,
+                "prefetch_queue_size": 0,
+                "initialized": False,
+                "num_buffers": len(self._init_storage._storages),
+            }
+        with self._replay_lock:
+            size = sum(len(storage) for storage in self._storage._storages)
+            capacity = sum(storage.max_size for storage in self._storage._storages)
+            write_count = sum(
+                getattr(writer, "_write_count", 0) for writer in self._writer._writers
+            )
+            prefetch_queue_size = len(self._prefetch_queue)
+        return {
+            "size": int(size),
+            "write_count": int(write_count),
+            "prefetch_queue_size": int(prefetch_queue_size),
+            "initialized": True,
+            "capacity": int(capacity),
+            "utilization": float(size) / capacity if capacity else 0.0,
+            "num_buffers": len(self._storage._storages),
+        }
 
     def _sample(self, *args, **kwargs):
         sample, info = super()._sample(*args, **kwargs)
@@ -344,7 +684,11 @@ class ReplayBufferEnsemble(ReplayBuffer):
                     _collate_fns = self._collate_fns[index]
                 except IndexError:
                     raise IndexError(self._INDEX_ERROR.format(type(index)))
-            p = self._sampler._p[index] if self._sampler._p is not None else None
+            p = (
+                self._sampler._p[index]
+                if isinstance(self._sampler._p, torch.Tensor)
+                else self._sampler._p
+            )
             return ReplayBufferEnsemble(
                 *rbs,
                 transform=self._transform,
@@ -364,7 +708,11 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 _collate_fns = [self._collate_fns[i] for i in index.tolist()]
             else:
                 _collate_fns = self._collate_fns[index]
-            p = self._sampler._p[index] if self._sampler._p is not None else None
+            p = (
+                self._sampler._p[index]
+                if isinstance(self._sampler._p, torch.Tensor)
+                else self._sampler._p
+            )
 
         except IndexError:
             raise IndexError(self._INDEX_ERROR.format(type(index)))
