@@ -5652,6 +5652,33 @@ class TestCollectHooks:
         finally:
             collector.shutdown()
 
+    def test_post_collect_hook_runs_before_replay_write(self):
+        hook_calls = 0
+
+        def hook(result):
+            nonlocal hook_calls
+            hook_calls += 1
+            result.set("hook_marker", torch.ones(result.batch_size, dtype=torch.bool))
+
+        env = ContinuousActionVecMockEnv()
+        rb = ReplayBuffer(storage=LazyTensorStorage(64, device="cpu"))
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+            replay_buffer=rb,
+            post_collect_hook=hook,
+        )
+        try:
+            outputs = list(collector)
+        finally:
+            collector.shutdown()
+
+        assert outputs == [None, None]
+        assert hook_calls == 2
+        assert rb[:]["hook_marker"].all()
+
     def test_hooks_none_by_default(self):
         collector = Collector(
             ContinuousActionVecMockEnv,
