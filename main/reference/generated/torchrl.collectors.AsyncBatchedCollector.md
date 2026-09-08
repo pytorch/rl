@@ -18,6 +18,9 @@ whatever backend the user chooses (`"threading"`,
 whichever environments are ready and submits their observations without
 blocking. Other exchanges use one lightweight coordinator thread per
 environment.
+- With a [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport),
+each multiprocessing environment worker talks directly to the dedicated
+inference process; the driver receives completed transitions only.
 - The `InferenceServer` running in a background
 thread continuously drains observation submissions, batches them, runs
 a single forward pass, and fans actions back out.
@@ -58,9 +61,12 @@ the first request arrives the server keeps draining for up to
 - **server_timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - seconds the server waits for work
 before dispatching a partial batch. Defaults to `0.01`.
 - **transport** ([*InferenceTransport*](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*,**optional*) - a pre-built transport
-object. When provided, it takes precedence over
-`policy_backend`. When `None` (default) a transport is
-created automatically from the resolved `policy_backend`.
+object. When provided, it takes precedence over `policy_backend`.
+A [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+together with multiprocessing environment and server backends runs
+the complete acting loop in environment worker processes. When
+`None` (default), a transport is created from the resolved
+`policy_backend`.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference
 (shorthand for `InferenceDeviceConfig(policy_device=...)`).
 Defaults to `None`.

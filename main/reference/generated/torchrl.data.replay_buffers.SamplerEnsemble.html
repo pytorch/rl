@@ -1570,6 +1570,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html">SliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html">SliceSamplerWithoutReplacement</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StalenessAwareSampler.html">StalenessAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StreamingSliceSampler.html">StreamingSliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.RoundRobinWriter.html">RoundRobinWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictMaxValueWriter.html">TensorDictMaxValueWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html">TensorDictRoundRobinWriter</a></li>
@@ -1979,6 +1980,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessSlotTransport.html">ProcessSlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2347,6 +2349,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html">torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.ListStorageConfig.html">torchrl.trainers.algorithms.configs.data.ListStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.TensorStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig</a></li>
@@ -2574,8 +2577,11 @@ It contains the samplers as well as the sampling strategy hyperparameters.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>p</strong> (<a class="reference internal" href="torchrl.services.RayService.html#torchrl.services.RayService.list" title="torchrl.services.RayService.list"><em>list</em></a><em> or </em><em>tensor</em><em> of </em><em>probabilities</em><em>, </em><em>optional</em>) – if provided, indicates the
-weights of each dataset during sampling.</p></li>
+<li><p><strong>p</strong> (list, tensor of probabilities, or <code class="docutils literal notranslate"><span class="pre">&quot;sampleable&quot;</span></code>, optional) – if
+provided, indicates the weights of each dataset during sampling.
+<code class="docutils literal notranslate"><span class="pre">&quot;sampleable&quot;</span></code> recomputes weights from the number of records or
+valid slice windows currently available in each member and excludes
+members that cannot provide a batch.</p></li>
 <li><p><strong>sample_from_all</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, each dataset will be sampled
 from. This is not compatible with the <code class="docutils literal notranslate"><span class="pre">p</span></code> argument. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>num_buffer_sampled</strong> (<em>int</em><em>, </em><em>optional</em>) – the number of buffers to sample.
@@ -2593,6 +2599,12 @@ and <code class="xref py py-class docutils literal notranslate"><span class="pre
 This format is different from with other samplers which usually return indices
 as regular tensors.</p>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.SamplerEnsemble.can_sample">
+<span class="sig-name descname"><span class="pre">can_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.replay_buffers.StorageEnsemble.html#torchrl.data.replay_buffers.StorageEnsemble" title="torchrl.data.replay_buffers.storages.StorageEnsemble"><span class="pre">StorageEnsemble</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/samplers/ensemble.html#SamplerEnsemble.can_sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.SamplerEnsemble.can_sample" title="Link to this definition">#</a></dt>
+<dd><p>Returns whether the selected ensemble strategy can serve a batch.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -2714,7 +2726,10 @@ as regular tensors.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.SamplerEnsemble"><code class="docutils literal notranslate"><span class="pre">SamplerEnsemble</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.SamplerEnsemble"><code class="docutils literal notranslate"><span class="pre">SamplerEnsemble</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.SamplerEnsemble.can_sample"><code class="docutils literal notranslate"><span class="pre">SamplerEnsemble.can_sample()</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
     
@@ -2967,7 +2982,7 @@ as regular tensors.</p>
        "headline": "SamplerEnsemble",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.SamplerEnsemble.html",
-       "articleBody": "SamplerEnsemble# class torchrl.data.replay_buffers.SamplerEnsemble(*args, **kwargs)# An ensemble of samplers. This class is designed to work with ReplayBufferEnsemble. It contains the samplers as well as the sampling strategy hyperparameters. Parameters: samplers (sequence of Sampler) \u2013 the samplers to make the composite sampler. Keyword Arguments: p (list or tensor of probabilities, optional) \u2013 if provided, indicates the weights of each dataset during sampling. sample_from_all (bool, optional) \u2013 if True, each dataset will be sampled from. This is not compatible with the p argument. Defaults to False. num_buffer_sampled (int, optional) \u2013 the number of buffers to sample. if sample_from_all=True, this has no effect, as it defaults to the number of buffers. If sample_from_all=False, buffers will be sampled according to the probabilities p. Warning The indices provided in the info dictionary are placed in a TensorDict with keys index and buffer_ids that allow the upper ReplayBufferEnsemble and StorageEnsemble objects to retrieve the data. This format is different from with other samplers which usually return indices as regular tensors.",
+       "articleBody": "SamplerEnsemble# class torchrl.data.replay_buffers.SamplerEnsemble(*args, **kwargs)# An ensemble of samplers. This class is designed to work with ReplayBufferEnsemble. It contains the samplers as well as the sampling strategy hyperparameters. Parameters: samplers (sequence of Sampler) \u2013 the samplers to make the composite sampler. Keyword Arguments: p (list, tensor of probabilities, or \"sampleable\", optional) \u2013 if provided, indicates the weights of each dataset during sampling. \"sampleable\" recomputes weights from the number of records or valid slice windows currently available in each member and excludes members that cannot provide a batch. sample_from_all (bool, optional) \u2013 if True, each dataset will be sampled from. This is not compatible with the p argument. Defaults to False. num_buffer_sampled (int, optional) \u2013 the number of buffers to sample. if sample_from_all=True, this has no effect, as it defaults to the number of buffers. If sample_from_all=False, buffers will be sampled according to the probabilities p. Warning The indices provided in the info dictionary are placed in a TensorDict with keys index and buffer_ids that allow the upper ReplayBufferEnsemble and StorageEnsemble objects to retrieve the data. This format is different from with other samplers which usually return indices as regular tensors. can_sample(storage: StorageEnsemble, batch_size: int) \u2192 bool[source]# Returns whether the selected ensemble strategy can serve a batch.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

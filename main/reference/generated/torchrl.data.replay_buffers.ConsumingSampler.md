@@ -42,3 +42,7 @@ Note
 `ConsumingSampler` only supports 1-dimensional storages and uniform
 random sampling without replacement within each sampled batch.
 Prefetching and prioritized replay are not supported.
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.

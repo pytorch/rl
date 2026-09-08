@@ -25,3 +25,7 @@ True
 ... )
 True
 ```
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.

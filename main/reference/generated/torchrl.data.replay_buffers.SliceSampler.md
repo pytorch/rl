@@ -359,3 +359,7 @@ Trajectory boundaries are recovered at sampling time with
 trajectory ids, end flags, the write cursor and the storage capacity
 interact. See also [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries) for the conventions collectors, storages and
 samplers follow.
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.

@@ -5,7 +5,7 @@
 An ensemble of writers.
 
 This class is designed to work with [`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble).
-It contains the writers but blocks writing with any of them.
+It contains the member writers used by a replay-buffer ensemble.
 
 Parameters:
 
@@ -13,9 +13,9 @@ Parameters:
 
 Warning
 
-This class does not support writing.
-To extend one of the replay buffers, simply index the parent
-[`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble) object.
+This class does not write directly. A routed
+[`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble) dispatches writes to its
+member writers; otherwise, index the parent ensemble before writing.
 
 add()[[source]](../../_modules/torchrl/data/replay_buffers/writers/ensemble.html#WriterEnsemble.add)
 
@@ -25,7 +25,7 @@ extend()[[source]](../../_modules/torchrl/data/replay_buffers/writers/ensemble.h
 
 Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.
 
-generations_of(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+generations_of(*index: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/ensemble.html#WriterEnsemble.generations_of)
 
 Returns the generation stamp for each physical slot in `index`.
 
@@ -56,3 +56,11 @@ Returns:
 Return type:
 
 [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
+*property*tracks_generations*: bool*
+
+bool(x) -> bool
+
+Returns True when the argument x is true, False otherwise.
+The builtins True and False are the only two instances of the class bool.
+The class bool is a subclass of the class int, and cannot be subclassed.

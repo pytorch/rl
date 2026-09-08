@@ -243,7 +243,7 @@ different transport.
 | [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | `direct` | `direct` | - | - | `direct` |
 | [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer) or a replay buffer constructed with `service_backend="ray"` | `ray` | `ray` | Yes | Gloo or NCCL | - |
 | [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `thread` | `thread` | - | - | `thread`, `queue`, or `direct` |
-| [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `process` | `process` | - | Gloo or NCCL [1] | `process` or `shared_memory` |
+| [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `process` | `process` | - | Gloo or NCCL [1] | `process`, `shared_memory`, or `process_slot` |
 | [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `ray` | `ray` | Yes | Gloo or NCCL | - |
 
 ### Transport characteristics
@@ -257,6 +257,7 @@ universal ordering.
 | `thread` / `direct` | Dynamic | Values accepted by the component | Same process | Lowest communication overhead. There is no serialization boundary; batching and model execution usually dominate. |
 | `process` | Dynamic | Pickle-compatible values, including non-tensor data | Multiprocessing-supported | Flexible, but queueing and serialization make large or frequent payloads more expensive than a preallocated tensor path. |
 | `shared_memory` | Fixed keys, shapes, dtypes, and batch sizes | Tensor leaves only | CPU | Preallocated slots avoid pickling tensor contents. This is generally a better process-local choice for large, stable CPU TensorDict payloads. |
+| `process_slot` | Fixed keys, shapes, dtypes, and batch sizes; one slot per client | Tensor leaves only | CPU | Fixed per-worker slots and process-shared signals keep observations and actions off the driver path. Each client has one in-flight request. |
 | `ray` | Dynamic | Ray-serializable values, including strings and non-tensor data | Ray-supported | Easiest remote option and the compatibility fallback. Ray RPC, queue, and object-store overhead can dominate small, frequent RL messages. |
 | `distributed` with Gloo | Fixed keys, shapes, dtypes, devices, and batch sizes | Tensor leaves only | CPU | Avoids putting steady-state tensor payloads through Ray. It is usually preferable for stable CPU TensorDict traffic once rendezvous and group setup costs are amortized. |
 | `distributed` with NCCL | Fixed keys, shapes, dtypes, devices, and batch sizes | Tensor leaves only | CUDA | Sends CUDA tensors without CPU staging. It is intended for stable, sufficiently large GPU payloads; setup and per-message latency may outweigh the benefit for small requests. Assign each NCCL rank a distinct GPU in normal deployments. Colocating ranks on one GPU is supported by NCCL only when `NCCL_MULTI_RANK_GPU_ENABLE=1` is set in every participating process. |

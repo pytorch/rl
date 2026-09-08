@@ -1570,6 +1570,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html">SliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html">SliceSamplerWithoutReplacement</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StalenessAwareSampler.html">StalenessAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StreamingSliceSampler.html">StreamingSliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.RoundRobinWriter.html">RoundRobinWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictMaxValueWriter.html">TensorDictMaxValueWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html">TensorDictRoundRobinWriter</a></li>
@@ -1979,6 +1980,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessSlotTransport.html">ProcessSlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2347,6 +2349,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html">torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.ListStorageConfig.html">torchrl.trainers.algorithms.configs.data.ListStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.TensorStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig</a></li>
@@ -2603,6 +2606,12 @@ an item is consumed. Defaults to <code class="docutils literal notranslate"><spa
 random sampling without replacement within each sampled batch.
 Prefetching and prioritized replay are not supported.</p>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.ConsumingSampler.can_sample">
+<span class="sig-name descname"><span class="pre">can_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.storages.Storage"><span class="pre">Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.data.replay_buffers.ConsumingSampler.can_sample" title="Link to this definition">#</a></dt>
+<dd><p>Returns whether the sampler can draw the requested batch.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -2724,7 +2733,10 @@ Prefetching and prioritized replay are not supported.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ConsumingSampler"><code class="docutils literal notranslate"><span class="pre">ConsumingSampler</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ConsumingSampler"><code class="docutils literal notranslate"><span class="pre">ConsumingSampler</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ConsumingSampler.can_sample"><code class="docutils literal notranslate"><span class="pre">ConsumingSampler.can_sample()</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
     
@@ -2977,7 +2989,7 @@ Prefetching and prioritized replay are not supported.</p>
        "headline": "ConsumingSampler",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.ConsumingSampler.html",
-       "articleBody": "ConsumingSampler# class torchrl.data.replay_buffers.ConsumingSampler(*args, **kwargs)# A random sampler that consumes entries after they have been sampled. ConsumingSampler tracks how many times each storage index has been returned by sample(). Once an index has been returned max_sample_count times, it is removed from the set of sampleable indices until that slot is overwritten by the replay-buffer writer. When used through ReplayBuffer, consumed indices are kept in a free-list so writes can reuse those slots before advancing the normal writer cursor. Parameters: max_sample_count (int, optional) \u2013 number of returned samples after which an item is consumed. Defaults to 1. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e \u003e\u003e\u003e from torchrl.data import ConsumingSampler, ListStorage, ReplayBuffer \u003e\u003e\u003e rb = ReplayBuffer( ... storage=ListStorage(10), ... sampler=ConsumingSampler(), ... batch_size=3, ... ) \u003e\u003e\u003e rb.extend([torch.tensor(i) for i in range(4)]) tensor([0, 1, 2, 3]) \u003e\u003e\u003e sample = rb.sample() \u003e\u003e\u003e len(sample) 3 \u003e\u003e\u003e len(rb) 1 Note ConsumingSampler only supports 1-dimensional storages and uniform random sampling without replacement within each sampled batch. Prefetching and prioritized replay are not supported.",
+       "articleBody": "ConsumingSampler# class torchrl.data.replay_buffers.ConsumingSampler(*args, **kwargs)# A random sampler that consumes entries after they have been sampled. ConsumingSampler tracks how many times each storage index has been returned by sample(). Once an index has been returned max_sample_count times, it is removed from the set of sampleable indices until that slot is overwritten by the replay-buffer writer. When used through ReplayBuffer, consumed indices are kept in a free-list so writes can reuse those slots before advancing the normal writer cursor. Parameters: max_sample_count (int, optional) \u2013 number of returned samples after which an item is consumed. Defaults to 1. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e \u003e\u003e\u003e from torchrl.data import ConsumingSampler, ListStorage, ReplayBuffer \u003e\u003e\u003e rb = ReplayBuffer( ... storage=ListStorage(10), ... sampler=ConsumingSampler(), ... batch_size=3, ... ) \u003e\u003e\u003e rb.extend([torch.tensor(i) for i in range(4)]) tensor([0, 1, 2, 3]) \u003e\u003e\u003e sample = rb.sample() \u003e\u003e\u003e len(sample) 3 \u003e\u003e\u003e len(rb) 1 Note ConsumingSampler only supports 1-dimensional storages and uniform random sampling without replacement within each sampled batch. Prefetching and prioritized replay are not supported. can_sample(storage: Storage, batch_size: int) \u2192 bool# Returns whether the sampler can draw the requested batch.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

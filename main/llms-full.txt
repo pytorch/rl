@@ -1908,6 +1908,14 @@ in batches from one coordinator thread, while keeping faster environments
 independent of slower ones. This path is intended for environments whose step
 latency dominates its millisecond-scale coordinator polling interval.
 
+When both environment stepping and inference should leave the driver process,
+pass a [`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) together
+with `env_backend="multiprocessing"` and an
+[`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) whose
+`service_backend` is `"process"`. Each environment process then performs
+its own reset/infer/step loop against a fixed shared-memory inference slot; the
+driver receives completed transitions only.
+
 ## Scaling `Collector` across local processes
 
 Pass `num_collectors` to [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) to run parallel local collection.
@@ -3248,6 +3256,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`PrioritizedSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html#torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig)([_target_, ...]) | Configuration for prioritized sampling from replay buffer. |
 | [`SliceSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerConfig)([_target_, num_slices, ...]) | Configuration for slice sampling from replay buffer. |
 | [`SliceSamplerWithoutReplacementConfig`](generated/torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig)([...]) | Configuration for slice sampling without replacement. |
+| [`StreamingSliceSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html#torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig)([_target_, ...]) | Hydra configuration for `StreamingSliceSampler`. |
 | [`ListStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.ListStorageConfig.html#torchrl.trainers.algorithms.configs.data.ListStorageConfig)([_partial_, _target_, ...]) | Hydra configuration for [`ListStorage`](generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage). |
 | [`TensorStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html#torchrl.trainers.algorithms.configs.data.TensorStorageConfig)([_partial_, _target_, ...]) | Configuration for tensor-based storage in replay buffer. |
 | [`LazyTensorStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html#torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig)([_partial_, ...]) | Hydra configuration for [`LazyTensorStorage`](generated/torchrl.data.replay_buffers.LazyTensorStorage.html#torchrl.data.replay_buffers.LazyTensorStorage). |
@@ -3577,6 +3586,7 @@ rb.update_tensordict_priority(sample)
 - [SliceSampler](generated/torchrl.data.replay_buffers.SliceSampler.html)
 - [SliceSamplerWithoutReplacement](generated/torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html)
 - [StalenessAwareSampler](generated/torchrl.data.replay_buffers.StalenessAwareSampler.html)
+- [StreamingSliceSampler](generated/torchrl.data.replay_buffers.StreamingSliceSampler.html)
 - [Writers](data_samplers.html#writers)
 - [Datasets](data_datasets.html)
 
@@ -4770,6 +4780,7 @@ wraparound and the write cursor -- are documented in
 | [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler)(*args, **kwargs) | Samples slices of data along the first dimension, given start and stop signals. |
 | [`SliceSamplerWithoutReplacement`](generated/torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html#torchrl.data.replay_buffers.SliceSamplerWithoutReplacement)(*args, **kwargs) | Samples slices of data along the first dimension, given start and stop signals, without replacement. |
 | [`StalenessAwareSampler`](generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler)(*args, **kwargs) | A sampler that weights entries by freshness and filters stale entries. |
+| [`StreamingSliceSampler`](generated/torchrl.data.replay_buffers.StreamingSliceSampler.html#torchrl.data.replay_buffers.StreamingSliceSampler)(*args, **kwargs) | A slice sampler that prioritizes newly completed streaming windows. |
 
 ## Writers
 
@@ -9509,6 +9520,9 @@ whatever backend the user chooses (`"threading"`,
 whichever environments are ready and submits their observations without
 blocking. Other exchanges use one lightweight coordinator thread per
 environment.
+- With a [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport),
+each multiprocessing environment worker talks directly to the dedicated
+inference process; the driver receives completed transitions only.
 - The `InferenceServer` running in a background
 thread continuously drains observation submissions, batches them, runs
 a single forward pass, and fans actions back out.
@@ -9549,9 +9563,12 @@ the first request arrives the server keeps draining for up to
 - **server_timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - seconds the server waits for work
 before dispatching a partial batch. Defaults to `0.01`.
 - **transport** ([*InferenceTransport*](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*,**optional*) - a pre-built transport
-object. When provided, it takes precedence over
-`policy_backend`. When `None` (default) a transport is
-created automatically from the resolved `policy_backend`.
+object. When provided, it takes precedence over `policy_backend`.
+A [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+together with multiprocessing environment and server backends runs
+the complete acting loop in environment worker processes. When
+`None` (default), a transport is created from the resolved
+`policy_backend`.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference
 (shorthand for `InferenceDeviceConfig(policy_device=...)`).
 Defaults to `None`.
@@ -27104,6 +27121,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -27829,6 +27855,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → Any[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.client)
 
 Return a picklable client without actor shutdown rights.
@@ -28353,6 +28388,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -29227,6 +29271,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+can_sample(*batch_size: int | None = None*) → bool[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.can_sample)
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.client)
 
 Return `self` for the zero-overhead direct backend.
@@ -29856,8 +29909,9 @@ samplers ([`SamplerEnsemble`](torchrl.data.replay_buffers.SamplerEnsemble.html#t
 
 Note
 
-Writing directly to this class is forbidden, but it can be indexed to retrieve
-the nested nested-buffer and extending it.
+Writing directly to this class is disabled by default. Pass exactly one
+of `routing_key` or `routing_dim` to enable routed writes while
+preserving the historical read-only behavior for existing ensembles.
 
 There are two distinct ways of constructing a `ReplayBufferEnsemble`:
 one can either pass a list of replay buffers, or directly pass the components
@@ -29884,10 +29938,10 @@ is placed in a list (along with the buffer id).
 - **collate_fns** (*list**of**callables**,**optional*) - collate_fn of each nested
 replay buffer. Retrieved from the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) instances
 if not provided.
-- **p** (*list**of**float**or**Tensor**,**optional*) - a list of floating numbers
-indicating the relative weight of each replay buffer. Can also
-be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-if the buffer is built explicitly.
+- **p** (list of float, Tensor, or `"sampleable"`, optional) - relative
+weights of each replay buffer. `"sampleable"` dynamically
+weights members by their available records or slice windows and
+excludes members that are not ready.
 - **sample_from_all** (*bool**,**optional*) - if `True`, each dataset will be sampled
 from. This is not compatible with the `p` argument. Defaults to `False`.
 Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
@@ -29898,6 +29952,12 @@ number of buffers. If `sample_from_all=False`, buffers will be
 sampled according to the probabilities `p`. Can also
 be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
 if the buffer is built explicitly.
+- **routing_key** (*NestedKey**,**optional*) - key containing a member id for each
+record. Routed input is flattened, grouped stably by member and
+written to the corresponding nested replay buffer.
+- **routing_dim** (*int**,**optional*) - batch dimension whose entries correspond
+to ensemble members. The dimension size must equal the number of
+members. Exclusive with `routing_key`.
 - **generator** ([*torch.Generator*](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator)*,**optional*) -
 
 a generator to use for sampling.
@@ -29992,17 +30052,9 @@ collate_fn=<built-in method stack of type object at 0x128648260>)
 ... assert sample["renamed"].shape == torch.Size([2, 5])
 ```
 
-add(*data: Any*) → int
+add(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.add)
 
-Add a single element to the replay buffer.
-
-Parameters:
-
-**data** (*Any*) - data to be added to the replay buffer
-
-Returns:
-
-index where the data lives in the replay buffer.
+Routes one record through `routing_key` and returns its metadata.
 
 append_transform(*transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)
 
@@ -30054,6 +30106,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -30112,37 +30173,14 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
-extend(*data: Sequence*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+extend(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.extend)
 
-Extends the replay buffer with one or more elements contained in an iterable.
+Routes and writes a batch, returning member-local write metadata.
 
-If present, the inverse transforms will be called.`
-
-Parameters:
-
-**data** (*iterable*) - collection of data to be added to the replay
-buffer.
-
-Keyword Arguments:
-
-**update_priority** (*bool**,**optional*) - Whether to update the priority of the data. Defaults to True.
-Without effect in this class. See [`extend()`](torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend) for more details.
-
-Returns:
-
-Indices of the data added to the replay buffer.
-
-Warning
-
-`extend()` can have an
-ambiguous signature when dealing with lists of values, which should be interpreted
-either as PyTree (in which case all elements in the list will be put in a slice
-in the stored PyTree in the storage) or a list of values to add one at a time.
-To solve this, TorchRL makes the clear-cut distinction between list and tuple:
-a tuple will be viewed as a PyTree, a list (at the root level) will be interpreted
-as a stack of values to add one at a time to the buffer.
-For [`ListStorage`](torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage) instances, only
-unbound elements can be provided (no PyTrees).
+The returned tensordict is flat and aligned with `data.reshape(-1)`.
+It contains `"buffer_ids"` and member-local `"index"` entries,
+plus `"index_generation"` when every member writer tracks
+generations.
 
 *property*initialized*: bool*
 
@@ -30379,52 +30417,9 @@ start() → T
 
 Return this already-started direct replay buffer.
 
-stats() → dict[str, int | float | bool]
+stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.stats)
 
-Returns a cheap, serializable snapshot of the buffer's operational state.
-
-The snapshot only contains scalar counters and gauges. It never
-includes the storage content, does not modify the buffer state and is
-safe to call concurrently with writes and samples. Cumulative
-counters such as `write_count` are meant to be converted into rates
-by an external monitor such as
-[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
-
-Calling this method on an uninitialized buffer does not trigger its
-initialization; an empty snapshot with `initialized=False` is
-returned instead (`capacity` is still reported when the storage
-already advertises it).
-
-Returns:
-
-- `"size"`: current number of elements in the buffer (mirrors `len(buffer)`);
-- `"write_count"`: total number of items written through `add` and
-`extend` (`0` for writers that do not track writes, such as
-[`ImmutableDatasetWriter`](torchrl.data.replay_buffers.ImmutableDatasetWriter.html#torchrl.data.replay_buffers.ImmutableDatasetWriter));
-- `"prefetch_queue_size"`: number of pending prefetched batches;
-- `"initialized"`: whether the buffer components are initialized;
-- `"capacity"`: maximum number of elements the storage can hold
-(only present when the storage advertises a `max_size`);
-- `"utilization"`: `size / capacity` (only present alongside `capacity`).
-
-Remote clients backed by the distributed transport report a subset
-of these entries (`size` and `write_count`).
-
-Return type:
-
-A dictionary with the following entries
-
-Examples
-
-```
->>> import torch
->>> from torchrl.data import LazyTensorStorage, ReplayBuffer
->>> rb = ReplayBuffer(storage=LazyTensorStorage(10))
->>> rb.extend(torch.arange(5))
->>> snapshot = rb.stats()
->>> print(snapshot["size"], snapshot["write_count"], snapshot["capacity"])
-5 5 10
-```
+Returns aggregate scalar statistics across ensemble members.
 
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 
@@ -30513,135 +30508,9 @@ Returns:
 
 self
 
-update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)
+update_if_present(***, *index: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.update_if_present)
 
-Conditionally updates stored records that are still live.
-
-Replay slots are recycled by round-robin writers, so a physical index
-captured at sampling time can point to a different record by the time
-an asynchronous computation writes back. This method applies `patch`
-only to records whose `(index, generation)` pair still matches the
-writer's current slot generation, skipping records whose slot was
-reused or emptied since the handle was captured. Skipped records are
-never modified.
-
-The whole patch is validated (key existence, shape and dtype) before
-any write happens; a validation failure leaves the storage untouched.
-Updating a record refreshes its content, not its identity: the same
-handle keeps working until the slot is rewritten by `add`,
-`extend` or `empty`.
-
-Generation tracking is opt-in: the buffer must be constructed with a
-writer that tracks slot generations, e.g.
-`RoundRobinWriter(track_generations=True)` (see
-ref_buffers_generations). Calling this method on a buffer whose
-writer does not track generations raises a `RuntimeError`.
-
-Keyword Arguments:
-
-- **index** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - storage indices, as returned by
-`extend()` or found in the sample under `"index"`.
-- **generation** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - slot generations captured with the
-indices, as found in the sample under `"index_generation"`.
-- **patch** (*mapping**of**NestedKey to torch.Tensor**, or**TensorDictBase*) - the fields to overwrite for live records. Leading dimension
-must match the number of records addressed by `index`.
-- **version_key** (*NestedKey**,**optional*) - a stored per-record scalar
-field holding each record's current version. When passed
-(together with `version`), a generation-live record is only
-patched if the incoming version compares favorably against
-the stored one, and the accepted version is written into
-`version_key` atomically with the patch. `version_key`
-may not appear in `patch`. Nested keys must be passed in
-tuple form (`("nested", "version")`); dotted strings are
-rejected. Defaults to `None` (no version comparison).
-- **version** (*int**or*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - the incoming version,
-either a scalar (broadcast to every record) or a tensor with
-one entry per record. Must be passed together with
-`version_key`.
-- **require_newer** (*bool**,**optional*) - if `True`, a record is only
-patched when `version > stored`; if `False`, ties are
-accepted (`version >= stored`). When the same slot is
-addressed several times in one call, only the row carrying
-the highest incoming version is applied (the last such row
-on ties); the losing rows are reported in
-`version_rejected`. Defaults to `False`.
-
-Returns:
-
-A [`ConditionalUpdateResult`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult) whose `updated` mask is
-aligned with the input index order, with `updated_count` and
-`stale_count` conveniences. When `version_key` is passed, its
-`version_rejected` mask marks generation-live records that were
-rejected by the version comparison (`None` otherwise).
-
-Raises:
-
-- **RuntimeError** - if the storage does not support conditional updates
- (for example `ListStorage`) or the writer does not
- track slot generations.
-- **KeyError** - if a patch key (or `version_key`) does not exist in
- the storage.
-- **ValueError** - if a patch entry has an incompatible shape or dtype,
- if only one of `version_key` / `version` is passed, if
- `version_key` appears in `patch` or names a non-scalar
- field, or if it is a dotted string.
-
-Examples
-
-```
->>> import torch
->>> from tensordict import TensorDict
->>> from torchrl.data import (
-... LazyTensorStorage,
-... TensorDictReplayBuffer,
-... TensorDictRoundRobinWriter,
-... )
->>> rb = TensorDictReplayBuffer(
-... storage=LazyTensorStorage(10),
-... writer=TensorDictRoundRobinWriter(track_generations=True),
-... batch_size=4,
-... )
->>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
->>> sample = rb.sample()
->>> result = rb.update_if_present(
-... index=sample["index"],
-... generation=sample["index_generation"],
-... patch={"obs": torch.ones(4, 3)},
-... )
->>> print(result.updated_count, result.stale_count)
-4 0
-```
-
-With a version comparison, outdated asynchronous writers lose
-deterministically:
-
-```
->>> rb = TensorDictReplayBuffer(
-... storage=LazyTensorStorage(10),
-... writer=TensorDictRoundRobinWriter(track_generations=True),
-... batch_size=4,
-... )
->>> rb.extend(
-... TensorDict(
-... {
-... "obs": torch.zeros(10, 3),
-... "v": torch.full((10,), 5, dtype=torch.int64),
-... },
-... batch_size=[10],
-... )
-... )
->>> sample = rb.sample()
->>> result = rb.update_if_present(
-... index=sample["index"],
-... generation=sample["index_generation"],
-... patch={"obs": torch.ones(4, 3)},
-... version_key="v",
-... version=4,
-... require_newer=True,
-... )
->>> print(result.updated_count, result.version_rejected_count)
-0 4
-```
+Routes a conditional update to the member named by each handle.
 
 write_all(*data: Any*, *end: int | None = None*) → None
 
@@ -32155,6 +32024,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -32999,6 +32877,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -33975,7 +33862,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f177d3e7d80>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fc24f487bf0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -38155,6 +38042,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -39128,6 +39024,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -40080,6 +39985,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -41086,6 +41000,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -42090,6 +42013,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -43003,6 +42935,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -44095,6 +44036,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -45066,6 +45016,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -46072,6 +46031,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -47166,7 +47134,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f17804fc400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fc2520dc400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -51638,6 +51606,10 @@ Note
 random sampling without replacement within each sampled batch.
 Prefetching and prioritized replay are not supported.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
+
 ---
 
 # FlatStorageCheckpointer
@@ -52406,6 +52378,10 @@ priorities cannot be recovered from the trees in that regime, so the
 stored (uniform) values are kept - and a warning is emitted -
 until each entry's priority is next updated.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
+
 update_priority(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *priority: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *storage: [TensorStorage](torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage) | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/samplers/prioritized.html#PrioritizedSampler.update_priority)
 
 Updates the priority of the data pointed by the index.
@@ -52629,6 +52605,10 @@ priorities cannot be recovered from the trees in that regime, so the
 stored (uniform) values are kept - and a warning is emitted -
 until each entry's priority is next updated.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
+
 update_priority(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *priority: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *storage: [TensorStorage](torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage) | None = None*) → None
 
 Updates the priority of the data pointed by the index.
@@ -52749,6 +52729,10 @@ Examples
 8
 ```
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
+
 ---
 
 # RandomSampler
@@ -52778,6 +52762,10 @@ True
 ... )
 True
 ```
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
 
 ---
 
@@ -52894,6 +52882,10 @@ handed out for those slots are stale once this returns.
 
 A generic sampler base class for composable Replay Buffers.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool[[source]](../../_modules/torchrl/data/replay_buffers/samplers/base.html#Sampler.can_sample)
+
+Returns whether the sampler can draw the requested batch.
+
 ---
 
 # SamplerEnsemble
@@ -52911,8 +52903,11 @@ Parameters:
 
 Keyword Arguments:
 
-- **p** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*or**tensor**of**probabilities**,**optional*) - if provided, indicates the
-weights of each dataset during sampling.
+- **p** (list, tensor of probabilities, or `"sampleable"`, optional) - if
+provided, indicates the weights of each dataset during sampling.
+`"sampleable"` recomputes weights from the number of records or
+valid slice windows currently available in each member and excludes
+members that cannot provide a batch.
 - **sample_from_all** (*bool**,**optional*) - if `True`, each dataset will be sampled
 from. This is not compatible with the `p` argument. Defaults to `False`.
 - **num_buffer_sampled** (*int**,**optional*) - the number of buffers to sample.
@@ -52927,6 +52922,10 @@ keys `index` and `buffer_ids` that allow the upper [`ReplayBufferEnsemble`](torc
 and `StorageEnsemble` objects to retrieve the data.
 This format is different from with other samplers which usually return indices
 as regular tensors.
+
+can_sample(*storage: [StorageEnsemble](torchrl.data.replay_buffers.StorageEnsemble.html#torchrl.data.replay_buffers.StorageEnsemble)*, *batch_size: int*) → bool[[source]](../../_modules/torchrl/data/replay_buffers/samplers/ensemble.html#SamplerEnsemble.can_sample)
+
+Returns whether the selected ensemble strategy can serve a batch.
 
 ---
 
@@ -52955,6 +52954,10 @@ but this is not enforced.
 When the sampler reaches the end of the list of available indices, a new sample order
 will be generated and the resulting indices will be completed with this new draw, which
 can lead to duplicated indices, unless the `drop_last` argument is set to `True`.
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool[[source]](../../_modules/torchrl/data/replay_buffers/samplers/random.html#SamplerWithoutReplacement.can_sample)
+
+Returns whether the storage can provide the requested batch.
 
 ---
 
@@ -53320,6 +53323,10 @@ trajectory ids, end flags, the write cursor and the storage capacity
 interact. See also [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries) for the conventions collectors, storages and
 samplers follow.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
+
 ---
 
 # SliceSamplerWithoutReplacement
@@ -53531,6 +53538,10 @@ Trajectory boundaries are recovered at sampling time with
 [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
 for the conventions collectors, storages and samplers follow.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the storage can provide the requested batch.
+
 ---
 
 # StalenessAwareSampler
@@ -53616,6 +53627,10 @@ fundamentally different: weights are derived from a single scalar
 and are recomputed on every `sample()` call rather than
 maintained incrementally. Sharing the segment-tree machinery
 would add complexity without benefit.
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
 
 *property*consumer_version*: int*
 
@@ -53781,6 +53796,87 @@ Registers a load hook for this checkpointer.
 register_save_hook(*hook*)
 
 Registers a save hook for this checkpointer.
+
+---
+
+# StreamingSliceSampler
+
+*class*torchrl.data.replay_buffers.StreamingSliceSampler(**args*, ***kwargs*)
+
+A slice sampler that prioritizes newly completed streaming windows.
+
+Incoming records are partitioned into non-overlapping, fixed-length
+windows without crossing trajectory or done boundaries. Each completed
+window is queued once and returned before the sampler falls back to
+regular uniform [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) sampling. Generation-like write
+stamps maintained by the sampler discard queued windows whose ring slots
+were overwritten before they could be sampled.
+
+The sampler observes writes through the standard replay-buffer
+`mark_update` notification. It is intended for one-dimensional storages
+whose writes arrive in chronological order, such as one replay-buffer
+member per environment stream.
+
+See Also
+`StreamingSliceSamplerConfig`.
+
+Keyword Arguments:
+
+- **slice_len** (*int*) - fixed length of every queued and sampled slice.
+- **end_key** (*NestedKey**,**optional*) - single end-of-trajectory key. Defaults
+to `("next", "done")` when no trajectory key is available.
+- **end_keys** (*sequence**of**NestedKey**,**optional*) - boundary keys to combine
+with a logical OR. Exclusive with `end_key`.
+- **traj_key** (*NestedKey**,**optional*) - trajectory identifier. When no
+boundary key is configured, the usual collector trajectory key is
+detected automatically before falling back to done markers.
+- **cache_values** (*bool**,**optional*) - cache the uniform fallback trajectory
+index. Defaults to `False`.
+- **truncated_key** (*NestedKey**,**optional*) - key populated in sampling info at
+the final record of each sampled slice. Defaults to
+`("next", "truncated")`.
+- **strict_length** (*bool**,**optional*) - whether uniform fallback sampling
+rejects trajectories shorter than `slice_len`. Defaults to
+`True`.
+- **pad_output** (*bool**,**optional*) - whether short uniform fallback slices are
+padded when `strict_length=False`. Defaults to `False`.
+- **compile** (*bool**or**dict**,**optional*) - compile options forwarded to
+[`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler). Defaults to `False`.
+- **span** (*bool**,**int**or**pair**,**optional*) - span options forwarded to
+[`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler). Defaults to `False`.
+- **use_gpu** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**bool**,**optional*) - boundary-index device option
+forwarded to [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler). Defaults to `False`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage,
+... StreamingSliceSampler,
+... TensorDictReplayBuffer,
+... )
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(16),
+... sampler=StreamingSliceSampler(slice_len=3),
+... batch_size=6,
+... )
+>>> done = torch.zeros(6, 1, dtype=torch.bool)
+>>> rb.extend(
+... TensorDict(
+... {"value": torch.arange(6), ("next", "done"): done},
+... batch_size=[6],
+... )
+... )
+>>> rb.sample()["value"].reshape(2, 3)
+tensor([[0, 1, 2],
+ [3, 4, 5]])
+```
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
 
 ---
 
@@ -54231,7 +54327,7 @@ Return type:
 An ensemble of writers.
 
 This class is designed to work with [`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble).
-It contains the writers but blocks writing with any of them.
+It contains the member writers used by a replay-buffer ensemble.
 
 Parameters:
 
@@ -54239,9 +54335,9 @@ Parameters:
 
 Warning
 
-This class does not support writing.
-To extend one of the replay buffers, simply index the parent
-[`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble) object.
+This class does not write directly. A routed
+[`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble) dispatches writes to its
+member writers; otherwise, index the parent ensemble before writing.
 
 add()[[source]](../../_modules/torchrl/data/replay_buffers/writers/ensemble.html#WriterEnsemble.add)
 
@@ -54251,7 +54347,7 @@ extend()[[source]](../../_modules/torchrl/data/replay_buffers/writers/ensemble.h
 
 Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.
 
-generations_of(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+generations_of(*index: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/ensemble.html#WriterEnsemble.generations_of)
 
 Returns the generation stamp for each physical slot in `index`.
 
@@ -54282,6 +54378,14 @@ Returns:
 Return type:
 
 [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
+*property*tracks_generations*: bool*
+
+bool(x) -> bool
+
+Returns True when the argument x is true, False otherwise.
+The builtins True and False are the only two instances of the class bool.
+The class bool is a subclass of the class int, and cannot be subclassed.
 
 ---
 
@@ -213438,7 +213542,7 @@ Return the actor-side device expected from the policy server.
 
 # InferenceServer
 
-*class*torchrl.modules.inference_server.InferenceServer(*model: nn.Module | Callable[[TensorDictBase], TensorDictBase] | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'thread', 'process', 'ray', 'shared_memory', 'direct', 'distributed'] = 'auto'*, ***, *policy_factory: Callable[[], nn.Module | Callable[[TensorDictBase], TensorDictBase]] | None = None*, *service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *service_backend_options: dict[str, Any] | None = None*, *transport_options: dict[str, Any] | None = None*, *request_spec: TensorDictBase | None = None*, *response_spec: TensorDictBase | None = None*, *num_clients: int | None = None*, *max_batch_size: int | None = None*, *static_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *shutdown_event: threading.Event | MPEvent | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer)
+*class*torchrl.modules.inference_server.InferenceServer(*model: nn.Module | Callable[[TensorDictBase], TensorDictBase] | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'thread', 'process', 'ray', 'shared_memory', 'process_slot', 'direct', 'distributed'] = 'auto'*, ***, *policy_factory: Callable[[], nn.Module | Callable[[TensorDictBase], TensorDictBase]] | None = None*, *service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *service_backend_options: dict[str, Any] | None = None*, *transport_options: dict[str, Any] | None = None*, *request_spec: TensorDictBase | None = None*, *response_spec: TensorDictBase | None = None*, *num_clients: int | None = None*, *max_batch_size: int | None = None*, *static_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *shutdown_event: threading.Event | MPEvent | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer)
 
 Auto-batching inference server.
 
@@ -213472,10 +213576,10 @@ transport. For `"distributed"`, `backend` selects `"gloo"`
 or `"nccl"`. Explicit selectors never fall back to another
 transport.
 - **request_spec** (*TensorDictBase**,**optional*) - static request layout for
-shared-memory or process-owned distributed transports, and the
-representative unbatched request used for CUDA-graph capture when
-`static_batch_size` is set. Ray-owned distributed transports
-infer and bind this layout on first use.
+`"shared_memory"`, `"process_slot"`, or process-owned
+distributed transports, and the representative unbatched request
+used for CUDA-graph capture when `static_batch_size` is set.
+Ray-owned distributed transports infer and bind this layout on first use.
 - **response_spec** (*TensorDictBase**,**optional*) - static response layout paired
 with `request_spec`.
 - **num_clients** (*int**,**optional*) - expected concurrent client count for
@@ -214178,6 +214282,109 @@ Parameters:
 behavior-policy version. Defaults to `True`.
 - **timeout** (*float**,**optional*) - seconds to wait for the child to apply
 the weights. Defaults to `300.0`.
+
+---
+
+# ProcessSlotTransport
+
+*class*torchrl.modules.inference_server.ProcessSlotTransport(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *response_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *num_slots: int*, *ctx: BaseContext | None = None*, *copy_result: bool = True*)[[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport)
+
+Fixed-slot shared-memory transport for environment worker processes.
+
+Each client owns one CPU shared-memory request/response slot. A worker
+copies an observation into its slot and releases a process-shared
+semaphore; the inference server sweeps ready slots in round-robin order,
+batches their tensor views, writes actions back, and wakes the matching
+workers. Only synchronization signals cross process boundaries on the
+inference hot path.
+
+This transport allows environment workers and a
+[`ProcessInferenceServer`](torchrl.modules.inference_server.ProcessInferenceServer.html#torchrl.modules.inference_server.ProcessInferenceServer) to
+communicate without routing observations or actions through the driver.
+Each client permits one in-flight request, which naturally applies
+per-environment backpressure.
+
+Parameters:
+
+- **request_spec** (*TensorDictBase*) - representative request whose keys,
+shapes, dtypes and batch size define each request slot. Leaves
+must be CPU tensors.
+- **response_spec** (*TensorDictBase*) - representative response, including
+server-added keys such as `"policy_version"`. Leaves must be
+CPU tensors.
+
+Keyword Arguments:
+
+- **num_slots** (*int*) - number of fixed slots and maximum number of clients.
+- **ctx** (*multiprocessing context**,**optional*) - context used for process
+synchronization primitives. Defaults to `"spawn"`.
+- **copy_result** (*bool**,**optional*) - whether clients clone responses before
+returning them. Defaults to `True`. If `False`, a response is
+a borrowed view valid only until that client submits again.
+
+Note
+
+Create at most one client per environment worker. Unlike queue-based
+transports, clients do not need registration with the already-running
+server because every slot and signal is allocated at construction.
+
+Example
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule
+>>> from torchrl.modules.inference_server import (
+... InferenceServer,
+... ProcessSlotTransport,
+... )
+>>> transport = ProcessSlotTransport(
+... TensorDict({"observation": torch.zeros(4)}),
+... TensorDict(
+... {
+... "action": torch.zeros(2),
+... "policy_version": torch.zeros((), dtype=torch.long),
+... }
+... ),
+... num_slots=4,
+... )
+>>> client = transport.client()
+>>> policy = TensorDictModule(
+... torch.nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
+... )
+>>> with InferenceServer(policy, transport, max_batch_size=4):
+... result = client(TensorDict({"observation": torch.randn(4)}))
+>>> result["action"].shape
+torch.Size([2])
+```
+
+client() → _ProcessSlotClient[[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport.client)
+
+Create a client bound to the next unused slot.
+
+drain(*max_items: int*) → tuple[list[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], list[int]][[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport.drain)
+
+Sweep ready slots in round-robin order.
+
+drain_with_timing(*max_items: int*) → tuple[list[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], list[int], list[float | None]][[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport.drain_with_timing)
+
+Sweep ready slots and return request submission timestamps.
+
+resolve(*callback: int*, *result: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport.resolve)
+
+Copy a response into its slot and wake the owning worker.
+
+resolve_exception(*callback: int*, *exc: BaseException*) → None[[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport.resolve_exception)
+
+Send a model exception to the owning worker and wake it.
+
+submit(*td: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*)[[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport.submit)
+
+Reject unbound submissions; callers must first obtain a client.
+
+wait_for_work(*timeout: float*) → None[[source]](../../_modules/torchrl/modules/inference_server/_process_slot.html#ProcessSlotTransport.wait_for_work)
+
+Wait until an environment worker marks a request slot ready.
 
 ---
 
@@ -265458,6 +265665,14 @@ Fields match `WriterEnsembleConfig`
 
 ---
 
+# torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig
+
+*class*torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.StreamingSliceSampler'*, *slice_len: int = '???'*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *strict_length: bool = True*, *pad_output: bool = False*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#StreamingSliceSamplerConfig)
+
+Hydra configuration for `StreamingSliceSampler`.
+
+---
+
 # torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig
 
 *class*torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig(*_partial_: bool = False*, *_target_: str = 'torchrl.data.replay_buffers.TensorDictReplayBuffer'*, *priority_key: str = 'td_error'*, *sampler: ~typing.Any = None*, *sample_unit: ~typing.Any = None*, *storage: ~typing.Any = None*, *writer: ~typing.Any = None*, *collate_fn: ~typing.Any = None*, *pin_memory: bool = False*, *prefetch: int | None = None*, *transform: ~typing.Any = None*, *transform_factory: ~typing.Any = None*, *batch_size: int | None = None*, *dim_extend: int | None = None*, *checkpointer: ~typing.Any = None*, *generator: ~typing.Any = None*, *consume_after_n_samples: int | None = None*, *shared: bool = False*, *compilable: bool | None = None*, *delayed_init: bool | None = None*, *service_backend: str = 'direct'*, *service_backend_options: dict[str*, *~typing.Any] = <factory>*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#TensorDictReplayBufferConfig)
@@ -273436,6 +273651,7 @@ lifecycle.
 | [`SlotTransport`](generated/torchrl.modules.inference_server.SlotTransport.html#torchrl.modules.inference_server.SlotTransport)(num_slots, *[, preallocate]) | Lock-free, in-process transport using per-env slots. |
 | [`MPTransport`](generated/torchrl.modules.inference_server.MPTransport.html#torchrl.modules.inference_server.MPTransport)([ctx, use_manager]) | Cross-process transport using `multiprocessing` queues. |
 | [`SharedMemoryTransport`](generated/torchrl.modules.inference_server.SharedMemoryTransport.html#torchrl.modules.inference_server.SharedMemoryTransport)(request_spec, ...[, ...]) | Cross-process transport backed by shared-memory TensorDict slots. |
+| [`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)(request_spec, ...[, ...]) | Fixed-slot shared-memory transport for environment worker processes. |
 | [`RayTransport`](generated/torchrl.modules.inference_server.RayTransport.html#torchrl.modules.inference_server.RayTransport)(*[, max_queue_size]) | Transport using Ray queues for distributed inference. |
 | [`MonarchTransport`](generated/torchrl.modules.inference_server.MonarchTransport.html#torchrl.modules.inference_server.MonarchTransport)(*[, max_queue_size]) | Transport using Monarch for distributed inference on GPU clusters. |
 
@@ -273571,6 +273787,50 @@ all device transfers (batches are moved to `policy_device` before the
 forward pass, results copied back into the CPU response slots).
 `num_slots` bounds the number of concurrently in-flight requests and
 provides natural backpressure.
+
+### Direct process-slot transport
+
+For one synchronous acting loop per environment worker,
+[`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) assigns one fixed request/response slot to each
+worker. Workers notify the dedicated inference process through a shared
+semaphore, and the server sweeps ready slots in round-robin order. Observation
+and action tensors therefore never cross the driver process:
+
+```
+import torch
+from tensordict import TensorDict
+from torchrl.collectors import AsyncBatchedCollector
+from torchrl.modules.inference_server import (
+ InferenceServerConfig,
+ ProcessSlotTransport,
+)
+
+num_envs = 64
+transport = ProcessSlotTransport(
+ request_spec=TensorDict({"pixels": torch.zeros(3, 84, 84, dtype=torch.uint8)}),
+ response_spec=TensorDict(
+ {
+ "action": torch.zeros(6),
+ "policy_version": torch.zeros((), dtype=torch.long),
+ }
+ ),
+ num_slots=num_envs,
+)
+collector = AsyncBatchedCollector(
+ create_env_fn=[make_env] * num_envs,
+ policy_factory=make_policy,
+ transport=transport,
+ env_backend="multiprocessing",
+ server_config=InferenceServerConfig(
+ service_backend="process", max_batch_size=num_envs
+ ),
+ frames_per_batch=1024,
+)
+```
+
+The driver continues to receive completed transitions from the workers. The
+transport requires fixed-shape CPU tensor request and response specs; policy
+execution and device transfers remain owned by the inference process.
 
 ### Structured Configuration
 
@@ -275881,7 +276141,7 @@ different transport.
 | [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | `direct` | `direct` | - | - | `direct` |
 | [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer) or a replay buffer constructed with `service_backend="ray"` | `ray` | `ray` | Yes | Gloo or NCCL | - |
 | [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `thread` | `thread` | - | - | `thread`, `queue`, or `direct` |
-| [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `process` | `process` | - | Gloo or NCCL [1] | `process` or `shared_memory` |
+| [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `process` | `process` | - | Gloo or NCCL [1] | `process`, `shared_memory`, or `process_slot` |
 | [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) | `ray` | `ray` | Yes | Gloo or NCCL | - |
 
 ### Transport characteristics
@@ -275895,6 +276155,7 @@ universal ordering.
 | `thread` / `direct` | Dynamic | Values accepted by the component | Same process | Lowest communication overhead. There is no serialization boundary; batching and model execution usually dominate. |
 | `process` | Dynamic | Pickle-compatible values, including non-tensor data | Multiprocessing-supported | Flexible, but queueing and serialization make large or frequent payloads more expensive than a preallocated tensor path. |
 | `shared_memory` | Fixed keys, shapes, dtypes, and batch sizes | Tensor leaves only | CPU | Preallocated slots avoid pickling tensor contents. This is generally a better process-local choice for large, stable CPU TensorDict payloads. |
+| `process_slot` | Fixed keys, shapes, dtypes, and batch sizes; one slot per client | Tensor leaves only | CPU | Fixed per-worker slots and process-shared signals keep observations and actions off the driver path. Each client has one in-flight request. |
 | `ray` | Dynamic | Ray-serializable values, including strings and non-tensor data | Ray-supported | Easiest remote option and the compatibility fallback. Ray RPC, queue, and object-store overhead can dominate small, frequent RL messages. |
 | `distributed` with Gloo | Fixed keys, shapes, dtypes, devices, and batch sizes | Tensor leaves only | CPU | Avoids putting steady-state tensor payloads through Ray. It is usually preferable for stable CPU TensorDict traffic once rendezvous and group setup costs are amortized. |
 | `distributed` with NCCL | Fixed keys, shapes, dtypes, devices, and batch sizes | Tensor leaves only | CUDA | Sends CUDA tensors without CPU staging. It is intended for stable, sufficiently large GPU payloads; setup and per-message latency may outweigh the benefit for small requests. Assign each NCCL rank a distinct GPU in normal deployments. Colocating ranks on one GPU is supported by NCCL only when `NCCL_MULTI_RANK_GPU_ENABLE=1` is set in every participating process. |

@@ -103,6 +103,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → Any[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.client)
 
 Return a picklable client without actor shutdown rights.

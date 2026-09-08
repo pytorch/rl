@@ -11,8 +11,9 @@ samplers ([`SamplerEnsemble`](torchrl.data.replay_buffers.SamplerEnsemble.html#t
 
 Note
 
-Writing directly to this class is forbidden, but it can be indexed to retrieve
-the nested nested-buffer and extending it.
+Writing directly to this class is disabled by default. Pass exactly one
+of `routing_key` or `routing_dim` to enable routed writes while
+preserving the historical read-only behavior for existing ensembles.
 
 There are two distinct ways of constructing a `ReplayBufferEnsemble`:
 one can either pass a list of replay buffers, or directly pass the components
@@ -39,10 +40,10 @@ is placed in a list (along with the buffer id).
 - **collate_fns** (*list**of**callables**,**optional*) - collate_fn of each nested
 replay buffer. Retrieved from the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) instances
 if not provided.
-- **p** (*list**of**float**or**Tensor**,**optional*) - a list of floating numbers
-indicating the relative weight of each replay buffer. Can also
-be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-if the buffer is built explicitly.
+- **p** (list of float, Tensor, or `"sampleable"`, optional) - relative
+weights of each replay buffer. `"sampleable"` dynamically
+weights members by their available records or slice windows and
+excludes members that are not ready.
 - **sample_from_all** (*bool**,**optional*) - if `True`, each dataset will be sampled
 from. This is not compatible with the `p` argument. Defaults to `False`.
 Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
@@ -53,6 +54,12 @@ number of buffers. If `sample_from_all=False`, buffers will be
 sampled according to the probabilities `p`. Can also
 be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
 if the buffer is built explicitly.
+- **routing_key** (*NestedKey**,**optional*) - key containing a member id for each
+record. Routed input is flattened, grouped stably by member and
+written to the corresponding nested replay buffer.
+- **routing_dim** (*int**,**optional*) - batch dimension whose entries correspond
+to ensemble members. The dimension size must equal the number of
+members. Exclusive with `routing_key`.
 - **generator** ([*torch.Generator*](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator)*,**optional*) -
 
 a generator to use for sampling.
@@ -147,17 +154,9 @@ collate_fn=<built-in method stack of type object at 0x128648260>)
 ... assert sample["renamed"].shape == torch.Size([2, 5])
 ```
 
-add(*data: Any*) → int
+add(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.add)
 
-Add a single element to the replay buffer.
-
-Parameters:
-
-**data** (*Any*) - data to be added to the replay buffer
-
-Returns:
-
-index where the data lives in the replay buffer.
+Routes one record through `routing_key` and returns its metadata.
 
 append_transform(*transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)
 
@@ -209,6 +208,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
+
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
 
 client() → T
 
@@ -267,37 +275,14 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
-extend(*data: Sequence*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+extend(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.extend)
 
-Extends the replay buffer with one or more elements contained in an iterable.
+Routes and writes a batch, returning member-local write metadata.
 
-If present, the inverse transforms will be called.`
-
-Parameters:
-
-**data** (*iterable*) - collection of data to be added to the replay
-buffer.
-
-Keyword Arguments:
-
-**update_priority** (*bool**,**optional*) - Whether to update the priority of the data. Defaults to True.
-Without effect in this class. See [`extend()`](torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend) for more details.
-
-Returns:
-
-Indices of the data added to the replay buffer.
-
-Warning
-
-`extend()` can have an
-ambiguous signature when dealing with lists of values, which should be interpreted
-either as PyTree (in which case all elements in the list will be put in a slice
-in the stored PyTree in the storage) or a list of values to add one at a time.
-To solve this, TorchRL makes the clear-cut distinction between list and tuple:
-a tuple will be viewed as a PyTree, a list (at the root level) will be interpreted
-as a stack of values to add one at a time to the buffer.
-For [`ListStorage`](torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage) instances, only
-unbound elements can be provided (no PyTrees).
+The returned tensordict is flat and aligned with `data.reshape(-1)`.
+It contains `"buffer_ids"` and member-local `"index"` entries,
+plus `"index_generation"` when every member writer tracks
+generations.
 
 *property*initialized*: bool*
 
@@ -534,52 +519,9 @@ start() → T
 
 Return this already-started direct replay buffer.
 
-stats() → dict[str, int | float | bool]
+stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.stats)
 
-Returns a cheap, serializable snapshot of the buffer's operational state.
-
-The snapshot only contains scalar counters and gauges. It never
-includes the storage content, does not modify the buffer state and is
-safe to call concurrently with writes and samples. Cumulative
-counters such as `write_count` are meant to be converted into rates
-by an external monitor such as
-[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
-
-Calling this method on an uninitialized buffer does not trigger its
-initialization; an empty snapshot with `initialized=False` is
-returned instead (`capacity` is still reported when the storage
-already advertises it).
-
-Returns:
-
-- `"size"`: current number of elements in the buffer (mirrors `len(buffer)`);
-- `"write_count"`: total number of items written through `add` and
-`extend` (`0` for writers that do not track writes, such as
-[`ImmutableDatasetWriter`](torchrl.data.replay_buffers.ImmutableDatasetWriter.html#torchrl.data.replay_buffers.ImmutableDatasetWriter));
-- `"prefetch_queue_size"`: number of pending prefetched batches;
-- `"initialized"`: whether the buffer components are initialized;
-- `"capacity"`: maximum number of elements the storage can hold
-(only present when the storage advertises a `max_size`);
-- `"utilization"`: `size / capacity` (only present alongside `capacity`).
-
-Remote clients backed by the distributed transport report a subset
-of these entries (`size` and `write_count`).
-
-Return type:
-
-A dictionary with the following entries
-
-Examples
-
-```
->>> import torch
->>> from torchrl.data import LazyTensorStorage, ReplayBuffer
->>> rb = ReplayBuffer(storage=LazyTensorStorage(10))
->>> rb.extend(torch.arange(5))
->>> snapshot = rb.stats()
->>> print(snapshot["size"], snapshot["write_count"], snapshot["capacity"])
-5 5 10
-```
+Returns aggregate scalar statistics across ensemble members.
 
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 
@@ -668,135 +610,9 @@ Returns:
 
 self
 
-update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)
+update_if_present(***, *index: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.update_if_present)
 
-Conditionally updates stored records that are still live.
-
-Replay slots are recycled by round-robin writers, so a physical index
-captured at sampling time can point to a different record by the time
-an asynchronous computation writes back. This method applies `patch`
-only to records whose `(index, generation)` pair still matches the
-writer's current slot generation, skipping records whose slot was
-reused or emptied since the handle was captured. Skipped records are
-never modified.
-
-The whole patch is validated (key existence, shape and dtype) before
-any write happens; a validation failure leaves the storage untouched.
-Updating a record refreshes its content, not its identity: the same
-handle keeps working until the slot is rewritten by `add`,
-`extend` or `empty`.
-
-Generation tracking is opt-in: the buffer must be constructed with a
-writer that tracks slot generations, e.g.
-`RoundRobinWriter(track_generations=True)` (see
-ref_buffers_generations). Calling this method on a buffer whose
-writer does not track generations raises a `RuntimeError`.
-
-Keyword Arguments:
-
-- **index** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - storage indices, as returned by
-`extend()` or found in the sample under `"index"`.
-- **generation** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - slot generations captured with the
-indices, as found in the sample under `"index_generation"`.
-- **patch** (*mapping**of**NestedKey to torch.Tensor**, or**TensorDictBase*) - the fields to overwrite for live records. Leading dimension
-must match the number of records addressed by `index`.
-- **version_key** (*NestedKey**,**optional*) - a stored per-record scalar
-field holding each record's current version. When passed
-(together with `version`), a generation-live record is only
-patched if the incoming version compares favorably against
-the stored one, and the accepted version is written into
-`version_key` atomically with the patch. `version_key`
-may not appear in `patch`. Nested keys must be passed in
-tuple form (`("nested", "version")`); dotted strings are
-rejected. Defaults to `None` (no version comparison).
-- **version** (*int**or*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - the incoming version,
-either a scalar (broadcast to every record) or a tensor with
-one entry per record. Must be passed together with
-`version_key`.
-- **require_newer** (*bool**,**optional*) - if `True`, a record is only
-patched when `version > stored`; if `False`, ties are
-accepted (`version >= stored`). When the same slot is
-addressed several times in one call, only the row carrying
-the highest incoming version is applied (the last such row
-on ties); the losing rows are reported in
-`version_rejected`. Defaults to `False`.
-
-Returns:
-
-A [`ConditionalUpdateResult`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult) whose `updated` mask is
-aligned with the input index order, with `updated_count` and
-`stale_count` conveniences. When `version_key` is passed, its
-`version_rejected` mask marks generation-live records that were
-rejected by the version comparison (`None` otherwise).
-
-Raises:
-
-- **RuntimeError** - if the storage does not support conditional updates
- (for example `ListStorage`) or the writer does not
- track slot generations.
-- **KeyError** - if a patch key (or `version_key`) does not exist in
- the storage.
-- **ValueError** - if a patch entry has an incompatible shape or dtype,
- if only one of `version_key` / `version` is passed, if
- `version_key` appears in `patch` or names a non-scalar
- field, or if it is a dotted string.
-
-Examples
-
-```
->>> import torch
->>> from tensordict import TensorDict
->>> from torchrl.data import (
-... LazyTensorStorage,
-... TensorDictReplayBuffer,
-... TensorDictRoundRobinWriter,
-... )
->>> rb = TensorDictReplayBuffer(
-... storage=LazyTensorStorage(10),
-... writer=TensorDictRoundRobinWriter(track_generations=True),
-... batch_size=4,
-... )
->>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
->>> sample = rb.sample()
->>> result = rb.update_if_present(
-... index=sample["index"],
-... generation=sample["index_generation"],
-... patch={"obs": torch.ones(4, 3)},
-... )
->>> print(result.updated_count, result.stale_count)
-4 0
-```
-
-With a version comparison, outdated asynchronous writers lose
-deterministically:
-
-```
->>> rb = TensorDictReplayBuffer(
-... storage=LazyTensorStorage(10),
-... writer=TensorDictRoundRobinWriter(track_generations=True),
-... batch_size=4,
-... )
->>> rb.extend(
-... TensorDict(
-... {
-... "obs": torch.zeros(10, 3),
-... "v": torch.full((10,), 5, dtype=torch.int64),
-... },
-... batch_size=[10],
-... )
-... )
->>> sample = rb.sample()
->>> result = rb.update_if_present(
-... index=sample["index"],
-... generation=sample["index_generation"],
-... patch={"obs": torch.ones(4, 3)},
-... version_key="v",
-... version=4,
-... require_newer=True,
-... )
->>> print(result.updated_count, result.version_rejected_count)
-0 4
-```
+Routes a conditional update to the member named by each handle.
 
 write_all(*data: Any*, *end: int | None = None*) → None
 

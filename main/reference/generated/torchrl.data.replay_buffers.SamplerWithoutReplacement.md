@@ -23,3 +23,7 @@ but this is not enforced.
 When the sampler reaches the end of the list of available indices, a new sample order
 will be generated and the resulting indices will be completed with this new draw, which
 can lead to duplicated indices, unless the `drop_last` argument is set to `True`.
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool[[source]](../../_modules/torchrl/data/replay_buffers/samplers/random.html#SamplerWithoutReplacement.can_sample)
+
+Returns whether the storage can provide the requested batch.

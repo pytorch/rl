@@ -1570,6 +1570,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html">SliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html">SliceSamplerWithoutReplacement</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StalenessAwareSampler.html">StalenessAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StreamingSliceSampler.html">StreamingSliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.RoundRobinWriter.html">RoundRobinWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictMaxValueWriter.html">TensorDictMaxValueWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html">TensorDictRoundRobinWriter</a></li>
@@ -1979,6 +1980,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessSlotTransport.html">ProcessSlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2347,6 +2349,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html">torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.ListStorageConfig.html">torchrl.trainers.algorithms.configs.data.ListStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.TensorStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig</a></li>
@@ -2586,6 +2589,12 @@ but this is not enforced.</p>
 <p>When the sampler reaches the end of the list of available indices, a new sample order
 will be generated and the resulting indices will be completed with this new draw, which
 can lead to duplicated indices, unless the <code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_last</span></code> argument is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.SamplerWithoutReplacement.can_sample">
+<span class="sig-name descname"><span class="pre">can_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.storages.Storage"><span class="pre">Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/samplers/random.html#SamplerWithoutReplacement.can_sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.SamplerWithoutReplacement.can_sample" title="Link to this definition">#</a></dt>
+<dd><p>Returns whether the storage can provide the requested batch.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -2707,7 +2716,10 @@ can lead to duplicated indices, unless the <code class="xref py py-obj docutils 
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.SamplerWithoutReplacement"><code class="docutils literal notranslate"><span class="pre">SamplerWithoutReplacement</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.SamplerWithoutReplacement"><code class="docutils literal notranslate"><span class="pre">SamplerWithoutReplacement</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.SamplerWithoutReplacement.can_sample"><code class="docutils literal notranslate"><span class="pre">SamplerWithoutReplacement.can_sample()</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
     
@@ -2960,7 +2972,7 @@ can lead to duplicated indices, unless the <code class="xref py py-obj docutils 
        "headline": "SamplerWithoutReplacement",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.SamplerWithoutReplacement.html",
-       "articleBody": "SamplerWithoutReplacement# class torchrl.data.replay_buffers.SamplerWithoutReplacement(*args, **kwargs)# A data-consuming sampler that ensures that the same sample is not present in consecutive batches. Parameters: drop_last (bool, optional) \u2013 if True, the last incomplete sample (if any) will be dropped. If False, this last sample will be kept and (unlike with torch dataloaders) completed with other samples from a fresh indices permutation. Defaults to False. shuffle (bool, optional) \u2013 if False, the items are not randomly permuted. This enables to iterate over the replay buffer in the order the data was collected. Defaults to True. Caution: If the size of the storage changes in between two calls, the samples will be re-shuffled (as we can\u2019t generally keep track of which samples have been sampled before and which haven\u2019t). Similarly, it is expected that the storage content remains the same in between two calls, but this is not enforced. When the sampler reaches the end of the list of available indices, a new sample order will be generated and the resulting indices will be completed with this new draw, which can lead to duplicated indices, unless the drop_last argument is set to True.",
+       "articleBody": "SamplerWithoutReplacement# class torchrl.data.replay_buffers.SamplerWithoutReplacement(*args, **kwargs)# A data-consuming sampler that ensures that the same sample is not present in consecutive batches. Parameters: drop_last (bool, optional) \u2013 if True, the last incomplete sample (if any) will be dropped. If False, this last sample will be kept and (unlike with torch dataloaders) completed with other samples from a fresh indices permutation. Defaults to False. shuffle (bool, optional) \u2013 if False, the items are not randomly permuted. This enables to iterate over the replay buffer in the order the data was collected. Defaults to True. Caution: If the size of the storage changes in between two calls, the samples will be re-shuffled (as we can\u2019t generally keep track of which samples have been sampled before and which haven\u2019t). Similarly, it is expected that the storage content remains the same in between two calls, but this is not enforced. When the sampler reaches the end of the list of available indices, a new sample order will be generated and the resulting indices will be completed with this new draw, which can lead to duplicated indices, unless the drop_last argument is set to True. can_sample(storage: Storage, batch_size: int) \u2192 bool[source]# Returns whether the storage can provide the requested batch.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

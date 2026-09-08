@@ -174,6 +174,14 @@ in batches from one coordinator thread, while keeping faster environments
 independent of slower ones. This path is intended for environments whose step
 latency dominates its millisecond-scale coordinator polling interval.
 
+When both environment stepping and inference should leave the driver process,
+pass a [`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) together
+with `env_backend="multiprocessing"` and an
+[`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) whose
+`service_backend` is `"process"`. Each environment process then performs
+its own reset/infer/step loop against a fixed shared-memory inference slot; the
+driver receives completed transitions only.
+
 ## Scaling `Collector` across local processes
 
 Pass `num_collectors` to [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) to run parallel local collection.

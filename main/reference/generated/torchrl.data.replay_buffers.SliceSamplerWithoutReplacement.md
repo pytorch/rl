@@ -206,3 +206,7 @@ Trajectory boundaries are recovered at sampling time with
 [`find_start_stop_traj()`](torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj); see
 [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
 for the conventions collectors, storages and samplers follow.
+
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the storage can provide the requested batch.

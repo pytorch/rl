@@ -82,6 +82,10 @@ and are recomputed on every `sample()` call rather than
 maintained incrementally. Sharing the segment-tree machinery
 would add complexity without benefit.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
+
 *property*consumer_version*: int*
 
 The current training iteration / consumer version.

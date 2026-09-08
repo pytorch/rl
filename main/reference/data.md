@@ -177,6 +177,7 @@ rb.update_tensordict_priority(sample)
 - [SliceSampler](generated/torchrl.data.replay_buffers.SliceSampler.html)
 - [SliceSamplerWithoutReplacement](generated/torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html)
 - [StalenessAwareSampler](generated/torchrl.data.replay_buffers.StalenessAwareSampler.html)
+- [StreamingSliceSampler](generated/torchrl.data.replay_buffers.StreamingSliceSampler.html)
 - [Writers](data_samplers.html#writers)
 - [Datasets](data_datasets.html)
 
