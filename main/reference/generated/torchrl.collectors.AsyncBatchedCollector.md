@@ -67,7 +67,8 @@ Defaults to `None`.
 - **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
 configuration: execution `backend` (`"thread"` runs the serve
 loop in this process, `"process"` a dedicated server process
-requiring `policy_factory`), batching, and stats settings.
+requiring `policy_factory`), batching, optional static
+CUDA-graph execution, and stats settings.
 Mutually exclusive with the `max_batch_size`,
 `min_batch_size`, and `server_timeout` keyword arguments.
 - **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device

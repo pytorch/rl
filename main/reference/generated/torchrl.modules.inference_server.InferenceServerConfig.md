@@ -1,6 +1,6 @@
 # InferenceServerConfig
 
-*class*torchrl.modules.inference_server.InferenceServerConfig(*service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *max_batch_size: int = 64*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
+*class*torchrl.modules.inference_server.InferenceServerConfig(*service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *max_batch_size: int = 64*, *static_batch_size: int | None = None*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
 
 Server-side execution, batching, timeout, and instrumentation settings.
 
@@ -14,6 +14,11 @@ multiprocessing-capable transport); `"ray"` runs a dedicated
 Ray actor and requires `policy_factory`. Defaults to `"thread"`.
 - **max_batch_size** (*int**,**optional*) - maximum number of requests per forward
 pass. Defaults to `64`.
+- **static_batch_size** (*int**,**optional*) - fixed leading batch size used to
+CUDA-graph the served policy. Partial batches repeat their last
+request up to this size, and padded outputs are discarded. Must be
+at least `max_batch_size`. Defaults to `None` (eager policy
+execution).
 - **min_batch_size** (*int**,**optional*) - minimum number of requests to
 accumulate after the first request arrives. Defaults to `1`.
 - **timeout** (*float**,**optional*) - seconds to wait for more requests before

@@ -9535,7 +9535,8 @@ Defaults to `None`.
 - **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
 configuration: execution `backend` (`"thread"` runs the serve
 loop in this process, `"process"` a dedicated server process
-requiring `policy_factory`), batching, and stats settings.
+requiring `policy_factory`), batching, optional static
+CUDA-graph execution, and stats settings.
 Mutually exclusive with the `max_batch_size`,
 `min_batch_size`, and `server_timeout` keyword arguments.
 - **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device
@@ -33947,7 +33948,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f32c048d580>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4fc70dcd60>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47138,7 +47139,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f32c3618400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f4fc9e0c400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -213405,7 +213406,7 @@ Return the actor-side device expected from the policy server.
 
 # InferenceServer
 
-*class*torchrl.modules.inference_server.InferenceServer(*model: nn.Module | Callable[[TensorDictBase], TensorDictBase] | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'thread', 'process', 'ray', 'shared_memory', 'direct', 'distributed'] = 'auto'*, ***, *policy_factory: Callable[[], nn.Module | Callable[[TensorDictBase], TensorDictBase]] | None = None*, *service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *service_backend_options: dict[str, Any] | None = None*, *transport_options: dict[str, Any] | None = None*, *request_spec: TensorDictBase | None = None*, *response_spec: TensorDictBase | None = None*, *num_clients: int | None = None*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *shutdown_event: threading.Event | MPEvent | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer)
+*class*torchrl.modules.inference_server.InferenceServer(*model: nn.Module | Callable[[TensorDictBase], TensorDictBase] | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'thread', 'process', 'ray', 'shared_memory', 'direct', 'distributed'] = 'auto'*, ***, *policy_factory: Callable[[], nn.Module | Callable[[TensorDictBase], TensorDictBase]] | None = None*, *service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *service_backend_options: dict[str, Any] | None = None*, *transport_options: dict[str, Any] | None = None*, *request_spec: TensorDictBase | None = None*, *response_spec: TensorDictBase | None = None*, *num_clients: int | None = None*, *max_batch_size: int | None = None*, *static_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *shutdown_event: threading.Event | MPEvent | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer)
 
 Auto-batching inference server.
 
@@ -213439,14 +213440,23 @@ transport. For `"distributed"`, `backend` selects `"gloo"`
 or `"nccl"`. Explicit selectors never fall back to another
 transport.
 - **request_spec** (*TensorDictBase**,**optional*) - static request layout for
-shared-memory or process-owned distributed transports. Ray-owned
-distributed transports infer and bind this layout on first use.
+shared-memory or process-owned distributed transports, and the
+representative unbatched request used for CUDA-graph capture when
+`static_batch_size` is set. Ray-owned distributed transports
+infer and bind this layout on first use.
 - **response_spec** (*TensorDictBase**,**optional*) - static response layout paired
 with `request_spec`.
 - **num_clients** (*int**,**optional*) - expected concurrent client count for
 transports that allocate a fixed number of slots.
 - **max_batch_size** (*int**,**optional*) - upper bound on the number of requests
 processed in a single forward pass. Default: `64`.
+- **static_batch_size** (*int**,**optional*) - fixed leading batch size used to
+CUDA-graph the served policy. Partial batches repeat their last
+request up to this size, and padded outputs are discarded. The
+graph is captured before the serve loop starts using
+`request_spec`. Requires an explicit CUDA `policy_device` and
+must be at least `max_batch_size`. Defaults to `None` (eager
+policy execution).
 - **min_batch_size** (*int**,**optional*) - minimum number of requests to
 accumulate before dispatching a batch. After the first request
 arrives the server keeps draining for up to `timeout` seconds
@@ -213480,10 +213490,10 @@ initialising the weight sync scheme on the receiver side.
 Default: `"policy"`.
 - **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
 configuration. Mutually exclusive with the `max_batch_size`,
-`min_batch_size`, `timeout`, `collect_stats`, and
-`stats_window_size` keyword arguments (passing any of them
-alongside a config raises, even when the value equals the
-default).
+`static_batch_size`, `min_batch_size`, `timeout`,
+`collect_stats`, and `stats_window_size` keyword arguments
+(passing any of them alongside a config raises, even when the value
+equals the default).
 - **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device
 placement configuration. Mutually exclusive with `device`,
 `policy_device`, and `output_device`. The server consumes
@@ -213528,6 +213538,14 @@ Whether the background worker thread is running.
 *property*policy_version*: int*
 
 The current behavior-policy version served with inference outputs.
+
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer.prepare_cudagraph)
+
+Capture the configured static CUDA graph before server start.
+
+Parameters:
+
+**request_spec** (*TensorDictBase*) - representative unbatched request.
 
 *property*service_backend*: str*
 
@@ -213599,7 +213617,7 @@ weights outside the server's polling loop.
 
 # InferenceServerConfig
 
-*class*torchrl.modules.inference_server.InferenceServerConfig(*service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *max_batch_size: int = 64*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
+*class*torchrl.modules.inference_server.InferenceServerConfig(*service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *max_batch_size: int = 64*, *static_batch_size: int | None = None*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
 
 Server-side execution, batching, timeout, and instrumentation settings.
 
@@ -213613,6 +213631,11 @@ multiprocessing-capable transport); `"ray"` runs a dedicated
 Ray actor and requires `policy_factory`. Defaults to `"thread"`.
 - **max_batch_size** (*int**,**optional*) - maximum number of requests per forward
 pass. Defaults to `64`.
+- **static_batch_size** (*int**,**optional*) - fixed leading batch size used to
+CUDA-graph the served policy. Partial batches repeat their last
+request up to this size, and padded outputs are discarded. Must be
+at least `max_batch_size`. Defaults to `None` (eager policy
+execution).
 - **min_batch_size** (*int**,**optional*) - minimum number of requests to
 accumulate after the first request arrives. Defaults to `1`.
 - **timeout** (*float**,**optional*) - seconds to wait for more requests before
@@ -213961,7 +213984,7 @@ only implements `done()` and `result()`.
 
 # ProcessInferenceServer
 
-*class*torchrl.modules.inference_server.ProcessInferenceServer(***, *policy_factory: Callable[[], [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*, *mp_context: str | BaseContext | None = None*, *startup_timeout: float = 300.0*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer)
+*class*torchrl.modules.inference_server.ProcessInferenceServer(***, *policy_factory: Callable[[], [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*, *request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *max_batch_size: int | None = None*, *static_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*, *mp_context: str | BaseContext | None = None*, *startup_timeout: float = 300.0*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer)
 
 Dedicated-process wrapper around [`InferenceServer`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer).
 
@@ -213979,7 +214002,13 @@ the policy inside the server process.
 
 Keyword Arguments:
 
+- **request_spec** (*TensorDictBase**,**optional*) - representative unbatched
+request used to capture a static CUDA graph before child-process
+readiness.
 - **max_batch_size** (*int**,**optional*) - maximum requests per forward pass.
+- **static_batch_size** (*int**,**optional*) - fixed CUDA-graph batch size forwarded
+to [`InferenceServer`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer). Requires an explicit CUDA
+`policy_device`.
 - **min_batch_size** (*int**,**optional*) - minimum requests to accumulate before
 dispatching a partial batch.
 - **timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - wait timeout in seconds.
@@ -213993,8 +214022,8 @@ dispatching a partial batch.
 - **weight_sync_model_id** (*str**,**optional*) - model id for weight sync.
 - **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
 configuration. Mutually exclusive with the `max_batch_size`,
-`min_batch_size`, `timeout`, `collect_stats`, and
-`stats_window_size` keyword arguments.
+`static_batch_size`, `min_batch_size`, `timeout`,
+`collect_stats`, and `stats_window_size` keyword arguments.
 - **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device
 placement configuration. Mutually exclusive with `device`,
 `policy_device`, and `output_device`. Same field subset as
@@ -214062,6 +214091,14 @@ Whether the child process is alive.
 *property*policy_version*: int*
 
 The live behavior-policy version of the child server.
+
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.prepare_cudagraph)
+
+Set the representative request used for child-process capture.
+
+Parameters:
+
+**request_spec** (*TensorDictBase*) - representative unbatched request.
 
 *property*service_backend*: str*
 
@@ -273402,6 +273439,66 @@ with concurrent.futures.ThreadPoolExecutor(16) as pool:
 server.shutdown()
 ```
 
+### Static CUDA-graph batches
+
+CUDA policies can remove Python dispatch and kernel-launch overhead by setting
+`static_batch_size` together with an explicit CUDA `policy_device`. The
+server clones the last real request into any pad rows, replays a
+[`tensordict.nn.CudaGraphModule`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule) at the fixed size, and discards padded
+outputs before returning an owned copy to each actor. The static size must be
+at least `max_batch_size`:
+
+```
+import torch
+from tensordict import TensorDict
+
+request_spec = TensorDict(
+ {
+ "observation": torch.zeros(64),
+ "state": torch.zeros(32 * 64),
+ "belief": torch.zeros(512),
+ "previous_action": torch.zeros(20),
+ "is_init": torch.zeros(1, dtype=torch.bool),
+ }
+)
+server = InferenceServer(
+ policy,
+ ThreadingTransport(),
+ max_batch_size=64,
+ static_batch_size=64,
+ request_spec=request_spec,
+ policy_device="cuda:0",
+ output_device="cpu",
+)
+server.start() # warm-up and capture finish before the worker starts
+```
+
+The representative `request_spec` is required when constructing a server
+directly. It may be supplied without `response_spec` for transports whose
+layout is dynamic. [`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector) derives
+the request from the environment specs and calls
+[`prepare_cudagraph()`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.prepare_cudagraph)
+before starting its inference and coordinator threads. Initial weight
+synchronization also finishes before capture. Recurrent tensor inputs such as
+`state`, `belief`, and `is_init` remain inside the graph. The first real
+request is checked for every captured policy input key so an incomplete
+`request_spec` cannot silently leave stale input values in the graph.
+
+In-place parameter copies preserve the captured graph; for example, use
+`TensorDict.from_module(learner).to_module(behavior, inplace=True)`. A
+storage-replacing update raises an error and disables the graph, leaving the
+server on the safe eager path until it is stopped and prepared again. This
+avoids capturing while collector or environment threads are live. The
+interaction type is frozen to its effective value at capture time, including an ambient
+`set_interaction_type` context; later requests using another type are
+rejected.
+
+CUDA operations using PyTorch's default generator advance its graph-safe state
+across replays. Custom generators must manage CUDA graph state explicitly, and
+policies that reseed with `manual_seed` during each forward cannot be
+captured. Consequently, DreamerV3's `separate_policy_rng` mode and
+`static_batch_size` cannot be enabled together.
+
 ### Shared-memory transport
 
 For cross-process actors with large request payloads (e.g. image
@@ -273448,8 +273545,8 @@ provides natural backpressure.
 Server execution, batching, and device placement are grouped into two
 dataclasses instead of loose keyword arguments: [`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)
 collects the execution `service_backend` (`"thread"` or `"process"`) and the
-batching/instrumentation knobs (`max_batch_size`, `min_batch_size`,
-`timeout`, `collect_stats`, `stats_window_size`), and
+batching/instrumentation knobs (`max_batch_size`, `static_batch_size`,
+`min_batch_size`, `timeout`, `collect_stats`, `stats_window_size`), and
 [`InferenceDeviceConfig`](generated/torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) describes device placement across the
 collection pipeline (`policy_device`, `output_device`, `env_device`,
 `storing_device`). Both [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) and
