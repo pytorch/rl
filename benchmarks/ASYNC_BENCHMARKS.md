@@ -94,6 +94,11 @@ Use **Run workflow**, choose the branch and `suite: async`. The CLI equivalent i
 A default manual run on main publishes; set `skip-upload` to keep artifacts only.
 To rerun the complete nightly workload, choose `suite: full`.
 
+Merging a pull request that carries the `benchmarks/trigger` label dispatches
+the full suite on main immediately (`benchmarks_post_merge.yml`), so the merge
+gets a trend point without waiting for the nightly sample. The short async
+suite still runs on every main merge touching `torchrl/` or `benchmarks/`.
+
 Locally, install `benchmarks/requirements.txt` and run from the repository:
 
 ```sh
