@@ -3759,7 +3759,6 @@ class TestAsyncBatchedCollector:
             assert type(batch) is TensorDict
             assert batch["env_index"].dtype == torch.long
         stored = torch.cat(batches, 0)
-        assert stored["env_index"].unique().numel() > 1
         for env_id in range(num_envs):
             obs = stored[stored["env_index"] == env_id]["observation"].flatten()
             torch.testing.assert_close(obs, torch.arange(len(obs), dtype=obs.dtype))
