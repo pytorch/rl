@@ -10,6 +10,7 @@ Reference: https://arxiv.org/abs/2301.04104
 from __future__ import annotations
 
 import copy
+import functools as ft
 import importlib.util
 import json
 import os
@@ -84,6 +85,42 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     rnn_hidden_dim = 8
     action_dim = 3
     num_reward_bins = 16  # small for tests; paper uses 255
+
+    def _small_sota_config(
+        self,
+        example_dir: Path,
+        *,
+        compile_train_step: bool,
+        cudagraph_train_step: bool,
+        mixed_precision: bool = False,
+    ):
+        from omegaconf import OmegaConf
+
+        cfg = OmegaConf.load(example_dir / "config.yaml")
+        cfg.env.name = PENDULUM_VERSIONED()
+        cfg.networks.rnn_hidden_dim = 8
+        cfg.networks.num_categoricals = 2
+        cfg.networks.num_classes = 2
+        cfg.networks.num_blocks = 2
+        cfg.networks.hidden_dim = 8
+        cfg.networks.num_reward_bins = 16
+        cfg.networks.num_value_bins = 16
+        cfg.networks.encoder_layers = 1
+        cfg.networks.decoder_layers = 1
+        cfg.networks.reward_layers = 1
+        cfg.networks.actor_layers = 1
+        cfg.networks.value_layers = 1
+        cfg.replay_buffer.batch_size = 2
+        cfg.replay_buffer.seq_len = 3
+        cfg.optimization.imagination_horizon = 3
+        cfg.optimization.continuation_horizon = 3
+        cfg.optimization.warmup_steps = 0
+        cfg.optimization.mixed_precision = mixed_precision
+        cfg.optimization.compile_rssm = "scan"
+        cfg.optimization.rssm_scan_unroll = 1
+        cfg.optimization.compile_train_step = compile_train_step
+        cfg.optimization.cudagraph_train_step = cudagraph_train_step
+        return cfg
 
     def _create_world_model_data(self):
         B, T = 2, 3
@@ -452,6 +489,19 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             if p.grad is not None:
                 assert not torch.isnan(p.grad).any(), f"NaN grad in {name}"
                 assert not torch.isinf(p.grad).any(), f"Inf grad in {name}"
+
+    def test_dreamer_v3_model_loss_compile_preserves_input(self, device):
+        tensordict = self._create_world_model_data().to(device)
+        reward = tensordict["next", "reward"].clone()
+        loss_module = DreamerV3ModelLoss(
+            self._create_world_model(reward_two_hot=True).to(device),
+            num_reward_bins=self.num_reward_bins,
+        )
+        compiled_loss = torch.compile(loss_module, backend="eager")
+
+        for _ in range(2):
+            compiled_loss(tensordict)
+            torch.testing.assert_close(tensordict["next", "reward"], reward)
 
     def test_dreamer_v3_model_loss_sums_only_event_dims(self, device):
         batch_size, event_size = (2, 3), 4
@@ -1159,11 +1209,10 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         not (_has_hydra and _has_omegaconf and _has_gym),
         reason="requires hydra, omegaconf, and gym",
     )
-    def test_dreamer_v3_full_learner_cuda_graph_matches_eager(
-        self, device, monkeypatch
+    @pytest.mark.parametrize("compile_train_step", [False, True])
+    def test_dreamer_v3_full_learner_cuda_graph_matches_uncaptured(
+        self, device, monkeypatch, compile_train_step
     ):
-        from omegaconf import OmegaConf
-
         device = torch.device(device)
         if device.type != "cuda":
             pytest.skip("CUDA graph test only runs for the CUDA parametrization")
@@ -1175,31 +1224,6 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             example_dir / "train.py",
             run_name="dreamer_v3_learner_cuda_graph_test",
         )
-
-        def make_config(cudagraph: bool):
-            cfg = OmegaConf.load(example_dir / "config.yaml")
-            cfg.networks.rnn_hidden_dim = 8
-            cfg.networks.num_categoricals = 2
-            cfg.networks.num_classes = 2
-            cfg.networks.num_blocks = 2
-            cfg.networks.hidden_dim = 8
-            cfg.networks.num_reward_bins = 16
-            cfg.networks.num_value_bins = 16
-            cfg.networks.encoder_layers = 1
-            cfg.networks.decoder_layers = 1
-            cfg.networks.reward_layers = 1
-            cfg.networks.actor_layers = 1
-            cfg.networks.value_layers = 1
-            cfg.replay_buffer.batch_size = 2
-            cfg.replay_buffer.seq_len = 3
-            cfg.optimization.imagination_horizon = 3
-            cfg.optimization.continuation_horizon = 3
-            cfg.optimization.warmup_steps = 0
-            cfg.optimization.mixed_precision = True
-            cfg.optimization.compile_rssm = "scan"
-            cfg.optimization.rssm_scan_unroll = 1
-            cfg.optimization.cudagraph_train_step = cudagraph
-            return cfg
 
         state_dim = 4
         torch.manual_seed(1)
@@ -1224,7 +1248,12 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         modules = []
         learners = []
         for cudagraph in (False, True):
-            cfg = make_config(cudagraph)
+            cfg = self._small_sota_config(
+                example_dir,
+                compile_train_step=compile_train_step,
+                cudagraph_train_step=cudagraph,
+                mixed_precision=True,
+            )
             torch.manual_seed(0)
             learner = example["_build_learner"](cfg, device, 3, 1)
             learners.append(learner)
@@ -1249,12 +1278,14 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         torch.testing.assert_close(modules[1].state_dict(), initial_state)
 
         # Compile both paths and finish graph capture without applying updates.
-        for update, sample in zip(updates, (data.clone(), data.clone())):
-            for _ in range(5):
-                update.train_step(sample)
+        for update in updates:
+            example["_warm_up_learner"](update.cfg, device, update, 3, 1)
         for module in modules:
             module.load_state_dict(initial_state)
 
+        # Actual replay batches have squeezed boolean feature axes.
+        for key in ("is_init", ("next", "done"), ("next", "terminated")):
+            data.set(key, data.get(key).squeeze(-1))
         eager_data = data.clone()
         graph_data = data.clone()
         for seed in (10, 11):
@@ -1276,6 +1307,11 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             atol=2e-3,
             rtol=2e-3,
         )
+        for module in modules:
+            assert any(
+                not torch.equal(parameter, initial_state[name])
+                for name, parameter in module.named_parameters()
+            )
         assert learners[0].optimizer.state
         assert learners[1].optimizer.state
         assert learners[0].optimizer.param_groups[0]["step"] == 2
@@ -1291,7 +1327,12 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             repo_root / "benchmarks/ad_hoc/bench_dreamer_v3_learner.py",
             run_name="dreamer_v3_native_replay_cuda_graph_test",
         )
-        cfg = make_config(True)
+        cfg = self._small_sota_config(
+            example_dir,
+            compile_train_step=compile_train_step,
+            cudagraph_train_step=True,
+            mixed_precision=True,
+        )
         torch.manual_seed(0)
         replay_learner = example["_build_learner"](cfg, device, 3, 1)
         replay_update = example["_LearnerUpdate"](
@@ -1316,6 +1357,54 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             assert not replay_update.replay_must_be_idle
         finally:
             replay_step.close()
+
+    @pytest.mark.skipif(
+        not (_has_hydra and _has_omegaconf and _has_gym),
+        reason="requires hydra, omegaconf, and gym",
+    )
+    def test_dreamer_v3_full_learner_compile_avoids_nested_rssm(
+        self, device, monkeypatch
+    ):
+        device = torch.device(device)
+        if device.type != "cpu":
+            pytest.skip("CPU compile regression")
+
+        repo_root = Path(__file__).parents[2]
+        example_dir = repo_root / "sota-implementations/dreamer_v3"
+        monkeypatch.syspath_prepend(str(example_dir))
+        example = runpy.run_path(
+            example_dir / "train.py",
+            run_name="dreamer_v3_learner_compile_test",
+        )
+        cfg = self._small_sota_config(
+            example_dir,
+            compile_train_step=True,
+            cudagraph_train_step=False,
+        )
+        monkeypatch.setattr(
+            torch, "compile", ft.partial(torch.compile, backend="eager")
+        )
+
+        learner = example["_build_learner"](cfg, device, 3, 1)
+        update = example["_LearnerUpdate"](cfg, device, learner)
+        sample = example["_fake_learner_sample"](cfg, device, 3, 1)
+        reward = sample.get(("next", "reward")).clone()
+        for key in ("is_init", ("next", "done"), ("next", "terminated")):
+            sample.set(key, sample.get(key).squeeze(-1))
+        example["_warm_up_learner"](cfg, device, update, 3, 1)
+        parameters = list(learner.optimizer.param_groups[0]["params"])
+        before = [parameter.detach().clone() for parameter in parameters]
+        metrics, _, _ = update(sample)
+
+        assert any(
+            not torch.equal(parameter, previous)
+            for parameter, previous in zip(parameters, before)
+        )
+        assert torch.isfinite(metrics).all()
+        learner.optimizer.zero_grad(set_to_none=True)
+        with pytest.raises(RuntimeError, match="no parameter gradients"):
+            learner.optimizer.step()
+        torch.testing.assert_close(sample.get(("next", "reward")), reward)
 
     @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
     def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
