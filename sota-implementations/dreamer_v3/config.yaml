@@ -5,10 +5,25 @@ env:
   seed: 0
   use_seed: true
   max_episode_steps: 200
+  # Custom factory: package.module:function, called with seed, env_index and num_envs.
+  factory: null
+  factory_kwargs: {}
+  # Strings or lists of nested key components; null disables that observation.
+  vector_key: observation
+  pixels_key: null
+  milestone_key: null
+  milestone_names: []
 
 collector:
   backend: sync  # one of: sync, async
   async_env_backend: threading  # one of: threading, multiprocessing
+  env_exchange: queue
+  envs_per_worker: 1
+  policy_device: null
+  inference_max_batch_size: null  # null uses num_envs
+  inference_min_batch_size: 1
+  inference_timeout: 0.01
+  inference_static_batch_size: null
   num_envs: 1
   frames_per_batch: 200
   total_frames: 5000
@@ -47,6 +62,10 @@ networks:
   value_layers: 3
   policy_min_std: 0.1
   policy_max_std: 1.0
+  image_depth: 64
+  image_mults: [2, 3, 4, 4]
+  image_kernel_size: 5
+  image_decoder_blocks: 8
 
 optimization:
   device: null       # training device (models, losses, policy). null=auto
@@ -66,6 +85,8 @@ optimization:
   cudagraph_train_step: false
   # Synchronize CUDA around train-update timing. This disables CPU/GPU overlap.
   sync_timers: false
+  collection_warmup_seconds: 0
+  max_time: null  # wall-clock seconds; null uses the frame budget
   lr: 4.0e-5
   optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3
@@ -92,6 +113,15 @@ logger:
   eval_episodes: 3
   output_plot: dreamer_v3_pendulum.png
   metrics_jsonl: null
+  backend: null  # null, csv, tensorboard or wandb
+  log_dir: logs
+  project: torchrl-dreamer-v3
+  entity: null
+  base_url: null
+  exp_name: null
+  group: null
+  tags: []
+  mode: online
 
 hydra:
   job:

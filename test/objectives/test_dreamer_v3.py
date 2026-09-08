@@ -32,7 +32,16 @@ from tensordict.nn import (
 )
 from tensordict.utils import assert_close
 from torch import nn
-from torchrl.data import SliceSampler, StreamingSliceSampler, Unbounded
+from torchrl.data import (
+    Bounded,
+    Categorical,
+    Composite,
+    OneHot,
+    SliceSampler,
+    StreamingSliceSampler,
+    Unbounded,
+)
+from torchrl.envs import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
@@ -75,6 +84,59 @@ _has_gym = (
     or importlib.util.find_spec("gym") is not None
 )
 _compile_backend = "eager" if os.name == "nt" else "inductor"
+
+
+class _DreamerV3TestEnv(EnvBase):
+    def __init__(self, *, seed, env_index, num_envs, pixels=False, discrete=False):
+        super().__init__()
+        assert seed is not None and 0 <= env_index < num_envs
+        self.index = env_index
+        self.steps = 0
+        self.pixels = pixels
+        self.observation_spec = Composite(
+            {
+                ("sensors", "vector"): Unbounded((3,)),
+                ("episode", "milestones"): Categorical(2, shape=(2,), dtype=torch.bool),
+            }
+        )
+        if pixels:
+            self.observation_spec["sensors", "image"] = Bounded(
+                0, 255, (1, 8, 8), dtype=torch.uint8
+            )
+        self.action_spec = OneHot(3) if discrete else Bounded(-1, 1, (1,))
+        self.reward_spec = Unbounded((1,))
+        self.done_spec = Categorical(2, shape=(1,), dtype=torch.bool)
+
+    def _observation(self):
+        data = TensorDict(
+            {
+                ("sensors", "vector"): torch.tensor([self.index, self.steps, 1.0]),
+                ("episode", "milestones"): torch.tensor(
+                    [self.steps >= 1, self.steps >= 3]
+                ),
+            },
+            [],
+        )
+        if self.pixels:
+            data["sensors", "image"] = torch.full(
+                (1, 8, 8), self.steps * 20, dtype=torch.uint8
+            )
+        return data
+
+    def _reset(self, tensordict=None, **kwargs):
+        self.steps = 0
+        return self._observation()
+
+    def _step(self, tensordict):
+        self.steps += 1
+        data = self._observation()
+        data["reward"] = torch.ones(1)
+        data["done"] = torch.tensor([self.steps >= 3])
+        data["terminated"] = data["done"].clone()
+        return data
+
+    def _set_seed(self, seed):
+        return seed
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -2420,11 +2482,36 @@ def test_dreamer_v3_native_replay_benchmark_step_cpu(monkeypatch):
     reason="requires hydra, omegaconf, and gym",
 )
 @pytest.mark.parametrize(
-    ("collector_backend", "separate_policy_rng"),
-    [("sync", False), ("async", False), ("async", True)],
+    ("collector_backend", "custom", "pixels", "discrete", "budget"),
+    [
+        ("sync", False, False, False, "frames"),
+        ("async", False, False, False, "frames"),
+        ("sync", True, False, False, "frames"),
+        ("async", True, True, False, "frames"),
+        ("async", True, True, True, "frames"),
+        ("sync", True, True, True, "frames"),
+        ("async", True, False, False, "time"),
+        ("async", True, False, False, "warmup"),
+        ("sync", True, False, False, "reset_records"),
+    ],
+)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="requires CUDA"
+                ),
+            ],
+        ),
+    ],
 )
 def test_dreamer_v3_native_replay_collection_smoke(
-    monkeypatch, collector_backend, separate_policy_rng
+    monkeypatch, tmp_path, collector_backend, custom, pixels, discrete, budget, device
 ):
     from omegaconf import OmegaConf
 
@@ -2437,8 +2524,9 @@ def test_dreamer_v3_native_replay_collection_smoke(
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
     cfg.env.name = PENDULUM_VERSIONED()
-    cfg.optimization.separate_policy_rng = separate_policy_rng
-    cfg.optimization.device = "cpu"
+    cfg.optimization.separate_policy_rng = collector_backend == "async" and not custom
+    cfg.optimization.device = device
+    cfg.optimization.cudagraph_train_step = device == "cuda"
     cfg.optimization.updates_per_batch = 1
     cfg.optimization.train_ratio = None
     cfg.collector.backend = collector_backend
@@ -2453,7 +2541,56 @@ def test_dreamer_v3_native_replay_collection_smoke(
     cfg.logger.train_every = 0
     cfg.logger.output_plot = None
     cfg.logger.metrics_jsonl = None
+    if custom:
+        cfg.env.backend = "custom"
+        cfg.env.factory = f"{__name__}:_DreamerV3TestEnv"
+        cfg.env.factory_kwargs = {"pixels": pixels, "discrete": discrete}
+        cfg.env.vector_key = None if discrete else ["sensors", "vector"]
+        cfg.env.pixels_key = ["sensors", "image"] if pixels else None
+        cfg.env.milestone_key = ["episode", "milestones"]
+        cfg.env.milestone_names = ["started", "completed"]
+        cfg.networks.image_depth = 2
+        cfg.networks.image_mults = [1, 1]
+        cfg.networks.image_kernel_size = 3
+        cfg.networks.image_decoder_blocks = 2
+        cfg.logger.backend = "csv"
+        cfg.logger.log_dir = str(tmp_path / "logs")
+        cfg.logger.metrics_jsonl = str(tmp_path / "metrics.jsonl")
+        cfg.logger.train_every = 8
+    if budget == "time":
+        cfg.collector.total_frames = -1
+        cfg.optimization.max_time = 0.2
+    elif budget == "warmup":
+        cfg.optimization.collection_warmup_seconds = 60
+    elif budget == "reset_records":
+        cfg.collector.count_reset_records = True
+        cfg.collector.total_frames = 18  # 16 actions under the configured horizon.
     example["main"].__wrapped__(cfg)
+    if custom:
+        records = [
+            json.loads(line)
+            for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
+        ]
+        if budget == "time":
+            assert records[-1]["total_action_steps"] > 0
+            assert records[-1]["elapsed_seconds"] < 5
+        else:
+            assert records[-1]["total_action_steps"] == 16
+            assert (records[-1]["updates"] > 0) == (budget != "warmup")
+        episodes = [record for record in records if record["type"] == "train_episode"]
+        assert episodes and all(
+            record["milestones"] == [True, True] for record in episodes
+        )
+        assert list((tmp_path / "logs").rglob("*.csv"))
+        if budget == "reset_records":
+            # The custom environment terminates before the configured time limit.
+            assert records[-1]["total_environment_steps"] == 22
+            assert [episode["environment_steps"] for episode in episodes] == [
+                7,
+                8,
+                15,
+                16,
+            ]
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="requires bash")

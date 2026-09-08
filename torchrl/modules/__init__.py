@@ -83,6 +83,7 @@ from .tensordict_module import (
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
+    DreamerV3DiscreteActor,
     EGreedyModule,
     EGreedyWrapper,
     get_recurrent_matmul_precision,
@@ -147,6 +148,7 @@ from .vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase  # usort:skip
 __all__ = [
     "Actor",
     "DiffusionActor",
+    "DreamerV3DiscreteActor",
     "ActorCriticOperator",
     "ActorCriticWrapper",
     "ActorValueOperator",

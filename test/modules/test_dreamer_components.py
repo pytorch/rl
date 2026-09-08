@@ -19,7 +19,8 @@ from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule, TensorDictModule
 from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded
-from torchrl.modules import RSSMStateEstimatorV3, SafeModule
+from torchrl.envs import ExplorationType, set_exploration_type
+from torchrl.modules import DreamerV3DiscreteActor, RSSMStateEstimatorV3, SafeModule
 from torchrl.modules.models._dreamer_v3_block_gru_triton import (
     _has_triton as _has_dreamer_v3_triton,
 )
@@ -438,6 +439,91 @@ class TestDreamerV3Components:
             },
             [2, 4],
         )
+
+    @pytest.mark.parametrize(
+        ("device", "execution"),
+        [
+            ("cpu", "eager"),
+            ("cpu", "compile"),
+            ("cpu", "autocast"),
+            pytest.param(
+                "cuda",
+                "autocast",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_discrete_actor(self, device, execution):
+        actor = DreamerV3DiscreteActor(
+            12,
+            5,
+            depth=2,
+            num_cells=16,
+            unimix=0.2,
+            device=device,
+            in_keys=[("latent", "state"), ("latent", "belief")],
+            action_key=("policy", "action"),
+            logits_key=("policy", "logits"),
+            log_prob_key=("policy", "log_prob"),
+        )
+        unmixed = DreamerV3DiscreteActor(
+            12, 5, depth=2, num_cells=16, unimix=0, device=device
+        )
+        unmixed.load_state_dict(actor.state_dict())
+        data = TensorDict(
+            {
+                "state": torch.randn(2, 3, 8, device=device),
+                "belief": torch.randn(2, 3, 4, device=device),
+            },
+            [2, 3],
+        )
+        nested = TensorDict({"latent": data}, [2, 3])
+        get_dist = (
+            torch.compile(actor.get_dist, backend="eager", fullgraph=True)
+            if execution == "compile"
+            else actor.get_dist
+        )
+        with torch.autocast(
+            device, dtype=torch.bfloat16, enabled=execution == "autocast"
+        ):
+            expected = 0.8 * unmixed.get_dist(data.clone()).probs + 0.2 / 5
+            distribution = get_dist(nested.clone())
+            torch.testing.assert_close(
+                distribution.probs, expected, rtol=1e-6, atol=1e-7
+            )
+            assert distribution.logits.dtype == torch.float32
+            with set_exploration_type(ExplorationType.DETERMINISTIC):
+                result = actor(nested.clone())
+            torch.testing.assert_close(
+                result["policy", "action"],
+                F.one_hot(expected.argmax(-1), 5).to(result["policy", "action"]),
+            )
+            with set_exploration_type(ExplorationType.RANDOM):
+                result = actor(nested.clone())
+            action = result["policy", "action"]
+            assert ((action == 0) | (action == 1)).all() and (action.sum(-1) == 1).all()
+            torch.testing.assert_close(
+                result["policy", "log_prob"], distribution.log_prob(action)
+            )
+            before = {
+                name: value.detach().clone() for name, value in actor.named_parameters()
+            }
+            optimizer = torch.optim.SGD(actor.parameters(), lr=0.1)
+            sampled = distribution.rsample()
+            torch.testing.assert_close(
+                sampled.detach().sum(-1), torch.ones(2, 3, device=device)
+            )
+            (sampled * torch.arange(5, device=device)).sum().backward()
+            optimizer.step()
+            assert any(
+                not torch.equal(before[name], value)
+                for name, value in actor.named_parameters()
+            )
 
     def test_mlp_output_scale_and_multiple_inputs(self):
         module = DreamerV3MLP(
