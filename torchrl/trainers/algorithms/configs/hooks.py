@@ -197,9 +197,10 @@ class DreamerV3OptimizationStepperConfig(HookConfig):
     loss_module: Any = None
     optimizer: Any = None
     target_updater: Any = None
-    compile_train_step: bool = False
+    compile_train_step: bool | None = None
     compile_mode: str = "default"
-    cudagraph: bool = False
+    cudagraph: bool | None = None
+    rssm_scan_unroll: int | None = 8
     warmup_steps: int = 5
     mixed_precision: bool = False
     _target_: str = "torchrl.trainers.algorithms.DreamerV3OptimizationStepper"

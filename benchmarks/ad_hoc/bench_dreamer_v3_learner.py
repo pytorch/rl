@@ -248,9 +248,9 @@ def main() -> None:
         cfg = _load_config(repo_root)
         cfg.replay_buffer.batch_size = args.batch
         cfg.replay_buffer.seq_len = args.steps
-        cfg.optimization.compile_rssm = (
-            "scan" if variant in ("compiled_scan", "cuda_graph") else None
-        )
+        # Each variant sets the three switches itself.
+        cfg.optimization.compile = "off"
+        cfg.optimization.compile_rssm = "scan" if variant != "eager" else None
         cfg.optimization.rssm_scan_unroll = args.unroll
         cfg.optimization.compile_train_step = variant in (
             "compiled_train_step",
