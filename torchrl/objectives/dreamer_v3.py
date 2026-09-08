@@ -411,7 +411,9 @@ class DreamerV3ModelLoss(LossModule):
 
     @_maybe_record_function_decorator("dreamer_v3/world_model_loss")
     def forward(self, tensordict: TensorDict) -> tuple[TensorDict, TensorDict]:
-        tensordict = tensordict.copy()
+        # Rebuild nested containers without copying tensor storage. Under
+        # compilation, a shallow copy can retain the input's nested containers.
+        tensordict = tensordict.select(*tensordict.keys(True, True))
         tensordict.rename_key_(
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.true_reward),
