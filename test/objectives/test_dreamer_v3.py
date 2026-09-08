@@ -30,6 +30,7 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
+from tensordict.utils import assert_close
 from torch import nn
 from torchrl.data import SliceSampler, StreamingSliceSampler, Unbounded
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -60,9 +61,10 @@ from torchrl.objectives.dreamer_v3 import (
     two_hot_decode,
     two_hot_encode,
 )
-from torchrl.objectives.utils import SoftUpdate, ValueEstimators
+from torchrl.objectives.utils import HardUpdate, SoftUpdate, ValueEstimators
 from torchrl.testing import get_default_devices, PENDULUM_VERSIONED
 from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
+from torchrl.trainers import Trainer
 from torchrl.trainers.algorithms import DreamerV3Optimizer
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
@@ -1263,7 +1265,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                 )
             )
             updates.append(
-                example["_LearnerUpdate"](
+                example["_make_learner_update"](
                     cfg,
                     device,
                     learner,
@@ -1279,7 +1281,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
         # Compile both paths and finish graph capture without applying updates.
         for update in updates:
-            example["_warm_up_learner"](update.cfg, device, update, 3, 1)
+            update.warmup(data)
         for module in modules:
             module.load_state_dict(initial_state)
 
@@ -1288,12 +1290,25 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             data.set(key, data.get(key).squeeze(-1))
         eager_data = data.clone()
         graph_data = data.clone()
+        retained = []
         for seed in (10, 11):
             torch.manual_seed(seed)
-            expected = updates[0](eager_data)
+            expected = updates[0].step(None, eager_data)
             torch.manual_seed(seed)
-            actual = updates[1](graph_data)
-            torch.testing.assert_close(actual, expected, atol=2e-3, rtol=2e-3)
+            actual = updates[1].step(None, graph_data)
+            assert_close(actual, expected, atol=2e-3, rtol=2e-3)
+            assert_close(
+                graph_data["replay_context"],
+                eager_data["replay_context"],
+                atol=2e-3,
+                rtol=2e-3,
+            )
+            for previous, snapshot in retained:
+                assert_close(previous, snapshot)
+            retained.append((actual, actual.clone()))
+            retained.append(
+                (graph_data["replay_context"], graph_data["replay_context"].clone())
+            )
 
         torch.testing.assert_close(
             modules[1].state_dict(),
@@ -1335,12 +1350,13 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         torch.manual_seed(0)
         replay_learner = example["_build_learner"](cfg, device, 3, 1)
-        replay_update = example["_LearnerUpdate"](
+        replay_update = example["_make_learner_update"](
             cfg,
             device,
             replay_learner,
             cudagraph_warmup=5,
         )
+        example["_warm_up_learner"](cfg, device, replay_update, 3, 1)
         replay_step = benchmark["_ReplayLearnerStep"](
             example,
             cfg,
@@ -1354,7 +1370,6 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             for _ in range(6):
                 replay_step()
             replay_step.synchronize()
-            assert not replay_update.replay_must_be_idle
         finally:
             replay_step.close()
 
@@ -1386,25 +1401,88 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
 
         learner = example["_build_learner"](cfg, device, 3, 1)
-        update = example["_LearnerUpdate"](cfg, device, learner)
+        if not getattr(torch._dynamo.config, "inline_inbuilt_nn_modules", False):
+            with pytest.raises(RuntimeError, match="inline_inbuilt_nn_modules"):
+                example["_make_learner_update"](cfg, device, learner)
+            return
+        update = example["_make_learner_update"](cfg, device, learner)
         sample = example["_fake_learner_sample"](cfg, device, 3, 1)
         reward = sample.get(("next", "reward")).clone()
         for key in ("is_init", ("next", "done"), ("next", "terminated")):
             sample.set(key, sample.get(key).squeeze(-1))
+        update.loss_module.set_keys(replay_context=("learner", "refresh"))
+        rng_before = torch.get_rng_state().clone()
+        state_before = copy.deepcopy(update.loss_module.state_dict())
+        with pytest.raises(RuntimeError, match="Call warmup"):
+            update.step(None, sample)
         example["_warm_up_learner"](cfg, device, update, 3, 1)
+        torch.testing.assert_close(torch.get_rng_state(), rng_before)
+        torch.testing.assert_close(update.loss_module.state_dict(), state_before)
         parameters = list(learner.optimizer.param_groups[0]["params"])
+        gradient_addresses = [
+            parameter.grad.data_ptr() if parameter.grad is not None else None
+            for parameter in parameters
+        ]
         before = [parameter.detach().clone() for parameter in parameters]
-        metrics, _, _ = update(sample)
+        losses = update.step(None, sample)
+        metrics = example["_learner_metrics"](losses)
+        assert not sample["learner", "refresh", "state"].requires_grad
+        assert gradient_addresses == [
+            parameter.grad.data_ptr() if parameter.grad is not None else None
+            for parameter in parameters
+        ]
 
         assert any(
             not torch.equal(parameter, previous)
             for parameter, previous in zip(parameters, before)
         )
         assert torch.isfinite(metrics).all()
+        logged = []
+
+        def log_metrics(steps, metrics):
+            logged.append((steps, metrics))
+
+        trainer = Trainer(
+            collector=[sample],
+            total_frames=sample.numel(),
+            frame_skip=1,
+            optim_steps_per_batch=2,
+            loss_module=update.loss_module,
+            optimization_stepper=update,
+            progress_bar=False,
+        )
+        trainer.register_op("post_optim_complete_log", log_metrics)
+        trainer.optim_steps(sample)
+        assert len(logged) == 1 and logged[0][0] == 2
+        assert all(value.numel() == 1 for value in logged[0][1].values(True, True))
+        update.target_updater = HardUpdate(
+            learner.value_loss, value_network_update_interval=5
+        )
+        saved_stepper = copy.deepcopy(update.state_dict())
+        update.step(None, sample)
+        assert update.target_updater.counter == 1
+        update.load_state_dict(saved_stepper)
+        assert update.target_updater.counter == 0
+        assert gradient_addresses == [
+            parameter.grad.data_ptr() if parameter.grad is not None else None
+            for parameter in parameters
+        ]
         learner.optimizer.zero_grad(set_to_none=True)
         with pytest.raises(RuntimeError, match="no parameter gradients"):
             learner.optimizer.step()
         torch.testing.assert_close(sample.get(("next", "reward")), reward)
+        update.loss_module.replay_value_loss_weight = 0.0
+        update.loss_module.model_loss.detach_output = True
+        short_sample = sample[:, :1]
+        for key in ("is_init", ("next", "done"), ("next", "terminated")):
+            short_sample.set(key, short_sample.get(key).unsqueeze(-1))
+        losses = update.loss_module(short_sample)
+        assert losses["loss_replay_value"] == 0
+        assert all(
+            torch.isfinite(value).all()
+            for key, value in losses.items()
+            if key.startswith("loss_")
+        )
 
     @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
     def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
@@ -2301,19 +2379,21 @@ def test_dreamer_v3_native_replay_benchmark_step_cpu(monkeypatch):
     cfg.replay_buffer.seq_len = 3
 
     class LearnerUpdate:
-        replay_must_be_idle = False
-
         def __init__(self):
             self.calls = 0
 
-        def __call__(self, sample):
+        def step(self, trainer, sample):
             self.calls += 1
             assert sample.shape == (2, 3)
-            return (
-                torch.zeros(6),
-                sample["state"] + self.calls,
-                sample["belief"] + self.calls,
+            sample.set(
+                "replay_context",
+                TensorDict(
+                    state=sample["state"] + self.calls,
+                    belief=sample["belief"] + self.calls,
+                    batch_size=sample.batch_size,
+                ),
             )
+            return TensorDict({}, [])
 
     learner_update = LearnerUpdate()
     step = benchmark["_ReplayLearnerStep"](

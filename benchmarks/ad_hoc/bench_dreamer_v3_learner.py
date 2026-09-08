@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import functools as ft
+import gc
 import json
 import runpy
 import statistics
@@ -125,12 +126,9 @@ class _ReplayLearnerStep:
         sample_info = replay_sample.select("index", "index_generation")
         sample = replay_sample.exclude("index", "index_generation")
         sample = sample.to(self.device, non_blocking=True)[:, :-1]
-        if self.learner_update.replay_must_be_idle:
-            self.replay_buffer.synchronize()
-        _, state, belief = self.learner_update(sample)
-        if self.cfg.optimization.cudagraph_train_step:
-            state = state.clone()
-            belief = belief.clone()
+        self.learner_update.step(None, sample)
+        state = sample["replay_context", "state"]
+        belief = sample["replay_context", "belief"]
         index, generation, patch = self.replay_context_update(
             sample_info, state, belief
         )
@@ -269,7 +267,7 @@ def main() -> None:
             obs_dim,
             action_dim,
         )
-        learner_update = example["_LearnerUpdate"](
+        learner_update = example["_make_learner_update"](
             cfg,
             device,
             learner,
@@ -283,9 +281,10 @@ def main() -> None:
                     example["LEARNER_RNG_STREAM"],
                 )
             )
+        example["_warm_up_learner"](cfg, device, learner_update, obs_dim, action_dim)
         replay_step = None
         if args.replay_device is None:
-            step = ft.partial(learner_update, data.clone())
+            step = ft.partial(learner_update.step, None, data.clone())
             synchronize = ft.partial(torch.cuda.synchronize, device)
             workload = "complete_learner_update"
         else:
@@ -338,6 +337,11 @@ def main() -> None:
             **profile_metrics,
         }
         print(json.dumps(result, sort_keys=True), flush=True)
+        # Bound learner/capture callables form cycles. Release the previous
+        # variant before measuring the next one's live and peak allocations.
+        del step, synchronize, learner_update, learner, replay_step
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

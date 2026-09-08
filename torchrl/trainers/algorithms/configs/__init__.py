@@ -82,6 +82,7 @@ from torchrl.trainers.algorithms.configs.hooks import (
     BatchSubSamplerConfig,
     ClearCudaCacheConfig,
     CountFramesLogConfig,
+    DreamerV3OptimizationStepperConfig,
     EarlyStoppingConfig,
     HookConfig,
     LogScalarConfig,
@@ -118,6 +119,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     CQLLossConfig,
     DDPGLossConfig,
     DQNLossConfig,
+    DreamerV3LossConfig,
     GAEConfig,
     HardUpdateConfig,
     IQLLossConfig,
@@ -414,6 +416,7 @@ __all__ = [
     "CQLLossConfig",
     "DDPGLossConfig",
     "DQNLossConfig",
+    "DreamerV3LossConfig",
     "IQLLossConfig",
     "LossConfig",
     "PPOLossConfig",
@@ -444,6 +447,7 @@ __all__ = [
     "ClearCudaCacheConfig",
     "CountFramesLogConfig",
     "EarlyStoppingConfig",
+    "DreamerV3OptimizationStepperConfig",
     "LogScalarConfig",
     "LogTimingConfig",
     "RewardNormalizerConfig",
@@ -656,6 +660,7 @@ def _register_configs():
     cs.store(group="loss", name="cql", node=CQLLossConfig)
     cs.store(group="loss", name="ddpg", node=DDPGLossConfig)
     cs.store(group="loss", name="dqn", node=DQNLossConfig)
+    cs.store(group="loss", name="dreamer_v3", node=DreamerV3LossConfig)
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="mixer", node=QMixerLossConfig)
@@ -750,6 +755,11 @@ def _register_configs():
     cs.store(group="hook", name="batch_subsampler", node=BatchSubSamplerConfig)
     cs.store(group="hook", name="clear_cuda_cache", node=ClearCudaCacheConfig)
     cs.store(group="hook", name="count_frames_log", node=CountFramesLogConfig)
+    cs.store(
+        group="hook",
+        name="dreamer_v3_optimization",
+        node=DreamerV3OptimizationStepperConfig,
+    )
     cs.store(group="hook", name="early_stopping", node=EarlyStoppingConfig)
     cs.store(group="hook", name="log_scalar", node=LogScalarConfig)
     cs.store(group="hook", name="log_timing", node=LogTimingConfig)
