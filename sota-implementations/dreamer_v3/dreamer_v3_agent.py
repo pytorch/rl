@@ -35,6 +35,7 @@ from torchrl.envs.transforms import (
     TensorDictPrimer,
 )
 from torchrl.modules import (
+    DreamerV3DiscreteActor,
     DreamerV3ImageDecoder,
     DreamerV3ImageEncoder,
     DreamerV3MLP,
@@ -43,8 +44,6 @@ from torchrl.modules import (
     WorldModelWrapper,
 )
 from torchrl.modules.distributions.continuous import IndependentNormal
-from torchrl.modules.distributions.discrete import OneHotCategorical
-from torchrl.modules.models.model_based import _unimix_probs
 from torchrl.modules.models.model_based_v3 import (
     _dreamer_v3_init,
     RSSMPosteriorV3,
@@ -140,31 +139,6 @@ class _DreamerV3Actor(torch.nn.Module):
         std = (self.max_std - self.min_std) * torch.sigmoid(std + 2) + self.min_std
         # The Normal parameters stay FP32, also under BF16 autocast.
         return mean.float(), std.float()
-
-
-class _DreamerV3DiscreteActor(torch.nn.Module):
-    """Categorical actor with the uniform mixture of the reference implementation."""
-
-    def __init__(self, cfg: DictConfig, action_dim: int):
-        super().__init__()
-        state_dim = latent_state_dim(cfg)
-        self.backbone = DreamerV3MLP(
-            state_dim + cfg.networks.rnn_hidden_dim,
-            None,
-            depth=cfg.networks.actor_layers,
-            num_cells=cfg.networks.hidden_dim,
-            norm_eps=cfg.networks.norm_eps,
-        )
-        self.logits_head = torch.nn.Linear(cfg.networks.hidden_dim, action_dim)
-        self.logits_head.apply(_dreamer_v3_init)
-        with torch.no_grad():
-            self.logits_head.weight.mul_(0.01)
-        self.unimix = cfg.networks.unimix
-
-    def forward(self, state: torch.Tensor, belief: torch.Tensor) -> torch.Tensor:
-        hidden = self.backbone(belief, state)
-        logits = self.logits_head(hidden).float()
-        return torch.log(_unimix_probs(logits, self.unimix))
 
 
 class _DreamerV3PolicyCarry(torch.nn.Module):
@@ -675,20 +649,13 @@ def build_actor(
 ) -> ProbabilisticTensorDictSequential:
     """Build the actor; ``discrete`` selects a one-hot categorical policy."""
     if discrete:
-        return ProbabilisticTensorDictSequential(
-            TensorDictModule(
-                _DreamerV3DiscreteActor(cfg, action_dim),
-                in_keys=["state", "belief"],
-                out_keys=["logits"],
-            ),
-            ProbabilisticTensorDictModule(
-                in_keys=["logits"],
-                out_keys=["action"],
-                default_interaction_type=InteractionType.RANDOM,
-                distribution_class=OneHotCategorical,
-                return_log_prob=True,
-                log_prob_key="action_log_prob",
-            ),
+        return DreamerV3DiscreteActor(
+            latent_state_dim(cfg) + cfg.networks.rnn_hidden_dim,
+            action_dim,
+            depth=cfg.networks.actor_layers,
+            num_cells=cfg.networks.hidden_dim,
+            norm_eps=cfg.networks.norm_eps,
+            unimix=cfg.networks.unimix,
         )
     actor_mlp = _DreamerV3Actor(cfg, action_dim)
     actor_model = ProbabilisticTensorDictSequential(

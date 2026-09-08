@@ -2489,6 +2489,7 @@ def test_dreamer_v3_native_replay_benchmark_step_cpu(monkeypatch):
         ("sync", True, False, False, "frames"),
         ("async", True, True, False, "frames"),
         ("async", True, True, True, "frames"),
+        ("sync", True, True, True, "frames"),
         ("async", True, False, False, "time"),
         ("async", True, False, False, "warmup"),
         ("sync", True, False, False, "reset_records"),

@@ -12,6 +12,8 @@ from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
     CompositeDistribution,
     dispatch,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
@@ -26,6 +28,12 @@ from torch.distributions import Categorical
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _process_action_space_spec
+from torchrl.modules.distributions.discrete import OneHotCategorical
+from torchrl.modules.models.model_based import (
+    _dreamer_v3_init,
+    _unimix_probs,
+    DreamerV3MLP,
+)
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet, SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
@@ -421,6 +429,137 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
             module,
             SafeProbabilisticModule(
                 in_keys=in_keys, out_keys=out_keys, spec=spec, **kwargs
+            ),
+        )
+
+
+class _DreamerV3DiscreteActorNet(nn.Module):
+    def __init__(
+        self, in_features, out_features, depth, num_cells, norm_eps, unimix, device
+    ):
+        super().__init__()
+        self.backbone = DreamerV3MLP(
+            in_features,
+            None,
+            depth=depth,
+            num_cells=num_cells,
+            norm_eps=norm_eps,
+            device=device,
+        )
+        self.logits_head = nn.Linear(num_cells, out_features, device=device)
+        self.logits_head.apply(_dreamer_v3_init)
+        with torch.no_grad():
+            self.logits_head.weight.mul_(0.01)
+        self.unimix = unimix
+
+    def forward(self, state: torch.Tensor, belief: torch.Tensor) -> torch.Tensor:
+        hidden = self.backbone(belief, state)
+        logits = self.logits_head(hidden).float()
+        return _unimix_probs(logits, self.unimix).log()
+
+
+class DreamerV3DiscreteActor(ProbabilisticTensorDictSequential):
+    """DreamerV3 one-hot categorical policy over stochastic state and belief.
+
+    The RMS-normalized SiLU network concatenates belief before state, initializes
+    its output weights with scale ``0.01``, and mixes categorical probabilities
+    with a uniform distribution. Logits remain in float32 under autocast.
+    Calling the actor writes logits, a hard one-hot action and its log probability
+    into the input tensordict. Sampling is random by default and respects
+    :func:`~torchrl.envs.set_exploration_type`. Use :meth:`get_dist` for
+    differentiable straight-through sampling with ``distribution.rsample()``.
+
+    Reference: Hafner et al., DreamerV3 (2023),
+    https://arxiv.org/abs/2301.04104.
+
+    Args:
+        in_features (int): Sum of the flattened stochastic state and belief widths.
+        out_features (int): Number of discrete actions.
+
+    Keyword Args:
+        depth (int, optional): Number of hidden layers. Must be positive.
+            Defaults to ``3``.
+        num_cells (int, optional): Width of each hidden layer. Defaults to ``1024``.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to ``1e-4``.
+        unimix (float, optional): Uniform probability fraction in ``[0, 1)``.
+            Defaults to ``0.01``.
+        in_keys (Sequence[NestedKey] or None, optional): Exactly two input keys,
+            in stochastic state, then belief order. Defaults to
+            ``["state", "belief"]`` when ``None``.
+        action_key (NestedKey, optional): Output one-hot action key. Defaults to
+            ``"action"``.
+        logits_key (NestedKey, optional): Output mixed log-probability key.
+            Defaults to ``"logits"``.
+        log_prob_key (NestedKey, optional): Output sampled-action log-probability
+            key. Defaults to ``"action_log_prob"``.
+        device (torch.device or str or None, optional): Initial parameter device.
+            Defaults to ``None``, using the default torch device.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs import ExplorationType, set_exploration_type
+        >>> from torchrl.modules import DreamerV3DiscreteActor
+        >>> actor = DreamerV3DiscreteActor(12, 3, depth=2, num_cells=32)
+        >>> data = TensorDict({"state": torch.randn(4, 8), "belief": torch.randn(4, 4)}, [4])
+        >>> with set_exploration_type(ExplorationType.DETERMINISTIC):
+        ...     result = actor(data)
+        >>> result["action"].sum(-1).tolist()
+        [1, 1, 1, 1]
+        >>> distribution = actor.get_dist(data)
+        >>> action = distribution.rsample()
+        >>> (action * torch.arange(3)).sum().backward()
+        >>> distribution.log_prob(action).shape
+        torch.Size([4])
+
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.DreamerV3DiscreteActorConfig`
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        *,
+        depth: int = 3,
+        num_cells: int = 1024,
+        norm_eps: float = 1e-4,
+        unimix: float = 0.01,
+        in_keys: Sequence[NestedKey] | None = None,
+        action_key: NestedKey = "action",
+        logits_key: NestedKey = "logits",
+        log_prob_key: NestedKey = "action_log_prob",
+        device: torch.device | str | None = None,
+    ):
+        in_keys = list(in_keys) if in_keys is not None else ["state", "belief"]
+        if len(in_keys) != 2:
+            raise ValueError(
+                "in_keys must contain the state and belief keys, in that order."
+            )
+        if depth < 1:
+            raise ValueError(f"depth must be positive, got {depth}.")
+        if not 0 <= unimix < 1:
+            raise ValueError(f"unimix must be in [0, 1), got {unimix}.")
+        super().__init__(
+            TensorDictModule(
+                _DreamerV3DiscreteActorNet(
+                    in_features,
+                    out_features,
+                    depth,
+                    num_cells,
+                    norm_eps,
+                    unimix,
+                    device,
+                ),
+                in_keys=in_keys,
+                out_keys=[logits_key],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys={"logits": logits_key},
+                out_keys=[action_key],
+                distribution_class=OneHotCategorical,
+                default_interaction_type=InteractionType.RANDOM,
+                return_log_prob=True,
+                log_prob_key=log_prob_key,
             ),
         )
 

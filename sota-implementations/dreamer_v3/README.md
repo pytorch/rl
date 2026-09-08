@@ -215,6 +215,12 @@ Image dimensions must match the configured encoder/decoder downsampling stages.
 The image decoder predicts unconstrained values against normalized pixel targets.
 Continuous vector actions and discrete `OneHot` action specs are supported.
 
+Discrete policies use the public `torchrl.modules.DreamerV3DiscreteActor`.
+It owns the normalized network, DreamerV3 initialization, uniform probability
+mixture and one-hot sampling. The recipe only supplies dimensions and configured
+hyperparameters; standalone users can construct the actor directly or through
+`DreamerV3DiscreteActorConfig` and use `get_dist()` for imagination.
+
 Milestone flags are read from the configured key under `next` at each completed
 episode. Their boolean vector must match `milestone_names`. Both synchronous and
 asynchronous runs log these flags with episode returns. Imagination runs only in

@@ -14,6 +14,7 @@ from omegaconf import MISSING
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl.modules import (
     AdditiveGaussianModule,
+    DreamerV3DiscreteActor,
     QValueActor,
     RSSMStateEstimatorV3,
     TanhModule,
@@ -192,6 +193,46 @@ class DreamerV3ImageDecoderConfig(NetworkConfig):
     norm_eps: float = 1e-4
     device: Any = None
     _target_: str = "torchrl.modules.DreamerV3ImageDecoder"
+
+
+@dataclass
+class DreamerV3DiscreteActorConfig(NetworkConfig):
+    """Hydra configuration for :class:`~torchrl.modules.DreamerV3DiscreteActor`.
+
+    Examples:
+        >>> import torch
+        >>> from hydra.utils import instantiate
+        >>> from tensordict import TensorDict
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3DiscreteActorConfig
+        >>> actor = instantiate(DreamerV3DiscreteActorConfig(in_features=12, out_features=3))
+        >>> data = TensorDict({"state": torch.randn(4, 8), "belief": torch.randn(4, 4)}, [4])
+        >>> actor(data)["action"].shape
+        torch.Size([4, 3])
+    """
+
+    in_features: int = MISSING
+    out_features: int = MISSING
+    depth: int = 3
+    num_cells: int = 1024
+    norm_eps: float = 1e-4
+    unimix: float = 0.01
+    in_keys: Any = None
+    action_key: Any = "action"
+    logits_key: Any = "logits"
+    log_prob_key: Any = "action_log_prob"
+    device: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_dreamer_v3_discrete_actor"
+    )
+
+
+def _make_dreamer_v3_discrete_actor(**kwargs) -> DreamerV3DiscreteActor:
+    """Normalize Hydra's nested key lists before constructing the actor."""
+    in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", None))
+    for key in ("action_key", "logits_key", "log_prob_key"):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_key(kwargs[key])
+    return DreamerV3DiscreteActor(in_keys=in_keys, **kwargs)
 
 
 @dataclass
