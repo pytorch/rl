@@ -69,6 +69,21 @@ synchronous `Collector`. `collector.async_env_backend` selects `threading` or
 post-processing, episode reporting, device normalization, and replay writes
 happen through the collector's standard replay integration.
 
+`collector.inference_backend` selects where the acting policy is served.
+`thread` (the default) runs the inference server in a thread of the training
+process, and coordinator threads relay observations and actions between the
+environment workers and the server. `process` starts a dedicated inference
+process that reads each environment worker's shared-memory request slot and
+writes the action back into it, so no observation or action crosses the
+training process; the driver only receives completed transitions. It requires
+`collector.async_env_backend=multiprocessing` and `collector.envs_per_worker=1`,
+uses the worker exchange owned by the transport (`collector.env_exchange` is
+ignored), and takes `collector.inference_static_batch_size` like the thread
+server. The policy is rebuilt from the configuration inside the server process
+and receives the learner's weights through the collector's policy-update path:
+the server starts with the first collected batch, receives the learner's
+weights right after it, and again after every training batch.
+
 For a three-seed median and interquartile reproduction run:
 
 ```bash

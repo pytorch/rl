@@ -24,6 +24,12 @@ collector:
   inference_min_batch_size: 1
   inference_timeout: 0.01
   inference_static_batch_size: null
+  # Where the acting policy is served. "thread": the inference server runs in a
+  # thread of this process and coordinator threads relay observations and
+  # actions. "process": a dedicated inference process reads each environment
+  # worker's shared-memory slot directly, so nothing crosses the driver on the
+  # action path; needs async_env_backend=multiprocessing and envs_per_worker=1.
+  inference_backend: thread
   num_envs: 1
   frames_per_batch: 200
   total_frames: 5000

@@ -35,6 +35,7 @@ from dreamer_v3_agent import (
     build_imagination_model,
     build_mb_env,
     build_real_world_actor,
+    build_serving_policy,
     build_value,
     build_world_model,
     DreamerV3BehaviorPolicySync,
@@ -75,6 +76,7 @@ from torchrl.modules import DreamerV3SeededPolicy
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServerConfig,
+    ProcessSlotTransport,
 )
 from torchrl.objectives import (
     DreamerV3ActorLoss,
@@ -473,6 +475,40 @@ def _build_learner(
     )
 
 
+def _behavior_policy_weights(
+    cfg: DictConfig, learner: _Learner
+) -> TensorDictBase | TensorDictModuleBase:
+    """The learner's acting weights in the layout of the served policy."""
+    policy_weights = learner.real_world_actor
+    if cfg.optimization.separate_policy_rng:
+        return TensorDict({"module": TensorDict.from_module(policy_weights)}, [])
+    return policy_weights
+
+
+def _inference_slot_specs(
+    cfg: DictConfig,
+    device: torch.device,
+    policy: TensorDictModuleBase,
+    state_dim: int,
+    action_dim: int,
+) -> tuple[TensorDictBase, TensorDictBase]:
+    """Representative request and response of the acting policy, on CPU.
+
+    A process-hosted inference server exchanges fixed shared-memory slots with
+    the environment workers, so their layout is fixed from one environment's
+    fake transition and one policy pass before collection starts.
+    """
+    primed_env = make_primed_env(cfg, cfg.env.seed + 1, state_dim, action_dim)
+    try:
+        request = primed_env.fake_tensordict().select(*policy.in_keys, strict=True)
+    finally:
+        primed_env.close()
+    request = request.cpu()
+    with torch.no_grad():
+        response = policy(request.clone().unsqueeze(0).to(device)).squeeze(0)
+    return request, response.select(*policy.out_keys, strict=True).cpu()
+
+
 def _build_collection(
     cfg: DictConfig,
     device: torch.device,
@@ -482,6 +518,10 @@ def _build_collection(
     collector_action_frames: int,
     replay_buffer: ReplayBufferEnsemble,
     post_collect_hook: Callable[[TensorDictBase], None],
+    *,
+    obs_dim: int,
+    pixels_shape: tuple[int, int, int] | None,
+    discrete: bool,
 ) -> tuple[Collector | AsyncBatchedCollector, DreamerV3BehaviorPolicySync | None]:
     num_envs = cfg.collector.num_envs
     collector_backend = cfg.collector.backend
@@ -554,27 +594,75 @@ def _build_collection(
         "replay_buffer": replay_buffer,
     }
     if collector_backend == "async":
-        collector = AsyncBatchedCollector(
-            create_env_fns,
-            policy=collector_policy,
-            env_backend=cfg.collector.async_env_backend,
-            env_exchange=cfg.collector.env_exchange,
-            envs_per_worker=cfg.collector.envs_per_worker,
-            server_config=InferenceServerConfig(
-                max_batch_size=cfg.collector.inference_max_batch_size or num_envs,
-                min_batch_size=cfg.collector.inference_min_batch_size,
-                timeout=cfg.collector.inference_timeout,
-                static_batch_size=cfg.collector.inference_static_batch_size,
-            ),
-            device_config=InferenceDeviceConfig(
-                policy_device=cfg.collector.policy_device or device,
-                output_device="cpu",
-                env_device="cpu",
-                storing_device="cpu",
-            ),
-            policy_version_key=None,
-            **collector_kwargs,
+        inference_backend = cfg.collector.inference_backend
+        if inference_backend not in ("thread", "process"):
+            raise ValueError(
+                "collector.inference_backend must be 'thread' or 'process', got "
+                f"{inference_backend!r}."
+            )
+        server_config = InferenceServerConfig(
+            service_backend=inference_backend,
+            max_batch_size=cfg.collector.inference_max_batch_size or num_envs,
+            min_batch_size=cfg.collector.inference_min_batch_size,
+            timeout=cfg.collector.inference_timeout,
+            static_batch_size=cfg.collector.inference_static_batch_size,
         )
+        device_config = InferenceDeviceConfig(
+            policy_device=cfg.collector.policy_device or device,
+            output_device="cpu",
+            env_device="cpu",
+            storing_device="cpu",
+        )
+        if inference_backend == "process":
+            if (
+                cfg.collector.async_env_backend != "multiprocessing"
+                or cfg.collector.envs_per_worker != 1
+            ):
+                raise ValueError(
+                    "collector.inference_backend='process' requires "
+                    "collector.async_env_backend=multiprocessing and "
+                    "collector.envs_per_worker=1."
+                )
+            request_spec, response_spec = _inference_slot_specs(
+                cfg, device, collector_policy, state_dim, action_dim
+            )
+            # The server process rebuilds the policy from the configuration and
+            # receives the learner's weights through update_policy_weights_.
+            collector = AsyncBatchedCollector(
+                create_env_fns,
+                policy_factory=ft.partial(
+                    build_serving_policy,
+                    OmegaConf.to_container(cfg, resolve=True),
+                    obs_dim,
+                    action_dim,
+                    pixels_shape,
+                    discrete,
+                ),
+                transport=ProcessSlotTransport(
+                    request_spec, response_spec, num_slots=num_envs
+                ),
+                env_backend="multiprocessing",
+                # The transport owns the worker exchange; the collector
+                # requires the queue setting here.
+                env_exchange="queue",
+                envs_per_worker=1,
+                server_config=server_config,
+                device_config=device_config,
+                policy_version_key=None,
+                **collector_kwargs,
+            )
+        else:
+            collector = AsyncBatchedCollector(
+                create_env_fns,
+                policy=collector_policy,
+                env_backend=cfg.collector.async_env_backend,
+                env_exchange=cfg.collector.env_exchange,
+                envs_per_worker=cfg.collector.envs_per_worker,
+                server_config=server_config,
+                device_config=device_config,
+                policy_version_key=None,
+                **collector_kwargs,
+            )
     else:
         collector = Collector(
             SerialEnv(num_envs, create_env_fns),
@@ -928,6 +1016,9 @@ def main(cfg: DictConfig):
         else -1,
         rb,
         post_collect_hook,
+        obs_dim=obs_dim,
+        pixels_shape=pixels_shape,
+        discrete=discrete,
     )
 
     history_steps: list[int] = []
@@ -1029,10 +1120,19 @@ def main(cfg: DictConfig):
             torchrl_logger.info("Saved DreamerV3 checkpoint to %s", path)
 
     collection_timer = None
+    # A process-hosted inference server starts from freshly built weights; the
+    # first collected batch starts it, then it receives the learner's weights.
+    initial_policy_sync_pending = (
+        isinstance(collector, AsyncBatchedCollector)
+        and cfg.collector.inference_backend == "process"
+    )
     try:
         for _ in collector:
             if collection_timer is None:
                 collection_timer = timeit("dreamer_v3/collection", sync=False).start()
+            if initial_policy_sync_pending:
+                collector.update_policy_weights_(_behavior_policy_weights(cfg, learner))
+                initial_policy_sync_pending = False
             # The collector writes canonical transitions directly into replay.
             if behavior_policy_sync is not None:
                 behavior_policy_sync.apply_after_action()
@@ -1116,12 +1216,7 @@ def main(cfg: DictConfig):
                 update_step += 1
 
             if isinstance(collector, AsyncBatchedCollector):
-                policy_weights = learner.real_world_actor
-                if cfg.optimization.separate_policy_rng:
-                    policy_weights = TensorDict(
-                        {"module": TensorDict.from_module(policy_weights)}, []
-                    )
-                collector.update_policy_weights_(policy_weights)
+                collector.update_policy_weights_(_behavior_policy_weights(cfg, learner))
 
             if record_loss_history:
                 loss_history.append(batch_losses.cpu())
