@@ -70,7 +70,7 @@ def summarize(root: Path, summary: Path) -> None:
         [
             "",
             "RSS is a final process-tree snapshot, with shared pages counted per process. "
-            "CUDA peak covers measured rounds in the policy process. "
+            "CUDA peak covers measured rounds when inference runs in this process. "
             "Raw samples, server timing, machine information and dependency versions are in the run artifacts.",
             "",
         ]

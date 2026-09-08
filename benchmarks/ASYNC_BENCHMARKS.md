@@ -29,7 +29,7 @@ and `PolicyFactory` from `bench_collectors.py`.
 | Output batch / measured round | 256 / 1,024 transitions | same |
 | Warm-up / measured rounds | 2 / 5 | same |
 | Fresh process repetitions | 3 | same |
-| Torch threads / seed | 1 / 0 | same |
+| Torch threads / parent seed | 1 / 0 | same |
 | Async batching | min 1, max environment count, timeout 1 ms | same |
 
 Uniform episodes last 200 steps. The slow-reset workload has 16-step episodes
@@ -44,6 +44,12 @@ worker). The last two explicitly skip on revisions before their public APIs
 exist. They start new series when those features merge; absence is never
 reported as zero time or as a speedup. CUDA-only cases carry the `gpu` marker.
 Existing eager series continue unchanged through all merges.
+
+The `async-process-slots` and CUDA-only `async-process-slots-static` series
+exercise the direct worker-to-server transport when `ProcessSlotTransport`
+becomes public in #4272. They keep one environment per worker because that
+transport rejects grouped workers. The same workload and batching limits apply;
+these remain separate series alongside the grouped integrated curve.
 
 Follow **`async-shm-integrated`** for the cumulative performance curve. It starts
 with eager inference and one environment per worker, enables static inference
@@ -68,7 +74,10 @@ The Actions summary includes batch p95 latency, final process-tree RSS and CUDA
 peak allocation. Raw JSON includes every measured round, batch latency p50/p95,
 server batching/queue/forward statistics, machine information, and dependency
 versions. RSS includes shared pages once per process and is a final snapshot,
-not peak unique memory. CUDA peak covers measured rounds in the policy process.
+not peak unique memory. CUDA peak covers measured rounds when the policy runs in
+the benchmark process.
+Process-slot series omit that allocator metric because inference owns a separate
+CUDA process; they still report complete process-tree RSS and server timings.
 Artifacts are retained for 30 days and the dashboard keeps 250 points per series.
 
 The short suite uses the existing `linux.g5.4xlarge.nvidia.gpu` runner class, pinned
