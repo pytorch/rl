@@ -7,6 +7,8 @@ env:
   max_episode_steps: 200
 
 collector:
+  backend: sync  # one of: sync, async
+  async_env_backend: threading  # one of: threading, multiprocessing
   num_envs: 1
   frames_per_batch: 200
   total_frames: 5000
