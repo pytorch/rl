@@ -16,7 +16,10 @@ import json
 import os
 import runpy
 import shutil
+import signal
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -32,6 +35,7 @@ from tensordict.nn import (
 )
 from tensordict.utils import assert_close
 from torch import nn
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.data import (
     Bounded,
     Categorical,
@@ -2591,6 +2595,214 @@ def test_dreamer_v3_native_replay_collection_smoke(
                 15,
                 16,
             ]
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize(
+    ("collector_backend", "include_replay", "terminate"),
+    [
+        ("sync", False, False),
+        ("async", False, False),
+        ("sync", True, False),
+        ("async", True, False),
+        ("async", False, True),
+        ("async", True, True),
+    ],
+)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="requires CUDA"
+                ),
+            ],
+        ),
+    ],
+)
+def test_dreamer_v3_checkpoint_resume_processes(
+    monkeypatch, tmp_path, collector_backend, include_replay, terminate, device
+):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_resume_test"
+    )
+    cfg = TestDreamerV3()._small_sota_config(
+        example_dir, compile_train_step=False, cudagraph_train_step=device == "cuda"
+    )
+    cfg.optimization.device = device
+    cfg.optimization.compile_rssm = None
+    cfg.optimization.updates_per_batch = 1
+    cfg.optimization.separate_policy_rng = True
+    cfg.optimization.checkpoint_dir = str(tmp_path / "checkpoints")
+    cfg.optimization.checkpoint_every = 1
+    cfg.optimization.checkpoint_keep_last = 20
+    cfg.optimization.train_ratio = 1.5
+    cfg.optimization.checkpoint_include_replay = include_replay
+    cfg.collector.backend = collector_backend
+    cfg.collector.num_envs = 2
+    cfg.collector.frames_per_batch = 8
+    cfg.collector.total_frames = 100_000 if terminate else 16
+    cfg.replay_buffer.online = collector_backend == "async"
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.warmup_factor = 1
+    cfg.logger.backend = "csv"
+    cfg.logger.log_dir = str(tmp_path / "logs")
+    cfg.logger.metrics_jsonl = str(tmp_path / "metrics.jsonl")
+    cfg.logger.train_every = 8
+    cfg.logger.eval_every = 0
+    cfg.logger.output_plot = None
+    config_path = tmp_path / "resume_test.yaml"
+    process_env = {**os.environ, "PYTHONPATH": str(repo_root), "OMP_NUM_THREADS": "1"}
+    # Exercise training in fresh processes without depending on Hydra's CLI
+    # parser, whose lazy help strings are incompatible with Python 3.14.
+    runner = tmp_path / "resume_process.py"
+    runner.write_text(
+        "from __future__ import annotations\n"
+        "import runpy\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from omegaconf import OmegaConf\n"
+        "if __name__ == '__main__':\n"
+        "    sys.path.insert(0, str(Path(sys.argv[1]).parent))\n"
+        "    example = runpy.run_path(sys.argv[1])\n"
+        "    example['main'].__wrapped__(OmegaConf.load(sys.argv[2]))\n"
+    )
+    command = [
+        sys.executable,
+        str(runner),
+        str(example_dir / "train.py"),
+        str(config_path),
+    ]
+    OmegaConf.save(cfg, config_path)
+    rotation = CheckpointRotation(cfg.optimization.checkpoint_dir, keep_last=20)
+    if terminate:
+        with open(tmp_path / "first.log", "w+") as log:
+            process = subprocess.Popen(command, env=process_env, stdout=log, stderr=log)
+            try:
+                deadline = time.monotonic() + 60
+                while rotation.latest() is None and process.poll() is None:
+                    assert (
+                        time.monotonic() < deadline
+                    ), "No checkpoint before termination."
+                    time.sleep(0.05)
+                process.send_signal(signal.SIGTERM)
+                process.wait(timeout=60)
+                log.seek(0)
+                assert process.returncode == 0, log.read()
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=10)
+    else:
+        first = subprocess.run(
+            command, env=process_env, capture_output=True, text=True, timeout=120
+        )
+        assert first.returncode == 0, first.stdout + first.stderr
+    first_path = rotation.latest()
+    first_state = {}
+    Checkpoint(run_state=first_state).load(first_path)
+    first_steps = first_state["action_steps"]
+    assert first_steps >= 8 if terminate else first_steps == 16
+    assert first_state["updates"] > 0
+    assert ("replay" in Checkpoint.manifest(first_path)["components"]) == include_replay
+    first_learner = example["_build_learner"](cfg, torch.device("cpu"), 3, 1)
+    stepper = example["_make_learner_update"](cfg, torch.device("cpu"), first_learner)
+    modules = stepper.loss_module
+    policy = example["DreamerV3SeededPolicy"](first_learner.real_world_actor, seed=0)
+    schedule = example["DreamerV3UpdateRatio"](0.0)
+    Checkpoint(policy=policy, update_ratio=schedule).load(first_path)
+    first_policy_counter = policy.get_extra_state()["counter"]
+    Checkpoint(learner=modules).load(first_path)
+    before = [parameter.detach().clone() for parameter in modules.parameters()]
+    tails = []
+    if include_replay:
+        replay = example["_build_replay"](
+            cfg, 2, torch.device("cpu"), torch.device("cpu")
+        )
+        try:
+            Checkpoint(replay=replay).load(first_path)
+            tails = [
+                (replay[i].writer.state_dict()["_cursor"] - 1) % len(replay[i])
+                for i in range(2)
+            ]
+        finally:
+            replay.shutdown()
+
+    cfg.optimization.resume_from = str(first_path)
+    cfg.collector.total_frames = first_steps + 16
+    OmegaConf.save(cfg, config_path)
+    second = subprocess.run(
+        command, env=process_env, capture_output=True, text=True, timeout=90
+    )
+    assert second.returncode == 0, second.stdout + second.stderr
+    second_path = rotation.latest()
+    second_state = {}
+    Checkpoint(run_state=second_state, learner=modules).load(second_path)
+    assert second_state["action_steps"] == first_steps + 16
+    assert second_state["updates"] > first_state["updates"]
+    assert second_state["elapsed_seconds"] > first_state["elapsed_seconds"]
+    Checkpoint(policy=policy, update_ratio=schedule).load(second_path)
+    assert policy.get_extra_state()["counter"] > first_policy_counter
+    for key in ("exp_name", "log_dir"):
+        assert second_state["logger"][key] == first_state["logger"][key]
+    previous_logs = first_state["logger"]["local"]["scalars"]["train/updates"]
+    assert (
+        second_state["logger"]["local"]["scalars"]["train/updates"][
+            : len(previous_logs)
+        ]
+        == previous_logs
+    )
+    assert any(
+        not torch.equal(old, new) for old, new in zip(before, modules.parameters())
+    )
+    records = [
+        json.loads(line)
+        for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
+    ]
+    assert [
+        record["total_action_steps"]
+        for record in records
+        if record["type"] == "summary"
+    ] == [first_steps, first_steps + 16]
+    train_steps = [
+        record["environment_steps"] for record in records if record["type"] == "train"
+    ]
+    assert train_steps == sorted(set(train_steps))
+    csv_steps = [
+        int(line.split(",")[0])
+        for line in next((tmp_path / "logs").rglob("train/updates.csv"))
+        .read_text()
+        .splitlines()
+    ]
+    assert csv_steps == train_steps
+    if include_replay:
+        replay = example["_build_replay"](
+            cfg, 2, torch.device("cpu"), torch.device("cpu")
+        )
+        try:
+            Checkpoint(replay=replay).load(second_path)
+            assert replay.stats()["size"] == min(first_steps + 16, 64)
+            # A process restart closes the old stream without inventing a terminal.
+            for stream in range(2) if not terminate else ():
+                assert replay[stream][tails[stream]]["next", "done"].all()
+                assert not replay[stream][tails[stream]]["next", "terminated"].any()
+            for _ in range(20):
+                sample = replay.sample().reshape(2, 4)
+                assert not sample["is_init"][:, 1:].any()
+        finally:
+            replay.shutdown()
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="requires bash")

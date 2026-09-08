@@ -49,6 +49,7 @@ class StorageEnsemble(Storage):
         self._rng_private = None
         self._storages = storages
         self._transforms = transforms
+        super().__init__(max_size=sum(storage.max_size for storage in storages))
         if transforms is not None and len(transforms) != len(storages):
             raise TypeError(
                 "transforms must have the same length as the storages provided."

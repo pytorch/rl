@@ -236,6 +236,26 @@ def _make_dreamer_v3_discrete_actor(**kwargs) -> DreamerV3DiscreteActor:
 
 
 @dataclass
+class DreamerV3SeededPolicyConfig(NetworkConfig):
+    """Hydra configuration for :class:`~torchrl.modules.DreamerV3SeededPolicy`.
+
+    Examples:
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3DiscreteActorConfig, DreamerV3SeededPolicyConfig
+        >>> config = DreamerV3SeededPolicyConfig(
+        ...     module=DreamerV3DiscreteActorConfig(in_features=6, out_features=3), seed=7,
+        ... )
+        >>> policy = instantiate(config)
+        >>> policy.get_extra_state()
+        {'seed': 7, 'counter': 0}
+    """
+
+    module: Any = MISSING
+    seed: int = MISSING
+    _target_: str = "torchrl.modules.DreamerV3SeededPolicy"
+
+
+@dataclass
 class RSSMStateEstimatorV3Config(NetworkConfig):
     """Hydra configuration for :class:`~torchrl.modules.RSSMStateEstimatorV3`.
 

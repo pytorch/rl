@@ -40,31 +40,6 @@ def collector_action_budget(
     return (vector_records - reset_records) * num_envs
 
 
-class DreamerV3UpdateRatio:
-    """Schedule learner updates from a ratio of updates to driver records.
-
-    Each call truncates the count from the cumulative driver-record count and
-    keeps the remainder. The first call returns one update.
-
-    Args:
-        ratio (float): Learner updates for each driver record.
-    """
-
-    def __init__(self, ratio: float):
-        self.ratio = ratio
-        self._previous: float | None = None
-
-    def __call__(self, record_count: int) -> int:
-        if self.ratio <= 0:
-            return 0
-        if self._previous is None:
-            self._previous = float(record_count)
-            return 1
-        repeats = int((record_count - self._previous) * self.ratio)
-        self._previous += repeats / self.ratio
-        return repeats
-
-
 def replay_context_update(
     sample: TensorDictBase,
     state: torch.Tensor,

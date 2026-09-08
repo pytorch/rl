@@ -83,6 +83,7 @@ from torchrl.trainers.algorithms.configs.hooks import (
     ClearCudaCacheConfig,
     CountFramesLogConfig,
     DreamerV3OptimizationStepperConfig,
+    DreamerV3UpdateRatioConfig,
     EarlyStoppingConfig,
     HookConfig,
     LogScalarConfig,
@@ -104,6 +105,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     DreamerV3ImageDecoderConfig,
     DreamerV3ImageEncoderConfig,
     DreamerV3MLPConfig,
+    DreamerV3SeededPolicyConfig,
     MLPConfig,
     ModelConfig,
     QMixerNetworkConfig,
@@ -313,6 +315,7 @@ __all__ = [
     "DreamerV3ImageEncoderConfig",
     "DreamerV3MLPConfig",
     "DreamerV3DiscreteActorConfig",
+    "DreamerV3SeededPolicyConfig",
     "RSSMStateEstimatorV3Config",
     "MLPConfig",
     "ModelConfig",
@@ -452,6 +455,7 @@ __all__ = [
     "CountFramesLogConfig",
     "EarlyStoppingConfig",
     "DreamerV3OptimizationStepperConfig",
+    "DreamerV3UpdateRatioConfig",
     "LogScalarConfig",
     "LogTimingConfig",
     "RewardNormalizerConfig",
@@ -531,6 +535,11 @@ def _register_configs():
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
     cs.store(group="network", name="dreamer_v3_mlp", node=DreamerV3MLPConfig)
+    cs.store(
+        group="network",
+        name="dreamer_v3_seeded_policy",
+        node=DreamerV3SeededPolicyConfig,
+    )
     cs.store(
         group="network",
         name="dreamer_v3_discrete_actor",

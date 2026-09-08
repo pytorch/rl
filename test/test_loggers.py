@@ -219,6 +219,22 @@ class TestCSVLogger:
         assert restored.experiment.scalars["reward"] == [(0, 2.0)]
         assert restored.experiment.videos_counter["evaluation"] == 3
 
+    def test_factory_resume_appends_same_run(self, tmp_path):
+        logger = get_logger("csv", str(tmp_path), "saved")
+        logger.log_scalar("reward", 1.0)
+        state = logger.state_dict()
+        logger.close()
+        resumed = get_logger(
+            "csv", str(tmp_path / "unused"), "unused", state_dict=state
+        )
+        resumed.log_scalar("reward", 2.0)
+        resumed.close()
+        assert (tmp_path / "saved/scalars/reward.csv").read_text().splitlines() == [
+            "0,1.0",
+            "1,2.0",
+        ]
+        assert not (tmp_path / "unused").exists()
+
     def test_direct_service_client_is_identity(self, tmpdir):
         logger = CSVLogger(log_dir=tmpdir, exp_name="direct")
         assert logger.client() is logger
@@ -375,6 +391,7 @@ def wandb_tmp_logger(tmp_path):
 @pytest.mark.parametrize("source", ["logger", "dreamer_v3"])
 def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     calls = []
+    initializations = []
 
     class Settings:
         def __init__(self, *, base_url):
@@ -386,7 +403,10 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
 
     def init(**kwargs):
         calls.append(("init", kwargs["settings"].base_url))
-        return argparse.Namespace(config={}, define_metric=mock.Mock())
+        initializations.append(kwargs)
+        return argparse.Namespace(
+            config={}, define_metric=mock.Mock(), id="generated-run", log=mock.Mock()
+        )
 
     monkeypatch.setitem(
         sys.modules,
@@ -397,7 +417,18 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     base_url = "https://wandb.example.com"
 
     if source == "logger":
-        WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
+        logger = WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
+        state = logger.state_dict()
+        resumed = get_logger(
+            "wandb",
+            "ignored",
+            "ignored",
+            state_dict=state,
+            wandb_kwargs={"base_url": base_url, "log_env_packages": False},
+        )
+        assert initializations[-1]["id"] == "generated-run"
+        assert initializations[-1]["resume"] == "must"
+        resumed.close()
     else:
         if not (_has_hydra and _has_omegaconf):
             pytest.skip("requires hydra and omegaconf")
@@ -413,9 +444,20 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
         cfg = OmegaConf.load(example_dir / "config.yaml")
         cfg.logger.backend = "wandb"
         cfg.logger.base_url = base_url
-        example["_RunLogger"](cfg, None)
+        run_logger = example["_RunLogger"](cfg, None)
+        state = run_logger.logger.state_dict()
+        assert state["local"]["id"] == "generated-run"
+        run_logger.finish()
+        resumed = example["_RunLogger"](cfg, None, state)
+        assert initializations[-1]["id"] == "generated-run"
+        assert initializations[-1]["resume"] == "must"
+        resumed.log({"type": "train", "environment_steps": 32, "loss": 1.0})
+        resumed.logger.experiment.log.assert_called_once_with(
+            {"environment_steps": 32, "train/loss": 1.0}
+        )
+        resumed.finish()
 
-    assert calls == [("login", base_url), ("init", base_url)]
+    assert calls == [("login", base_url), ("init", base_url)] * 2
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")

@@ -66,5 +66,7 @@ example script. See :doc:`dreamer_v3` for the loss and target-update composition
    ~torchrl.trainers.algorithms.DreamerV3Optimizer
    ~torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig
 
+   ~torchrl.trainers.algorithms.DreamerV3UpdateRatio
+   ~torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig
    ~torchrl.trainers.algorithms.DreamerV3OptimizationStepper
    ~torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig

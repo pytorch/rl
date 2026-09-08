@@ -7,6 +7,8 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from unittest import mock
 
 import numpy as np
@@ -22,6 +24,7 @@ from tensordict import (
 )
 from torch.utils._pytree import tree_flatten
 
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -43,6 +46,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -151,6 +155,175 @@ class TestEnsemble:
         assert restored_members[0][:]["value"].tolist() == [2, 3]
         assert restored_members[1][:]["value"].tolist() == [110, 111]
         assert restored.stats()["write_count"] == 6
+
+    @pytest.mark.parametrize("empty_member", [False, True])
+    def test_checkpoint_drains_updates_and_restores_prefetch(
+        self, monkeypatch, tmp_path, empty_member
+    ):
+        buffers = [
+            ReplayBufferEnsemble(
+                *[self._make_routed_member(8) for _ in range(2)],
+                routing_key=("collector", "env_id"),
+                p="sampleable",
+                batch_size=4,
+                prefetch=1,
+                generator=torch.Generator().manual_seed(0),
+            )
+            for _ in range(2)
+        ]
+        replay, restored = buffers
+        entered = threading.Event()
+        release = threading.Event()
+        original_update = replay.update_if_present
+
+        def delayed_update(**kwargs):
+            entered.set()
+            if not release.wait(10):
+                raise TimeoutError("Checkpoint test did not release the replay update.")
+            return original_update(**kwargs)
+
+        try:
+            metadata = replay.extend(
+                TensorDict(
+                    {
+                        "value": torch.arange(8),
+                        ("collector", "env_id"): torch.zeros(8, dtype=torch.long)
+                        if empty_member
+                        else torch.arange(8) % 2,
+                    },
+                    [8],
+                )
+            )
+            replay.sample()
+            monkeypatch.setattr(replay, "update_if_present", delayed_update)
+            update = replay.submit_update_if_present(
+                index=metadata.select("buffer_ids", "index"),
+                generation=metadata["index_generation"],
+                patch={"value": torch.full((8,), 42)},
+            )
+            assert entered.wait(5)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                saved = executor.submit(
+                    Checkpoint(replay=replay).save, tmp_path / "saved"
+                )
+                with pytest.raises(FuturesTimeoutError):
+                    saved.result(timeout=0.05)
+                release.set()
+                saved.result(timeout=10)
+            assert update.result().updated.all()
+            Checkpoint(replay=restored).load(tmp_path / "saved")
+            assert restored.stats()["write_count"] == 8
+            assert len(restored[1]) == (0 if empty_member else 4)
+            assert (restored[0][:]["value"] == 42).all()
+            for _ in range(3):
+                assert_allclose_td(replay.sample(), restored.sample())
+            # Loading replay must not retain writable views into the checkpoint.
+            restored[0].extend(
+                TensorDict(
+                    {
+                        "value": torch.zeros(8, dtype=torch.long),
+                        ("collector", "env_id"): torch.zeros(8, dtype=torch.long),
+                    },
+                    [8],
+                )
+            )
+            Checkpoint(replay=restored).load(tmp_path / "saved")
+            assert (restored[0][:]["value"] == 42).all()
+        finally:
+            release.set()
+            for buffer in buffers:
+                buffer.shutdown()
+
+    @pytest.mark.parametrize("sampler_type", [SliceSampler, StreamingSliceSampler])
+    def test_end_streams_orders_updates_and_resets_windows(
+        self, sampler_type, monkeypatch
+    ):
+        done_key, terminal_key, cut_key = (
+            ("flags", "end"),
+            ("flags", "terminal"),
+            ("flags", "cut"),
+        )
+        members = [
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(9),
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+                sampler=sampler_type(slice_len=3, end_key=done_key, cache_values=True),
+                batch_size=3,
+            )
+            for _ in range(3)
+        ]
+        replay = ReplayBufferEnsemble(*members, routing_key="stream")
+        data = TensorDict(
+            {
+                "stream": torch.zeros(11, dtype=torch.long),
+                "value": torch.arange(11),
+                done_key: torch.zeros(11, 1, dtype=torch.bool),
+                terminal_key: torch.zeros(11, 1, dtype=torch.bool),
+                cut_key: torch.zeros(11, 1, dtype=torch.bool),
+            },
+            [11],
+        )
+        replay.extend(data)
+        terminal = data[:3].clone()
+        terminal["stream"] = torch.ones(3, dtype=torch.long)
+        terminal[done_key][-1] = True
+        terminal[terminal_key][-1] = True
+        replay.extend(terminal)
+        # Populate the uniform boundary cache; keep an unfinished fresh window.
+        members[0].sample()
+        generation = members[0].writer.generations_of(torch.arange(9)).clone()
+        writes = replay.stats()["write_count"]
+        entered, release = threading.Event(), threading.Event()
+        original_update = replay.update_if_present
+
+        def delayed_update(**kwargs):
+            entered.set()
+            if not release.wait(10):
+                raise TimeoutError("Stream-finalization update was not released.")
+            return original_update(**kwargs)
+
+        monkeypatch.setattr(replay, "update_if_present", delayed_update)
+        update = replay.submit_update_if_present(
+            index=TensorDict(
+                {"buffer_ids": torch.tensor([0]), "index": torch.tensor([1])}, [1]
+            ),
+            generation=generation[1:2],
+            patch={done_key: torch.zeros(1, 1, dtype=torch.bool)},
+        )
+        try:
+            assert entered.wait(5)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                ended = executor.submit(
+                    replay.end_streams,
+                    end_key=done_key,
+                    terminated_key=terminal_key,
+                    truncated_key=cut_key,
+                )
+                with pytest.raises(FuturesTimeoutError):
+                    ended.result(timeout=0.05)
+                release.set()
+                ended.result(timeout=10)
+            assert update.result().updated.all()
+            assert replay.stats()["write_count"] == writes
+            torch.testing.assert_close(
+                members[0].writer.generations_of(torch.arange(9)), generation
+            )
+            assert members[0][1][done_key].all() and members[0][1][cut_key].all()
+            assert not members[0][1][terminal_key].any()
+            assert (
+                members[1][2][terminal_key].all() and not members[1][2][cut_key].any()
+            )
+            assert len(members[2]) == 0
+            new = data[:3].clone()
+            new["value"] = torch.arange(100, 103)
+            replay.extend(new)
+            for _ in range(12):
+                values = members[0].sample()["value"]
+                assert (values < 100).all() or (values >= 100).all()
+                assert (values.diff() == 1).all()
+        finally:
+            release.set()
+            replay.shutdown()
 
     def test_routing_dim_preserves_member_order(self):
         members = [self._make_routed_member() for _ in range(2)]
