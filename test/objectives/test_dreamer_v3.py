@@ -1713,6 +1713,67 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert "loss_model_reco" in loss_td.keys()
         loss_td["loss_model_reco"].backward()
 
+    @pytest.mark.parametrize("heads", ["vector", "image", "both"])
+    @pytest.mark.parametrize("compile_loss", [False, True])
+    def test_dreamer_v3_reconstruction_heads(self, device, heads, compile_loss):
+        class WorldModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.vector = nn.Parameter(torch.ones(2, device=device))
+                self.image = nn.Parameter(torch.tensor([0.25, 0.5], device=device))
+
+            def forward(self, td):
+                td["next", "decoded", "vector"] = self.vector.expand(2, 3, 2)
+                td["next", "decoded", "image"] = self.image.expand(2, 3, 2)
+                td["next", "reward"] = torch.zeros(2, 3, 1, device=device)
+                return td
+
+        model = WorldModel()
+        sample = TensorDict(
+            {
+                ("next", "sensors", "vector"): torch.tensor(
+                    [0.0, 3.0], device=device
+                ).expand(2, 3, 2),
+                ("next", "sensors", "image"): torch.tensor(
+                    [0, 255], dtype=torch.uint8, device=device
+                ).expand(2, 3, 2),
+                ("next", "reward"): torch.zeros(2, 3, 1, device=device),
+                ("next", "prior_logits"): torch.zeros(2, 3, 2, 2, device=device),
+                ("next", "posterior_logits"): torch.zeros(2, 3, 2, 2, device=device),
+            },
+            [2, 3],
+        )
+        names = ["vector", "image"] if heads == "both" else [heads]
+        symlog_flags = [name == "vector" for name in names]
+        objective = DreamerV3ModelLoss(
+            model,
+            reward_two_hot=False,
+            reco_symlog=symlog_flags if heads == "both" else symlog_flags[0],
+        )
+        objective.set_keys(
+            pixels=[("sensors", name) for name in names],
+            reco_pixels=[("decoded", name) for name in names],
+        )
+        call = torch.compile(objective, backend="eager") if compile_loss else objective
+        losses, _ = call(sample)
+        log_two = torch.tensor(2.0, device=device).log()
+        expected = (2 * log_two.square() if "vector" in names else 0) + (
+            0.3125 if "image" in names else 0
+        )
+        torch.testing.assert_close(
+            losses["loss_model_reco"],
+            torch.as_tensor(expected, device=device).reshape(1),
+        )
+        losses["loss_model_reco"].sum().backward()
+        if "vector" in names:
+            torch.testing.assert_close(
+                model.vector.grad, torch.stack([log_two, -log_two])
+            )
+        if "image" in names:
+            torch.testing.assert_close(
+                model.image.grad, model.image.new_tensor([0.5, -1])
+            )
+
     def test_dreamer_v3_model_loss_no_continue_default(self, device):
         """With ``lambda_continue=0`` (default), no ``loss_model_continue`` key is emitted."""
         tensordict = self._create_world_model_data().to(device)
