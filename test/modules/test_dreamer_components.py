@@ -16,10 +16,10 @@ import torch
 from packaging import version
 from pyvers import implement_for
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
+from tensordict.nn import CudaGraphModule, TensorDictModule
 from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded
-from torchrl.modules import SafeModule
+from torchrl.modules import RSSMStateEstimatorV3, SafeModule
 from torchrl.modules.models._dreamer_v3_block_gru_triton import (
     _has_triton as _has_dreamer_v3_triton,
 )
@@ -285,6 +285,87 @@ class TestDreamerComponents:
 
 
 class TestDreamerV3Components:
+    @pytest.mark.parametrize(
+        "execution",
+        [
+            "eager",
+            "compile",
+            pytest.param(
+                "cudagraph",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_state_estimator_resets_and_posterior_rng(self, execution):
+        device = torch.device("cuda" if execution == "cudagraph" else "cpu")
+        rollout = self._make_rollout(device)
+        prior, posterior = rollout.rssm_prior.module, rollout.rssm_posterior.module
+        keys = [
+            ("context", key)
+            for key in ("state", "belief", "action", "embedding", "reset")
+        ]
+        outputs = [("current", "state"), ("current", "belief")]
+        estimator = RSSMStateEstimatorV3(
+            prior, posterior, in_keys=keys, out_keys=outputs
+        )
+        state, belief = torch.randn(2, 3, 8, device=device), torch.randn(
+            2, 3, 8, device=device
+        )
+        action = torch.randint(2, (2, 3, 2), device=device).bool()
+        embedding = torch.randn(2, 3, 6, device=device)
+        reset = torch.tensor(
+            [[True, False, False], [False, True, False]], device=device
+        )
+        sample = TensorDict(
+            dict(zip(keys, (state, belief, action, embedding, reset))),
+            [2, 3],
+            device=device,
+        )
+        call = estimator
+        if execution == "compile":
+            call = torch.compile(estimator, backend="eager", fullgraph=True)
+        elif execution == "cudagraph":
+            call = CudaGraphModule(estimator, warmup=3, device=device)
+        with torch.no_grad(), torch.autocast(
+            device.type, dtype=torch.bfloat16, enabled=execution == "cudagraph"
+        ):
+            for _ in range(3):
+                call(sample.clone())
+            # A supplied uniform avoids a discarded prior draw. Only the
+            # posterior may advance the acting random stream.
+            _, _, expected_belief = prior(
+                state.masked_fill(reset.unsqueeze(-1), 0),
+                belief.masked_fill(reset.unsqueeze(-1), 0),
+                action.masked_fill(reset.unsqueeze(-1), 0),
+                _uniform=torch.zeros(2, 3, 2, device=device),
+            )
+            torch.manual_seed(17)
+            _, expected_state = posterior(expected_belief, embedding)
+            expected_rng = torch.rand(4, device=device)
+            torch.manual_seed(17)
+            result = call(sample.clone())
+            torch.testing.assert_close(result[outputs[0]], expected_state)
+            torch.testing.assert_close(result[outputs[1]], expected_belief.float())
+            torch.testing.assert_close(torch.rand(4, device=device), expected_rng)
+            # Refresh shared parameters in place, then exercise a different
+            # reset mask without replacing captured parameter storage.
+            for parameter in prior.parameters():
+                parameter.add_(0.1)
+            changed = sample.clone()
+            changed[keys[-1]] = ~reset
+            torch.manual_seed(23)
+            expected = estimator(changed.clone())
+            torch.manual_seed(23)
+            actual = call(changed.clone())
+            torch.testing.assert_close(actual[outputs[0]], expected[outputs[0]])
+            torch.testing.assert_close(actual[outputs[1]], expected[outputs[1]])
+            assert not torch.allclose(actual[outputs[1]], expected_belief.float())
+
     def test_reference_normalization_and_block_fan_in(self):
         norm = _DreamerV3RMSNorm(8)
         assert set(dict(norm.named_parameters())) == {"weight"}

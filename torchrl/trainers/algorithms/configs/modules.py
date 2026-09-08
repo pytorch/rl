@@ -15,6 +15,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl.modules import (
     AdditiveGaussianModule,
     QValueActor,
+    RSSMStateEstimatorV3,
     TanhModule,
     ValueOperator,
 )
@@ -191,6 +192,36 @@ class DreamerV3ImageDecoderConfig(NetworkConfig):
     norm_eps: float = 1e-4
     device: Any = None
     _target_: str = "torchrl.modules.DreamerV3ImageDecoder"
+
+
+@dataclass
+class RSSMStateEstimatorV3Config(NetworkConfig):
+    """Hydra configuration for :class:`~torchrl.modules.RSSMStateEstimatorV3`.
+
+    Examples:
+        Given the shared prior and posterior in the estimator's example:
+
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import RSSMStateEstimatorV3Config
+        >>> estimator = instantiate(  # doctest: +SKIP
+        ...     RSSMStateEstimatorV3Config(), prior=prior, posterior=posterior,
+        ... )
+    """
+
+    prior: Any = MISSING
+    posterior: Any = MISSING
+    in_keys: Any = None
+    out_keys: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_rssm_state_estimator_v3"
+    )
+
+
+def _make_rssm_state_estimator_v3(**kwargs) -> RSSMStateEstimatorV3:
+    """Normalize configured nested keys before constructing the estimator."""
+    in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", None))
+    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", None))
+    return RSSMStateEstimatorV3(in_keys=in_keys, out_keys=out_keys, **kwargs)
 
 
 @dataclass
