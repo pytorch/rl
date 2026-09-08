@@ -18,6 +18,7 @@ import warnings
 
 import pytest
 import torch
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
@@ -52,7 +53,16 @@ from torchrl.data.replay_buffers.writers import (
 )
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.modules import ConvNet, DreamerV3MLP, MLP, TanhModule, ValueOperator
+from torchrl.modules import (
+    ConvNet,
+    DreamerV3MLP,
+    MLP,
+    RSSMPosteriorV3,
+    RSSMPriorV3,
+    RSSMStateEstimatorV3,
+    TanhModule,
+    ValueOperator,
+)
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.record.loggers import (
@@ -1206,6 +1216,49 @@ class TestModuleConfigs:
         assert isinstance(module, DreamerV3MLP)
         output = module(torch.randn(3, 2), torch.randn(3, 4))
         assert output.shape == (3, expected_features)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_rssm_state_estimator_nested_config(self):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            action_dim=2,
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+        )
+        posterior = RSSMPosteriorV3(
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            obs_embed_dim=6,
+        )
+        names = ["state", "belief", "previous_action", "encoded_latents", "is_init"]
+        configured = instantiate_config(
+            algorithm_configs.RSSMStateEstimatorV3Config(
+                in_keys=[["input", name] for name in names],
+                out_keys=[["output", "state"], ["output", "belief"]],
+            ),
+            prior=prior,
+            posterior=posterior,
+        )
+        data = TensorDict(
+            {
+                "state": torch.randn(2, 8),
+                "belief": torch.randn(2, 8),
+                "previous_action": torch.randn(2, 2),
+                "encoded_latents": torch.randn(2, 6),
+                "is_init": torch.tensor([True, False]),
+            },
+            [2],
+        )
+        torch.manual_seed(1)
+        expected = RSSMStateEstimatorV3(prior, posterior)(data.clone())
+        torch.manual_seed(1)
+        actual = configured(TensorDict({"input": data}, [2]))
+        torch.testing.assert_close(actual["output", "state"], expected["state"])
+        torch.testing.assert_close(actual["output", "belief"], expected["belief"])
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_dreamer_v3_image_configs(self):

@@ -32,7 +32,12 @@ from torchrl.envs.transforms import (
     InitTracker,
     TensorDictPrimer,
 )
-from torchrl.modules import DreamerV3MLP, SymExpTwoHot, WorldModelWrapper
+from torchrl.modules import (
+    DreamerV3MLP,
+    RSSMStateEstimatorV3,
+    SymExpTwoHot,
+    WorldModelWrapper,
+)
 from torchrl.modules.distributions.continuous import IndependentNormal
 from torchrl.modules.models.model_based_v3 import (
     _dreamer_v3_init,
@@ -120,37 +125,6 @@ class _DreamerV3Actor(torch.nn.Module):
         std = (self.max_std - self.min_std) * torch.sigmoid(std + 2) + self.min_std
         # The Normal parameters stay FP32, also under BF16 autocast.
         return mean.float(), std.float()
-
-
-class _DreamerV3PolicyFilter(torch.nn.Module):
-    def __init__(
-        self,
-        prior_net: torch.nn.Module,
-        posterior_net: torch.nn.Module,
-    ):
-        super().__init__()
-        self.prior_net = prior_net
-        self.posterior_net = posterior_net
-
-    def forward(
-        self,
-        state: torch.Tensor,
-        belief: torch.Tensor,
-        previous_action: torch.Tensor,
-        encoded_latents: torch.Tensor,
-        is_init: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        reset = is_init
-        while reset.ndim < state.ndim:
-            reset = reset.unsqueeze(-1)
-        state = torch.where(reset, 0, state)
-        belief = torch.where(reset, 0, belief)
-        previous_action = torch.where(reset, 0, previous_action)
-        # Advance the recurrence only. The posterior reads the observation.
-        belief = self.prior_net._update_belief(state, belief, previous_action)
-        _, state = self.posterior_net(belief, encoded_latents)
-        # The collector and the replay entries use FP32.
-        return state.float(), belief.float()
 
 
 class _DreamerV3PolicyCarry(torch.nn.Module):
@@ -584,17 +558,7 @@ def build_real_world_actor(
             in_keys=["symlog_observation"],
             out_keys=["encoded_latents"],
         ),
-        TensorDictModule(
-            _DreamerV3PolicyFilter(prior_net, posterior_net),
-            in_keys=[
-                "state",
-                "belief",
-                "previous_action",
-                "encoded_latents",
-                "is_init",
-            ],
-            out_keys=["state", "belief"],
-        ),
+        RSSMStateEstimatorV3(prior_net, posterior_net),
         actor_model,
         TensorDictModule(
             _DreamerV3PolicyCarry(),

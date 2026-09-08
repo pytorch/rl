@@ -11,6 +11,7 @@ and graph-capture warmup; it intentionally excludes cold-start latency.
 Example::
 
     python benchmarks/ad_hoc/bench_dreamer_v3_rssm.py
+    python benchmarks/ad_hoc/bench_dreamer_v3_rssm.py --acting
 """
 
 from __future__ import annotations
@@ -26,7 +27,12 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule, TensorDictModule
 
-from torchrl.modules.models import RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3
+from torchrl.modules.models import (
+    RSSMPosteriorV3,
+    RSSMPriorV3,
+    RSSMRolloutV3,
+    RSSMStateEstimatorV3,
+)
 
 
 def _make_rollout(device: torch.device) -> RSSMRolloutV3:
@@ -112,6 +118,11 @@ def main() -> None:
     parser.add_argument("--unroll", type=int, default=8)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iterations", type=int, default=50)
+    parser.add_argument(
+        "--acting",
+        action="store_true",
+        help="Measure the public one-observation state estimator.",
+    )
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("This benchmark requires CUDA.")
@@ -120,8 +131,47 @@ def main() -> None:
     torch.set_float32_matmul_precision("high")
     device = torch.device("cuda:0")
     rollout = _make_rollout(device)
-    rollout.compile_rollout("scan", unroll=args.unroll)
     data = _make_data(device, args.batch, args.steps)
+
+    if args.acting:
+        estimator = RSSMStateEstimatorV3(
+            rollout.rssm_prior.module,
+            rollout.rssm_posterior.module,
+            out_keys=["posterior_state", "current_belief"],
+        )
+        observation = data[:, 0].clone()
+        observation.rename_key_("action", "previous_action")
+        observation.set("encoded_latents", observation["next", "encoded_latents"])
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+            graph = CudaGraphModule(estimator, warmup=args.warmup, device=device)
+            for name, module in (
+                ("acting_eager", estimator),
+                ("acting_cuda_graph", graph),
+            ):
+                samples = _measure(
+                    ft.partial(module, observation),
+                    device=device,
+                    warmup=args.warmup,
+                    iterations=args.iterations,
+                )
+                median_ms = statistics.median(samples)
+                print(
+                    json.dumps(
+                        {
+                            "variant": name,
+                            "batch": args.batch,
+                            "median_ms": median_ms,
+                            "min_ms": min(samples),
+                            "max_ms": max(samples),
+                            "observations_per_second": args.batch * 1000 / median_ms,
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+        return
+
+    rollout.compile_rollout("scan", unroll=args.unroll)
 
     def train_step(value: TensorDict) -> torch.Tensor:
         rollout.zero_grad(set_to_none=True)
