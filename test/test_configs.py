@@ -33,6 +33,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -904,6 +905,18 @@ class TestDataConfigs:
         sampler = SliceSampler(num_slices=10)
         assert isinstance(sampler, SliceSampler)
         assert sampler.num_slices == 10
+
+    def test_streaming_slice_sampler_config(self):
+        """Test StreamingSliceSamplerConfig."""
+        from torchrl.trainers.algorithms.configs.data import StreamingSliceSamplerConfig
+
+        cfg = StreamingSliceSamplerConfig(slice_len=8, traj_key="episode")
+
+        assert cfg._target_ == "torchrl.data.replay_buffers.StreamingSliceSampler"
+        assert cfg.slice_len == 8
+        sampler = StreamingSliceSampler(slice_len=cfg.slice_len, traj_key=cfg.traj_key)
+        assert sampler.slice_len == 8
+        assert sampler.traj_key == "episode"
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_prioritized_sampler_config(self):

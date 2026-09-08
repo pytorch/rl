@@ -835,6 +835,40 @@ class SliceSampler(Sampler):
             num_slices = batch_size // self.slice_len
         return seq_length, num_slices
 
+    def _sampleable_count(
+        self, storage: Storage, batch_size: int
+    ) -> int | torch.Tensor:
+        if len(storage) == 0:
+            return 0
+        seq_length, _ = self._adjusted_batch_size(batch_size)
+        if self.fragmented:
+            if getattr(self, "_traj_key_auto", False):
+                self._resolve_traj_key(storage)
+            if not self._fetch_traj or self.traj_key is None:
+                return 0
+            indexer = self._fragmented_index
+            if (
+                indexer is None
+                or indexer.trajectory_key != self.traj_key
+                or indexer.step_key != self.step_key
+            ):
+                indexer = self._fragmented_index = _FragmentedTrajectoryIndex(
+                    self.traj_key, self.step_key
+                )
+            indexer.refresh(storage)
+            _, _, lengths = indexer.runs()
+        else:
+            try:
+                _, _, lengths = self._get_stop_and_length(storage)
+            except (KeyError, RuntimeError):
+                return 0
+        windows = lengths - seq_length + 1
+        if self.strict_length:
+            windows = windows.clamp_min(0)
+        else:
+            windows = torch.where(lengths > 0, windows.clamp_min(1), 0)
+        return windows.sum()
+
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         if self._batch_size_multiplier is not None:
             batch_size = batch_size * self._batch_size_multiplier
