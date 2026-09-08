@@ -58,7 +58,7 @@ from dreamer_v3_utils import (
 )
 from omegaconf import DictConfig
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import CudaGraphModule, TensorDictModuleBase
+from tensordict.nn import TensorDictModuleBase
 from torchrl import timeit
 from torchrl._utils import get_available_device, logger as torchrl_logger
 from torchrl.collectors import AsyncBatchedCollector, Collector
@@ -75,11 +75,12 @@ from torchrl.envs.utils import ExplorationType
 from torchrl.modules.inference_server import InferenceDeviceConfig
 from torchrl.objectives import (
     DreamerV3ActorLoss,
+    DreamerV3Loss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
-from torchrl.trainers.algorithms import DreamerV3Optimizer
+from torchrl.trainers.algorithms import DreamerV3OptimizationStepper, DreamerV3Optimizer
 
 
 class _Learner(NamedTuple):
@@ -92,163 +93,46 @@ class _Learner(NamedTuple):
     real_world_actor: TensorDictModuleBase
 
 
-class _LearnerUpdate:
-    """Run one complete DreamerV3 learner update."""
+def _make_learner_update(
+    cfg: DictConfig,
+    device: torch.device,
+    learner: _Learner,
+    *,
+    cudagraph_warmup: int = 5,
+) -> DreamerV3OptimizationStepper:
+    """Assemble public learner components from the experiment configuration."""
+    loss_module = DreamerV3Loss(
+        learner.model_loss,
+        learner.actor_loss,
+        learner.value_loss,
+        replay_value_loss_weight=cfg.optimization.replay_value_loss_weight,
+        continuation_horizon=cfg.optimization.continuation_horizon,
+        lmbda=cfg.optimization.lmbda,
+    )
+    return DreamerV3OptimizationStepper(
+        loss_module,
+        learner.optimizer,
+        learner.value_target_updater,
+        compile_train_step=cfg.optimization.compile_train_step,
+        compile_mode=cfg.optimization.compile_train_step_mode,
+        cudagraph=cfg.optimization.cudagraph_train_step,
+        warmup_steps=cudagraph_warmup if cfg.optimization.cudagraph_train_step else 1,
+        mixed_precision=cfg.optimization.mixed_precision and device.type == "cuda",
+    )
 
-    def __init__(
-        self,
-        cfg: DictConfig,
-        device: torch.device,
-        learner: _Learner,
-        *,
-        cudagraph_warmup: int = 5,
-    ):
-        self.cfg = cfg
-        self._sample_keys = [
-            "action",
-            "is_init",
-            "state",
-            "belief",
-            ("next", "observation"),
-            ("next", "reward"),
-            ("next", "done"),
-            ("next", "terminated"),
-        ]
-        self.device = device
-        self.model_loss = learner.model_loss
-        self.actor_loss = learner.actor_loss
-        self.value_loss = learner.value_loss
-        self.optimizer = learner.optimizer
-        self.value_target_updater = learner.value_target_updater
-        self.state_dim = latent_state_dim(cfg)
-        self.use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
-        self._warmup_steps = (
-            cudagraph_warmup
-            if cfg.optimization.cudagraph_train_step
-            else int(
-                bool(
-                    cfg.optimization.compile_train_step or cfg.optimization.compile_rssm
-                )
-            )
+
+def _learner_metrics(losses: TensorDictBase) -> torch.Tensor:
+    """Select the six loss series recorded by this experiment."""
+    return torch.stack(
+        (
+            losses["loss_model_dynamic"] + losses["loss_model_representation"],
+            losses["loss_model_reco"],
+            losses["loss_model_reward"],
+            losses["loss_actor"],
+            losses["loss_value"],
+            losses["replay_value"],
         )
-        self._cudagraph_warmup_remaining = (
-            cudagraph_warmup if cfg.optimization.cudagraph_train_step else 0
-        )
-        train_step = self._forward_backward
-        if cfg.optimization.compile_train_step:
-            train_step = torch.compile(
-                train_step,
-                mode=cfg.optimization.compile_train_step_mode,
-            )
-        if cfg.optimization.cudagraph_train_step:
-            if device.type != "cuda":
-                raise RuntimeError(
-                    "optimization.cudagraph_train_step requires a CUDA training device."
-                )
-            train_step = CudaGraphModule(
-                train_step,
-                warmup=cudagraph_warmup,
-                device=device,
-            )
-        self.train_step = train_step
-
-    @property
-    def replay_must_be_idle(self) -> bool:
-        """Whether replay work must finish before the next learner call."""
-        return self._cudagraph_warmup_remaining > 0
-
-    def _forward_backward(
-        self,
-        sample: TensorDictBase,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        cfg = self.cfg
-        with torch.autocast(
-            device_type=self.device.type,
-            dtype=torch.bfloat16,
-            enabled=self.use_bfloat16,
-        ):
-            model_loss_td, model_out = self.model_loss(sample)
-            model_kl = (
-                model_loss_td["loss_model_dynamic"]
-                + model_loss_td["loss_model_representation"]
-            )
-            total_model_loss = (
-                model_kl
-                + model_loss_td["loss_model_reco"]
-                + model_loss_td["loss_model_reward"]
-                + model_loss_td["loss_model_continue"]
-            ).squeeze()
-
-            post_state = (
-                model_out.get(("next", "state")).detach().reshape(-1, self.state_dim)
-            )
-            post_belief = (
-                model_out.get(("next", "belief"))
-                .detach()
-                .reshape(-1, cfg.networks.rnn_hidden_dim)
-            )
-            actor_input = TensorDict(
-                {"state": post_state, "belief": post_belief},
-                [post_state.shape[0]],
-            )
-            actor_loss_td, fake_data = self.actor_loss(actor_input)
-            value_loss_td, _ = self.value_loss(fake_data.detach())
-
-            replay_features = TensorDict(
-                {
-                    "state": model_out.get(("next", "state")),
-                    "belief": model_out.get(("next", "belief")),
-                    "bootstrap": fake_data.get("lambda_target")[..., 0, 0].reshape(
-                        sample.batch_size
-                    ),
-                    "next": sample.get("next").select("reward", "done", "terminated"),
-                },
-                sample.batch_size,
-            )
-            replay_loss = self.value_loss.replay_value_loss(
-                replay_features,
-                horizon=cfg.optimization.continuation_horizon,
-                lmbda=cfg.optimization.lmbda,
-            )["loss_replay_value"]
-            total_loss = (
-                total_model_loss
-                + actor_loss_td["loss_actor"]
-                + value_loss_td["loss_value"]
-                + cfg.optimization.replay_value_loss_weight * replay_loss
-            )
-
-        self.optimizer.zero_grad(set_to_none=False)
-        total_loss.backward()
-        metrics = torch.stack(
-            (
-                model_kl.detach().reshape(()),
-                model_loss_td["loss_model_reco"].detach().reshape(()),
-                model_loss_td["loss_model_reward"].detach().reshape(()),
-                actor_loss_td["loss_actor"].detach().reshape(()),
-                value_loss_td["loss_value"].detach().reshape(()),
-                replay_loss.detach().reshape(()),
-            )
-        )
-        return (
-            metrics,
-            model_out.get(("next", "state")).detach(),
-            model_out.get(("next", "belief")).detach(),
-        )
-
-    def __call__(
-        self,
-        sample: TensorDictBase,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        sample = sample.select(*self._sample_keys)
-        # Replay sampling may squeeze boolean feature axes. Match capture inputs.
-        for key in ("is_init", ("next", "done"), ("next", "terminated")):
-            sample.set(key, sample.get(key).reshape(*sample.batch_size, 1))
-        result = self.train_step(sample)
-        if self._cudagraph_warmup_remaining:
-            self._cudagraph_warmup_remaining -= 1
-        self.optimizer.step()
-        self.value_target_updater.step()
-        return result
+    )
 
 
 def _fake_learner_sample(
@@ -279,29 +163,17 @@ def _fake_learner_sample(
 def _warm_up_learner(
     cfg: DictConfig,
     device: torch.device,
-    learner_update: _LearnerUpdate,
+    learner_update: DreamerV3OptimizationStepper,
     obs_dim: int,
     action_dim: int,
 ) -> None:
-    if not learner_update._warmup_steps:
+    if not (
+        cfg.optimization.compile_train_step
+        or cfg.optimization.compile_rssm
+        or cfg.optimization.cudagraph_train_step
+    ):
         return
-
-    cpu_rng_state = torch.get_rng_state()
-    cuda_rng_state = torch.cuda.get_rng_state(device) if device.type == "cuda" else None
-    return_low = learner_update.actor_loss.retnorm.low.detach().clone()
-    return_high = learner_update.actor_loss.retnorm.high.detach().clone()
-    sample = _fake_learner_sample(cfg, device, obs_dim, action_dim)
-    try:
-        for _ in range(learner_update._warmup_steps):
-            learner_update.train_step(sample.select(*learner_update._sample_keys))
-        learner_update._cudagraph_warmup_remaining = 0
-        learner_update.optimizer.zero_grad(set_to_none=False)
-    finally:
-        learner_update.actor_loss.retnorm.low.copy_(return_low)
-        learner_update.actor_loss.retnorm.high.copy_(return_high)
-        torch.set_rng_state(cpu_rng_state)
-        if cuda_rng_state is not None:
-            torch.cuda.set_rng_state(cuda_rng_state, device)
+    learner_update.warmup(_fake_learner_sample(cfg, device, obs_dim, action_dim))
 
 
 def _validated_action_budget(cfg: DictConfig) -> int:
@@ -762,7 +634,7 @@ def main(cfg: DictConfig):
     run_timer = timeit("dreamer_v3/run").start()
 
     learner = _build_learner(cfg, device, obs_dim, action_dim)
-    learner_update = _LearnerUpdate(cfg, device, learner)
+    learner_update = _make_learner_update(cfg, device, learner)
     _warm_up_learner(cfg, device, learner_update, obs_dim, action_dim)
     rb = _build_replay(cfg, num_envs, replay_device, device)
     action_step = 0
@@ -890,25 +762,16 @@ def main(cfg: DictConfig):
                     sample_info = replay_sample.select("index", "index_generation")
                     sample = replay_sample.exclude("index", "index_generation")
                     sample = sample.to(device, non_blocking=True)[:, :-1]
-                if learner_update.replay_must_be_idle:
-                    # CUDA graph capture rejects CUDA API calls from other threads.
-                    with timeit("dreamer_v3/replay_wait"):
-                        rb.synchronize()
                 with timeit(
                     "dreamer_v3/train_update", sync=cfg.optimization.sync_timers
                 ):
-                    (
-                        update_losses,
-                        refreshed_state,
-                        refreshed_belief,
-                    ) = learner_update(sample)
+                    losses = learner_update.step(None, sample)
+                    update_losses = _learner_metrics(losses)
+                    refreshed_state = sample["replay_context", "state"]
+                    refreshed_belief = sample["replay_context", "belief"]
                     batch_losses[update_index].copy_(update_losses)
                     loss_window_sum += update_losses
                     loss_window_updates += 1
-                if cfg.optimization.cudagraph_train_step:
-                    # CudaGraphModule reuses static output buffers across replays.
-                    refreshed_state = refreshed_state.clone()
-                    refreshed_belief = refreshed_belief.clone()
                 with timeit("dreamer_v3/replay_submit"):
                     index, generation, patch = replay_context_update(
                         sample_info, refreshed_state, refreshed_belief

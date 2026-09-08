@@ -60,3 +60,11 @@ Documentation Sections
    modules_inference_server
    modules_utils
    recurrent_state_lifecycle
+
+DreamerV3 recurrent components
+------------------------------
+
+The recurrent components are also exported directly from ``torchrl.modules``:
+:class:`~torchrl.modules.RSSMPriorV3`,
+:class:`~torchrl.modules.RSSMPosteriorV3`, and
+:class:`~torchrl.modules.RSSMRolloutV3`. See :doc:`dreamer_v3` for their composition.
