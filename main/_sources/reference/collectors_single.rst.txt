@@ -138,6 +138,14 @@ The pause context finishes in-flight environment and policy requests, parks
 the coordinator threads, and leaves the inference server idle. Collection
 resumes automatically when the context exits.
 
+With ``replay_buffer=buffer``, calling ``collector.start()`` writes complete
+batches in a background thread until ``total_frames`` is reached. The ordinary
+iterator still writes synchronously and yields ``None``. Choose one mode per
+collector. Background mode runs post-processing and post-collect hooks on the
+writer thread; ``collector.pause()`` waits for writes as well as environment and
+policy work to finish. Call ``collector.async_shutdown()`` to join the writer,
+close workers, and propagate collection or replay errors.
+
 .. _async_batched_collector_cpu_affinity:
 
 On Linux, ``worker_affinity`` assigns CPU masks to the multiprocessing

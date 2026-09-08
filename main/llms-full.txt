@@ -1865,6 +1865,14 @@ The pause context finishes in-flight environment and policy requests, parks
 the coordinator threads, and leaves the inference server idle. Collection
 resumes automatically when the context exits.
 
+With `replay_buffer=buffer`, calling `collector.start()` writes complete
+batches in a background thread until `total_frames` is reached. The ordinary
+iterator still writes synchronously and yields `None`. Choose one mode per
+collector. Background mode runs post-processing and post-collect hooks on the
+writer thread; `collector.pause()` waits for writes as well as environment and
+policy work to finish. Call `collector.async_shutdown()` to join the writer,
+close workers, and propagate collection or replay errors.
+
 On Linux, `worker_affinity` assigns CPU masks to the multiprocessing
 environment workers, while `driver_affinity` assigns one mask to the
 inference-server and coordinator threads, as well as the pool's parent-side
@@ -10122,27 +10130,14 @@ shutdown(*timeout: float | None = None*, *close_env: bool = True*, *raise_on_err
 
 Shut down the collector, inference server, threads and env pool.
 
-start()
+start() → None[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.start)
 
-Starts the collector for asynchronous data collection.
+Collect into replay in a background thread until `total_frames`.
 
-This method initiates the background collection of data, allowing for decoupling of data collection and training.
-
-The collected data is typically stored in a replay buffer passed during the collector's initialization.
-
-Note
-
-After calling this method, it's essential to shut down the collector using `async_shutdown()`
-when you're done with it to free up resources.
-
-Warning
-
-Asynchronous data collection can significantly impact training performance due to its decoupled nature.
-Ensure you understand the implications for your specific algorithm before using this mode.
-
-Raises:
-
-**NotImplementedError** - If not implemented by a subclass.
+Requires `replay_buffer`. Post-processing and the post-collect hook
+run on the writer thread. Iteration and background collection are
+mutually exclusive. Use `pause()` to quiesce collection and writes,
+and `async_shutdown()` to join the writer and surface its errors.
 
 stats() → dict[str, int | float | bool]
 
@@ -34019,7 +34014,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f0cfa78d800>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f857130dd50>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47291,7 +47286,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0cfd71c4a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f85742784a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 

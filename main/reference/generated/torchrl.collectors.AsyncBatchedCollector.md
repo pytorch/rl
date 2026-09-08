@@ -527,27 +527,14 @@ shutdown(*timeout: float | None = None*, *close_env: bool = True*, *raise_on_err
 
 Shut down the collector, inference server, threads and env pool.
 
-start()
+start() → None[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.start)
 
-Starts the collector for asynchronous data collection.
+Collect into replay in a background thread until `total_frames`.
 
-This method initiates the background collection of data, allowing for decoupling of data collection and training.
-
-The collected data is typically stored in a replay buffer passed during the collector's initialization.
-
-Note
-
-After calling this method, it's essential to shut down the collector using `async_shutdown()`
-when you're done with it to free up resources.
-
-Warning
-
-Asynchronous data collection can significantly impact training performance due to its decoupled nature.
-Ensure you understand the implications for your specific algorithm before using this mode.
-
-Raises:
-
-**NotImplementedError** - If not implemented by a subclass.
+Requires `replay_buffer`. Post-processing and the post-collect hook
+run on the writer thread. Iteration and background collection are
+mutually exclusive. Use `pause()` to quiesce collection and writes,
+and `async_shutdown()` to join the writer and surface its errors.
 
 stats() → dict[str, int | float | bool]
 
