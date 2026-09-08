@@ -1,0 +1,31 @@
+name: Post-merge benchmarks
+# Opt-in: merging a pull request that carries the "benchmarks/trigger" label
+# runs the full benchmark suite on main right away and publishes it to the
+# trend, instead of waiting for the nightly sample. pull_request_target
+# provides a write-capable token for the dispatch; nothing is checked out.
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch the full benchmark suite
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      contains(github.event.pull_request.labels.*.name, 'benchmarks/trigger')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run benchmarks.yml on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          gh workflow run benchmarks.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f suite=full -f skip-upload=false
+          echo "Dispatched the full benchmark suite on main for #${PR_NUMBER} (merge commit ${MERGE_SHA})." >> "$GITHUB_STEP_SUMMARY"
