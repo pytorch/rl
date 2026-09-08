@@ -1277,7 +1277,12 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         not (_has_hydra and _has_omegaconf and _has_gym),
         reason="requires hydra, omegaconf, and gym",
     )
-    @pytest.mark.parametrize("compile_train_step", [False, True])
+    # This compares two independently compiled forward/backward paths and
+    # CUDA capture. Even the previous loop backend took ~266s on CI runners.
+    @pytest.mark.parametrize(
+        "compile_train_step",
+        [False, pytest.param(True, marks=pytest.mark.timeout(600))],
+    )
     def test_dreamer_v3_full_learner_cuda_graph_matches_uncaptured(
         self, device, monkeypatch, compile_train_step
     ):
@@ -2645,6 +2650,7 @@ def test_dreamer_v3_checkpoint_resume_processes(
         example_dir, compile_train_step=False, cudagraph_train_step=device == "cuda"
     )
     cfg.optimization.device = device
+    cfg.optimization.compile = "off"
     cfg.optimization.compile_rssm = None
     cfg.optimization.updates_per_batch = 1
     cfg.optimization.separate_policy_rng = True
@@ -2720,8 +2726,13 @@ def test_dreamer_v3_checkpoint_resume_processes(
     assert first_steps >= 8 if terminate else first_steps == 16
     assert first_state["updates"] > 0
     assert ("replay" in Checkpoint.manifest(first_path)["components"]) == include_replay
-    first_learner = example["_build_learner"](cfg, torch.device("cpu"), 3, 1)
-    stepper = example["_make_learner_update"](cfg, torch.device("cpu"), first_learner)
+    # Inspect CUDA checkpoints on CPU with an eager execution configuration.
+    inspect_cfg = copy.deepcopy(cfg)
+    inspect_cfg.optimization.cudagraph_train_step = False
+    first_learner = example["_build_learner"](inspect_cfg, torch.device("cpu"), 3, 1)
+    stepper = example["_make_learner_update"](
+        inspect_cfg, torch.device("cpu"), first_learner
+    )
     modules = stepper.loss_module
     policy = example["DreamerV3SeededPolicy"](first_learner.real_world_actor, seed=0)
     schedule = example["DreamerV3UpdateRatio"](0.0)
