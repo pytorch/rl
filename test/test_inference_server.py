@@ -2206,6 +2206,27 @@ from torchrl.collectors import AsyncBatchedCollector, Collector
 from torchrl.testing.mocking_classes import CountingEnv
 
 
+class _ControlledResetEnv(CountingEnv):
+    def __init__(self, *, reset_index=0, entered=None, release=None, fail=False):
+        super().__init__(max_steps=0)
+        self._reset_index = reset_index
+        self._reset_count = 0
+        self._entered = entered
+        self._release = release
+        self._fail = fail
+
+    def _reset(self, tensordict=None, **kwargs):
+        if self._reset_count == self._reset_index:
+            if self._entered is not None:
+                self._entered.set()
+            if self._fail:
+                raise ValueError("controlled reset failure")
+            if self._release is not None and not self._release.wait(timeout=10):
+                raise TimeoutError("reset was not released")
+        self._reset_count += 1
+        return super()._reset(tensordict, **kwargs)
+
+
 def _counting_env_factory(max_steps=5):
     """Factory that returns a CountingEnv."""
     return CountingEnv(max_steps=max_steps)
@@ -2609,17 +2630,22 @@ class TestAsyncBatchedCollector:
         assert collected >= 50
 
     @pytest.mark.parametrize(
-        ("env_backend", "env_exchange"),
-        [("threading", "queue"), ("multiprocessing", "shm")],
+        ("env_backend", "env_exchange", "envs_per_worker"),
+        [
+            ("threading", "queue", 1),
+            ("multiprocessing", "queue", 2),
+            ("multiprocessing", "shm", 2),
+        ],
     )
-    def test_pause_for_torch_compile(self, env_backend, env_exchange):
+    def test_pause_for_torch_compile(self, env_backend, env_exchange, envs_per_worker):
         """Compilation can run while a started collector is quiescent."""
         collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * 4,
+            create_env_fn=[_counting_env_factory] * 5,
             policy=_make_counting_policy(),
             frames_per_batch=10,
             total_frames=-1,
             env_backend=env_backend,
+            envs_per_worker=envs_per_worker,
             env_exchange=env_exchange,
         )
         iterator = iter(collector)
@@ -2750,36 +2776,41 @@ class TestAsyncBatchedCollector:
                 env_exchange="shm",
             )
 
-    def test_worker_affinity_validation_is_eager(self):
-        with pytest.raises(ValueError, match="one CPU mask per environment"):
+    @pytest.mark.parametrize("envs_per_worker", [1, 2])
+    def test_worker_affinity_validation_is_eager(self, envs_per_worker):
+        with pytest.raises(ValueError, match="one CPU mask per worker process"):
             AsyncBatchedCollector(
-                create_env_fn=[_counting_env_factory] * 2,
+                create_env_fn=[_counting_env_factory] * 3,
                 policy=_make_counting_policy(),
                 frames_per_batch=10,
                 total_frames=10,
                 env_backend="multiprocessing",
                 worker_affinity=[(0,)],
+                envs_per_worker=envs_per_worker,
             )
 
     @pytest.mark.skipif(
         not hasattr(os, "sched_setaffinity"),
         reason="CPU affinity requires Linux",
     )
-    def test_cpu_affinity(self):
+    @pytest.mark.parametrize("envs_per_worker", [1, 2])
+    def test_cpu_affinity(self, envs_per_worker):
         """Worker processes and driver threads use their configured masks."""
         original_affinity = os.sched_getaffinity(0)
         cpus = sorted(original_affinity)
         driver_affinity = (cpus[0],)
         worker_affinity = (cpus[-1],)
         collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * 2,
+            create_env_fn=[_counting_env_factory] * 3,
             policy=_make_counting_policy(),
             frames_per_batch=10,
             total_frames=10,
             max_batch_size=2,
             env_backend="multiprocessing",
-            worker_affinity=[worker_affinity] * 2,
+            worker_affinity=[worker_affinity]
+            * ((3 + envs_per_worker - 1) // envs_per_worker),
             driver_affinity=driver_affinity,
+            envs_per_worker=envs_per_worker,
         )
         try:
             collector._ensure_started()
@@ -2798,6 +2829,90 @@ class TestAsyncBatchedCollector:
                 == set(driver_affinity)
                 for input_queue in collector.env.input_queue
             )
+        finally:
+            collector.shutdown()
+
+    def test_multiprocessing_envs_per_worker(self):
+        """Grouped workers preserve every stream with a single receive owner."""
+        num_envs = 5
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy=_make_counting_policy(),
+            frames_per_batch=25,
+            total_frames=25,
+            max_batch_size=num_envs,
+            env_backend="multiprocessing",
+            envs_per_worker=2,
+        )
+        try:
+            batch = next(iter(collector))
+            env_ids = {int(env_id) for env_id in batch["env_index"]}
+            assert env_ids == set(range(num_envs))
+            assert len(collector.env.threads) == 3
+            assert len(collector._workers) == 1
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("env_exchange", ["queue", "shm"])
+    @pytest.mark.parametrize("reset_index", [0, 1])
+    def test_grouped_slow_reset_keeps_other_stream_running(
+        self, env_exchange, reset_index
+    ):
+        ctx = mp.get_context("spawn")
+        entered, release = ctx.Event(), ctx.Event()
+        collector = AsyncBatchedCollector(
+            create_env_fn=[
+                ft.partial(
+                    _ControlledResetEnv,
+                    reset_index=reset_index,
+                    entered=entered,
+                    release=release,
+                ),
+                _counting_env_factory,
+            ],
+            policy=_make_counting_policy(),
+            frames_per_batch=8,
+            total_frames=24,
+            env_backend="multiprocessing",
+            env_exchange=env_exchange,
+            envs_per_worker=2,
+        )
+        try:
+            collector._ensure_started()
+            assert entered.wait(timeout=5)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                try:
+                    batches = executor.submit(list, collector).result(timeout=5)
+                    assert sum(batch.numel() for batch in batches) == 24
+                    assert all(
+                        int(index) == 1
+                        for batch in batches
+                        for index in batch["env_index"]
+                    )
+                finally:
+                    release.set()
+        finally:
+            release.set()
+            collector.shutdown()
+
+    @pytest.mark.parametrize("env_exchange", ["queue", "shm"])
+    def test_grouped_environment_error_reaches_collector(self, env_exchange):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[
+                ft.partial(_ControlledResetEnv, reset_index=1, fail=True),
+                _counting_env_factory,
+            ],
+            policy=_make_counting_policy(),
+            frames_per_batch=8,
+            env_backend="multiprocessing",
+            env_exchange=env_exchange,
+            envs_per_worker=2,
+        )
+        try:
+            with pytest.raises(RuntimeError) as error:
+                for _ in collector:
+                    pass
+            assert "controlled reset failure" in str(error.value.__cause__)
         finally:
             collector.shutdown()
 
