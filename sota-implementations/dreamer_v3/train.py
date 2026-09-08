@@ -614,12 +614,18 @@ def _build_replay(
         )
 
     sampler_type = StreamingSliceSampler if cfg.replay_buffer.online else SliceSampler
+    # Async collection stores one environment per stream: with the stream as
+    # the trajectory, sequences may span an episode end (the rollout resets on
+    # the stored is_init flags), so terminal transitions and episodes shorter
+    # than a sequence reach the learner.
+    traj_key = "env_index" if cfg.collector.backend == "async" else None
     members = [
         TensorDictReplayBuffer(
             storage=LazyTensorStorage(capacity, device=replay_device),
             sampler=sampler_type(
                 slice_len=sequence_records,
                 end_key=("next", "done"),
+                traj_key=traj_key,
                 # The RSSM rollout resets its state wherever is_init is set,
                 # so samples must carry the collector's episode starts only,
                 # not the sampler's slice-start markers.
