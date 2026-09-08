@@ -86,6 +86,12 @@ objects. In the TorchRL API:
      - The learned probability that an imagined trajectory continues. It
        replaces a fixed survival assumption when weighting returns and losses.
 
+For acting in a real environment, compose the encoder,
+:class:`~torchrl.modules.RSSMStateEstimatorV3` and actor with
+:class:`~tensordict.nn.TensorDictSequential`. The estimator resets recurrent
+context per stream and samples only the observation-conditioned posterior.
+The collector carries its state, belief and action into the next step.
+
 How the RSSM works
 ------------------
 

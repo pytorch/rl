@@ -107,6 +107,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     ModelConfig,
     QMixerNetworkConfig,
     QValueModelConfig,
+    RSSMStateEstimatorV3Config,
     TanhModuleConfig,
     TanhNormalModelConfig,
     TensorDictModuleConfig,
@@ -310,6 +311,7 @@ __all__ = [
     "DreamerV3ImageDecoderConfig",
     "DreamerV3ImageEncoderConfig",
     "DreamerV3MLPConfig",
+    "RSSMStateEstimatorV3Config",
     "MLPConfig",
     "ModelConfig",
     "TanhModuleConfig",
@@ -527,6 +529,9 @@ def _register_configs():
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
     cs.store(group="network", name="dreamer_v3_mlp", node=DreamerV3MLPConfig)
+    cs.store(
+        group="network", name="rssm_state_estimator_v3", node=RSSMStateEstimatorV3Config
+    )
     cs.store(
         group="network",
         name="dreamer_v3_image_encoder",
