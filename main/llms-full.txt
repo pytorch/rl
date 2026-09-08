@@ -6940,13 +6940,36 @@ per-environment receives own their tensor storage. Aggregate batches returned
 with `stack="lazy"` are views over the shared slots and remain valid only until
 actions are sent back to the corresponding environments.
 
+Multiprocessing pools can reduce process and command-pipe overhead by hosting
+several environments in each worker:
+
+```
+env = AsyncEnvPool(
+ [make_env] * 64,
+ backend="multiprocessing",
+ exchange="shm",
+ envs_per_worker=4,
+)
+```
+
+Each worker runs its environments concurrently in threads, so grouping is most
+useful for I/O-bound environments. CPU-bound Python environments can contend
+for the GIL and should generally keep `envs_per_worker=1`. The process count
+is `ceil(num_envs / envs_per_worker)`. Grouping also changes CPU-affinity
+granularity: a worker affinity mask applied before its environment threads are
+created is inherited by all of them, while tools that pin an already-running
+PID may need to target every thread explicitly. Container CPU sets and quotas
+apply to the grouped process and all of its threads; use one environment per
+worker when environments require independent CPU placement.
+
 ### CPU affinity (Linux)
 
 The multiprocessing backend accepts `worker_affinity` to restrict each
-environment worker to selected CPUs. Pass one CPU mask per environment or a
-callable that returns a mask for an environment index. The mask is applied
-before the environment factory runs, so subprocesses created by the factory
-inherit the worker's affinity.
+worker process to selected CPUs. Pass one CPU mask per worker process or a
+callable that returns a mask for a worker index. With `envs_per_worker=4` and
+64 environments, provide 16 masks. The mask is applied before environment
+threads and factories start, so all environments in a worker and subprocesses
+created by their factories inherit the worker's affinity.
 
 This option is intended for deployments where Python workers, CPU-heavy
 simulators, and driver services share a constrained CPU set. Without explicit
@@ -7008,9 +7031,9 @@ If this is not possible, please raise an issue.
 - [`AsyncEnvPool`](generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool): A base class for asynchronous environment pools. It determines the backend
 implementation to use based on the provided arguments and manages the lifecycle of the environments.
 - [`ProcessorAsyncEnvPool`](generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool): An implementation of [`AsyncEnvPool`](generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) using
-multiprocessing for parallel execution of environments. This class manages a pool of environments, each running in
-its own process, and provides methods for asynchronous stepping and resetting of environments using inter-process
-communication. It is automatically instantiated when "multiprocessing" is passed as a backend during the
+multiprocessing for parallel execution of environments. This class manages a pool of environments across worker
+processes and provides methods for asynchronous stepping and resetting using inter-process communication. It is
+automatically instantiated when "multiprocessing" is passed as a backend during the
 [`AsyncEnvPool`](generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) instantiation.
 - [`ThreadingAsyncEnvPool`](generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool): An implementation of [`AsyncEnvPool`](generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) using
 threading for parallel execution of environments. This class manages a pool of environments, each running in its own
@@ -9468,7 +9491,7 @@ alias of `Literal`['directory', 'archive', 'consolidated', 'torch']
 
 # AsyncBatchedCollector
 
-*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'queue'*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
+*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'queue'*, *envs_per_worker: int = 1*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
 
 Asynchronous collector with env slots and a policy server.
 
@@ -9482,7 +9505,7 @@ decouples environment stepping from policy inference:
 - An [`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) runs *N* environments using
 whatever backend the user chooses (`"threading"`,
 `"multiprocessing"`).
-- With a shared-memory environment exchange, one coordinator thread drains
+- With a shared-memory exchange or grouped workers, one coordinator drains
 whichever environments are ready and submits their observations without
 blocking. Other exchanges use one lightweight coordinator thread per
 environment.
@@ -9562,6 +9585,10 @@ Python threads regardless of this setting. Defaults to `None`.
 [`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool), one of `"queue"`, `"shm"`
 or `"auto"`. The shared-memory exchange also enables batched
 coordination from one thread. Defaults to `"queue"`.
+- **envs_per_worker** (*int**,**optional*) - Number of environments hosted by each
+multiprocessing worker. Grouped workers share one coordinator that
+drains ready environments without waiting for a complete group.
+Defaults to `1`.
 - **policy_backend** (*str**,**optional*) - backend for the inference transport
 used to communicate with the
 `InferenceServer`. One of
@@ -9596,12 +9623,12 @@ on CPUs reserved for simulators or driver work causes contention or
 step-time jitter; most users should leave it unset. TorchRL knows
 which CPUs are available, but not the application's intended CPU
 partition or each environment's thread requirements, so it cannot
-choose these masks automatically. Provide one mask per environment,
-or a callable mapping each environment index to its mask. Defaults
+choose these masks automatically. Provide one mask per worker process,
+or a callable mapping each worker index to its mask. Defaults
 to `None`. See async_batched_collector_cpu_affinity for a
 complete collector example.
 - **driver_affinity** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**,**optional*) - Linux CPU affinity mask for
-the inference-server and per-environment coordinator threads, plus
+the inference-server and coordinator threads, plus
 parent-side multiprocessing queue feeder threads. Dedicated
 process-backed inference servers are not covered. The thread
 constructing the collector is restored to its original affinity
@@ -33948,7 +33975,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4fc70dcd60>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f177d3e7d80>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47139,7 +47166,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f4fc9e0c400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f17804fc400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -61270,11 +61297,15 @@ TorchRL can discover which CPUs the current process may use, but
 it cannot infer which CPUs the application has reserved for other
 work or how many threads an environment and its subprocesses need.
 It therefore does not choose a partition automatically. Provide
-one mask per environment, or a callable mapping an environment
-index to its mask. The mask is applied before the environment is
-constructed and is inherited by subprocesses it starts. Defaults
-to `None`. See [CPU affinity (Linux)](../envs_vectorized.html#async-env-pool-cpu-affinity) for an example
-and deployment guidance.
+one mask per worker process, or a callable mapping a worker
+index to its mask. The mask is applied before environment threads
+and factories start and is inherited by subprocesses they start.
+Defaults to `None`. See [CPU affinity (Linux)](../envs_vectorized.html#async-env-pool-cpu-affinity) for an
+example and deployment guidance.
+- **envs_per_worker** (*int**,**optional*) - Number of environments hosted by each
+multiprocessing worker process. Environments within a worker are
+executed concurrently in threads. This option is only supported by
+the multiprocessing backend. Defaults to `1`.
 - **create_env_kwargs** (*dict**,**optional*) - Keyword arguments to pass to the environment maker. Defaults to {}.
 
 Variables:
@@ -61282,6 +61313,8 @@ Variables:
 - **min_get** (*int*) - Minimum number of environments to process in a batch.
 - **env_makers** (*list*) - List of environment makers or environments.
 - **num_envs** (*int*) - Number of environments in the pool.
+- **envs_per_worker** (*int*) - Number of environments hosted by each
+multiprocessing worker.
 - **backend** (*str*) - Backend used for parallel execution.
 - **stack** (*str*) - Method used for stacking environment outputs.
 
@@ -107792,9 +107825,9 @@ Examples
 
 An implementation of AsyncEnvPool using multiprocessing for parallel execution of environments.
 
-This class manages a pool of environments, each running in its own process, and
-provides methods for asynchronous stepping and resetting of environments using
-inter-process communication.
+This class manages a pool of environments across worker processes and provides
+methods for asynchronous stepping and resetting using inter-process
+communication. A worker can host multiple environments in dedicated threads.
 
 Supports per-env `recv` via `env_index` for thread-safe concurrent access
 from multiple collector threads.
@@ -107808,8 +107841,7 @@ If this is not possible, please raise an issue.
 
 _setup()[[source]](../../_modules/torchrl/envs/async_envs.html#ProcessorAsyncEnvPool._setup)
 
-Initializes the multiprocessing queues and processes for each
-environment.
+Initializes multiprocessing queues and worker processes.
 
 async_step_send(*tensordict*)[[source]](../../_modules/torchrl/envs/async_envs.html#ProcessorAsyncEnvPool.async_step_send)
 
@@ -265447,7 +265479,7 @@ Configuration for tensor-based storage in replay buffer.
 
 # torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig
 
-*class*torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig(*_partial_: bool = False*, *create_env_fn: ~typing.Any = '???'*, *num_workers: int = 1*, *create_env_kwargs: dict = <factory>*, *batched_env_type: str = 'parallel'*, *device: str | None = None*, *backend: str = 'threading'*, *stack: str = 'dense'*, *exchange: str = 'queue'*, *worker_affinity: list[list[int]] | None = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.envs.make_batched_env'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/envs.html#BatchedEnvConfig)
+*class*torchrl.trainers.algorithms.configs.envs.BatchedEnvConfig(*_partial_: bool = False*, *create_env_fn: ~typing.Any = '???'*, *num_workers: int = 1*, *create_env_kwargs: dict = <factory>*, *batched_env_type: str = 'parallel'*, *device: str | None = None*, *backend: str = 'threading'*, *stack: str = 'dense'*, *exchange: str = 'queue'*, *worker_affinity: list[list[int]] | None = None*, *envs_per_worker: int = 1*, *_target_: str = 'torchrl.trainers.algorithms.configs.envs.make_batched_env'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/envs.html#BatchedEnvConfig)
 
 Configuration for batched environments.
 

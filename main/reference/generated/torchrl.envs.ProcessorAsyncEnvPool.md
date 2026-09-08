@@ -4,9 +4,9 @@
 
 An implementation of AsyncEnvPool using multiprocessing for parallel execution of environments.
 
-This class manages a pool of environments, each running in its own process, and
-provides methods for asynchronous stepping and resetting of environments using
-inter-process communication.
+This class manages a pool of environments across worker processes and provides
+methods for asynchronous stepping and resetting using inter-process
+communication. A worker can host multiple environments in dedicated threads.
 
 Supports per-env `recv` via `env_index` for thread-safe concurrent access
 from multiple collector threads.
@@ -20,8 +20,7 @@ If this is not possible, please raise an issue.
 
 _setup()[[source]](../../_modules/torchrl/envs/async_envs.html#ProcessorAsyncEnvPool._setup)
 
-Initializes the multiprocessing queues and processes for each
-environment.
+Initializes multiprocessing queues and worker processes.
 
 async_step_send(*tensordict*)[[source]](../../_modules/torchrl/envs/async_envs.html#ProcessorAsyncEnvPool.async_step_send)
 

@@ -52,11 +52,15 @@ TorchRL can discover which CPUs the current process may use, but
 it cannot infer which CPUs the application has reserved for other
 work or how many threads an environment and its subprocesses need.
 It therefore does not choose a partition automatically. Provide
-one mask per environment, or a callable mapping an environment
-index to its mask. The mask is applied before the environment is
-constructed and is inherited by subprocesses it starts. Defaults
-to `None`. See [CPU affinity (Linux)](../envs_vectorized.html#async-env-pool-cpu-affinity) for an example
-and deployment guidance.
+one mask per worker process, or a callable mapping a worker
+index to its mask. The mask is applied before environment threads
+and factories start and is inherited by subprocesses they start.
+Defaults to `None`. See [CPU affinity (Linux)](../envs_vectorized.html#async-env-pool-cpu-affinity) for an
+example and deployment guidance.
+- **envs_per_worker** (*int**,**optional*) - Number of environments hosted by each
+multiprocessing worker process. Environments within a worker are
+executed concurrently in threads. This option is only supported by
+the multiprocessing backend. Defaults to `1`.
 - **create_env_kwargs** (*dict**,**optional*) - Keyword arguments to pass to the environment maker. Defaults to {}.
 
 Variables:
@@ -64,6 +68,8 @@ Variables:
 - **min_get** (*int*) - Minimum number of environments to process in a batch.
 - **env_makers** (*list*) - List of environment makers or environments.
 - **num_envs** (*int*) - Number of environments in the pool.
+- **envs_per_worker** (*int*) - Number of environments hosted by each
+multiprocessing worker.
 - **backend** (*str*) - Backend used for parallel execution.
 - **stack** (*str*) - Method used for stacking environment outputs.
 
