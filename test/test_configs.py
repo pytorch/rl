@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import enum
 import importlib.util
 import inspect
 import os
@@ -159,6 +160,18 @@ _CONFIG_PARITY_UNRESOLVED = {
     "the torch versions TorchRL currently supports.",
 }
 
+_CONFIG_PARITY_SIGNATURE_OVERRIDES = {
+    "MultiAsyncCollectorConfig": "torchrl.collectors.MultiCollector",
+}
+
+_CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
+    {
+        "CollectorConfig",
+        "MultiAsyncCollectorConfig",
+        "MultiSyncCollectorConfig",
+    }
+)
+
 _CONFIG_PARITY_KNOWN_GAPS = frozenset(
     {
         "ActionMaskConfig",
@@ -181,7 +194,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "MeltingpotEnvConfig",
         "ModuleTransformConfig",
         "MultiStepTransformConfig",
-        "MultiSyncCollectorConfig",
         "MultiThreadedEnvConfig",
         "NormConfig",
         "ObservationNormConfig",
@@ -266,6 +278,64 @@ def _config_parity_cases() -> list:
     return cases
 
 
+def _normalize_default(value):
+    """Compare enum members by their string value, case-insensitively."""
+    if isinstance(value, enum.Enum):
+        value = value.value
+    if isinstance(value, str):
+        return value.lower()
+    return value
+
+
+def _resolve_parity_target(config_name: str) -> tuple[dict, type, list]:
+    """Resolve a Config to the class whose ``__init__`` defines its contract.
+
+    Returns the Config's dataclass fields, the wrapped class and its named
+    ``__init__`` parameters; the leading positional parameter is dropped for
+    ``_partial_`` configs, which bind it at call time rather than from the
+    config. Skips the calling test when the target needs a missing optional
+    dependency.
+    """
+    cfg_cls = _discover_leaf_configs()[config_name]
+    fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
+    target_path = fields["_target_"].default
+    signature_target_path = _CONFIG_PARITY_SIGNATURE_OVERRIDES.get(
+        config_name, target_path
+    )
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            wrapped_cls = _resolve_wrapped_class(signature_target_path)
+    except ImportError as err:
+        # Resolving a _target_ may import modules that require optional
+        # dependencies (e.g. the vLLM weight-sync schemes pull in modules
+        # that need `requests`); on a minimal install that is a skip, not
+        # a parity failure.
+        pytest.skip(
+            f"optional dependency missing while resolving "
+            f"{config_name} signature target = {signature_target_path!r}: {err}"
+        )
+    assert wrapped_cls is not None, (
+        f"{config_name} signature target = {signature_target_path!r} could not "
+        "be resolved to "
+        "a class (not a class itself, and not a function with a class "
+        "return annotation)."
+    )
+
+    params = [
+        (pname, param)
+        for pname, param in inspect.signature(wrapped_cls.__init__).parameters.items()
+        if pname != "self"
+    ]
+    if (
+        fields.get("_partial_") is not None
+        and fields["_partial_"].default is True
+        and params
+    ):
+        params = params[1:]
+    return fields, wrapped_cls, params
+
+
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
@@ -285,13 +355,17 @@ class TestConfigClassParity:
 
     Two deliberate limitations, left as follow-ups:
 
-    - Only field-name presence is checked; default-value *equality* between a
-      Config field and the corresponding ``__init__`` kwarg is NOT enforced, so
-      a Config default that drifts from the constructor's default still passes.
+    - Default-value *equality* between a Config field and the corresponding
+      ``__init__`` kwarg is only enforced for the configs listed in
+      ``_CONFIG_PARITY_DEFAULTS_CHECKED``; for every other config a default
+      that drifts from the constructor's default still passes. The list is
+      meant to grow one area at a time, as the allowlist below shrinks.
     - Wrapped ``__init__`` signatures made up purely of ``*args``/``**kwargs``
-      expose no named parameters to diff, so their configs pass vacuously, and
-      a ``**kwargs`` catch-all next to named parameters hides any kwarg that is
-      only reachable through it.
+      expose no named parameters to diff. Known wrappers can point to the class
+      that owns their constructor contract through
+      ``_CONFIG_PARITY_SIGNATURE_OVERRIDES``. An unmapped wrapper still passes
+      vacuously, and a ``**kwargs`` catch-all next to named parameters hides any
+      kwarg that is only reachable through it.
 
     Resolving a ``_target_`` can import optional-dependency modules; when such
     an import fails the case is skipped rather than failed, so the test stays
@@ -308,41 +382,7 @@ class TestConfigClassParity:
 
     @pytest.mark.parametrize("config_name", _config_parity_cases())
     def test_wrapped_class_kwargs_have_config_fields(self, config_name):
-        cfg_cls = _discover_leaf_configs()[config_name]
-        fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
-        target_path = fields["_target_"].default
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                wrapped_cls = _resolve_wrapped_class(target_path)
-        except ImportError as err:
-            # Resolving a _target_ may import modules that require optional
-            # dependencies (e.g. the vLLM weight-sync schemes pull in modules
-            # that need `requests`); on a minimal install that is a skip, not
-            # a parity failure.
-            pytest.skip(
-                f"optional dependency missing while resolving "
-                f"{config_name}._target_ = {target_path!r}: {err}"
-            )
-        assert wrapped_cls is not None, (
-            f"{config_name}._target_ = {target_path!r} could not be resolved to "
-            "a class (not a class itself, and not a function with a class "
-            "return annotation)."
-        )
-
-        params = [
-            (pname, param)
-            for pname, param in inspect.signature(
-                wrapped_cls.__init__
-            ).parameters.items()
-            if pname != "self"
-        ]
-        if (
-            fields.get("_partial_") is not None
-            and fields["_partial_"].default is True
-            and params
-        ):
-            params = params[1:]
+        fields, wrapped_cls, params = _resolve_parity_target(config_name)
 
         missing = [
             pname
@@ -357,6 +397,26 @@ class TestConfigClassParity:
             f"{wrapped_cls.__name__}.__init__ kwarg(s) {missing}: these can be "
             f"set on {wrapped_cls.__name__} directly but are silently "
             f"unreachable through Hydra. See CLAUDE.md section 14."
+        )
+
+    @pytest.mark.parametrize("config_name", sorted(_CONFIG_PARITY_DEFAULTS_CHECKED))
+    def test_wrapped_class_kwarg_defaults_match_config(self, config_name):
+        fields, wrapped_cls, params = _resolve_parity_target(config_name)
+
+        drift = {
+            pname: (fields[pname].default, param.default)
+            for pname, param in params
+            if pname in fields
+            and param.default is not inspect.Parameter.empty
+            and fields[pname].default is not dataclasses.MISSING
+            and _normalize_default(fields[pname].default)
+            != _normalize_default(param.default)
+        }
+        assert not drift, (
+            f"{config_name} default(s) drift from {wrapped_cls.__name__}.__init__ "
+            f"as {{field: (config default, constructor default)}} = {drift}: a "
+            "Hydra user who leaves the field unset gets different behavior from "
+            "a caller of the constructor. See CLAUDE.md section 14."
         )
 
 
@@ -1667,6 +1727,33 @@ class TestCollectorsConfig:
             assert next(iter(collector)).numel() == 10
         finally:
             collector.shutdown()
+
+    @pytest.mark.parametrize("collector", ["multi_sync", "multi_async"])
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_multi_collector_config_without_policy(self, collector):
+        """Leaving ``policy`` unset falls back to a random policy, as in the constructor."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import (
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg_cls = {
+            "multi_sync": MultiSyncCollectorConfig,
+            "multi_async": MultiAsyncCollectorConfig,
+        }[collector]
+        cfg = cfg_cls(
+            create_env_fn=[GymEnvConfig(env_name="Pendulum-v1")],
+            frames_per_batch=10,
+            total_frames=10,
+        )
+        collector_instance = instantiate(cfg)
+        try:
+            assert next(iter(collector_instance)).numel() == 10
+        finally:
+            collector_instance.shutdown(timeout=10)
 
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
