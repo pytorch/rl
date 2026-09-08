@@ -7,6 +7,9 @@ from __future__ import annotations
 import multiprocessing as mp
 import queue
 import time
+from ctypes import Array, c_byte, c_double
+from multiprocessing.queues import SimpleQueue
+from multiprocessing.synchronize import Event, Lock, Semaphore
 
 import torch
 from tensordict.base import _is_leaf_nontensor, TensorDictBase
@@ -16,6 +19,10 @@ from torchrl._comm import MailboxPeerClosedError, MailboxTransportError
 from torchrl.modules.inference_server._client import (
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
+)
+from torchrl.modules.inference_server._slot_utils import (
+    _make_slot_bank,
+    _take_ready_slots,
 )
 from torchrl.modules.inference_server._transport import InferenceTransport
 
@@ -58,13 +65,14 @@ class _ProcessSlotClient:
         request_slots: TensorDictBase,
         response_slots: TensorDictBase,
         request_keys: list[NestedKey],
-        request_ready,
-        submitted_at,
-        response_status,
-        response_event,
-        exception_queue,
-        work_semaphore,
-        peer_alive,
+        request_ready: Array[c_byte],
+        request_lock: Lock,
+        submitted_at: Array[c_double],
+        response_status: Array[c_byte],
+        response_event: Event,
+        exception_queue: SimpleQueue,
+        work_semaphore: Semaphore,
+        peer_alive: Event | None,
         copy_result: bool,
     ):
         self._slot_id = slot_id
@@ -72,6 +80,7 @@ class _ProcessSlotClient:
         self._response_slots = response_slots
         self._request_keys = request_keys
         self._request_ready = request_ready
+        self._request_lock = request_lock
         self._submitted_at = submitted_at
         self._response_status = response_status
         self._response_event = response_event
@@ -118,9 +127,12 @@ class _ProcessSlotClient:
         self._response_event.clear()
         self._response_status[slot] = 0
         self._submitted_at[slot] = time.monotonic()
-        self._request_ready[slot] = 1
         self._in_flight = True
-        self._work_semaphore.release()
+        # The server takes this lock even after a timed-out semaphore wait.
+        # Releasing it publishes all preceding payload writes to that reader.
+        with self._request_lock:
+            self._request_ready[slot] = 1
+            self._work_semaphore.release()
         return _ProcessSlotFuture(self)
 
     def __call__(
@@ -257,7 +269,13 @@ class ProcessSlotTransport(InferenceTransport):
         self._next_slot = 0
         self._acquired_signals = 0
 
-        request_keys = list(request_spec.keys(include_nested=True, leaves_only=True))
+        request_keys = list(
+            request_spec.keys(
+                include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor
+            )
+        )
+        if not request_keys:
+            raise ValueError("request_spec must contain at least one tensor leaf.")
         self._request_keys = [
             key for key in request_keys if key != _REMOTE_INTERACTION_TYPE_KEY
         ]
@@ -271,13 +289,18 @@ class ProcessSlotTransport(InferenceTransport):
                     dtype=torch.int8,
                 ),
             )
-        self._request_slots = self._make_slots(request_slot_spec, "request_spec")
-        self._response_slots = self._make_slots(response_spec, "response_spec")
+        self._request_slots = _make_slot_bank(
+            request_slot_spec, self._num_slots, type(self).__name__, "request_spec"
+        )
+        self._response_slots = _make_slot_bank(
+            response_spec, self._num_slots, type(self).__name__, "response_spec"
+        )
         self._response_keys = list(
             response_spec.keys(include_nested=True, leaves_only=True)
         )
 
         self._request_ready = self._ctx.Array("b", num_slots, lock=False)
+        self._request_lock = self._ctx.Lock()
         self._submitted_at = self._ctx.Array("d", num_slots, lock=False)
         self._response_status = self._ctx.Array("b", num_slots, lock=False)
         self._response_events = [self._ctx.Event() for _ in range(num_slots)]
@@ -286,50 +309,25 @@ class ProcessSlotTransport(InferenceTransport):
         self._peer_alive = self._ctx.Event()
         self._peer_alive.set()
 
-    def _make_slots(self, spec: TensorDictBase, argname: str) -> TensorDictBase:
-        leaves = list(
-            spec.items(
-                include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor
-            )
-        )
-        if not leaves:
-            raise ValueError(f"{argname} must contain at least one tensor leaf.")
-        for key, value in leaves:
-            if not isinstance(value, torch.Tensor):
-                raise TypeError(
-                    "ProcessSlotTransport specs only support tensor leaves; "
-                    f"{argname} has a {type(value).__name__} at key {key!r}."
-                )
-            if value.device.type != "cpu":
-                raise ValueError(
-                    "ProcessSlotTransport slots live in CPU shared memory; "
-                    f"{argname} has a {value.device} tensor at key {key!r}."
-                )
-        return (
-            spec.unsqueeze(0)
-            .expand(self._num_slots, *spec.batch_size)
-            .clone()
-            .share_memory_()
-        )
-
     def _set_peer_alive(self, alive_event) -> None:
         self._peer_alive = alive_event
 
     def client(self) -> _ProcessSlotClient:
         """Create a client bound to the next unused slot."""
         slot_id = self._next_client_slot
-        self._next_client_slot += 1
         if slot_id >= self._num_slots:
             raise RuntimeError(
                 f"ProcessSlotTransport has {self._num_slots} slots but client() "
                 f"was called {slot_id + 1} times."
             )
+        self._next_client_slot += 1
         return _ProcessSlotClient(
             slot_id=slot_id,
             request_slots=self._request_slots,
             response_slots=self._response_slots,
             request_keys=self._request_keys,
             request_ready=self._request_ready,
+            request_lock=self._request_lock,
             submitted_at=self._submitted_at,
             response_status=self._response_status,
             response_event=self._response_events[slot_id],
@@ -363,20 +361,22 @@ class ProcessSlotTransport(InferenceTransport):
         items = []
         callbacks = []
         submitted_at = []
-        start_slot = self._next_slot
-        for offset in range(self._num_slots):
-            slot = (start_slot + offset) % self._num_slots
-            if not self._request_ready[slot]:
-                continue
-            self._request_ready[slot] = 0
+        # The semaphore is a doorbell, not the payload's memory barrier: a
+        # timed drain can run without acquiring a signal. Synchronize with each
+        # publisher before looking at flags, including on weakly ordered CPUs.
+        with self._request_lock:
+            callbacks = _take_ready_slots(
+                self._request_ready, self._next_slot, max_items
+            )
+            if callbacks:
+                self._next_slot = (callbacks[-1] + 1) % self._num_slots
+        for slot in callbacks:
             items.append(self._request_slots[slot].copy())
-            callbacks.append(slot)
             submitted_at.append(self._submitted_at[slot])
             self._submitted_at[slot] = 0.0
-            self._next_slot = (slot + 1) % self._num_slots
-            if len(items) >= max_items:
-                break
 
+        # Consume doorbells for drained requests, including a signal already
+        # consumed by wait_for_work(). Extra wakeups are harmless.
         signals_to_consume = len(items)
         acquired = min(signals_to_consume, self._acquired_signals)
         self._acquired_signals -= acquired
