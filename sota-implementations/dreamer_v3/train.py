@@ -2,10 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""DreamerV3 training script that reproduces a pinned JAX configuration.
+"""DreamerV3 training with native replay and configurable environments.
 
-The script is proprioceptive, not pixel-based, and writes its metrics to a
-JSONL file on the same step axis as the author-maintained JAX implementation.
+Supports vector and image observations and continuous or discrete actions.
+The Walker preset reproduces a pinned JAX configuration and reporting axis.
 
 Usage::
 
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 import functools as ft
+import math
 from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
@@ -42,7 +43,6 @@ from dreamer_v3_agent import (
 from dreamer_v3_replay import (
     collector_action_budget,
     DreamerV3UpdateRatio,
-    driver_step_for_action,
     replay_context_update,
 )
 from dreamer_v3_utils import (
@@ -56,7 +56,7 @@ from dreamer_v3_utils import (
     stream_seed,
     training_episode_returns,
 )
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl import timeit
@@ -64,6 +64,7 @@ from torchrl._utils import get_available_device, logger as torchrl_logger
 from torchrl.collectors import AsyncBatchedCollector, Collector
 from torchrl.data import (
     LazyTensorStorage,
+    OneHot,
     ReplayBufferEnsemble,
     SliceSampler,
     StreamingSliceSampler,
@@ -72,7 +73,10 @@ from torchrl.data import (
 )
 from torchrl.envs import SelectTransform, SerialEnv
 from torchrl.envs.utils import ExplorationType
-from torchrl.modules.inference_server import InferenceDeviceConfig
+from torchrl.modules.inference_server import (
+    InferenceDeviceConfig,
+    InferenceServerConfig,
+)
 from torchrl.objectives import (
     DreamerV3ActorLoss,
     DreamerV3Loss,
@@ -80,7 +84,73 @@ from torchrl.objectives import (
     DreamerV3ValueLoss,
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
+from torchrl.record.loggers import get_logger
 from torchrl.trainers.algorithms import DreamerV3OptimizationStepper, DreamerV3Optimizer
+from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key
+
+
+class _RunLogger:
+    """Write consistent records to JSONL and a selected TorchRL logger."""
+
+    def __init__(self, cfg: DictConfig, jsonl_path: Path | None):
+        self.jsonl_path = jsonl_path
+        self.milestone_names = list(cfg.env.milestone_names)
+        self.backend = cfg.logger.backend
+        if cfg.logger.base_url and self.backend != "wandb":
+            raise ValueError(
+                "logger.base_url is only supported with logger.backend='wandb'."
+            )
+        kwargs = {}
+        if self.backend == "wandb":
+            kwargs["wandb_kwargs"] = {
+                "project": cfg.logger.project,
+                "entity": cfg.logger.entity,
+                "group": cfg.logger.group,
+                "tags": list(cfg.logger.tags) or None,
+                "mode": cfg.logger.mode,
+                "config": OmegaConf.to_container(cfg, resolve=True),
+            }
+            if cfg.logger.base_url:
+                kwargs["wandb_kwargs"]["base_url"] = cfg.logger.base_url
+        self.logger = get_logger(
+            self.backend,
+            logger_name=cfg.logger.log_dir,
+            experiment_name=cfg.logger.exp_name or f"dreamer_v3_{cfg.env.name}",
+            **kwargs,
+        )
+        if self.backend == "wandb":
+            self.logger.experiment.define_metric("environment_steps")
+            self.logger.experiment.define_metric("*", step_metric="environment_steps")
+
+    def log(self, record: dict[str, object]) -> None:
+        append_jsonl(self.jsonl_path, record)
+        if self.logger is None:
+            return
+        kind = record.get("type", "run")
+        step = record.get("environment_steps", record.get("total_environment_steps"))
+        payload = {}
+        for key, value in record.items():
+            if key in ("type", "environment_steps"):
+                continue
+            if key == "milestones":
+                if len(value) != len(self.milestone_names):
+                    raise ValueError(
+                        "env.milestone_names must match the milestone vector."
+                    )
+                for name, flag in zip(self.milestone_names, value):
+                    payload[f"{kind}/obtained_{name}"] = float(flag)
+            elif isinstance(value, (bool, int, float)):
+                payload[f"{kind}/{key}"] = value
+        if self.backend == "wandb":
+            payload["environment_steps"] = step
+            self.logger.experiment.log(payload)
+        else:
+            for key, value in payload.items():
+                self.logger.log_scalar(key, value, step=step)
+
+    def finish(self) -> None:
+        if self.logger is not None:
+            self.logger.close()
 
 
 class _Learner(NamedTuple):
@@ -141,23 +211,29 @@ def _fake_learner_sample(
     obs_dim: int,
     action_dim: int,
 ) -> TensorDict:
-    batch_size = (cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len)
-    return TensorDict(
-        {
-            "state": torch.zeros(*batch_size, latent_state_dim(cfg)),
-            "belief": torch.zeros(*batch_size, cfg.networks.rnn_hidden_dim),
-            "action": torch.zeros(*batch_size, action_dim),
-            "is_init": torch.zeros(*batch_size, 1, dtype=torch.bool),
-            "next": {
-                "observation": torch.zeros(*batch_size, obs_dim),
-                "reward": torch.zeros(*batch_size, 1),
-                "done": torch.zeros(*batch_size, 1, dtype=torch.bool),
-                "terminated": torch.zeros(*batch_size, 1, dtype=torch.bool),
-            },
-        },
-        batch_size,
-        device=device,
-    )
+    env = make_primed_env(cfg, cfg.env.seed + 3, latent_state_dim(cfg), action_dim)
+    try:
+        sample = env.fake_tensordict().select(
+            "action",
+            "is_init",
+            "state",
+            "belief",
+            ("next", "reward"),
+            ("next", "done"),
+            ("next", "terminated"),
+            *[
+                ("next", _normalize_hydra_key(key))
+                for key in (cfg.env.vector_key, cfg.env.pixels_key)
+                if key is not None
+            ],
+        )
+        return (
+            sample.expand(cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len)
+            .clone()
+            .to(device)
+        )
+    finally:
+        env.close()
 
 
 def _warm_up_learner(
@@ -190,6 +266,21 @@ def _validated_action_budget(cfg: DictConfig) -> int:
             "collector.frames_per_batch must be divisible by collector.num_envs, "
             f"got {cfg.collector.frames_per_batch} and {num_envs}."
         )
+    max_time = cfg.optimization.max_time
+    if max_time is not None and (max_time <= 0 or not math.isfinite(max_time)):
+        raise ValueError("optimization.max_time must be positive and finite.")
+    if cfg.optimization.collection_warmup_seconds < 0 or not math.isfinite(
+        cfg.optimization.collection_warmup_seconds
+    ):
+        raise ValueError(
+            "optimization.collection_warmup_seconds must be non-negative and finite."
+        )
+    if cfg.collector.total_frames < 0:
+        if max_time is None:
+            raise ValueError(
+                "An unlimited frame budget requires optimization.max_time."
+            )
+        return -1
     collector_action_frames = (
         collector_action_budget(
             cfg.collector.total_frames,
@@ -199,7 +290,10 @@ def _validated_action_budget(cfg: DictConfig) -> int:
         if cfg.collector.count_reset_records
         else cfg.collector.total_frames
     )
-    if collector_action_frames % cfg.collector.frames_per_batch:
+    if (
+        cfg.collector.backend == "sync"
+        and collector_action_frames % cfg.collector.frames_per_batch
+    ):
         raise ValueError(
             "The action budget derived from collector.total_frames must be "
             "divisible by collector.frames_per_batch, got "
@@ -209,7 +303,12 @@ def _validated_action_budget(cfg: DictConfig) -> int:
 
 
 def _build_learner(
-    cfg: DictConfig, device: torch.device, obs_dim: int, action_dim: int
+    cfg: DictConfig,
+    device: torch.device,
+    obs_dim: int,
+    action_dim: int,
+    pixels_shape: tuple[int, int, int] | None = None,
+    discrete: bool = False,
 ) -> _Learner:
     (
         world_model,
@@ -221,6 +320,7 @@ def _build_learner(
         cfg=cfg,
         obs_dim=obs_dim,
         action_dim=action_dim,
+        pixels_shape=pixels_shape,
         compile_rollout=not cfg.optimization.compile_train_step,
     )
     world_model = world_model.to(device)
@@ -237,7 +337,9 @@ def _build_learner(
     continuation_model = build_continuation_model(continuation_net=continuation_net).to(
         device
     )
-    actor_model = build_actor(cfg=cfg, action_dim=action_dim).to(device)
+    actor_model = build_actor(cfg=cfg, action_dim=action_dim, discrete=discrete).to(
+        device
+    )
     value_model = build_value(cfg=cfg).to(device)
     mb_env = build_mb_env(
         cfg=cfg,
@@ -246,6 +348,10 @@ def _build_learner(
         device=device,
     )
 
+    vector = _normalize_hydra_key(cfg.env.vector_key) if obs_dim else None
+    pixels = (
+        _normalize_hydra_key(cfg.env.pixels_key) if pixels_shape is not None else None
+    )
     model_loss = DreamerV3ModelLoss(
         world_model,
         num_reward_bins=cfg.networks.num_reward_bins,
@@ -255,12 +361,24 @@ def _build_learner(
         lambda_representation=cfg.optimization.representation_loss_weight,
         unimix=cfg.networks.unimix,
         lambda_continue=1.0,
+        reco_symlog=[True, False]
+        if vector is not None and pixels is not None
+        else vector is not None,
         continue_target_scale=1 - 1 / cfg.optimization.continuation_horizon,
         # The reference adds the event dimensions, then averages batch and time.
         global_average=False,
         detach_output=False,
     ).to(device)
-    model_loss.set_keys(pixels="observation")
+    model_loss.set_keys(
+        pixels=[vector, pixels]
+        if vector is not None and pixels is not None
+        else vector
+        if vector is not None
+        else pixels,
+        reco_pixels=["reco_vector", "reco_pixels"]
+        if vector is not None and pixels is not None
+        else "reco_pixels",
+    )
     actor_loss = DreamerV3ActorLoss(
         actor_model,
         value_model,
@@ -364,8 +482,14 @@ def _build_collection(
             cfg.env.seed + 2 + index if cfg.env.use_seed else None,
             state_dim,
             action_dim,
+            env_index=index,
         )
         for index in range(num_envs)
+    ]
+    observation_keys = [
+        ("next", _normalize_hydra_key(key))
+        for key in (cfg.env.vector_key, cfg.env.pixels_key, cfg.env.milestone_key)
+        if key is not None
     ]
     replay_postproc = SelectTransform(
         "action",
@@ -373,7 +497,7 @@ def _build_collection(
         "state",
         "belief",
         "env_index",
-        ("next", "observation"),
+        *observation_keys,
         ("next", "reward"),
         ("next", "done"),
         ("next", "terminated"),
@@ -393,10 +517,17 @@ def _build_collection(
         collector = AsyncBatchedCollector(
             create_env_fns,
             policy=collector_policy,
-            max_batch_size=num_envs,
             env_backend=cfg.collector.async_env_backend,
+            env_exchange=cfg.collector.env_exchange,
+            envs_per_worker=cfg.collector.envs_per_worker,
+            server_config=InferenceServerConfig(
+                max_batch_size=cfg.collector.inference_max_batch_size or num_envs,
+                min_batch_size=cfg.collector.inference_min_batch_size,
+                timeout=cfg.collector.inference_timeout,
+                static_batch_size=cfg.collector.inference_static_batch_size,
+            ),
             device_config=InferenceDeviceConfig(
-                policy_device=device,
+                policy_device=cfg.collector.policy_device or device,
                 output_device="cpu",
                 env_device="cpu",
                 storing_device="cpu",
@@ -469,41 +600,31 @@ def _build_replay(
 
 def _log_train_episodes(
     cfg: DictConfig,
-    metrics_jsonl_path: Path | None,
+    run_logger: _RunLogger,
     completed_episodes: list[tuple[int, int, float]],
     batch_start_action_step: int,
     batch_start_record_step: int,
     batch_reset_prefix: list[int],
+    milestones: list[list[bool]] | None = None,
 ) -> None:
     num_envs = cfg.collector.num_envs
-    for time_index, env_index, score in completed_episodes:
-        if cfg.collector.backend == "async":
-            episode_step = batch_start_action_step + time_index + 1
-            if cfg.collector.count_reset_records:
-                episode_step = (
-                    batch_start_record_step
-                    + time_index
-                    + 1
-                    + batch_reset_prefix[time_index]
-                )
-        elif cfg.collector.count_reset_records:
-            action_index = batch_start_action_step // num_envs + time_index + 1
-            episode_step = driver_step_for_action(
-                action_index,
-                env_index,
-                num_envs,
-                cfg.env.max_episode_steps,
-            )
-        else:
+    for episode_index, (time_index, env_index, score) in enumerate(completed_episodes):
+        position = (
+            time_index
+            if cfg.collector.backend == "async"
+            else time_index * num_envs + env_index
+        )
+        episode_step = batch_start_action_step + position + 1
+        if cfg.collector.count_reset_records:
             episode_step = (
-                batch_start_action_step + time_index * num_envs + env_index + 1
+                batch_start_record_step + position + 1 + batch_reset_prefix[position]
             )
-        append_jsonl(
-            metrics_jsonl_path,
+        run_logger.log(
             {
                 "type": "train_episode",
                 "environment_steps": episode_step,
                 "score": score,
+                **({"milestones": milestones[episode_index]} if milestones else {}),
             },
         )
 
@@ -511,15 +632,14 @@ def _log_train_episodes(
 def _log_train_window(
     *,
     cfg: DictConfig,
-    metrics_jsonl_path: Path | None,
+    run_logger: _RunLogger,
     run_timer,
     record_step: int,
     update_step: int,
     loss_window_sum: torch.Tensor,
     loss_window_updates: int,
 ) -> None:
-    append_jsonl(
-        metrics_jsonl_path,
+    run_logger.log(
         {
             "type": "train",
             "environment_steps": record_step,
@@ -549,7 +669,7 @@ def _evaluate(
     device: torch.device,
     eval_env,
     real_world_actor: TensorDictModuleBase,
-    metrics_jsonl_path: Path | None,
+    run_logger: _RunLogger,
     run_timer,
     record_step: int,
     latest_losses: torch.Tensor,
@@ -574,8 +694,7 @@ def _evaluate(
         latest_losses[2].item(),
         latest_losses[3].item(),
     )
-    append_jsonl(
-        metrics_jsonl_path,
+    run_logger.log(
         {
             "type": "evaluation",
             "environment_steps": record_step,
@@ -620,7 +739,21 @@ def main(cfg: DictConfig):
     count_reset_records = cfg.collector.count_reset_records
     collector_action_frames = _validated_action_budget(cfg)
     real_env = make_env(cfg, cfg.env.seed)
-    obs_dim = real_env.observation_spec["observation"].shape[0]
+    vector = _normalize_hydra_key(cfg.env.vector_key)
+    pixels = _normalize_hydra_key(cfg.env.pixels_key)
+    obs_dim = real_env.observation_spec[vector].shape[-1] if vector is not None else 0
+    pixels_shape = (
+        tuple(real_env.observation_spec[pixels].shape[-3:])
+        if pixels is not None
+        else None
+    )
+    if not obs_dim and pixels_shape is None:
+        raise ValueError("Set env.vector_key, env.pixels_key or both.")
+    discrete = isinstance(real_env.action_spec, OneHot)
+    if len(real_env.action_spec.shape) != 1:
+        raise ValueError(
+            "DreamerV3 requires a vector action or one-hot discrete action spec."
+        )
     action_dim = real_env.action_spec.shape[0]
     real_env.close()
     state_dim = latent_state_dim(cfg)
@@ -633,7 +766,7 @@ def main(cfg: DictConfig):
     timeit.reset()
     run_timer = timeit("dreamer_v3/run").start()
 
-    learner = _build_learner(cfg, device, obs_dim, action_dim)
+    learner = _build_learner(cfg, device, obs_dim, action_dim, pixels_shape, discrete)
     learner_update = _make_learner_update(cfg, device, learner)
     _warm_up_learner(cfg, device, learner_update, obs_dim, action_dim)
     rb = _build_replay(cfg, num_envs, replay_device, device)
@@ -644,6 +777,8 @@ def main(cfg: DictConfig):
     running_training_return = torch.zeros(num_envs)
     seen_stream = torch.zeros(num_envs, dtype=torch.bool)
     completed_episodes: list[tuple[int, int, float]] = []
+    completed_milestones: list[list[bool]] = []
+    milestone_key = _normalize_hydra_key(cfg.env.milestone_key)
     batch_reset_prefix: list[int] = []
 
     def post_collect_hook(data: TensorDictBase) -> None:
@@ -652,13 +787,24 @@ def main(cfg: DictConfig):
         completed_episodes.extend(
             training_episode_returns(data, running_training_return, num_envs)
         )
+        completed_milestones.clear()
+        if milestone_key is not None:
+            flags = data.get(("next", milestone_key))
+            for position, env_index, _ in completed_episodes:
+                value = (
+                    flags[position]
+                    if cfg.collector.backend == "async"
+                    else flags[env_index, position]
+                )
+                completed_milestones.append(value.bool().tolist())
         if not count_reset_records:
             return
         is_init = data.get("is_init").reshape(-1).cpu()
         env_index = data.get("env_index", default=None)
         if env_index is None:
-            env_index = torch.arange(num_envs).reshape(num_envs, 1)
-            env_index = env_index.expand(data.batch_size).reshape(-1)
+            # Report synchronous episodes in time-major, then environment order.
+            is_init = is_init.reshape(num_envs, -1).t().reshape(-1)
+            env_index = torch.arange(num_envs).repeat(data.numel() // num_envs)
         else:
             env_index = env_index.reshape(-1).cpu()
         batch_reset_prefix.clear()
@@ -694,6 +840,7 @@ def main(cfg: DictConfig):
     next_train_log = 0
 
     eval_env = make_primed_env(cfg, cfg.env.seed + 100, state_dim, action_dim)
+    run_logger = _RunLogger(cfg, metrics_jsonl_path)
 
     warmup = (
         cfg.replay_buffer.warmup_factor
@@ -716,8 +863,11 @@ def main(cfg: DictConfig):
         # Keep the learner draws in a range apart from the policy stream.
         torch.manual_seed(stream_seed(cfg.env.seed, 0, LEARNER_RNG_STREAM))
 
+    collection_timer = None
     try:
         for _ in collector:
+            if collection_timer is None:
+                collection_timer = timeit("dreamer_v3/collection", sync=False).start()
             # The collector writes canonical transitions directly into replay.
             if behavior_policy_sync is not None:
                 behavior_policy_sync.apply_after_action()
@@ -729,13 +879,21 @@ def main(cfg: DictConfig):
             )
             _log_train_episodes(
                 cfg,
-                metrics_jsonl_path,
+                run_logger,
                 completed_episodes,
                 batch_start_action_step,
                 batch_start_record_step,
                 batch_reset_prefix,
+                completed_milestones,
             )
 
+            if (
+                cfg.optimization.max_time is not None
+                and run_timer.elapsed() >= cfg.optimization.max_time
+            ):
+                break
+            if collection_timer.elapsed() < cfg.optimization.collection_warmup_seconds:
+                continue
             replay_stats = rb.stats()
             if replay_stats["size"] < warmup or not rb.can_sample():
                 continue
@@ -795,7 +953,7 @@ def main(cfg: DictConfig):
                 loss_history.append(batch_losses.cpu())
 
             train_log_due = bool(
-                metrics_jsonl_path is not None
+                (metrics_jsonl_path is not None or cfg.logger.backend)
                 and cfg.logger.train_every
                 and (
                     record_step >= next_train_log
@@ -807,7 +965,7 @@ def main(cfg: DictConfig):
             if train_log_due:
                 _log_train_window(
                     cfg=cfg,
-                    metrics_jsonl_path=metrics_jsonl_path,
+                    run_logger=run_logger,
                     run_timer=run_timer,
                     record_step=record_step,
                     update_step=update_step,
@@ -824,7 +982,7 @@ def main(cfg: DictConfig):
                     device=device,
                     eval_env=eval_env,
                     real_world_actor=learner.real_world_actor,
-                    metrics_jsonl_path=metrics_jsonl_path,
+                    run_logger=run_logger,
                     run_timer=run_timer,
                     record_step=record_step,
                     latest_losses=latest_losses,
@@ -833,6 +991,22 @@ def main(cfg: DictConfig):
                 history_eval.append(r)
                 next_eval = record_step + cfg.logger.eval_every
 
+        run_logger.log(
+            {
+                "type": "summary",
+                "backend": cfg.env.backend,
+                "environment": cfg.env.name,
+                "task": cfg.env.task,
+                "seed": cfg.env.seed,
+                "environment_seeded": bool(cfg.env.use_seed),
+                "total_environment_steps": record_step,
+                "total_action_steps": action_step,
+                "updates": update_step,
+                "bfloat16": use_bfloat16,
+                "elapsed_seconds": run_timer.elapsed(),
+                "timings": timeit.todict(percall=False),
+            },
+        )
     finally:
         try:
             collector.shutdown()
@@ -840,28 +1014,14 @@ def main(cfg: DictConfig):
             try:
                 eval_env.close()
             finally:
-                rb.shutdown()
+                try:
+                    rb.shutdown()
+                finally:
+                    run_logger.finish()
 
     if cfg.logger.output_plot:
         save_run_plot(cfg, history_steps, history_eval, loss_history)
 
-    append_jsonl(
-        metrics_jsonl_path,
-        {
-            "type": "summary",
-            "backend": cfg.env.backend,
-            "environment": cfg.env.name,
-            "task": cfg.env.task,
-            "seed": cfg.env.seed,
-            "environment_seeded": bool(cfg.env.use_seed),
-            "total_environment_steps": record_step,
-            "total_action_steps": action_step,
-            "updates": update_step,
-            "bfloat16": use_bfloat16,
-            "elapsed_seconds": run_timer.elapsed(),
-            "timings": timeit.todict(percall=False),
-        },
-    )
     if metrics_jsonl_path is not None:
         torchrl_logger.info("Saved run metrics to %s", metrics_jsonl_path)
 

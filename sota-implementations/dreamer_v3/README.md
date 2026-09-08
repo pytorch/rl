@@ -182,3 +182,67 @@ python benchmarks/ad_hoc/bench_dreamer_v3_learner.py \
 
 Each variant reports the median synchronized update time plus a one-update
 profiler sample with kernel count, summed GPU kernel time, and CPU launch time.
+
+
+## Custom environments, observations and actions
+
+The standard configuration retains its Pendulum environment, synchronous collection,
+training defaults and optional JSONL output. A custom environment factory can select
+nested observation keys without changing the learner or replay implementation:
+
+```yaml
+env:
+  backend: custom
+  factory: my_envs:make_env
+  factory_kwargs: {}
+  vector_key: [sensors, vector]
+  pixels_key: [sensors, image]
+  milestone_key: [episode, milestones]
+  milestone_names: [started, completed]
+collector:
+  backend: async
+  async_env_backend: multiprocessing
+  env_exchange: shm
+  envs_per_worker: 4
+```
+
+The importable factory receives `seed`, `env_index`, `num_envs` and the configured
+keyword arguments, and returns one TorchRL environment. Multiprocessing factories
+must be spawn-compatible. Set either observation key to `null` to disable that
+path. Vector observations have one feature dimension; images use channels-first
+`(C, H, W)` shape and either uint8 pixels or floating-point values scaled to `[0, 1]`.
+Image dimensions must match the configured encoder/decoder downsampling stages.
+The image decoder predicts unconstrained values against normalized pixel targets.
+Continuous vector actions and discrete `OneHot` action specs are supported.
+
+Milestone flags are read from the configured key under `next` at each completed
+episode. Their boolean vector must match `milestone_names`. Both synchronous and
+asynchronous runs log these flags with episode returns. Imagination runs only in
+latent state and does not require real sensor or milestone observations.
+
+Asynchronous collection supports `env_exchange`, `envs_per_worker`, a separate
+`policy_device`, and the existing inference batch size/timeout settings. Setting
+`inference_static_batch_size` enables fixed-size CUDA-graph policy batches and
+requires a CUDA policy device. The default maximum inference batch size remains
+`num_envs`. Native replay performs all insertion in the parent process and checks
+write generations before applying latent-context updates.
+
+## Logging and time budgets
+
+`logger.backend` selects an optional TorchRL logger, for example `csv`,
+`tensorboard` or `wandb`; JSONL logging can remain enabled alongside it. Use
+`logger.log_dir` and `logger.exp_name` for local output. W&B additionally accepts
+`project`, `entity`, `group`, `tags`, `mode` and an explicit `base_url`. The latter
+is passed to W&B settings and takes precedence over its environment-variable
+server setting. Tracker metrics use the environment-step counter.
+
+`optimization.max_time` is a positive wall-clock budget in seconds, checked after
+completed collection batches. An unlimited frame budget (`collector.total_frames=-1`)
+requires a time budget. A current batch or learner update is allowed to finish;
+this is not a hard process deadline. `optimization.collection_warmup_seconds`
+collects into native replay without training for that duration, measured from the
+first completed collection batch. Both options preserve their disabled defaults.
+Compilation and capture warm-up complete before collection starts, using the real
+observation specs and the same learner input keys as native replay. Gradient
+buffers remain attached after capture, and an optimizer step without parameter
+gradients fails explicitly.

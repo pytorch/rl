@@ -10,10 +10,12 @@ import multiprocessing as mp
 import os
 import os.path
 import pathlib
+import runpy
 import sys
 import tempfile
 import threading
 from time import sleep
+from unittest import mock
 
 import pytest
 import torch
@@ -37,6 +39,8 @@ from torchrl.record.loggers.wandb import _has_moviepy, _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 _has_mp4 = _has_torchcodec
+_has_hydra = importlib.util.find_spec("hydra") is not None
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
@@ -368,7 +372,8 @@ def wandb_tmp_logger(tmp_path):
     del logger
 
 
-def test_wandb_base_url_used_for_login_and_init(monkeypatch):
+@pytest.mark.parametrize("source", ["logger", "dreamer_v3"])
+def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     calls = []
 
     class Settings:
@@ -381,7 +386,7 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch):
 
     def init(**kwargs):
         calls.append(("init", kwargs["settings"].base_url))
-        return argparse.Namespace(config={})
+        return argparse.Namespace(config={}, define_metric=mock.Mock())
 
     monkeypatch.setitem(
         sys.modules,
@@ -391,7 +396,24 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch):
     monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
     base_url = "https://wandb.example.com"
 
-    WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
+    if source == "logger":
+        WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
+    else:
+        if not (_has_hydra and _has_omegaconf):
+            pytest.skip("requires hydra and omegaconf")
+        from omegaconf import OmegaConf
+
+        example_dir = (
+            pathlib.Path(__file__).parents[1] / "sota-implementations/dreamer_v3"
+        )
+        monkeypatch.syspath_prepend(str(example_dir))
+        example = runpy.run_path(
+            example_dir / "train.py", run_name="dreamer_v3_logger_test"
+        )
+        cfg = OmegaConf.load(example_dir / "config.yaml")
+        cfg.logger.backend = "wandb"
+        cfg.logger.base_url = base_url
+        example["_RunLogger"](cfg, None)
 
     assert calls == [("login", base_url), ("init", base_url)]
 
