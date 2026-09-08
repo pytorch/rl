@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 """Run logging, RNG streams and evaluation of the DreamerV3 example."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -14,7 +15,6 @@ import torch
 from omegaconf import DictConfig
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -62,6 +62,22 @@ def training_episode_returns(
 ) -> list[tuple[int, int, float]]:
     reward = data.get(("next", "reward")).squeeze(-1)
     done = data.get(("next", "done")).squeeze(-1)
+    env_index = data.get("env_index", default=None)
+    if env_index is not None:
+        completed = []
+        for position, (env, step_reward, step_done) in enumerate(
+            zip(
+                env_index.reshape(-1).cpu(),
+                reward.reshape(-1).cpu(),
+                done.reshape(-1).cpu(),
+            )
+        ):
+            env = int(env)
+            running_return[env].add_(step_reward)
+            if step_done:
+                completed.append((position, env, float(running_return[env])))
+                running_return[env] = 0
+        return completed
     if num_envs == 1:
         reward = reward.reshape(1, -1)
         done = done.reshape(1, -1)

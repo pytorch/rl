@@ -6,6 +6,7 @@
 
 Reference: https://arxiv.org/abs/2301.04104
 """
+
 from __future__ import annotations
 
 import copy
@@ -29,8 +30,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
-
-from torchrl.data import Unbounded
+from torchrl.data import SliceSampler, StreamingSliceSampler, Unbounded
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
@@ -60,7 +60,7 @@ from torchrl.objectives.dreamer_v3 import (
     two_hot_encode,
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
-from torchrl.testing import get_default_devices
+from torchrl.testing import get_default_devices, PENDULUM_VERSIONED
 from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
 from torchrl.trainers.algorithms import DreamerV3Optimizer
 
@@ -1287,6 +1287,36 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             if key.startswith(target_prefix)
         )
 
+        benchmark = runpy.run_path(
+            repo_root / "benchmarks/ad_hoc/bench_dreamer_v3_learner.py",
+            run_name="dreamer_v3_native_replay_cuda_graph_test",
+        )
+        cfg = make_config(True)
+        torch.manual_seed(0)
+        replay_learner = example["_build_learner"](cfg, device, 3, 1)
+        replay_update = example["_LearnerUpdate"](
+            cfg,
+            device,
+            replay_learner,
+            cudagraph_warmup=5,
+        )
+        replay_step = benchmark["_ReplayLearnerStep"](
+            example,
+            cfg,
+            replay_update,
+            device=device,
+            replay_device=torch.device("cpu"),
+            obs_dim=3,
+            action_dim=1,
+        )
+        try:
+            for _ in range(6):
+                replay_step()
+            replay_step.synchronize()
+            assert not replay_update.replay_must_be_idle
+        finally:
+            replay_step.close()
+
     @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
     def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
         from omegaconf import OmegaConf
@@ -1357,8 +1387,11 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         ):
             loss_module.value_model(online_td)
         target_td = tensordict.select(*value_model.in_keys, strict=False)
-        with torch.no_grad(), loss_module.target_value_model_params.to_module(
-            loss_module.value_model, preserve_module_state=False
+        with (
+            torch.no_grad(),
+            loss_module.target_value_model_params.to_module(
+                loss_module.value_model, preserve_module_state=False
+            ),
         ):
             loss_module.value_model(target_td)
         expected_slow_loss = two_hot_cross_entropy(
@@ -2003,6 +2036,194 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert prior_grad > 0, "Real prior received no gradient"
         assert posterior_grad > 0, "Real posterior received no gradient"
         assert B == 2 and T == 3
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("online", [False, True])
+@pytest.mark.parametrize("count_reset_records", [False, True])
+def test_dreamer_v3_native_stream_replay(monkeypatch, online, count_reset_records):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py",
+        run_name=f"dreamer_v3_native_replay_{online}",
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.collector.num_envs = 2
+    cfg.collector.count_reset_records = count_reset_records
+    cfg.collector.total_frames = 16
+    cfg.collector.frames_per_batch = 4
+    cfg.env.max_episode_steps = 3
+    expected_action_budget = 12 if count_reset_records else 16
+    assert example["_validated_action_budget"](cfg) == expected_action_budget
+    cfg.replay_buffer.buffer_size = 15
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 2
+    cfg.replay_buffer.online = online
+    rb = example["_build_replay"](cfg, 2, torch.device("cpu"), torch.device("cpu"))
+    sampler_type = StreamingSliceSampler if online else SliceSampler
+    assert [rb[index].storage.max_size for index in range(2)] == [8, 7]
+    assert all(isinstance(rb[index].sampler, sampler_type) for index in range(2))
+
+    data = TensorDict(
+        {
+            "action": torch.arange(12).reshape(2, 6, 1).float(),
+            "is_init": torch.zeros(2, 6, 1, dtype=torch.bool),
+            "state": torch.zeros(2, 6, 4),
+            "belief": torch.zeros(2, 6, 5),
+            "next": {
+                "observation": torch.randn(2, 6, 3),
+                "reward": torch.randn(2, 6, 1),
+                "done": torch.zeros(2, 6, 1, dtype=torch.bool),
+                "terminated": torch.zeros(2, 6, 1, dtype=torch.bool),
+                "truncated": torch.zeros(2, 6, 1, dtype=torch.bool),
+            },
+        },
+        [2, 6],
+    )
+    data["is_init"][:, 0] = True
+    try:
+        rb.extend(data)
+        assert rb.stats()["write_count"] == 12
+        assert rb.can_sample()
+        sample = rb.sample().reshape(2, 3)
+        assert ("collector", "context_valid") not in sample.keys(True, True)
+        assert sample["is_init"].sum() <= 2
+        sample_info = sample.select("index", "index_generation")
+        index, generation, patch = example["replay_context_update"](
+            sample_info,
+            torch.ones(2, 2, 4),
+            torch.ones(2, 2, 5),
+        )
+        result = rb.submit_update_if_present(
+            index=index, generation=generation, patch=patch
+        ).result()
+        assert result.updated_count == index.numel()
+        assert any(rb[index][:]["state"].any() for index in range(2))
+        assert all(rb[index][:]["is_init"][0].all() for index in range(2))
+    finally:
+        rb.shutdown()
+
+
+@pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
+def test_dreamer_v3_replay_capacity_validation(monkeypatch):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_replay_capacity_test"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.collector.num_envs = 2
+    cfg.replay_buffer.buffer_size = 7
+    cfg.replay_buffer.seq_len = 3
+    with pytest.raises(ValueError, match="cannot hold one 4-record sequence"):
+        example["_build_replay"](cfg, 2, torch.device("cpu"), torch.device("cpu"))
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+def test_dreamer_v3_native_replay_benchmark_step_cpu(monkeypatch):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_replay_benchmark_cpu_test"
+    )
+    benchmark = runpy.run_path(
+        repo_root / "benchmarks/ad_hoc/bench_dreamer_v3_learner.py",
+        run_name="dreamer_v3_replay_benchmark_helpers_test",
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 3
+
+    class LearnerUpdate:
+        replay_must_be_idle = False
+
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, sample):
+            self.calls += 1
+            assert sample.shape == (2, 3)
+            return (
+                torch.zeros(6),
+                sample["state"] + self.calls,
+                sample["belief"] + self.calls,
+            )
+
+    learner_update = LearnerUpdate()
+    step = benchmark["_ReplayLearnerStep"](
+        example,
+        cfg,
+        learner_update,
+        device=torch.device("cpu"),
+        replay_device=torch.device("cpu"),
+        obs_dim=3,
+        action_dim=1,
+    )
+    try:
+        step()
+        step()
+        step.synchronize()
+        assert learner_update.calls == 2
+        assert any(step.replay_buffer[index][:]["state"].any() for index in range(4))
+    finally:
+        step.close()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize(
+    ("collector_backend", "separate_policy_rng"),
+    [("sync", False), ("async", False), ("async", True)],
+)
+def test_dreamer_v3_native_replay_collection_smoke(
+    monkeypatch, collector_backend, separate_policy_rng
+):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py",
+        run_name=f"dreamer_v3_native_replay_collection_{collector_backend}",
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.env.name = PENDULUM_VERSIONED()
+    cfg.optimization.separate_policy_rng = separate_policy_rng
+    cfg.optimization.device = "cpu"
+    cfg.optimization.updates_per_batch = 1
+    cfg.optimization.train_ratio = None
+    cfg.collector.backend = collector_backend
+    cfg.collector.num_envs = 2
+    cfg.collector.frames_per_batch = 8
+    cfg.collector.total_frames = 16
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 2
+    cfg.replay_buffer.warmup_factor = 1
+    cfg.logger.eval_every = 0
+    cfg.logger.train_every = 0
+    cfg.logger.output_plot = None
+    cfg.logger.metrics_jsonl = None
+    example["main"].__wrapped__(cfg)
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="requires bash")
