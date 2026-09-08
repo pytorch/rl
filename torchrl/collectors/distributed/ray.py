@@ -277,6 +277,15 @@ class RayCollector(BaseCollector):
             fixed-layout TensorDict payloads, ``transport="distributed"`` is
             the recommended data path (Gloo for CPU tensors and NCCL for CUDA
             tensors). Defaults to ``None``.
+        flatten_data (bool, optional): if ``True``, flatten each remote
+            collector rollout before extending the replay buffer. A rollout
+            with shape ``[N, T]`` is written as ``[N * T]`` transitions to the
+            recommended flat, 1-D replay-buffer layout. Requires
+            ``replay_buffer`` to be set (a ``TypeError`` is raised otherwise).
+            When ``trajs_per_batch`` is set this option is redundant: complete
+            trajectories are already written to the buffer as flat 1-D
+            sequences. Defaults to ``False`` for backward compatibility with
+            multidimensional replay-buffer storage.
         weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
@@ -376,6 +385,7 @@ class RayCollector(BaseCollector):
         update_after_each_batch: bool = False,
         max_weight_update_interval: int = -1,
         replay_buffer: ReplayBuffer | None = None,
+        flatten_data: bool = False,
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
@@ -426,6 +436,17 @@ class RayCollector(BaseCollector):
                     "actors. For large fixed-layout TensorDict payloads, consider "
                     "transport='distributed'."
                 )
+        if flatten_data:
+            if replay_buffer is None:
+                raise TypeError(
+                    "flatten_data=True requires a replay buffer to be passed to RayCollector. "
+                    "To flatten yielded batches, reshape them at consumption time with data.reshape(-1)."
+                )
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("flatten_data", True)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("flatten_data", True)
         if trajs_per_batch is not None:
             if isinstance(collector_kwargs, dict):
                 collector_kwargs.setdefault("trajs_per_batch", trajs_per_batch)
@@ -544,6 +565,7 @@ class RayCollector(BaseCollector):
 
         self.no_cuda_sync = no_cuda_sync
         self.replay_buffer = replay_buffer
+        self.flatten_data = flatten_data
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * len(create_env_fn)
         self.policy_factory = policy_factory

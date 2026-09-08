@@ -53,6 +53,7 @@ def _main_async_collector(
     set_truncated: bool = False,
     use_buffers: bool | None = None,
     replay_buffer: ReplayBuffer | None = None,
+    flatten_data: bool = False,
     extend_buffer: bool = True,
     traj_pool: _TrajectoryPool = None,
     trust_policy: bool = False,
@@ -100,6 +101,9 @@ def _main_async_collector(
     original_init_random_frames = (
         init_random_frames if init_random_frames is not None else 0
     )
+    # Only forward flatten_data when requested: collector_class may be a custom
+    # collector whose constructor predates (and does not accept) this kwarg.
+    flatten_kwargs = {"flatten_data": True} if flatten_data else {}
     try:
         # When trajs_per_batch is set, _iter_by_trajectories() handles RB writes
         # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
@@ -151,6 +155,7 @@ def _main_async_collector(
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
             compact_obs=compact_obs,
+            **flatten_kwargs,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.

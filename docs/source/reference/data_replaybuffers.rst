@@ -20,6 +20,16 @@ restrictions, and expected performance trade-offs, and
 :ref:`ref_distributed_transport_layouts` for the per-operation layout
 discovery and buffer lifecycle.
 
+.. important::
+
+    TorchRL recommends a flat, 1-D replay-buffer layout (the default
+    ``ndim=1`` storage). Flatten batched collector output before insertion and
+    recover trajectory structure from per-step boundary markers with
+    :class:`~torchrl.data.replay_buffers.SliceSampler`. Higher-dimensional
+    storage is supported when fixed-shape chunks are intentionally part of each
+    replay item, but it is not the preferred general-purpose layout. See
+    :ref:`Data layout: contiguous trajectories <data-layout>`.
+
 .. code-block:: python
 
     from functools import partial

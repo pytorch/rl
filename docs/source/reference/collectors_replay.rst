@@ -13,79 +13,56 @@ Collectors and Replay Buffers
     recommended — see :ref:`Data layout: contiguous trajectories
     <data-layout>`.
 
-Collectors and replay buffers interoperability
-----------------------------------------------
+Preferred layout: flat 1-D storage
+----------------------------------
 
-In the simplest scenario where single transitions have to be sampled
-from the replay buffer, little attention has to be given to the way
-the collector is built. Flattening the data after collection will
-be a sufficient preprocessing step before populating the storage:
+TorchRL recommends storing replay data in a single flat, 1-D buffer
+(``ndim=1``). Collector batch dimensions describe how data was produced; they
+do not need to become replay-buffer dimensions. Trajectory boundaries remain
+available through ``("collector", "traj_ids")``, ``("next", "done")``,
+``("next", "terminated")``, and ``("next", "truncated")``, and trajectory
+slices can be reconstructed at sampling time with
+:class:`~torchrl.data.replay_buffers.SliceSampler`.
 
-    >>> memory = ReplayBuffer(
-    ...     storage=LazyTensorStorage(N),
-    ...     transform=lambda data: data.reshape(-1))
-    >>> for data in collector:
-    ...     memory.extend(data)
+When the collector writes directly to the replay buffer, set
+``flatten_data=True``. A batched rollout with shape ``[N, T]`` is then reshaped
+once to ``[N * T]`` and written with one ``extend`` call:
 
-If trajectory slices have to be collected, the recommended way to achieve this is to create
-a multidimensional buffer and sample using the :class:`~torchrl.data.replay_buffers.SliceSampler`
-sampler class. One must ensure that the data passed to the buffer is properly shaped, with the
-``time`` and ``batch`` dimensions clearly separated. In practice, the following configurations
-will work:
+.. code-block:: python
 
-    >>> # Single environment: no need for a multi-dimensional buffer
-    >>> memory = ReplayBuffer(
-    ...     storage=LazyTensorStorage(N),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
-    ... )
-    >>> collector = Collector(env, policy, frames_per_batch=N, total_frames=-1)
-    >>> for data in collector:
-    ...     memory.extend(data)
-    >>> # Batched environments: a multi-dim buffer is required
-    >>> memory = ReplayBuffer(
-    ...     storage=LazyTensorStorage(N, ndim=2),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
-    ... )
-    >>> env = ParallelEnv(4, make_env)
-    >>> collector = Collector(env, policy, frames_per_batch=N, total_frames=-1)
-    >>> for data in collector:
-    ...     memory.extend(data)
-    >>> # Synchronous process collection behaves like ParallelEnv if cat_results="stack"
-    >>> memory = ReplayBuffer(
-    ...     storage=LazyTensorStorage(N, ndim=2),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
-    ... )
-    >>> collector = Collector(make_env, policy,
-    ...     num_collectors=4,
-    ...     sync=True,
-    ...     frames_per_batch=N,
-    ...     total_frames=-1,
-    ...     cat_results="stack")
-    >>> for data in collector:
-    ...     memory.extend(data)
-    >>> # Process collection + parallel env: adapt ndim for both batch dimensions
-    >>> memory = ReplayBuffer(
-    ...     storage=LazyTensorStorage(N, ndim=3),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
-    ... )
-    >>> collector = Collector(lambda: ParallelEnv(2, make_env), policy,
-    ...     num_collectors=4,
-    ...     sync=True,
-    ...     frames_per_batch=N,
-    ...     total_frames=-1,
-    ...     cat_results="stack")
-    >>> for data in collector:
-    ...     memory.extend(data)
+    from torchrl.collectors import Collector
+    from torchrl.data import LazyTensorStorage, ReplayBuffer
 
-.. important::
+    memory = ReplayBuffer(storage=LazyTensorStorage(100_000))
+    collector = Collector(
+        env,
+        policy,
+        frames_per_batch=200,
+        total_frames=-1,
+        replay_buffer=memory,
+        flatten_data=True,
+    )
+    for _ in collector:  # yields None; transitions are written directly
+        batch = memory.sample(256)
 
-    The ``ndim=2`` and ``ndim=3`` examples above apply to **fixed-frame
-    batches** (the default, without ``trajs_per_batch``).  When
-    ``trajs_per_batch`` is set, each trajectory is written to the buffer as a
-    **flat 1-D sequence** of variable length.  A storage with ``ndim >= 2``
-    expects a fixed second dimension that variable-length trajectories cannot
-    satisfy.  Always use the default ``ndim=1`` when combining
-    ``trajs_per_batch`` with a replay buffer.
+The same argument is available on :class:`~torchrl.collectors.AsyncCollector`,
+:class:`~torchrl.collectors.MultiSyncCollector`,
+:class:`~torchrl.collectors.MultiAsyncCollector`, and
+:class:`~torchrl.collectors.distributed.RayCollector`. If the caller owns the
+write instead, flatten explicitly before extending:
+
+.. code-block:: python
+
+    for data in collector:
+        memory.extend(data.reshape(-1))
+
+Higher-dimensional storage (``ndim >= 2``) remains supported for applications
+that deliberately store fixed-shape chunks. It is a specialized layout rather
+than the recommended default: the chunk dimensions become part of every replay
+item, variable-length trajectories cannot be represented directly, and shared
+multi-producer buffers require extra care around trajectory boundaries. See
+:ref:`The replay buffer ndim arg and why it doesn't multi-process well
+<data-layout-storage-ndim>` for details.
 
 .. _collectors_replay_trajs:
 

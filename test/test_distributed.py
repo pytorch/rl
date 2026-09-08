@@ -48,7 +48,7 @@ from torchrl.data import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
 )
-from torchrl.envs import StepCounter, TransformedEnv
+from torchrl.envs import SerialEnv, StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
 from torchrl.modules.inference_server import InferenceServer
 from torchrl.objectives import LossModule
@@ -103,6 +103,10 @@ class MismatchedCountingPolicy(CountingPolicy):
     def __init__(self):
         super().__init__()
         self.unexpected = nn.Parameter(torch.ones(()))
+
+
+def make_batched_counting_env():
+    return SerialEnv(2, CountingEnv)
 
 
 class ScalarRayLoss(LossModule):
@@ -1451,6 +1455,35 @@ class TestRayCollector(DistributedCollectorBase):
                 inference.shutdown()
             if replay is not None:
                 replay.shutdown()
+
+    def test_ray_replay_flatten_data_batched_env(self):
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        collector = None
+        try:
+            collector = RayCollector(
+                create_env_fn=[make_batched_counting_env],
+                policy=CountingPolicy(),
+                replay_buffer=replay,
+                flatten_data=True,
+                collector_class=Collector,
+                frames_per_batch=8,
+                total_frames=16,
+                remote_configs={"num_cpus": 1, "num_gpus": 0},
+                sync=True,
+            )
+            assert all(batch is None for batch in collector)
+            assert replay.write_count == 16
+            assert replay.sample().shape == (4,)
+        finally:
+            if collector is not None:
+                collector.shutdown()
+            replay.shutdown()
 
     def test_ray_collector_pause_drains_and_resumes(self):
         replay = TensorDictReplayBuffer(
