@@ -52,6 +52,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
 )
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.inference_server import (
     InferenceClient,
     InferenceDeviceConfig,
@@ -66,6 +67,10 @@ from torchrl.modules.inference_server import (
     SharedMemoryTransport,
     SlotTransport,
     ThreadingTransport,
+)
+from torchrl.modules.inference_server._client import (
+    _INTERACTION_TYPE_TO_CODE,
+    _NO_INTERACTION_TYPE_CODE,
 )
 from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._monarch import MonarchTransport
@@ -150,6 +155,32 @@ class _BatchSizeModule(nn.Module):
 class _RandomModule(nn.Module):
     def forward(self, value):
         return torch.rand_like(value)
+
+
+class _InteractionTypeProbe(TensorDictModule):
+    """Stand-in for a probabilistic policy: records the sampling mode it runs under."""
+
+    def __init__(self):
+        super().__init__(
+            module=nn.Module(),  # placeholder
+            in_keys=["observation"],
+            out_keys=["action", "interaction_code"],
+        )
+
+    def forward(self, td: TensorDictBase) -> TensorDictBase:
+        observation = td.get("observation")
+        current = interaction_type()
+        code = (
+            _INTERACTION_TYPE_TO_CODE[current.value]
+            if current is not None
+            else _NO_INTERACTION_TYPE_CODE
+        )
+        td.set("action", torch.ones_like(observation))
+        return td.set("interaction_code", torch.full_like(observation, code))
+
+
+def _make_interaction_type_probe():
+    return _InteractionTypeProbe()
 
 
 # =============================================================================
@@ -2327,31 +2358,65 @@ class TestWeightSyncIntegration:
             result = client(TensorDict({}, batch_size=[1]))
             assert result["action"].item() == 0
 
+    def test_policy_client_explicit_interaction_type_wins_over_ambient_context(self):
+        transport = ThreadingTransport()
+        with InferenceServer(_InteractionTypeProbe(), transport, max_batch_size=4):
+            client = PolicyClientModule(
+                transport,
+                out_keys=["action", "interaction_code"],
+                interaction_type=InteractionType.RANDOM,
+            )
+            request = TensorDict({"observation": torch.zeros(1, dtype=torch.int32)})
+            with set_interaction_type(InteractionType.DETERMINISTIC):
+                result = client(request)
+            assert (
+                result["interaction_code"].item() == _INTERACTION_TYPE_TO_CODE["random"]
+            )
+            result = client(request)
+            assert (
+                result["interaction_code"].item() == _INTERACTION_TYPE_TO_CODE["random"]
+            )
+
+    def test_server_ignores_ambient_interaction_type_for_unstamped_requests(self):
+        transport = ThreadingTransport()
+        with InferenceServer(_InteractionTypeProbe(), transport, max_batch_size=4):
+            # A raw transport client attaches no interaction-type code; the
+            # serving thread's global says nothing about the request.
+            client = transport.client()
+            with set_interaction_type(InteractionType.RANDOM):
+                result = client(
+                    TensorDict({"observation": torch.zeros(1, dtype=torch.int32)})
+                )
+        assert result["interaction_code"].item() == _NO_INTERACTION_TYPE_CODE
+
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-    def test_cudagraph_compares_effective_interaction_type(self):
-        class _InteractionValue(nn.Module):
-            def forward(self, observation):
-                value = 1 if interaction_type() is InteractionType.RANDOM else 0
-                return torch.full_like(observation, value)
-
-        policy = TensorDictModule(
-            _InteractionValue(), in_keys=["observation"], out_keys=["action"]
+    def test_cudagraph_captures_explicit_interaction_type(self):
+        request_spec = TensorDict({"observation": torch.zeros(1, dtype=torch.int32)})
+        server = InferenceServer(
+            _InteractionTypeProbe(),
+            transport="auto",
+            max_batch_size=1,
+            static_batch_size=1,
+            policy_device="cuda:0",
+            output_device="cpu",
         )
-        request_spec = TensorDict({"observation": torch.zeros(1)})
-        with set_interaction_type(InteractionType.RANDOM):
-            with InferenceServer(
-                policy,
-                transport="auto",
-                max_batch_size=1,
-                static_batch_size=1,
-                request_spec=request_spec,
-                policy_device="cuda:0",
-                output_device="cpu",
-            ) as server:
-                client = PolicyClientModule(server.transport, out_keys=["action"])
-                result = client(TensorDict({"observation": torch.ones(1)}))
-        assert result["action"].item() == 1
+        # The capture mode is explicit; the ambient context plays no role.
+        with set_interaction_type(InteractionType.DETERMINISTIC):
+            server.prepare_cudagraph(
+                request_spec, interaction_type=InteractionType.RANDOM
+            )
+        with server:
+            client = PolicyClientModule(
+                server.transport,
+                out_keys=["action", "interaction_code"],
+                interaction_type=InteractionType.RANDOM,
+            )
+            with set_interaction_type(InteractionType.DETERMINISTIC):
+                result = client(
+                    TensorDict({"observation": torch.ones(1, dtype=torch.int32)})
+                )
+        assert result["interaction_code"].item() == _INTERACTION_TYPE_TO_CODE["random"]
 
 
 # ---------------------------------------------------------------------------
@@ -2420,6 +2485,56 @@ def _make_bad_process_policy():
 def _make_slow_policy():
     time.sleep(30.0)
     return _make_counting_policy()
+
+
+def _toggle_deterministic_exploration(stop: threading.Event) -> None:
+    """Flip the process-wide interaction type the way a learner's loss forward does."""
+    while not stop.is_set():
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            time.sleep(0.0005)
+        time.sleep(0.0005)
+
+
+def _collect_under_toggled_exploration(collector):
+    """Drain ``collector`` while another thread toggles the interaction type."""
+    stop = threading.Event()
+    toggler = threading.Thread(
+        target=_toggle_deterministic_exploration, args=(stop,), daemon=True
+    )
+    toggler.start()
+    try:
+        return list(collector)
+    finally:
+        stop.set()
+        toggler.join(timeout=5.0)
+        collector.shutdown()
+
+
+def _record_served_interaction_codes(monkeypatch) -> list[int]:
+    """Record the interaction code an in-process server resolves per batch."""
+    codes = []
+    original = InferenceServer._interaction_type_context
+
+    def record(server, batch):
+        context, batch, code = original(server, batch)
+        codes.append(code)
+        return context, batch, code
+
+    monkeypatch.setattr(InferenceServer, "_interaction_type_context", record)
+    return codes
+
+
+@pytest.fixture
+def restore_interaction_type():
+    """Reset tensordict's process-wide interaction type after the test.
+
+    The toggling thread and an in-process server thread enter and exit
+    ``set_interaction_type`` contexts on the same global; interleaved exits
+    can leave a stale value behind once both have stopped.
+    """
+    initial = interaction_type()
+    yield
+    set_interaction_type(initial).__enter__()
 
 
 class TestProcessInferenceServer:
@@ -3789,6 +3904,94 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    @pytest.mark.parametrize("exploration_type", [None, ExplorationType.MODE])
+    def test_exploration_type_ignores_process_wide_interaction_type(
+        self, exploration_type, monkeypatch, restore_interaction_type
+    ):
+        """Requests carry the collector's mode, not the toggled global one."""
+        served_codes = _record_served_interaction_codes(monkeypatch)
+        kwargs = (
+            {} if exploration_type is None else {"exploration_type": exploration_type}
+        )
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 4,
+            policy=_make_interaction_type_probe(),
+            frames_per_batch=16,
+            total_frames=256,
+            max_batch_size=4,
+            env_backend="threading",
+            **kwargs,
+        )
+        batches = _collect_under_toggled_exploration(collector)
+        expected = _INTERACTION_TYPE_TO_CODE[
+            (exploration_type or ExplorationType.RANDOM).value
+        ]
+        assert sum(batch.numel() for batch in batches) >= 256
+        # Every batch was homogeneous (a mixed batch raises) and used the
+        # collector's mode. The probe's own record is not checked here: the
+        # server thread's set_interaction_type is process-wide as well, so the
+        # toggling thread can still change what the forward observes.
+        assert served_codes and set(served_codes) == {expected}
+
+    def test_exploration_type_ignores_process_wide_interaction_type_process_server(
+        self, restore_interaction_type
+    ):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 4,
+            policy_factory=_make_interaction_type_probe,
+            frames_per_batch=16,
+            total_frames=128,
+            env_backend="threading",
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=4
+            ),
+            exploration_type=ExplorationType.MODE,
+        )
+        batches = _collect_under_toggled_exploration(collector)
+        # The server process owns its own interaction-type global, so the
+        # probe's record is exact there.
+        codes = torch.cat([batch["interaction_code"].reshape(-1) for batch in batches])
+        assert codes.unique().tolist() == [_INTERACTION_TYPE_TO_CODE["mode"]]
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.parametrize("service_backend", ["thread", "process"])
+    def test_static_batch_exploration_type_ignores_process_wide_interaction_type(
+        self, service_backend, monkeypatch, restore_interaction_type
+    ):
+        """The graph is captured under the collector's mode, which every request carries."""
+        served_codes = _record_served_interaction_codes(monkeypatch)
+        if service_backend == "process":
+            policy_kwargs = {"policy_factory": _make_interaction_type_probe}
+        else:
+            policy_kwargs = {"policy": _make_interaction_type_probe()}
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            frames_per_batch=8,
+            total_frames=64,
+            env_backend="threading",
+            server_config=InferenceServerConfig(
+                service_backend=service_backend, max_batch_size=2, static_batch_size=2
+            ),
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+            **policy_kwargs,
+        )
+        batches = _collect_under_toggled_exploration(collector)
+        expected = _INTERACTION_TYPE_TO_CODE[ExplorationType.RANDOM.value]
+        assert sum(batch.numel() for batch in batches) >= 64
+        if service_backend == "thread":
+            assert served_codes and set(served_codes) == {expected}
+        else:
+            codes = torch.cat(
+                [batch["interaction_code"].reshape(-1) for batch in batches]
+            )
+            assert codes.unique().tolist() == [expected]
 
 
 # =============================================================================

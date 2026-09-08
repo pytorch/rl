@@ -13,7 +13,7 @@ from typing import Any
 import torch
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from tensordict.nn.probabilistic import interaction_type
+from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import NestedKey
 
 from torchrl.modules.inference_server._transport import InferenceTransport
@@ -30,6 +30,33 @@ _INTERACTION_TYPE_TO_CODE = {
     "random": 3,
     "deterministic": 4,
 }
+
+
+def _stamp_interaction_type(
+    tensordict: TensorDictBase, mode: InteractionType | None
+) -> TensorDictBase:
+    """Return a shallow copy of ``tensordict`` carrying ``mode`` as a request code.
+
+    ``None`` stamps the sentinel code, which the server maps to the served
+    module's default interaction type. The key is always present so server
+    batches stay homogeneous in key structure.
+    """
+    code = (
+        _INTERACTION_TYPE_TO_CODE[mode.value]
+        if mode is not None
+        else _NO_INTERACTION_TYPE_CODE
+    )
+    tensordict = tensordict.clone(recurse=False)
+    tensordict.set(
+        _REMOTE_INTERACTION_TYPE_KEY,
+        torch.full(
+            tensordict.batch_size,
+            code,
+            dtype=torch.int8,
+            device=tensordict.device or torch.device("cpu"),
+        ),
+    )
+    return tensordict
 
 
 class _ImmediateFuture:
@@ -149,13 +176,24 @@ class PolicyClientModule(TensorDictModuleBase):
             freed when its request *completes* (including errors), not when
             ``result()`` is first called; a timed-out ``result()`` keeps the
             slot. Must be at least ``1``. ``None`` means unbounded.
+        interaction_type (InteractionType, optional): sampling mode stamped
+            on every request. Defaults to ``None``: the caller's active
+            :func:`~tensordict.nn.interaction_type` is read at submission
+            time. Pass an explicit mode whenever another thread of the
+            process may set the interaction type while requests are
+            submitted, since that context is process-wide (a learner
+            thread's loss forward would otherwise decide how the served
+            policy samples). :class:`~torchrl.collectors.AsyncBatchedCollector`
+            always passes its ``exploration_type``.
 
     .. note::
-        The caller's active :func:`tensordict.nn.interaction_type` is
-        automatically attached to every transport request, and the server
-        executes the remote policy under that exploration context -- exactly
-        as a local policy would see it. In-process (plain callable) clients
-        need no propagation since the caller's context is already active.
+        The interaction type travels with the request: the explicit
+        ``interaction_type`` or, when none is given, the caller's active
+        :func:`tensordict.nn.interaction_type` is attached to every transport
+        request, and the server executes the remote policy under it -- exactly
+        as a local policy would see it. The serving thread's own (process-wide)
+        context is never consulted. In-process (plain callable) clients need
+        no propagation since the caller's context is already active.
 
     .. note::
         Version tracking is an instance of the generic *service-stamped
@@ -214,6 +252,7 @@ class PolicyClientModule(TensorDictModuleBase):
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         max_inflight: int | None = None,
+        interaction_type: InteractionType | None = None,
     ) -> None:
         super().__init__()
         if isinstance(client, (InferenceTransport, Service)):
@@ -227,6 +266,9 @@ class PolicyClientModule(TensorDictModuleBase):
         self.in_keys = list(in_keys or [])
         self.out_keys = list(out_keys or [])
         self.max_inflight = max_inflight
+        self.interaction_type = (
+            InteractionType(interaction_type) if interaction_type is not None else None
+        )
         self._inflight_sem = (
             threading.BoundedSemaphore(max_inflight)
             if max_inflight is not None
@@ -271,25 +313,15 @@ class PolicyClientModule(TensorDictModuleBase):
         release = self._acquire_inflight()
         submit = getattr(self.client, "submit", None)
         if submit is not None:
-            # Cross-boundary request: carry the caller's exploration context
-            # so the server-side forward behaves like a local call. The key
-            # is always attached (with a sentinel when no context is active)
-            # so server batches stay homogeneous in key structure.
-            current_interaction_type = interaction_type()
-            code = (
-                _INTERACTION_TYPE_TO_CODE[current_interaction_type.value]
-                if current_interaction_type is not None
-                else _NO_INTERACTION_TYPE_CODE
-            )
-            tensordict = tensordict.clone(recurse=False)
-            tensordict.set(
-                _REMOTE_INTERACTION_TYPE_KEY,
-                torch.full(
-                    tensordict.batch_size,
-                    code,
-                    dtype=torch.int8,
-                    device=tensordict.device or torch.device("cpu"),
-                ),
+            # Cross-boundary request: carry the exploration context so the
+            # server-side forward behaves like a local call. An explicit mode
+            # wins over the caller's ambient context, which is process-wide
+            # and may be changed by other threads at any time.
+            tensordict = _stamp_interaction_type(
+                tensordict,
+                self.interaction_type
+                if self.interaction_type is not None
+                else interaction_type(),
             )
         if submit is None:
             # The plain-callable path runs eagerly, so the request has

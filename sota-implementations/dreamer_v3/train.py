@@ -552,6 +552,11 @@ def _build_collection(
         "postproc": replay_postproc,
         "post_collect_hook": post_collect_hook,
         "replay_buffer": replay_buffer,
+        "exploration_type": (
+            ExplorationType.RANDOM
+            if cfg.collector.exploration == "random"
+            else ExplorationType.MODE
+        ),
     }
     if collector_backend == "async":
         collector = AsyncBatchedCollector(
@@ -582,11 +587,6 @@ def _build_collection(
             policy_device=device,
             env_device="cpu",
             storing_device="cpu",
-            exploration_type=(
-                ExplorationType.RANDOM
-                if cfg.collector.exploration == "random"
-                else ExplorationType.MODE
-            ),
             **collector_kwargs,
         )
     if cfg.optimization.separate_policy_rng:

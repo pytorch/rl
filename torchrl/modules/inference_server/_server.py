@@ -24,11 +24,7 @@ import torch
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import CudaGraphModule
-from tensordict.nn.probabilistic import (
-    interaction_type,
-    InteractionType,
-    set_interaction_type,
-)
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
 from torch import nn
 
@@ -43,9 +39,9 @@ from torchrl._comm.backends import (
 from torchrl._comm.mailbox import _exit_on_parent_exit
 from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
 from torchrl.modules.inference_server._client import (
-    _INTERACTION_TYPE_TO_CODE,
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
+    _stamp_interaction_type,
 )
 from torchrl.modules.inference_server._config import (
     _resolve_device_config,
@@ -812,16 +808,36 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         )
 
     @torch.no_grad()
-    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(
+        self,
+        request_spec: TensorDictBase,
+        *,
+        interaction_type: InteractionType | None = None,
+    ) -> None:
         """Capture the configured static CUDA graph before server start.
 
         Args:
             request_spec (TensorDictBase): representative unbatched request.
+
+        Keyword Args:
+            interaction_type (InteractionType, optional): sampling mode the
+                graph is captured under; every request must then carry the
+                same mode (see
+                :class:`~torchrl.modules.inference_server.PolicyClientModule`).
+                Defaults to ``None``: the mode already stamped on
+                ``request_spec`` if any, otherwise the served module's default
+                interaction type. The ambient
+                :func:`~tensordict.nn.set_interaction_type` context is never
+                consulted; it is process-wide and may belong to another thread.
         """
         if self.static_batch_size is None:
             return
         if self.is_alive:
             raise RuntimeError("The CUDA graph must be prepared before server start.")
+        if interaction_type is not None:
+            request_spec = _stamp_interaction_type(
+                request_spec, InteractionType(interaction_type)
+            )
         self._init_weight_sync()
         self._cudagraph_request_spec = request_spec.clone()
         cudagraph_model = CudaGraphModule(
@@ -847,10 +863,6 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                     model_in_keys
                     if model_in_keys is not None
                     else batch.keys(include_nested=True, leaves_only=True)
-                )
-            elif interaction_code != captured_interaction_code:
-                raise RuntimeError(
-                    "The interaction type changed while preparing the CUDA graph."
                 )
             with interaction_context:
                 cudagraph_model(batch)
@@ -918,15 +930,16 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         return result_batch.set(self.policy_version_key, version)
 
     def _interaction_type_context(self, batch: TensorDictBase):
+        # The code stamped on the request is the only source of truth. The
+        # serving thread's ambient interaction type is tensordict's
+        # process-wide global, which belongs to whichever thread set it last
+        # (e.g. a learner's loss forward), so it is never consulted. Note that
+        # entering the returned context mutates that same global for the
+        # duration of the forward.
         code = batch.get(_REMOTE_INTERACTION_TYPE_KEY, default=None)
         if code is None:
-            current_interaction_type = interaction_type()
-            interaction_code = (
-                _INTERACTION_TYPE_TO_CODE[current_interaction_type.value]
-                if current_interaction_type is not None
-                else _NO_INTERACTION_TYPE_CODE
-            )
-            return contextlib.nullcontext(), batch, interaction_code
+            # Unstamped request (e.g. a raw transport client): module default.
+            return set_interaction_type(None), batch, _NO_INTERACTION_TYPE_CODE
         if not isinstance(code, torch.Tensor):
             interaction_code = int(code)
         else:
@@ -1393,15 +1406,29 @@ class ProcessInferenceServer:
         # Live mirror of the child's policy version ("q" = signed 64-bit).
         self._policy_version_value = self._ctx.Value("q", int(policy_version))
 
-    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(
+        self,
+        request_spec: TensorDictBase,
+        *,
+        interaction_type: InteractionType | None = None,
+    ) -> None:
         """Set the representative request used for child-process capture.
 
         Args:
             request_spec (TensorDictBase): representative unbatched request.
+
+        Keyword Args:
+            interaction_type (InteractionType, optional): sampling mode the
+                child process captures under, stamped on the stored request.
+                See :meth:`InferenceServer.prepare_cudagraph`.
         """
         if self.is_alive:
             raise RuntimeError(
                 "The process inference server must prepare its CUDA graph before start."
+            )
+        if interaction_type is not None:
+            request_spec = _stamp_interaction_type(
+                request_spec, InteractionType(interaction_type)
             )
         self._server_kwargs["request_spec"] = request_spec.clone()
 
@@ -1962,13 +1989,21 @@ class _RayInferenceServer(InferenceServer):
             raise RuntimeError("The Ray inference server is not alive.")
         return self
 
-    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(
+        self,
+        request_spec: TensorDictBase,
+        *,
+        interaction_type: InteractionType | None = None,
+    ) -> None:
         """Reject post-construction capture for the already-running Ray actor.
 
         Args:
             request_spec (TensorDictBase): unused representative request.
+
+        Keyword Args:
+            interaction_type (InteractionType, optional): unused sampling mode.
         """
-        del request_spec
+        del request_spec, interaction_type
         raise RuntimeError(
             "A Ray inference server captures inside its actor; pass request_spec "
             "when constructing InferenceServer."

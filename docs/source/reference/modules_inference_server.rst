@@ -135,9 +135,17 @@ In-place parameter copies preserve the captured graph; for example, use
 storage-replacing update raises an error and disables the graph, leaving the
 server on the safe eager path until it is stopped and prepared again. This
 avoids capturing while collector or environment threads are live. The
-interaction type is frozen to its effective value at capture time, including an ambient
-``set_interaction_type`` context; later requests using another type are
-rejected.
+interaction type is fixed at capture time: pass it to
+:meth:`~torchrl.modules.inference_server.InferenceServer.prepare_cudagraph`
+(:class:`~torchrl.collectors.AsyncBatchedCollector` passes its
+``exploration_type``), otherwise the graph is captured under the policy's
+default interaction type. The ambient ``set_interaction_type`` context is never
+consulted, neither at capture nor when serving: it is process-wide state that
+another thread, typically the learner's loss forward, may change at any time.
+Requests must carry the captured mode, which
+:class:`~torchrl.modules.inference_server.PolicyClientModule` stamps from its
+``interaction_type`` argument or, when none is given, from the caller's active
+context; requests stamped with another mode are rejected.
 
 CUDA operations using PyTorch's default generator advance its graph-safe state
 across replays. Custom generators must manage CUDA graph state explicitly, and
