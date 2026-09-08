@@ -620,6 +620,10 @@ def _build_replay(
             sampler=sampler_type(
                 slice_len=sequence_records,
                 end_key=("next", "done"),
+                # The RSSM rollout resets its state wherever is_init is set,
+                # so samples must carry the collector's episode starts only,
+                # not the sampler's slice-start markers.
+                init_key=None,
             ),
             writer=TensorDictRoundRobinWriter(track_generations=True),
         )

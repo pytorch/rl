@@ -49,6 +49,13 @@ class StreamingSliceSampler(SliceSampler):
         truncated_key (NestedKey, optional): key populated in sampling info at
             the final record of each sampled slice. Defaults to
             ``("next", "truncated")``.
+        init_key (NestedKey, optional): If not ``None``, the sampler marks the
+            first step of every slice with ``True`` under this key (OR-ed with
+            the flags stored in the buffer, when present) so that recurrent
+            modules restart from the stored hidden state at each slice start.
+            Pass ``None`` to leave the stored flags untouched, as required by
+            models that reset their state wherever ``is_init`` is set, such as
+            the DreamerV3 RSSM rollout. Defaults to ``"is_init"``.
         strict_length (bool, optional): whether uniform fallback sampling
             rejects trajectories shorter than ``slice_len``. Defaults to
             ``True``.
@@ -95,6 +102,7 @@ class StreamingSliceSampler(SliceSampler):
         traj_key: NestedKey | None = None,
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
+        init_key: NestedKey | None = "is_init",
         strict_length: bool = True,
         pad_output: bool = False,
         compile: bool | dict = False,
@@ -112,6 +120,7 @@ class StreamingSliceSampler(SliceSampler):
             traj_key=traj_key,
             cache_values=cache_values,
             truncated_key=truncated_key,
+            init_key=init_key,
             strict_length=strict_length,
             pad_output=pad_output,
             compile=compile,
