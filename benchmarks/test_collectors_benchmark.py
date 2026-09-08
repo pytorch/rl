@@ -76,6 +76,18 @@ class _ResetLatencyPixelEnv(PixelMockEnv):
 )
 def test_async_collection_pixels(benchmark, mode, regime):
     """Fixed end-to-end series; see ASYNC_BENCHMARKS.md before changing inputs."""
+    _benchmark_async_collection_pixels(benchmark, mode, regime)
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+@pytest.mark.parametrize("mode", ["async-shm", "async-process-slots"])
+def test_async_collection_pixels_64_envs(benchmark, mode):
+    """Compare transport paths with a matched 64-env CUDA pixel-policy workload."""
+    _benchmark_async_collection_pixels(benchmark, mode, "uniform", num_envs=64)
+
+
+def _benchmark_async_collection_pixels(benchmark, mode, regime, *, num_envs=None):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     has_static = (
         "static_batch_size" in inspect.signature(InferenceServerConfig).parameters
@@ -102,7 +114,8 @@ def test_async_collection_pixels(benchmark, mode, regime):
         pytest.skip("Grouped environment workers are not available on this revision")
 
     # Keep these constants stable across merges. CPU and GPU are separate series.
-    num_envs = 32 if device != "cpu" else 8
+    if num_envs is None:
+        num_envs = 32 if device != "cpu" else 8
     frames_per_batch = 256
     batches_per_round = 4
     rounds = 5

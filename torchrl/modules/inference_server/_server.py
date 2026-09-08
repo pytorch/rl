@@ -40,6 +40,7 @@ from torchrl._comm.backends import (
     _resolve_service_backend,
     _resolve_transport_backend,
 )
+from torchrl._comm.mailbox import _exit_on_parent_exit
 from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
 from torchrl.modules.inference_server._client import (
     _INTERACTION_TYPE_TO_CODE,
@@ -1107,6 +1108,7 @@ def _process_server_entry(
     policy_version_value=None,
 ) -> None:
     """Run an :class:`InferenceServer` loop inside a child process."""
+    threading.Thread(target=_exit_on_parent_exit, daemon=True).start()
     try:
         model = policy_factory()
         server = InferenceServer(
@@ -1358,9 +1360,7 @@ class ProcessInferenceServer:
         self._peer_alive = peer_alive
         self._process_monitor: threading.Thread | None = None
         self._service_client = (
-            transport.client()
-            if getattr(transport, "_clients_require_registration", True)
-            else None
+            transport.client() if transport._clients_require_registration else None
         )
         self._shutdown_event = self._ctx.Event()
         self._ready_queue = self._ctx.Queue()
