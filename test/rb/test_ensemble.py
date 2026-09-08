@@ -172,7 +172,10 @@ class TestEnsemble:
         ],
     )
     @pytest.mark.parametrize("submit", [False, True])
-    def test_conditional_update_groups_records_by_member(self, device, submit):
+    @pytest.mark.parametrize("tensordict_patch", [False, True])
+    def test_conditional_update_groups_records_by_member(
+        self, device, submit, tensordict_patch
+    ):
         members = [self._make_routed_member(3) for _ in range(4)]
         rb = ReplayBufferEnsemble(*members, routing_key="env_id")
         env_id = torch.tensor([2, 0, 3, 1, 1, 3, 0, 2, 0, 1, 2, 3])
@@ -188,6 +191,10 @@ class TestEnsemble:
         handles = metadata.select("buffer_ids", "index")[rows]
         generation = metadata["index_generation"][rows]
         patch = {"value": (rows + 100).float().to(device)}
+        if tensordict_patch:
+            handles = handles.to(device)
+            generation = generation.to(device)
+            patch = TensorDict(patch, batch_size=rows.shape)
         try:
             if submit:
                 result = rb.submit_update_if_present(
@@ -200,6 +207,7 @@ class TestEnsemble:
         finally:
             rb.shutdown()
 
+        handles = handles.cpu()
         stale = handles["buffer_ids"] == 3
         stale &= handles["index"] == metadata["index"][2]
         assert stale.sum() == 1

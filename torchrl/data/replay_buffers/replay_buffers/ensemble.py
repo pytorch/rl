@@ -549,7 +549,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 rows = order[start : start + count]
                 start += count
                 member_patch = (
-                    flat_patch[rows]
+                    flat_patch[rows.to(flat_patch.device or "cpu")]
                     if isinstance(flat_patch, TensorDictBase)
                     else {
                         key: value[rows.to(value.device)]
