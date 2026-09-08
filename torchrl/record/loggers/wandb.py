@@ -146,7 +146,7 @@ class WandbLogger(Logger):
 
     def _checkpoint_state(self) -> dict[str, Any]:
         return {
-            "id": self.id,
+            "id": getattr(self.experiment, "id", self.id),
             "step_registry": dict(self._step_registry),
             "defined_step_metrics": sorted(self._defined_step_metrics),
             "defined_metrics": sorted(self._defined_metrics),

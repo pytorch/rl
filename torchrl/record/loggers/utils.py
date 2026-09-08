@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import pathlib
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Literal
 
@@ -36,6 +37,7 @@ def get_logger(
     logger_name: str,
     experiment_name: str,
     *,
+    state_dict: Mapping[str, Any] | None = None,
     service_backend: Literal["direct", "process", "ray"] = "direct",
     service_backend_options: dict[str, Any] | None = None,
     use_ray_service: bool = False,
@@ -49,6 +51,14 @@ def get_logger(
             If empty, ``None`` is returned.
         logger_name (str): Name to be used as a log_dir
         experiment_name (str): Name of the experiment
+
+    Keyword Args:
+        state_dict (Mapping[str, Any] or None, optional): Saved logger state from
+            :meth:`~torchrl.record.loggers.Logger.state_dict`. Restores the saved
+            name, directory and counters for CSV/TensorBoard, or resumes the
+            saved W&B run with strict ``resume="must"`` semantics. Other logger
+            types currently reject this option before opening a service.
+            Defaults to ``None`` (create a logger normally).
         service_backend: One of ``"direct"``, ``"process"``, or ``"ray"``.
         service_backend_options: Process or Ray initialization options.
         use_ray_service: Deprecated compatibility flag for the Ray backend.
@@ -56,6 +66,13 @@ def get_logger(
         **kwargs: May contain ``wandb_kwargs``, ``mlflow_kwargs``, or
             ``trackio_kwargs``.
     """
+    if state_dict is not None:
+        if logger_type not in ("csv", "tensorboard", "wandb"):
+            raise NotImplementedError(
+                f"Checkpoint resume is unsupported for logger_type={logger_type!r}."
+            )
+        logger_name = state_dict["log_dir"]
+        experiment_name = state_dict["exp_name"]
     service_kwargs = {
         "service_backend_options": dict(service_backend_options or {}),
     }
@@ -89,7 +106,12 @@ def get_logger(
             **service_kwargs,
         )
     elif logger_type == "wandb":
-        wandb_kwargs = kwargs.get("wandb_kwargs", {})
+        wandb_kwargs = dict(kwargs.get("wandb_kwargs", {}))
+        if state_dict is not None:
+            run_id = state_dict.get("local", {}).get("id")
+            if not run_id:
+                raise ValueError("The saved W&B logger state has no run ID.")
+            wandb_kwargs.update(id=run_id, resume="must")
         logger = WandbLogger(
             log_dir=logger_name,
             exp_name=experiment_name,
@@ -117,4 +139,6 @@ def get_logger(
         return None
     else:
         raise NotImplementedError(f"Unsupported logger_type: '{logger_type}'")
+    if state_dict is not None:
+        logger.load_state_dict(state_dict)
     return logger

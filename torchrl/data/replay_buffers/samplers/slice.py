@@ -558,6 +558,12 @@ class SliceSampler(Sampler):
         # PrioritizedSampler keep their write hook.
         super().mark_update(index, storage=storage)
 
+    def _end_stream(self, index: torch.Tensor, *, storage: Storage) -> None:
+        # A boundary patch changes no slot identity and must not look like a write.
+        self._cache.clear()
+        if self.fragmented and self._fragmented_index is not None:
+            self._fragmented_index.mark_update(index, storage=storage)
+
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(num_slices={self.num_slices}, "

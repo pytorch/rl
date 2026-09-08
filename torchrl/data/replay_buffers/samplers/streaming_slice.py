@@ -328,6 +328,13 @@ class StreamingSliceSampler(SliceSampler):
         }
         return index, info
 
+    def _end_stream(self, index: torch.Tensor, *, storage: Storage) -> None:
+        super()._end_stream(index, storage=storage)
+        self._pending_indices = torch.empty(0, dtype=torch.long)
+        self._pending_versions = torch.empty(0, dtype=torch.long)
+        self._last_traj = None
+        self._last_was_done = True
+
     def _empty(self):
         super()._empty()
         self._cache.clear()

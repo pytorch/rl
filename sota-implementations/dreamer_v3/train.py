@@ -21,7 +21,9 @@ from __future__ import annotations
 import copy
 import functools as ft
 import math
+import signal
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import NamedTuple
 
@@ -36,15 +38,10 @@ from dreamer_v3_agent import (
     build_value,
     build_world_model,
     DreamerV3BehaviorPolicySync,
-    DreamerV3SeededPolicy,
     make_env,
     make_primed_env,
 )
-from dreamer_v3_replay import (
-    collector_action_budget,
-    DreamerV3UpdateRatio,
-    replay_context_update,
-)
+from dreamer_v3_replay import collector_action_budget, replay_context_update
 from dreamer_v3_utils import (
     append_jsonl,
     eval_episode_reward,
@@ -61,6 +58,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl import timeit
 from torchrl._utils import get_available_device, logger as torchrl_logger
+from torchrl.checkpoint import Checkpoint, CheckpointRotation, GlobalRNGState
 from torchrl.collectors import AsyncBatchedCollector, Collector
 from torchrl.data import (
     LazyTensorStorage,
@@ -73,6 +71,7 @@ from torchrl.data import (
 )
 from torchrl.envs import SelectTransform, SerialEnv
 from torchrl.envs.utils import ExplorationType
+from torchrl.modules import DreamerV3SeededPolicy
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServerConfig,
@@ -85,14 +84,54 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 from torchrl.record.loggers import get_logger
-from torchrl.trainers.algorithms import DreamerV3OptimizationStepper, DreamerV3Optimizer
+from torchrl.trainers.algorithms import (
+    DreamerV3OptimizationStepper,
+    DreamerV3Optimizer,
+    DreamerV3UpdateRatio,
+)
 from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key
+
+
+class _ElapsedTimer:
+    """Include elapsed time from the process that wrote a checkpoint."""
+
+    def __init__(self, timer, offset: float = 0.0):
+        self.timer = timer
+        self.offset = offset
+
+    def elapsed(self) -> float:
+        return self.offset + self.timer.elapsed()
+
+
+class _ShutdownRequest:
+    """Handle termination after completing the current collection/update batch."""
+
+    def __init__(self):
+        self.signal_number: int | None = None
+
+    def __call__(self, signal_number: int, _frame) -> None:
+        self.signal_number = signal_number
+
+
+def _resolve_resume_path(requested: str | None) -> Path | None:
+    if not requested:
+        return None
+    candidate = Path(requested).expanduser().resolve()
+    if Checkpoint.is_checkpoint(candidate):
+        return candidate
+    if candidate.is_dir():
+        latest = CheckpointRotation(candidate, keep_last=1).latest()
+        if latest is not None:
+            return latest
+    raise FileNotFoundError(f"No checkpoint was found at {candidate}.")
 
 
 class _RunLogger:
     """Write consistent records to JSONL and a selected TorchRL logger."""
 
-    def __init__(self, cfg: DictConfig, jsonl_path: Path | None):
+    def __init__(
+        self, cfg: DictConfig, jsonl_path: Path | None, state: dict | None = None
+    ):
         self.jsonl_path = jsonl_path
         self.milestone_names = list(cfg.env.milestone_names)
         self.backend = cfg.logger.backend
@@ -116,6 +155,7 @@ class _RunLogger:
             self.backend,
             logger_name=cfg.logger.log_dir,
             experiment_name=cfg.logger.exp_name or f"dreamer_v3_{cfg.env.name}",
+            state_dict=state or None,
             **kwargs,
         )
         if self.backend == "wandb":
@@ -560,6 +600,8 @@ def _build_replay(
     num_envs: int,
     replay_device: torch.device,
     device: torch.device,
+    *,
+    generator: torch.Generator | None = None,
 ) -> ReplayBufferEnsemble:
     sequence_records = cfg.replay_buffer.seq_len + 1
     base_capacity, remainder = divmod(cfg.replay_buffer.buffer_size, num_envs)
@@ -583,6 +625,10 @@ def _build_replay(
         )
         for capacity in capacities
     ]
+    if generator is None:
+        generator = torch.Generator().manual_seed(
+            stream_seed(cfg.env.seed, 0, REPLAY_RNG_STREAM)
+        )
     return ReplayBufferEnsemble(
         *members,
         p="sampleable",
@@ -590,9 +636,7 @@ def _build_replay(
         routing_key="env_index" if cfg.collector.backend == "async" else None,
         routing_dim=0 if cfg.collector.backend == "sync" else None,
         batch_size=cfg.replay_buffer.batch_size * sequence_records,
-        generator=torch.Generator().manual_seed(
-            stream_seed(cfg.env.seed, 0, REPLAY_RNG_STREAM)
-        ),
+        generator=generator,
         pin_memory=replay_device.type == "cpu" and device.type == "cuda",
         prefetch=1,
     )
@@ -709,6 +753,29 @@ def _evaluate(
 @hydra.main(version_base="1.3", config_path="", config_name="config")
 def main(cfg: DictConfig):
     torch.manual_seed(cfg.env.seed)
+    resume_path = _resolve_resume_path(cfg.optimization.resume_from)
+    run_state = {}
+    if resume_path is not None:
+        saved_config = {}
+        Checkpoint(run_state=run_state, config=saved_config).load(resume_path)
+        for key in ("buffer_size", "batch_size", "seq_len", "online"):
+            if cfg.replay_buffer[key] != saved_config["replay_buffer"][key]:
+                raise ValueError(f"Resume requires the saved replay_buffer.{key}.")
+        if run_state["num_envs"] != cfg.collector.num_envs:
+            raise ValueError("Resume requires the saved collector.num_envs.")
+        if run_state["logger_backend"] != cfg.logger.backend:
+            raise ValueError("Resume requires the saved logger.backend.")
+    checkpoint_every = cfg.optimization.checkpoint_every
+    if checkpoint_every is not None and checkpoint_every <= 0:
+        raise ValueError("optimization.checkpoint_every must be positive or null.")
+    rotation = (
+        CheckpointRotation(
+            Path(cfg.optimization.checkpoint_dir).expanduser().resolve(),
+            keep_last=cfg.optimization.checkpoint_keep_last,
+        )
+        if cfg.optimization.checkpoint_dir
+        else None
+    )
 
     device = (
         torch.device(cfg.optimization.device)
@@ -760,20 +827,51 @@ def main(cfg: DictConfig):
     metrics_jsonl_path = (
         Path(cfg.logger.metrics_jsonl).resolve() if cfg.logger.metrics_jsonl else None
     )
+    if resume_path is not None:
+        saved_metrics_path = run_state.get("metrics_jsonl")
+        metrics_jsonl_path = Path(saved_metrics_path) if saved_metrics_path else None
     if metrics_jsonl_path is not None:
         metrics_jsonl_path.parent.mkdir(parents=True, exist_ok=True)
-        metrics_jsonl_path.write_text("")
+        if resume_path is None:
+            metrics_jsonl_path.write_text("")
     timeit.reset()
-    run_timer = timeit("dreamer_v3/run").start()
+    run_timer = _ElapsedTimer(
+        timeit("dreamer_v3/run").start(), run_state.get("elapsed_seconds", 0.0)
+    )
 
     learner = _build_learner(cfg, device, obs_dim, action_dim, pixels_shape, discrete)
     learner_update = _make_learner_update(cfg, device, learner)
     _warm_up_learner(cfg, device, learner_update, obs_dim, action_dim)
-    rb = _build_replay(cfg, num_envs, replay_device, device)
-    action_step = 0
-    reset_records = num_envs
-    record_step = reset_records if count_reset_records else 0
-    update_step = 0
+    replay_rng = torch.Generator().manual_seed(
+        stream_seed(cfg.env.seed, 0, REPLAY_RNG_STREAM)
+    )
+    rb = _build_replay(cfg, num_envs, replay_device, device, generator=replay_rng)
+    checkpoint = Checkpoint(
+        learner=learner_update.loss_module,
+        learner_update=learner_update,
+        replay=rb,
+        run_state=run_state,
+        rng=GlobalRNGState(),
+        config=OmegaConf.to_container(cfg, resolve=True),
+    )
+    replay_restored = False
+    if resume_path is not None:
+        checkpoint.load(
+            resume_path,
+            components={"learner", "learner_update"},
+            map_location=device,
+        )
+        if "replay" in Checkpoint.manifest(resume_path)["components"]:
+            checkpoint.load(resume_path, components={"replay"})
+            rb.end_streams()
+            replay_restored = True
+        replay_rng.set_state(torch.tensor(run_state["replay_rng"], dtype=torch.uint8))
+        rb.set_rng(replay_rng)
+    action_offset = int(run_state.get("action_steps", 0))
+    action_step = action_offset
+    reset_records = int(run_state.get("reset_records", 0)) + num_envs
+    record_step = action_step + reset_records if count_reset_records else action_step
+    update_step = int(run_state.get("updates", 0))
     running_training_return = torch.zeros(num_envs)
     seen_stream = torch.zeros(num_envs, dtype=torch.bool)
     completed_episodes: list[tuple[int, int, float]] = []
@@ -825,7 +923,9 @@ def main(cfg: DictConfig):
         learner,
         state_dim,
         action_dim,
-        collector_action_frames,
+        max(0, collector_action_frames - action_offset)
+        if collector_action_frames >= 0
+        else -1,
         rb,
         post_collect_hook,
     )
@@ -833,14 +933,16 @@ def main(cfg: DictConfig):
     history_steps: list[int] = []
     history_eval: list[torch.Tensor] = []
     loss_history: list[torch.Tensor] = []
-    loss_window_sum = torch.zeros(6, device=device)
-    loss_window_updates = 0
+    loss_window_sum = torch.tensor(
+        run_state.get("loss_window_sum", [0.0] * 6), device=device
+    )
+    loss_window_updates = int(run_state.get("loss_window_updates", 0))
     record_loss_history = plot_enabled(cfg)
-    next_eval = 0
-    next_train_log = 0
+    next_eval = int(run_state.get("next_eval", 0))
+    next_train_log = int(run_state.get("next_train_log", 0))
 
     eval_env = make_primed_env(cfg, cfg.env.seed + 100, state_dim, action_dim)
-    run_logger = _RunLogger(cfg, metrics_jsonl_path)
+    run_logger = _RunLogger(cfg, metrics_jsonl_path, run_state.get("logger"))
 
     warmup = (
         cfg.replay_buffer.warmup_factor
@@ -863,6 +965,69 @@ def main(cfg: DictConfig):
         # Keep the learner draws in a range apart from the policy stream.
         torch.manual_seed(stream_seed(cfg.env.seed, 0, LEARNER_RNG_STREAM))
 
+    stateful_components = set()
+    if update_ratio is not None:
+        checkpoint.register("update_ratio", update_ratio)
+        stateful_components.add("update_ratio")
+    if isinstance(collector.policy, DreamerV3SeededPolicy):
+        checkpoint.register("policy", collector.policy)
+        stateful_components.add("policy")
+    if resume_path is not None:
+        if stateful_components:
+            checkpoint.load(
+                resume_path, components=stateful_components, map_location=device
+            )
+        # Construction and compile/capture warm-up may consume RNG and update
+        # normalization. Restore training state after warm-up, and RNG last.
+        checkpoint.load(resume_path, components={"rng"})
+        torchrl_logger.info(
+            "Resumed DreamerV3 at action step %s with replay=%s; environments restart.",
+            action_step,
+            replay_restored,
+        )
+    next_checkpoint = update_step + checkpoint_every if checkpoint_every else None
+    shutdown_request = _ShutdownRequest()
+    previous_handlers = {
+        signum: signal.signal(signum, shutdown_request)
+        for signum in (signal.SIGINT, signal.SIGTERM)
+    }
+
+    def save_checkpoint() -> None:
+        if rotation is None:
+            return
+        pause = (
+            collector.pause()
+            if isinstance(collector, AsyncBatchedCollector)
+            else nullcontext()
+        )
+        with pause:
+            rb.synchronize()
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            run_state.update(
+                action_steps=action_step,
+                reset_records=reset_records,
+                environment_steps=record_step,
+                updates=update_step,
+                num_envs=num_envs,
+                elapsed_seconds=run_timer.elapsed(),
+                next_eval=next_eval,
+                next_train_log=next_train_log,
+                loss_window_sum=loss_window_sum.cpu().tolist(),
+                loss_window_updates=loss_window_updates,
+                replay_rng=replay_rng.get_state().cpu().tolist(),
+                logger_backend=cfg.logger.backend,
+                logger=run_logger.logger.state_dict()
+                if run_logger.logger is not None
+                else {},
+                metrics_jsonl=str(metrics_jsonl_path) if metrics_jsonl_path else None,
+            )
+            components = set(checkpoint.components)
+            if not cfg.optimization.checkpoint_include_replay:
+                components.discard("replay")
+            path = rotation.save(checkpoint, step=action_step, components=components)
+            torchrl_logger.info("Saved DreamerV3 checkpoint to %s", path)
+
     collection_timer = None
     try:
         for _ in collector:
@@ -873,7 +1038,7 @@ def main(cfg: DictConfig):
                 behavior_policy_sync.apply_after_action()
             batch_start_action_step = action_step
             batch_start_record_step = record_step
-            action_step = int(collector.stats()["frames"])
+            action_step = action_offset + int(collector.stats()["frames"])
             record_step = (
                 action_step + reset_records if count_reset_records else action_step
             )
@@ -887,6 +1052,8 @@ def main(cfg: DictConfig):
                 completed_milestones,
             )
 
+            if shutdown_request.signal_number is not None:
+                break
             if (
                 cfg.optimization.max_time is not None
                 and run_timer.elapsed() >= cfg.optimization.max_time
@@ -896,6 +1063,13 @@ def main(cfg: DictConfig):
                 continue
             replay_stats = rb.stats()
             if replay_stats["size"] < warmup or not rb.can_sample():
+                if (
+                    resume_path is not None
+                    and not replay_restored
+                    and update_ratio is not None
+                ):
+                    # New replay must warm up without accumulating a learner catch-up burst.
+                    update_ratio.reset(record_step)
                 continue
 
             batch_updates = (
@@ -991,6 +1165,11 @@ def main(cfg: DictConfig):
                 history_eval.append(r)
                 next_eval = record_step + cfg.logger.eval_every
 
+            if next_checkpoint is not None and update_step >= next_checkpoint:
+                save_checkpoint()
+                next_checkpoint = update_step + checkpoint_every
+
+        save_checkpoint()
         run_logger.log(
             {
                 "type": "summary",
@@ -1008,6 +1187,8 @@ def main(cfg: DictConfig):
             },
         )
     finally:
+        for signum, handler in previous_handlers.items():
+            signal.signal(signum, handler)
         try:
             collector.shutdown()
         finally:

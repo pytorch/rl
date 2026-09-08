@@ -18,9 +18,15 @@ from pyvers import implement_for
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule, TensorDictModule
 from torch.nn import functional as F
+from torchrl.checkpoint import Checkpoint
 from torchrl.data.tensor_specs import Bounded
 from torchrl.envs import ExplorationType, set_exploration_type
-from torchrl.modules import DreamerV3DiscreteActor, RSSMStateEstimatorV3, SafeModule
+from torchrl.modules import (
+    DreamerV3DiscreteActor,
+    DreamerV3SeededPolicy,
+    RSSMStateEstimatorV3,
+    SafeModule,
+)
 from torchrl.modules.models._dreamer_v3_block_gru_triton import (
     _has_triton as _has_dreamer_v3_triton,
 )
@@ -44,6 +50,7 @@ from torchrl.modules.models.model_based import (
     RSSMRolloutV3,
 )
 from torchrl.testing import get_default_devices
+from torchrl.trainers.algorithms import DreamerV3UpdateRatio
 
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
@@ -524,6 +531,41 @@ class TestDreamerV3Components:
                 not torch.equal(before[name], value)
                 for name, value in actor.named_parameters()
             )
+
+    def test_policy_rng_and_update_ratio_checkpoint(self, tmp_path):
+        policy = DreamerV3SeededPolicy(
+            DreamerV3DiscreteActor(
+                6,
+                5,
+                depth=1,
+                num_cells=8,
+                in_keys=[("latent", "state"), ("latent", "belief")],
+            ),
+            seed=17,
+        )
+        data = TensorDict(
+            {
+                ("latent", "state"): torch.randn(12, 4),
+                ("latent", "belief"): torch.randn(12, 2),
+            },
+            [12],
+        )
+        schedule = DreamerV3UpdateRatio(0.25)
+        assert schedule(4) == 1 and schedule(6) == 0
+        policy(data.clone())
+        checkpoint = Checkpoint(policy=policy, schedule=schedule)
+        checkpoint.save(tmp_path / "saved")
+        caller_rng = torch.random.get_rng_state().clone()
+        expected = [policy(data.clone())["action"] for _ in range(3)]
+        assert torch.equal(torch.random.get_rng_state(), caller_rng)
+        updates = [schedule(i) for i in (8, 10, 15)]
+        policy.reset_counter()
+        checkpoint.load(tmp_path / "saved")
+        for action in expected:
+            torch.testing.assert_close(policy(data.clone())["action"], action)
+        assert [schedule(i) for i in (8, 10, 15)] == updates == [1, 0, 1]
+        schedule.reset(100)
+        assert schedule(102) == 0 and schedule(104) == 1
 
     def test_mlp_output_scale_and_multiple_inputs(self):
         module = DreamerV3MLP(

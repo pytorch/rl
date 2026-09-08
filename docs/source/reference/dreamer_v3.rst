@@ -381,3 +381,32 @@ API map
 
 For a complete training setup, see the
 `DreamerV3 example <https://github.com/pytorch/rl/tree/main/sota-implementations/dreamer_v3>`_.
+
+
+Checkpoint ownership
+--------------------
+
+Register the composed :class:`~torchrl.objectives.DreamerV3Loss` and
+:class:`~torchrl.trainers.algorithms.DreamerV3OptimizationStepper` separately with
+:class:`~torchrl.checkpoint.Checkpoint`. The loss owns network and normalization
+state; the stepper owns optimizer and target-update progress. Restore both after
+compile/capture warm-up, which may modify parameters or running statistics.
+
+:class:`~torchrl.modules.DreamerV3SeededPolicy` includes its seed and next-draw
+counter in its module state. Register the policy and
+:class:`~torchrl.trainers.algorithms.DreamerV3UpdateRatio` directly to preserve
+policy RNG progress and fractional update scheduling. When replay is omitted,
+call the ratio's ``reset(record_count)`` while refilling it to discard owed updates.
+Restore global RNG state last, before collection begins.
+
+After loading native replay, call
+:meth:`~torchrl.data.ReplayBufferEnsemble.end_streams` before new environments
+append transitions. This closes unfinished tails and resets incomplete streaming
+windows without inventing terminal transitions. Environments restart; checkpoint
+resume does not guarantee identical trajectories.
+
+Pass saved logger state to :func:`~torchrl.record.loggers.get_logger` through
+``state_dict=...``. The logger layer reopens saved local logs or strictly resumes
+the saved W&B run ID, then restores its counters. The recipe chooses checkpoint
+paths, cadence, optional replay and when to quiesce collection; it does not inspect
+component internals to reconstruct their state.

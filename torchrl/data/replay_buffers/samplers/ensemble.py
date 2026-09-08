@@ -270,6 +270,7 @@ class SamplerEnsemble(Sampler):
 
     def dumps(self, path: Path):
         path = Path(path).absolute()
+        path.mkdir(parents=True, exist_ok=True)
         for i, sampler in enumerate(self._samplers):
             sampler.dumps(path / str(i))
 

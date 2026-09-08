@@ -252,3 +252,71 @@ Compilation and capture warm-up complete before collection starts, using the rea
 observation specs and the same learner input keys as native replay. Gradient
 buffers remain attached after capture, and an optimizer step without parameter
 gradients fails explicitly.
+
+
+Checkpoint saving is opt-in. For example:
+
+```bash
+python sota-implementations/dreamer_v3/train.py \
+  optimization.checkpoint_dir=checkpoints \
+  optimization.checkpoint_every=1000 \
+  optimization.checkpoint_include_replay=true
+```
+
+`checkpoint_every` counts completed learner updates; a save happens after the
+current training batch. Set it to `null` to save only on completion or graceful
+termination. `checkpoint_keep_last=2` controls retention. Checkpoint directory
+names use the cumulative action count. The default `checkpoint_dir=null`
+disables saving, and replay is excluded unless explicitly enabled.
+
+Resume explicitly from a checkpoint or a rotation directory:
+
+```bash
+python sota-implementations/dreamer_v3/train.py \
+  optimization.resume_from=checkpoints \
+  optimization.checkpoint_dir=checkpoints \
+  collector.total_frames=10000
+```
+
+The frame budget is cumulative, so increase it to continue a completed run.
+Elapsed time also resumes from the saved value; increase `optimization.max_time`
+when continuing a run that reached its time budget. The environment count,
+replay capacity, batch/sequence sizes and sampling mode must match the saved
+configuration. Model shapes must remain compatible with the saved state.
+
+TorchRL checkpoint utilities save the learner (including normalization and
+slow-value parameters), optimizer, target-update state, global and replay RNGs,
+policy RNG counter, update-ratio remainder, reporting counters, unfinished
+logging window, logger identity and resolved configuration. Optional native
+replay serialization includes writer generations, streaming sampler state and
+queued prefetched samples. Async collection pauses and pending replay operations
+finish before the snapshot. CUDA work is synchronized before saving.
+
+A resumed process performs compile/capture warm-up before loading training state,
+then restores RNG state after constructing environments and loggers. JSONL and
+CSV logging append to their saved paths. W&B resumes the saved run ID with
+`resume="must"`; keep the same logger backend and service configuration.
+
+Environments restart. Saved unfinished replay tails become truncation boundaries
+before new transitions arrive, and incomplete episode returns restart at zero.
+Initial reset records are counted again when reset-record reporting is enabled.
+Queued collector results that were not emitted are not checkpointed. The acting
+policy is rebuilt from the restored learner; when using a separate policy RNG,
+its saved module state and counter are then restored. Consequently resumed
+trajectories are not promised to match an uninterrupted run. Without a replay payload,
+collection refills native replay before training continues, without accumulating
+a catch-up update burst. Counters and logger identity still continue.
+
+SIGINT and SIGTERM request a stop after the current collection/update batch.
+The final checkpoint is written before replay, environments and loggers close.
+Abrupt process termination cannot take a final snapshot; resume from the latest
+completed checkpoint instead.
+
+
+Checkpoint ownership is provided by core components: `DreamerV3Loss` stores
+learner and normalization state; `DreamerV3OptimizationStepper` stores optimizer
+and target-update progress. `DreamerV3SeededPolicy` and `DreamerV3UpdateRatio`
+serialize their own RNG counter and fractional scheduling progress. The recipe
+registers these objects with `Checkpoint` directly. Native replay closes restored
+stream tails through `ReplayBufferEnsemble.end_streams()`, and
+`get_logger(..., state_dict=saved_state)` owns logger identity and counter restoration.

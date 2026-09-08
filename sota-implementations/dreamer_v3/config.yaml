@@ -87,6 +87,12 @@ optimization:
   sync_timers: false
   collection_warmup_seconds: 0
   max_time: null  # wall-clock seconds; null uses the frame budget
+  # Saving is opt-in. Resume only when resume_from is explicitly set.
+  checkpoint_dir: null
+  checkpoint_every: 1000  # completed learner updates; null saves only at exit
+  checkpoint_keep_last: 2
+  checkpoint_include_replay: false
+  resume_from: null  # checkpoint or rotation directory
   lr: 4.0e-5
   optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3

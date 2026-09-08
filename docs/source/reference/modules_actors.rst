@@ -32,6 +32,7 @@ Probabilistic actors
 
     ProbabilisticActor
     DreamerV3DiscreteActor
+    DreamerV3SeededPolicy
     SafeProbabilisticModule
     SafeProbabilisticTensorDictSequential
 
