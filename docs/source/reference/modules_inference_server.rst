@@ -83,6 +83,67 @@ threads in the same process:
 
     server.shutdown()
 
+Static CUDA-graph batches
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+CUDA policies can remove Python dispatch and kernel-launch overhead by setting
+``static_batch_size`` together with an explicit CUDA ``policy_device``. The
+server clones the last real request into any pad rows, replays a
+:class:`tensordict.nn.CudaGraphModule` at the fixed size, and discards padded
+outputs before returning an owned copy to each actor. The static size must be
+at least ``max_batch_size``:
+
+.. code-block:: python
+
+    import torch
+    from tensordict import TensorDict
+
+    request_spec = TensorDict(
+        {
+            "observation": torch.zeros(64),
+            "state": torch.zeros(32 * 64),
+            "belief": torch.zeros(512),
+            "previous_action": torch.zeros(20),
+            "is_init": torch.zeros(1, dtype=torch.bool),
+        }
+    )
+    server = InferenceServer(
+        policy,
+        ThreadingTransport(),
+        max_batch_size=64,
+        static_batch_size=64,
+        request_spec=request_spec,
+        policy_device="cuda:0",
+        output_device="cpu",
+    )
+    server.start()  # warm-up and capture finish before the worker starts
+
+The representative ``request_spec`` is required when constructing a server
+directly. It may be supplied without ``response_spec`` for transports whose
+layout is dynamic. :class:`~torchrl.collectors.AsyncBatchedCollector` derives
+the request from the environment specs and calls
+:meth:`~torchrl.modules.inference_server.InferenceServer.prepare_cudagraph`
+before starting its inference and coordinator threads. Initial weight
+synchronization also finishes before capture. Recurrent tensor inputs such as
+``state``, ``belief``, and ``is_init`` remain inside the graph. The first real
+request is checked for every captured policy input key so an incomplete
+``request_spec`` cannot silently leave stale input values in the graph.
+
+In-place parameter copies preserve the captured graph; for example, use
+``TensorDict.from_module(learner).to_module(behavior, inplace=True)``. A
+storage-replacing update raises an error and disables the graph, leaving the
+server on the safe eager path until it is stopped and prepared again. This
+avoids capturing while collector or environment threads are live. The
+interaction type is frozen to its effective value at capture time, including an ambient
+``set_interaction_type`` context; later requests using another type are
+rejected.
+
+CUDA operations using PyTorch's default generator advance its graph-safe state
+across replays. Custom generators must manage CUDA graph state explicitly, and
+policies that reseed with ``manual_seed`` during each forward cannot be
+captured. Consequently, DreamerV3's ``separate_policy_rng`` mode and
+``static_batch_size`` cannot be enabled together.
+
 Shared-memory transport
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -131,8 +192,8 @@ Structured Configuration
 Server execution, batching, and device placement are grouped into two
 dataclasses instead of loose keyword arguments: :class:`InferenceServerConfig`
 collects the execution ``service_backend`` (``"thread"`` or ``"process"``) and the
-batching/instrumentation knobs (``max_batch_size``, ``min_batch_size``,
-``timeout``, ``collect_stats``, ``stats_window_size``), and
+batching/instrumentation knobs (``max_batch_size``, ``static_batch_size``,
+``min_batch_size``, ``timeout``, ``collect_stats``, ``stats_window_size``), and
 :class:`InferenceDeviceConfig` describes device placement across the
 collection pipeline (``policy_device``, ``output_device``, ``env_device``,
 ``storing_device``). Both :class:`InferenceServer` and

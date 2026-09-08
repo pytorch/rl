@@ -318,7 +318,8 @@ class AsyncBatchedCollector(BaseCollector):
         server_config (InferenceServerConfig, optional): structured server
             configuration: execution ``backend`` (``"thread"`` runs the serve
             loop in this process, ``"process"`` a dedicated server process
-            requiring ``policy_factory``), batching, and stats settings.
+            requiring ``policy_factory``), batching, optional static
+            CUDA-graph execution, and stats settings.
             Mutually exclusive with the ``max_batch_size``,
             ``min_batch_size``, and ``server_timeout`` keyword arguments.
         device_config (InferenceDeviceConfig, optional): structured device
@@ -571,6 +572,7 @@ class AsyncBatchedCollector(BaseCollector):
                 policy_factory=policy_factory,
                 transport=transport,
                 max_batch_size=max_batch_size,
+                static_batch_size=_server_defaults.static_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
                 collate_fn=maybe_dense_stack,
@@ -588,6 +590,7 @@ class AsyncBatchedCollector(BaseCollector):
                 model=policy,
                 transport=transport,
                 max_batch_size=max_batch_size,
+                static_batch_size=_server_defaults.static_batch_size,
                 min_batch_size=min_batch_size,
                 timeout=server_timeout,
                 collate_fn=maybe_dense_stack,
@@ -669,6 +672,10 @@ class AsyncBatchedCollector(BaseCollector):
                     )
                     for _ in range(self._num_envs)
                 ]
+
+            if self._server.static_batch_size is not None:
+                request_spec = self._env_pool.fake_tensordict()[0]
+                self._server.prepare_cudagraph(request_spec)
 
             # Start inference server
             if not self._server.is_alive:

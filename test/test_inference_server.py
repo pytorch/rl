@@ -127,6 +127,16 @@ def _make_policy():
     )
 
 
+class _BatchSizeModule(nn.Module):
+    def forward(self, value):
+        return value + value.shape[0]
+
+
+class _RandomModule(nn.Module):
+    def forward(self, value):
+        return torch.rand_like(value)
+
+
 # =============================================================================
 # Tests: core abstractions (Commit 1)
 # =============================================================================
@@ -392,6 +402,148 @@ class TestInferenceServerCore:
             for r in results:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
+
+    def test_static_batch_requires_cuda_policy_device(self):
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        with pytest.raises(ValueError, match="CUDA policy_device"):
+            InferenceServer(
+                policy,
+                transport="auto",
+                max_batch_size=4,
+                static_batch_size=4,
+                request_spec=TensorDict({"observation": torch.zeros(1)}),
+                policy_device="cpu",
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_batch_pads_slices_and_owns_results(self):
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        server = InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=4,
+            static_batch_size=4,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+        )
+        transport = server.transport
+        futures = [
+            transport.submit(TensorDict({"observation": torch.tensor([value])}))
+            for value in (1.0, 2.0)
+        ]
+
+        with server:
+            results = [future.result(timeout=5.0) for future in futures]
+            held_action = results[0]["action"]
+            latest = server.client()(TensorDict({"observation": torch.tensor([10.0])}))
+
+        assert len(results) == 2
+        torch.testing.assert_close(
+            results[0]["action"], torch.tensor([5.0], device="cuda:0")
+        )
+        torch.testing.assert_close(
+            results[1]["action"], torch.tensor([6.0], device="cuda:0")
+        )
+        torch.testing.assert_close(
+            latest["action"], torch.tensor([14.0], device="cuda:0")
+        )
+        torch.testing.assert_close(held_action, torch.tensor([5.0], device="cuda:0"))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_rejects_request_spec_key_mismatch(self):
+        policy = TensorDictModule(
+            torch.add, in_keys=["left", "right"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"left": torch.zeros(1), "right": torch.zeros(1)})
+        with InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ) as server:
+            with pytest.raises(RuntimeError, match="missing policy input keys"):
+                server.client()(TensorDict({"left": torch.ones(1)}))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_randomness_advances_across_replays(self):
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            _RandomModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(64)})
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ):
+            client = transport.client()
+            first = client(request_spec.clone())["action"]
+            second = client(request_spec.clone())["action"]
+
+        assert not torch.equal(first, second)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_requires_in_place_weight_updates(self):
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            nn.Linear(1, 1, bias=False),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        with torch.no_grad():
+            policy.module.weight.fill_(1.0)
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ) as server:
+            client = transport.client()
+            request = TensorDict({"observation": torch.tensor([2.0])})
+            graph = server._cudagraph_model
+
+            def copy_weight(model):
+                with torch.no_grad():
+                    model.module.weight.fill_(3.0)
+
+            server.update_model(copy_weight)
+            assert server._cudagraph_model is graph
+            torch.testing.assert_close(
+                client(request.clone())["action"], torch.tensor([6.0])
+            )
+
+            def replace_weight(model):
+                model.module.weight = nn.Parameter(
+                    torch.full_like(model.module.weight, 4.0)
+                )
+
+            with pytest.raises(RuntimeError, match="only supports in-place"):
+                server.update_model(replace_weight)
+            assert server._cudagraph_model is None
+            torch.testing.assert_close(
+                client(request.clone())["action"], torch.tensor([8.0])
+            )
 
     def test_batch_of_requests_with_mixed_root_device_metadata(self):
         transport = _MockTransport()
@@ -695,6 +847,28 @@ class TestInferenceServerCore:
             assert scheme.connect_locked
             assert actor.server.policy_version == 9
             assert actor.server.stats()["weight_updates"] == 2
+        finally:
+            actor.shutdown()
+
+    def test_ray_actor_weight_update_preserves_parameter_storage(self):
+        actor = _RayInferenceServerActor(
+            _make_policy,
+            ThreadingTransport(),
+            None,
+            None,
+            None,
+            None,
+            {},
+        )
+        try:
+            parameter = actor.model.module.weight
+            weights = TensorDict.from_module(actor.model).data.clone()
+            weights.apply_(torch.zeros_like)
+            actor.update_model_weights(weights)
+            assert actor.model.module.weight is parameter
+            torch.testing.assert_close(
+                actor.model.module.weight, torch.zeros_like(parameter)
+            )
         finally:
             actor.shutdown()
 
@@ -1863,6 +2037,49 @@ class TestWeightSyncIntegration:
             assert ws.initialized_on_receiver
             assert ws.synchronized_on_receiver
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_capture_follows_initial_weight_sync(self):
+        class _InitialWeightSync:
+            def __init__(self):
+                self.initialized_on_receiver = False
+                self.synchronized_on_receiver = False
+                self.model = None
+
+            def init_on_receiver(self, *, model_id, model, worker_idx):
+                self.model = model
+                self.initialized_on_receiver = True
+
+            def connect(self, *, worker_idx):
+                self.model.module.weight = nn.Parameter(
+                    torch.full_like(self.model.module.weight, 3.0)
+                )
+                self.synchronized_on_receiver = True
+
+            def receive(self, timeout=None):
+                return None
+
+        policy = TensorDictModule(
+            nn.Linear(1, 1, bias=False),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        with torch.no_grad():
+            policy.module.weight.fill_(1.0)
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        with InferenceServer(
+            policy,
+            transport="auto",
+            max_batch_size=1,
+            static_batch_size=1,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+            weight_sync=_InitialWeightSync(),
+        ) as server:
+            result = server.client()(TensorDict({"observation": torch.tensor([2.0])}))
+        torch.testing.assert_close(result["action"], torch.tensor([6.0]))
+
     def test_weight_update_applied(self):
         """Weights pushed via weight_sync are applied to the model."""
         transport = ThreadingTransport()
@@ -1953,6 +2170,32 @@ class TestWeightSyncIntegration:
             # Without an active context the server runs a bare forward.
             result = client(TensorDict({}, batch_size=[1]))
             assert result["action"].item() == 0
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cudagraph_compares_effective_interaction_type(self):
+        class _InteractionValue(nn.Module):
+            def forward(self, observation):
+                value = 1 if interaction_type() is InteractionType.RANDOM else 0
+                return torch.full_like(observation, value)
+
+        policy = TensorDictModule(
+            _InteractionValue(), in_keys=["observation"], out_keys=["action"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        with set_interaction_type(InteractionType.RANDOM):
+            with InferenceServer(
+                policy,
+                transport="auto",
+                max_batch_size=1,
+                static_batch_size=1,
+                request_spec=request_spec,
+                policy_device="cuda:0",
+                output_device="cpu",
+            ) as server:
+                client = PolicyClientModule(server.transport, out_keys=["action"])
+                result = client(TensorDict({"observation": torch.ones(1)}))
+        assert result["action"].item() == 1
 
 
 # ---------------------------------------------------------------------------
@@ -2567,7 +2810,35 @@ class TestAsyncBatchedCollector:
             total_frames=20,
             env_backend="threading",
             server_config=InferenceServerConfig(
-                service_backend="process", max_batch_size=2
+                service_backend="process",
+                max_batch_size=2,
+            ),
+        )
+        total = 0
+        for batch in collector:
+            total += batch.numel()
+        collector.shutdown()
+        assert total >= 20
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_process_server_static_batch(self):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_counting_policy,
+            frames_per_batch=10,
+            total_frames=20,
+            env_backend="threading",
+            server_config=InferenceServerConfig(
+                service_backend="process",
+                max_batch_size=2,
+                static_batch_size=2,
+            ),
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
             ),
         )
         total = 0
@@ -2650,6 +2921,29 @@ class TestAsyncBatchedCollector:
         collector.shutdown()
         assert total >= 20
         assert stats["requests"] > 0
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_batch_collector(self):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            server_config=InferenceServerConfig(max_batch_size=2, static_batch_size=2),
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+        )
+        total = 0
+        for batch in collector:
+            assert batch.device is None or batch.device.type == "cpu"
+            total += batch.numel()
+        collector.shutdown()
+        assert total >= 20
 
 
 # =============================================================================
