@@ -2429,6 +2429,10 @@ class RSSMRolloutV3(TensorDictModuleBase):
         """Run the recurrence with the higher-order :func:`torch.scan`."""
         if not isinstance(unroll, int) or isinstance(unroll, bool) or unroll < 1:
             raise ValueError(f"unroll must be a positive integer, got {unroll!r}.")
+        if not action.is_floating_point():
+            # A one-hot action spec yields bool actions; the explicit loop casts
+            # them in the prior, the scan body must receive floats.
+            action = action.to(belief.dtype)
         prior_net = self.rssm_prior.module
         posterior_net = self.rssm_posterior.module
         length = action.shape[-2]
@@ -2545,6 +2549,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
         scope: Literal["step", "scan"] = "step",
         *,
         unroll: int = 1,
+        compile: bool = True,
         **compile_kwargs,
     ) -> None:
         """Compile the recurrence with :func:`torch.compile`.
@@ -2563,8 +2568,15 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 higher-order scan iteration. Larger values can improve runtime
                 at the cost of compilation time and graph size. Only applies
                 to ``scope="scan"``. Defaults to ``1``.
+            compile (bool, optional): If ``False``, select the backend without
+                wrapping it in :func:`torch.compile`, for a rollout that runs
+                inside an enclosing compiled region such as a compiled learner
+                step. The enclosing compile then traces one higher-order scan
+                of ``unroll`` steps instead of unrolling the explicit loop over
+                the whole sequence. Defaults to ``True``.
             **compile_kwargs: Keyword arguments for :func:`torch.compile`.
-                ``dynamic`` defaults to ``False``.
+                ``dynamic`` defaults to ``False``. Ignored when ``compile`` is
+                ``False``.
         """
         if not self._fast_path:
             raise RuntimeError(
@@ -2580,14 +2592,17 @@ class RSSMRolloutV3(TensorDictModuleBase):
         compile_kwargs.setdefault("dynamic", False)
         self._step_fn = self._scan_fn = None
         if scope == "step":
-            self._step_fn = torch.compile(self._step, **compile_kwargs)
+            self._step_fn = (
+                torch.compile(self._step, **compile_kwargs) if compile else self._step
+            )
         else:
             devices = {value.device for value in self.parameters()}
             devices.update(value.device for value in self.buffers())
             for device in devices:
                 _maybe_warm_scan_backward(device)
-            self._scan_fn = torch.compile(
-                ft.partial(self._scan, unroll=unroll), **compile_kwargs
+            scan_fn = ft.partial(self._scan, unroll=unroll)
+            self._scan_fn = (
+                torch.compile(scan_fn, **compile_kwargs) if compile else scan_fn
             )
 
     def __getstate__(self) -> dict:

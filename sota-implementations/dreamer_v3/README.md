@@ -156,8 +156,11 @@ the compiled region, so a seeded run diverges from an eager one. The scan uses
 time and graph size, while `1` disables manual unrolling.
 `optimization.compile_train_step=true` compiles the complete learner forward
 and backward with TorchInductor, including the model, actor, value, and replay
-value losses. It subsumes `optimization.compile_rssm`, which is ignored to avoid
-nested compilation of shared RSSM modules. The compile mode defaults to
+value losses. `optimization.compile_rssm` then selects the recurrence backend
+inside that compiled step without a nested `torch.compile`: with `scan`, Dynamo
+traces one higher-order scan of `rssm_scan_unroll` steps, whereas the default
+explicit loop is unrolled over the whole sequence and makes the compile of a
+long sequence very slow. The compile mode defaults to
 `optimization.compile_train_step_mode=default`; autotuning modes are opt-in.
 Compilation and CUDA-graph warmup use a fixed-shape synthetic batch before the
 collector is constructed, so async collection is not live while Dynamo runs.

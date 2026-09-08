@@ -341,7 +341,10 @@ def build_world_model(
     ``cfg.env.pixels_key``; ``None`` disables the image path. The decoded
     vector is written to ``("next", "reco_pixels")`` without an image, which
     keeps the vector-only keys unchanged, and to ``("next", "reco_vector")``
-    next to the decoded image otherwise.
+    next to the decoded image otherwise. ``compile_rollout`` wraps the RSSM
+    recurrence in its own :func:`torch.compile`; pass ``False`` when the whole
+    learner step is compiled, so ``cfg.optimization.compile_rssm`` only selects
+    the backend that the enclosing compile traces.
     """
     state_dim = latent_state_dim(cfg)
     vector = _normalize_hydra_key(cfg.env.vector_key) if obs_dim else None
@@ -457,7 +460,10 @@ def build_world_model(
     # Canonical transitions retain is_init. Native replay slices stay within
     # one episode, and the rollout handles a reset at the first transition.
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior, reset_key="is_init")
-    if compile_rollout and cfg.optimization.compile_rssm:
+    if cfg.optimization.compile_rssm:
+        # With compile_rollout=False the backend is selected for the enclosing
+        # compiled learner step: the higher-order scan is then traced once per
+        # unroll instead of the explicit loop being unrolled over the sequence.
         rollout.compile_rollout(
             cfg.optimization.compile_rssm,
             unroll=(
@@ -465,6 +471,7 @@ def build_world_model(
                 if cfg.optimization.compile_rssm == "scan"
                 else 1
             ),
+            compile=compile_rollout,
         )
 
     decoder_modules = []
