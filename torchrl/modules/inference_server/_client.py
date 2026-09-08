@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import queue
 import threading
 from collections.abc import Callable, Sequence
@@ -13,7 +14,11 @@ from typing import Any
 import torch
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from tensordict.nn.probabilistic import interaction_type, InteractionType
+from tensordict.nn.probabilistic import (
+    interaction_type,
+    InteractionType,
+    set_interaction_type,
+)
 from tensordict.utils import NestedKey
 
 from torchrl.modules.inference_server._transport import InferenceTransport
@@ -192,8 +197,8 @@ class PolicyClientModule(TensorDictModuleBase):
         :func:`tensordict.nn.interaction_type` is attached to every transport
         request, and the server executes the remote policy under it -- exactly
         as a local policy would see it. The serving thread's own (process-wide)
-        context is never consulted. In-process (plain callable) clients need
-        no propagation since the caller's context is already active.
+        context is never consulted. In-process (plain callable) clients enter
+        the explicit context when given, otherwise retain the caller's context.
 
     .. note::
         Version tracking is an instance of the generic *service-stamped
@@ -327,7 +332,12 @@ class PolicyClientModule(TensorDictModuleBase):
             # The plain-callable path runs eagerly, so the request has
             # already completed here: free the slot immediately.
             try:
-                result = self.client(tensordict)
+                with (
+                    set_interaction_type(self.interaction_type)
+                    if self.interaction_type is not None
+                    else contextlib.nullcontext()
+                ):
+                    result = self.client(tensordict)
                 return _ImmediateFuture(result)
             except Exception as exc:
                 return _ImmediateFuture(exc)

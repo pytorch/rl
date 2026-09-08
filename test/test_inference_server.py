@@ -1191,17 +1191,20 @@ class TestPolicyClientModule:
         for lifecycle in ("start", "shutdown", "close", "flush"):
             assert not hasattr(restored, lifecycle)
 
-    def test_plain_callable_client_defers_errors(self):
+    @pytest.mark.parametrize("mode", [None, InteractionType.RANDOM])
+    def test_plain_callable_client_defers_errors(self, mode):
         """A plain-callable client defers exceptions to result()."""
 
         def failing_client(td):
             raise ValueError("local policy failure")
 
-        remote_policy = PolicyClientModule(failing_client)
-        future = remote_policy.submit(TensorDict({}))
-        assert future.done()
-        with pytest.raises(ValueError, match="local policy failure"):
-            future.result()
+        remote_policy = PolicyClientModule(failing_client, interaction_type=mode)
+        with set_interaction_type(InteractionType.DETERMINISTIC):
+            future = remote_policy.submit(TensorDict({}))
+            assert future.done()
+            with pytest.raises(ValueError, match="local policy failure"):
+                future.result()
+            assert interaction_type() is InteractionType.DETERMINISTIC
 
     def test_update_policy_weights_cascade_bumps_version(self):
         """The weight-sync cascade hook increments the policy version."""
@@ -2358,17 +2361,26 @@ class TestWeightSyncIntegration:
             result = client(TensorDict({}, batch_size=[1]))
             assert result["action"].item() == 0
 
-    def test_policy_client_explicit_interaction_type_wins_over_ambient_context(self):
+    @pytest.mark.parametrize("remote", [False, True])
+    def test_policy_client_explicit_interaction_type_wins_over_ambient_context(
+        self, remote
+    ):
         transport = ThreadingTransport()
-        with InferenceServer(_InteractionTypeProbe(), transport, max_batch_size=4):
+        policy = _InteractionTypeProbe()
+        with (
+            InferenceServer(policy, transport, max_batch_size=4)
+            if remote
+            else contextlib.nullcontext()
+        ):
             client = PolicyClientModule(
-                transport,
+                transport if remote else policy,
                 out_keys=["action", "interaction_code"],
                 interaction_type=InteractionType.RANDOM,
             )
             request = TensorDict({"observation": torch.zeros(1, dtype=torch.int32)})
             with set_interaction_type(InteractionType.DETERMINISTIC):
                 result = client(request)
+                assert interaction_type() is InteractionType.DETERMINISTIC
             assert (
                 result["interaction_code"].item() == _INTERACTION_TYPE_TO_CODE["random"]
             )
@@ -2377,42 +2389,44 @@ class TestWeightSyncIntegration:
                 result["interaction_code"].item() == _INTERACTION_TYPE_TO_CODE["random"]
             )
 
-    def test_server_ignores_ambient_interaction_type_for_unstamped_requests(self):
+    def test_server_preserves_ambient_interaction_type_for_unstamped_requests(self):
         transport = ThreadingTransport()
         with InferenceServer(_InteractionTypeProbe(), transport, max_batch_size=4):
-            # A raw transport client attaches no interaction-type code; the
-            # serving thread's global says nothing about the request.
+            # Raw clients retain their existing ambient-context behavior.
             client = transport.client()
             with set_interaction_type(InteractionType.RANDOM):
                 result = client(
                     TensorDict({"observation": torch.zeros(1, dtype=torch.int32)})
                 )
-        assert result["interaction_code"].item() == _NO_INTERACTION_TYPE_CODE
+        assert result["interaction_code"].item() == _INTERACTION_TYPE_TO_CODE["random"]
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-    def test_cudagraph_captures_explicit_interaction_type(self):
+    @pytest.mark.parametrize("explicit", [False, True])
+    def test_cudagraph_captures_interaction_type(self, explicit):
         request_spec = TensorDict({"observation": torch.zeros(1, dtype=torch.int32)})
         server = InferenceServer(
             _InteractionTypeProbe(),
             transport="auto",
             max_batch_size=1,
             static_batch_size=1,
+            request_spec=request_spec,
             policy_device="cuda:0",
             output_device="cpu",
         )
-        # The capture mode is explicit; the ambient context plays no role.
-        with set_interaction_type(InteractionType.DETERMINISTIC):
-            server.prepare_cudagraph(
-                request_spec, interaction_type=InteractionType.RANDOM
-            )
-        with server:
-            client = PolicyClientModule(
-                server.transport,
-                out_keys=["action", "interaction_code"],
-                interaction_type=InteractionType.RANDOM,
-            )
-            with set_interaction_type(InteractionType.DETERMINISTIC):
+        with set_interaction_type(
+            InteractionType.DETERMINISTIC if explicit else InteractionType.RANDOM
+        ):
+            if explicit:
+                server.prepare_cudagraph(
+                    request_spec, interaction_type=InteractionType.RANDOM
+                )
+            with server:
+                client = PolicyClientModule(
+                    server.transport,
+                    out_keys=["action", "interaction_code"],
+                    interaction_type=InteractionType.RANDOM if explicit else None,
+                )
                 result = client(
                     TensorDict({"observation": torch.ones(1, dtype=torch.int32)})
                 )

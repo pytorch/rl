@@ -24,7 +24,11 @@ import torch
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import CudaGraphModule
-from tensordict.nn.probabilistic import InteractionType, set_interaction_type
+from tensordict.nn.probabilistic import (
+    interaction_type,
+    InteractionType,
+    set_interaction_type,
+)
 from tensordict.utils import NestedKey
 from torch import nn
 
@@ -39,6 +43,7 @@ from torchrl._comm.backends import (
 from torchrl._comm.mailbox import _exit_on_parent_exit
 from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
 from torchrl.modules.inference_server._client import (
+    _INTERACTION_TYPE_TO_CODE,
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
     _stamp_interaction_type,
@@ -825,10 +830,10 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                 same mode (see
                 :class:`~torchrl.modules.inference_server.PolicyClientModule`).
                 Defaults to ``None``: the mode already stamped on
-                ``request_spec`` if any, otherwise the served module's default
-                interaction type. The ambient
-                :func:`~tensordict.nn.set_interaction_type` context is never
-                consulted; it is process-wide and may belong to another thread.
+                ``request_spec`` if any, otherwise the ambient
+                :func:`~tensordict.nn.set_interaction_type` context (or the
+                module default when no context is active). Pass an explicit
+                mode when other threads may change the ambient context.
         """
         if self.static_batch_size is None:
             return
@@ -863,6 +868,10 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                     model_in_keys
                     if model_in_keys is not None
                     else batch.keys(include_nested=True, leaves_only=True)
+                )
+            elif interaction_code != captured_interaction_code:
+                raise RuntimeError(
+                    "The interaction type changed while preparing the CUDA graph."
                 )
             with interaction_context:
                 cudagraph_model(batch)
@@ -930,16 +939,18 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         return result_batch.set(self.policy_version_key, version)
 
     def _interaction_type_context(self, batch: TensorDictBase):
-        # The code stamped on the request is the only source of truth. The
-        # serving thread's ambient interaction type is tensordict's
-        # process-wide global, which belongs to whichever thread set it last
-        # (e.g. a learner's loss forward), so it is never consulted. Note that
-        # entering the returned context mutates that same global for the
-        # duration of the forward.
+        # Stamped requests ignore the ambient context; unstamped requests retain
+        # the standalone server's ambient-context behavior. Entering a stamped
+        # context still mutates tensordict's process-wide global during forward.
         code = batch.get(_REMOTE_INTERACTION_TYPE_KEY, default=None)
         if code is None:
-            # Unstamped request (e.g. a raw transport client): module default.
-            return set_interaction_type(None), batch, _NO_INTERACTION_TYPE_CODE
+            current_interaction_type = interaction_type()
+            interaction_code = (
+                _INTERACTION_TYPE_TO_CODE[current_interaction_type.value]
+                if current_interaction_type is not None
+                else _NO_INTERACTION_TYPE_CODE
+            )
+            return contextlib.nullcontext(), batch, interaction_code
         if not isinstance(code, torch.Tensor):
             interaction_code = int(code)
         else:

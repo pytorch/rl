@@ -138,10 +138,11 @@ avoids capturing while collector or environment threads are live. The
 interaction type is fixed at capture time: pass it to
 :meth:`~torchrl.modules.inference_server.InferenceServer.prepare_cudagraph`
 (:class:`~torchrl.collectors.AsyncBatchedCollector` passes its
-``exploration_type``), otherwise the graph is captured under the policy's
-default interaction type. The ambient ``set_interaction_type`` context is never
-consulted, neither at capture nor when serving: it is process-wide state that
-another thread, typically the learner's loss forward, may change at any time.
+``exploration_type``). Without an explicit mode, capture uses the mode stamped on
+the request specification, otherwise the ambient ``set_interaction_type``
+context, or the policy default when no context is active. Raw, unstamped requests
+also retain their ambient-context behavior. Pass an explicit mode when other
+threads may change this process-wide context.
 Requests must carry the captured mode, which
 :class:`~torchrl.modules.inference_server.PolicyClientModule` stamps from its
 ``interaction_type`` argument or, when none is given, from the caller's active
