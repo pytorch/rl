@@ -21,7 +21,7 @@ from statistics import mean
 from typing import Any, Literal
 
 import torch
-from tensordict import lazy_stack, TensorDict
+from tensordict import lazy_stack, maybe_dense_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import CudaGraphModule
 from tensordict.nn.probabilistic import (
@@ -29,7 +29,7 @@ from tensordict.nn.probabilistic import (
     InteractionType,
     set_interaction_type,
 )
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 
 from torchrl._comm import CommandChannel, Mailbox, watch_process_liveness
@@ -280,6 +280,60 @@ def _default_collate(items: list[TensorDictBase]) -> TensorDictBase:
     )
 
 
+# Collate functions that stack requests without transforming them. Transports
+# with fixed slot banks gather such batches straight from their slots; any
+# other collate_fn keeps the per-request path.
+_STACKING_COLLATE_FNS = (_default_collate, lazy_stack, maybe_dense_stack, torch.stack)
+
+
+class _SlotBatches:
+    """Reusable staging batches for a transport with fixed slot banks.
+
+    ``host_request`` and ``host_response`` mirror the transport's slot layouts
+    on the host and are pinned when the policy runs on CUDA, so the per-pass
+    copies to and from ``device_request`` (the persistent policy-device batch,
+    sized for the CUDA graph when one is configured) do not block the host.
+    One event per pass then waits for the device-to-host copy of the
+    responses instead of a device-wide synchronize.
+    """
+
+    def __init__(
+        self,
+        transport: InferenceTransport,
+        *,
+        capacity: int,
+        device_capacity: int,
+        policy_device: torch.device | None,
+        policy_version_key: NestedKey | None,
+    ):
+        self.host_request = transport.request_batch(capacity)
+        self.host_response = transport.response_batch(capacity)
+        self.device_request: TensorDictBase | None = None
+        self.event: torch.cuda.Event | None = None
+        self.non_blocking = False
+        if policy_device is not None and policy_device.type != "cpu":
+            self.device_request = (
+                transport.request_batch(device_capacity)
+                .exclude(_REMOTE_INTERACTION_TYPE_KEY)
+                .to(policy_device)
+            )
+            if policy_device.type == "cuda":
+                self.host_request = self.host_request.pin_memory()
+                self.host_response = self.host_response.pin_memory()
+                self.event = torch.cuda.Event()
+                self.non_blocking = True
+        # The server stamps the policy version on the host; every other
+        # response key comes from the model output.
+        self.model_response_keys = list(
+            self.host_response.keys(include_nested=True, leaves_only=True)
+        )
+        self.version: torch.Tensor | None = None
+        if policy_version_key is not None:
+            self.version = self.host_response.get(policy_version_key, default=None)
+            if self.version is not None:
+                self.model_response_keys.remove(unravel_key(policy_version_key))
+
+
 class InferenceServer(metaclass=_InferenceServerMeta):
     """Auto-batching inference server.
 
@@ -519,6 +573,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         self._cudagraph_tensor_references = None
         self._cudagraph_input_keys: frozenset[NestedKey] | None = None
         self._cudagraph_input_keys_validated = False
+        self._slot_batches: _SlotBatches | None = None
 
         _validate_static_batch_size(self.static_batch_size, self.max_batch_size)
         _validate_cudagraph_device(self.static_batch_size, self.policy_device)
@@ -685,6 +740,18 @@ class InferenceServer(metaclass=_InferenceServerMeta):
                     "can be captured before the serve loop starts."
                 )
             self.prepare_cudagraph(self._cudagraph_request_spec)
+        if (
+            self._slot_batches is None
+            and self.transport._batched_slot_io
+            and self.collate_fn in _STACKING_COLLATE_FNS
+        ):
+            self._slot_batches = _SlotBatches(
+                self.transport,
+                capacity=self.max_batch_size,
+                device_capacity=self.static_batch_size or self.max_batch_size,
+                policy_device=self.policy_device,
+                policy_version_key=self.policy_version_key,
+            )
         self._shutdown_event.clear()
         self._worker = threading.Thread(
             target=self._run, daemon=True, name="InferenceServer-worker"
@@ -977,118 +1044,229 @@ class InferenceServer(metaclass=_InferenceServerMeta):
     @torch.no_grad()
     def _run(self) -> None:
         self._init_weight_sync()
+        transport = self.transport
+        slot_batches = self._slot_batches
+        if slot_batches is not None:
+            # Requests stay in the slot bank; _serve_slot_batch gathers them.
+            def drain(max_items):
+                slots, submitted_at = transport.drain_slots(max_items)
+                return None, slots, submitted_at
+
+        else:
+            drain_with_timing = getattr(transport, "drain_with_timing", None)
+            if drain_with_timing is not None:
+                drain = drain_with_timing
+            else:
+
+                def drain(max_items):
+                    items, callbacks = transport.drain(max_items)
+                    return items, callbacks, [None] * len(items)
 
         try:
             while not self._shutdown_event.is_set():
                 self._poll_weight_update()
 
-                self.transport.wait_for_work(timeout=self.timeout)
+                transport.wait_for_work(timeout=self.timeout)
 
-                drain_with_timing = getattr(self.transport, "drain_with_timing", None)
-                if drain_with_timing is None:
-                    items, callbacks = self.transport.drain(self.max_batch_size)
-                    submitted_at = [None] * len(items)
-                else:
-                    items, callbacks, submitted_at = drain_with_timing(
-                        self.max_batch_size
-                    )
-                if not items:
+                items, callbacks, submitted_at = drain(self.max_batch_size)
+                if not callbacks:
                     continue
 
                 # Accumulate up to min_batch_size (or until timeout expires)
-                if len(items) < self.min_batch_size:
+                if len(callbacks) < self.min_batch_size:
                     deadline = time.monotonic() + self.timeout
-                    while len(items) < self.min_batch_size:
+                    while len(callbacks) < self.min_batch_size:
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
                             break
-                        self.transport.wait_for_work(timeout=remaining)
-                        if drain_with_timing is None:
-                            more_items, more_cbs = self.transport.drain(
-                                self.max_batch_size - len(items)
-                            )
-                            more_submitted_at = [None] * len(more_items)
-                        else:
-                            more_items, more_cbs, more_submitted_at = drain_with_timing(
-                                self.max_batch_size - len(items)
-                            )
-                        items.extend(more_items)
+                        transport.wait_for_work(timeout=remaining)
+                        more_items, more_cbs, more_submitted_at = drain(
+                            self.max_batch_size - len(callbacks)
+                        )
+                        if items is not None:
+                            items.extend(more_items)
                         callbacks.extend(more_cbs)
                         submitted_at.extend(more_submitted_at)
 
                 try:
-                    now = time.monotonic()
-                    queue_wait_ms = [
-                        (now - item_submitted_at) * 1000.0
-                        for item_submitted_at in submitted_at
-                        if item_submitted_at is not None
-                    ]
-                    real_batch_size = len(callbacks)
-                    padded_for_cudagraph = self._cudagraph_model is not None
-                    batch = self._collate_model_batch(
-                        items, pad_to_static=padded_for_cudagraph
-                    )
-                    if self.policy_device is not None:
-                        batch = batch.to(self.policy_device)
-                    forward_start = time.monotonic()
-                    with self._model_lock:
-                        (
-                            interaction_context,
-                            batch,
-                            interaction_code,
-                        ) = self._interaction_type_context(batch)
-                        use_cudagraph = self._cudagraph_model is not None
-                        if (
-                            use_cudagraph
-                            and interaction_code != self._cudagraph_interaction_code
-                        ):
-                            raise RuntimeError(
-                                "CUDA-graphed inference requires the interaction "
-                                "type used during capture."
-                            )
-                        if use_cudagraph and not self._cudagraph_input_keys_validated:
-                            request_keys = frozenset(
-                                batch.keys(include_nested=True, leaves_only=True)
-                            )
-                            missing_keys = self._cudagraph_input_keys - request_keys
-                            if missing_keys:
-                                raise RuntimeError(
-                                    "The first CUDA-graph request does not match "
-                                    "request_spec; missing policy input keys "
-                                    f"{list(missing_keys)!r}."
-                                )
-                            self._cudagraph_input_keys_validated = True
-                        with interaction_context:
-                            if not use_cudagraph:
-                                result_batch = self.model(batch)
-                            else:
-                                result_batch = self._cudagraph_model(batch)
-                        if padded_for_cudagraph:
-                            result_batch = result_batch[:real_batch_size]
-                        if self.output_device is not None:
-                            result_batch = result_batch.to(self.output_device)
-                        if use_cudagraph:
-                            result_batch = result_batch.clone()
-                        result_batch = self._set_policy_version(result_batch)
-                    forward_ms = (time.monotonic() - forward_start) * 1000.0
-                    self._record_batch_stats(
-                        batch_size=len(callbacks),
-                        queue_wait_ms=queue_wait_ms,
-                        forward_ms=forward_ms,
-                    )
-                    results = result_batch.unbind(0)
-                    if len(results) != len(callbacks):
-                        raise RuntimeError(
-                            f"Model returned {len(results)} results for a "
-                            f"batch of {len(callbacks)} inputs."
-                        )
-                    for cb, res in zip(callbacks, results):
-                        self.transport.resolve(cb, res)
+                    if slot_batches is not None:
+                        self._serve_slot_batch(slot_batches, callbacks, submitted_at)
+                    else:
+                        self._serve_batch(items, callbacks, submitted_at)
                 except Exception as exc:
                     for cb in callbacks:
-                        self.transport.resolve_exception(cb, exc)
+                        transport.resolve_exception(cb, exc)
         finally:
             self._drain_pending_on_shutdown()
+
+    def _check_cudagraph_batch(
+        self, batch: TensorDictBase, interaction_code: int
+    ) -> bool:
+        """Validate a batch against the captured graph; return whether to replay it.
+
+        Must run under the model lock so a concurrent weight update cannot
+        drop the graph between the check and the forward pass.
+        """
+        if self._cudagraph_model is None:
+            return False
+        if interaction_code != self._cudagraph_interaction_code:
+            raise RuntimeError(
+                "CUDA-graphed inference requires the interaction "
+                "type used during capture."
+            )
+        if not self._cudagraph_input_keys_validated:
+            request_keys = frozenset(batch.keys(include_nested=True, leaves_only=True))
+            missing_keys = self._cudagraph_input_keys - request_keys
+            if missing_keys:
+                raise RuntimeError(
+                    "The first CUDA-graph request does not match "
+                    "request_spec; missing policy input keys "
+                    f"{list(missing_keys)!r}."
+                )
+            self._cudagraph_input_keys_validated = True
+        return True
+
+    def _serve_batch(
+        self,
+        items: list[TensorDictBase],
+        callbacks: list,
+        submitted_at: list[float | None],
+    ) -> None:
+        """Collate, run and resolve one batch of individually drained requests."""
+        now = time.monotonic()
+        queue_wait_ms = [
+            (now - item_submitted_at) * 1000.0
+            for item_submitted_at in submitted_at
+            if item_submitted_at is not None
+        ]
+        real_batch_size = len(callbacks)
+        padded_for_cudagraph = self._cudagraph_model is not None
+        batch = self._collate_model_batch(items, pad_to_static=padded_for_cudagraph)
+        if self.policy_device is not None:
+            batch = batch.to(self.policy_device)
+        forward_start = time.monotonic()
+        with self._model_lock:
+            (
+                interaction_context,
+                batch,
+                interaction_code,
+            ) = self._interaction_type_context(batch)
+            use_cudagraph = self._check_cudagraph_batch(batch, interaction_code)
+            with interaction_context:
+                if not use_cudagraph:
+                    result_batch = self.model(batch)
+                else:
+                    result_batch = self._cudagraph_model(batch)
+            if padded_for_cudagraph:
+                result_batch = result_batch[:real_batch_size]
+            if self.output_device is not None:
+                result_batch = result_batch.to(self.output_device)
+            if use_cudagraph:
+                result_batch = result_batch.clone()
+            result_batch = self._set_policy_version(result_batch)
+        forward_ms = (time.monotonic() - forward_start) * 1000.0
+        self._record_batch_stats(
+            batch_size=len(callbacks),
+            queue_wait_ms=queue_wait_ms,
+            forward_ms=forward_ms,
+        )
+        results = result_batch.unbind(0)
+        if len(results) != len(callbacks):
+            raise RuntimeError(
+                f"Model returned {len(results)} results for a "
+                f"batch of {len(callbacks)} inputs."
+            )
+        for cb, res in zip(callbacks, results):
+            self.transport.resolve(cb, res)
+
+    def _serve_slot_batch(
+        self,
+        batches: _SlotBatches,
+        slots: list[int],
+        submitted_at: list[float | None],
+    ) -> None:
+        """Serve one pass straight from and into the transport's slot banks.
+
+        The ready slots are gathered into the host staging batch, copied to
+        the persistent device batch (padded to the CUDA-graph size by
+        repeating the last request), run through the model, and the response
+        keys are copied back into the host response batch. A single event
+        wait per pass makes the responses visible before they are scattered
+        into the slots with one copy per leaf.
+        """
+        now = time.monotonic()
+        queue_wait_ms = [
+            (now - item_submitted_at) * 1000.0
+            for item_submitted_at in submitted_at
+            if item_submitted_at is not None
+        ]
+        real_batch_size = len(slots)
+        self.transport.gather_requests(slots, out=batches.host_request)
+        host_batch = batches.host_request[:real_batch_size]
+        forward_start = time.monotonic()
+        with self._model_lock:
+            # The interaction code is read from the host copy: no device sync.
+            (
+                interaction_context,
+                host_batch,
+                interaction_code,
+            ) = self._interaction_type_context(host_batch)
+            use_cudagraph = self._check_cudagraph_batch(host_batch, interaction_code)
+            device_batch = batches.device_request
+            if device_batch is None:
+                batch = host_batch
+            else:
+                device_batch[:real_batch_size].update_(
+                    host_batch, non_blocking=batches.non_blocking
+                )
+                if use_cudagraph:
+                    padding = device_batch.batch_size[0] - real_batch_size
+                    if padding:
+                        device_batch[real_batch_size:].update_(
+                            device_batch[real_batch_size - 1 : real_batch_size].expand(
+                                padding, *device_batch.batch_size[1:]
+                            )
+                        )
+                    # A shallow copy receives the module's output keys so the
+                    # persistent batch keeps the request layout.
+                    batch = device_batch.copy()
+                else:
+                    batch = device_batch[:real_batch_size]
+            with interaction_context:
+                if not use_cudagraph:
+                    result_batch = self.model(batch)
+                else:
+                    result_batch = self._cudagraph_model(batch)
+            if use_cudagraph:
+                result_batch = result_batch[:real_batch_size]
+            if (
+                result_batch.batch_dims == 0
+                or result_batch.batch_size[0] != real_batch_size
+            ):
+                raise RuntimeError(
+                    f"Model returned {result_batch.batch_size} results for a "
+                    f"batch of {real_batch_size} inputs."
+                )
+            # Only the declared response keys travel back to the host. The
+            # CUDA-graph output is read before the next replay overwrites it,
+            # so no clone is needed.
+            host_response = batches.host_response[:real_batch_size]
+            host_response.update_(
+                result_batch.select(*batches.model_response_keys, strict=True),
+                non_blocking=batches.non_blocking,
+            )
+            if batches.version is not None:
+                batches.version[:real_batch_size].fill_(self.policy_version)
+            if batches.event is not None:
+                batches.event.record(torch.cuda.current_stream(self.policy_device))
+                batches.event.synchronize()
+        forward_ms = (time.monotonic() - forward_start) * 1000.0
+        self._record_batch_stats(
+            batch_size=real_batch_size,
+            queue_wait_ms=queue_wait_ms,
+            forward_ms=forward_ms,
+        )
+        self.transport.resolve_batch(slots, host_response)
 
     def _drain_pending_on_shutdown(self) -> None:
         """Resolve all pending requests with an error during shutdown."""
