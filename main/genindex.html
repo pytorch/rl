@@ -4434,6 +4434,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.compile">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3.compile_rollout">compile_rollout() (torchrl.modules.RSSMRolloutV3 method)</a>
+</li>
       <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.components">components (torchrl.checkpoint.Checkpoint property)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose">Compose (class in torchrl.envs.transforms)</a>
@@ -5279,6 +5281,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.DreamerV3ActorLoss.html#torchrl.objectives.DreamerV3ActorLoss.default_keys">(torchrl.objectives.DreamerV3ActorLoss attribute)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss.default_keys">(torchrl.objectives.DreamerV3Loss attribute)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.DreamerV3ModelLoss.html#torchrl.objectives.DreamerV3ModelLoss.default_keys">(torchrl.objectives.DreamerV3ModelLoss attribute)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DreamerV3ValueLoss.html#torchrl.objectives.DreamerV3ValueLoss.default_keys">(torchrl.objectives.DreamerV3ValueLoss attribute)</a>
@@ -6036,6 +6040,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.DreamerV3BlockGRUCell.html#torchrl.modules.DreamerV3BlockGRUCell">DreamerV3BlockGRUCell (class in torchrl.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html#torchrl.modules.tensordict_module.DreamerV3DiscreteActor">DreamerV3DiscreteActor (class in torchrl.modules.tensordict_module)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig">DreamerV3DiscreteActorConfig (class in torchrl.trainers.algorithms.configs.modules)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.DreamerV3ImageDecoder.html#torchrl.modules.DreamerV3ImageDecoder">DreamerV3ImageDecoder (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig">DreamerV3ImageDecoderConfig (class in torchrl.trainers.algorithms.configs.modules)</a>
@@ -6044,11 +6052,19 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig">DreamerV3ImageEncoderConfig (class in torchrl.trainers.algorithms.configs.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss">DreamerV3Loss (class in torchrl.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html#torchrl.trainers.algorithms.configs.DreamerV3LossConfig">DreamerV3LossConfig (class in torchrl.trainers.algorithms.configs)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP">DreamerV3MLP (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig">DreamerV3MLPConfig (class in torchrl.trainers.algorithms.configs.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.DreamerV3ModelLoss.html#torchrl.objectives.DreamerV3ModelLoss">DreamerV3ModelLoss (class in torchrl.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper">DreamerV3OptimizationStepper (class in torchrl.trainers.algorithms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig">DreamerV3OptimizationStepperConfig (class in torchrl.trainers.algorithms.configs)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer">DreamerV3Optimizer (class in torchrl.trainers.algorithms)</a>
 </li>
@@ -7577,9 +7593,17 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior.forward">(torchrl.modules.RSSMPosterior method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3.forward">(torchrl.modules.RSSMPosteriorV3 method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior.forward">(torchrl.modules.RSSMPrior method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3.forward">(torchrl.modules.RSSMPriorV3 method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout.forward">(torchrl.modules.RSSMRollout method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3.forward">(torchrl.modules.RSSMRolloutV3 method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.RSSMStateEstimatorV3.html#torchrl.modules.RSSMStateEstimatorV3.forward">(torchrl.modules.RSSMStateEstimatorV3 method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.SignedHyperbolicValueTransform.html#torchrl.modules.SignedHyperbolicValueTransform.forward">(torchrl.modules.SignedHyperbolicValueTransform method)</a>
 </li>
@@ -7630,6 +7654,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.DreamerModelLoss.html#torchrl.objectives.DreamerModelLoss.forward">(torchrl.objectives.DreamerModelLoss method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DreamerV3ActorLoss.html#torchrl.objectives.DreamerV3ActorLoss.forward">(torchrl.objectives.DreamerV3ActorLoss method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss.forward">(torchrl.objectives.DreamerV3Loss method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DreamerV3ModelLoss.html#torchrl.objectives.DreamerV3ModelLoss.forward">(torchrl.objectives.DreamerV3ModelLoss method)</a>
 </li>
@@ -10539,6 +10565,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.modules.llm.RemoteTransformersWrapper.html#torchrl.modules.llm.RemoteTransformersWrapper.in_keys">(torchrl.modules.llm.RemoteTransformersWrapper property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss.in_keys">(torchrl.objectives.DreamerV3Loss property)</a>
+</li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.in_keys_inv">in_keys_inv (torchrl.envs.llm.transforms.RayDataLoadingPrimer property)</a>
 </li>
@@ -12050,6 +12078,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.load_state_dict">(torchrl.objectives.llm.SFTLossOutput method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss.load_state_dict">(torchrl.objectives.SACLoss method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper.load_state_dict">(torchrl.trainers.algorithms.DreamerV3OptimizationStepper method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook.load_state_dict">(torchrl.trainers.UTDRHook method)</a>
 </li>
@@ -18364,9 +18394,17 @@ document.write(`
       </ul></li>
       <li><a href="reference/generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior">RSSMPosterior (class in torchrl.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3">RSSMPosteriorV3 (class in torchrl.modules)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior">RSSMPrior (class in torchrl.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3">RSSMPriorV3 (class in torchrl.modules)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout">RSSMRollout (class in torchrl.modules)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3">RSSMRolloutV3 (class in torchrl.modules)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.RSSMStateEstimatorV3.html#torchrl.modules.RSSMStateEstimatorV3">RSSMStateEstimatorV3 (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.RunningMeanStd.html#torchrl.envs.transforms.RunningMeanStd">RunningMeanStd (class in torchrl.envs.transforms)</a>
 </li>
@@ -20503,6 +20541,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss.state_dict">(torchrl.objectives.SACLoss method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper.state_dict">(torchrl.trainers.algorithms.DreamerV3OptimizationStepper method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook.state_dict">(torchrl.trainers.UTDRHook method)</a>
 </li>
       </ul></li>
@@ -20842,6 +20882,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.step">(torchrl.modules.WorldModel method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.KLAdaptiveLR.html#torchrl.objectives.KLAdaptiveLR.step">(torchrl.objectives.KLAdaptiveLR method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper.step">(torchrl.trainers.algorithms.DreamerV3OptimizationStepper method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer.step">(torchrl.trainers.algorithms.DreamerV3Optimizer method)</a>
 </li>
@@ -23413,6 +23455,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.record.loggers.wandb.WandbLogger.html#torchrl.record.loggers.wandb.WandbLogger">WandbLogger() (in module torchrl.record.loggers.wandb)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig">WandbLoggerConfig (class in torchrl.trainers.algorithms.configs.logging)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper.warmup">warmup() (torchrl.trainers.algorithms.DreamerV3OptimizationStepper method)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.weight_updater">weight_updater (torchrl.collectors.llm.RayLLMCollector property)</a>
 </li>

@@ -52,7 +52,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="SafeProbabilisticModule" href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html" />
+    <link rel="next" title="DreamerV3DiscreteActor" href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html" />
     <link rel="prev" title="RandomPolicy" href="torchrl.modules.tensordict_module.RandomPolicy.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1893,6 +1893,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.TanhModule.html">TanhModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.RandomPolicy.html">RandomPolicy</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">ProbabilisticActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html">DreamerV3DiscreteActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html">SafeProbabilisticModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html">SafeProbabilisticTensorDictSequential</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.QValueActor.html">QValueActor</a></li>
@@ -2080,7 +2081,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.DreamerV3Loss.html">DreamerV3Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html">DreamerV3LossConfig</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2210,6 +2215,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html">DreamerV3OptimizationStepper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html">DreamerV3OptimizationStepperConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../utils.html">torchrl._utils package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2263,6 +2270,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
@@ -2872,11 +2880,11 @@ example code:</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html"
+       href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">SafeProbabilisticModule</p>
+        <p class="prev-next-title">DreamerV3DiscreteActor</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2911,11 +2919,11 @@ example code:</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html"
+       href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">SafeProbabilisticModule</p>
+        <p class="prev-next-title">DreamerV3DiscreteActor</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

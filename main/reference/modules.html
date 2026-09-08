@@ -1893,6 +1893,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.TanhModule.html">TanhModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.RandomPolicy.html">RandomPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.ProbabilisticActor.html">ProbabilisticActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html">DreamerV3DiscreteActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeProbabilisticModule.html">SafeProbabilisticModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html">SafeProbabilisticTensorDictSequential</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.QValueActor.html">QValueActor</a></li>
@@ -2080,7 +2081,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="dreamer_v3.html">DreamerV3 in a nutshell</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="dreamer_v3.html">DreamerV3 in a nutshell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DreamerV3Loss.html">DreamerV3Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html">DreamerV3LossConfig</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2210,6 +2215,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html">DreamerV3OptimizationStepper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html">DreamerV3OptimizationStepperConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="utils.html">torchrl._utils package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2263,6 +2270,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
@@ -2647,8 +2655,12 @@ tensordict data structures, making it easy to build and compose RL models.</p>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.ObsEncoder.html">ObsEncoder</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.ObsDecoder.html">ObsDecoder</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.RSSMPosterior.html">RSSMPosterior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.RSSMPosteriorV3.html">RSSMPosteriorV3</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.RSSMPrior.html">RSSMPrior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.RSSMPriorV3.html">RSSMPriorV3</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.RSSMRollout.html">RSSMRollout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.RSSMRolloutV3.html">RSSMRolloutV3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.RSSMStateEstimatorV3.html">RSSMStateEstimatorV3</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.SymExpTwoHot.html">SymExpTwoHot</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.DreamerV3BlockGRUCell.html">DreamerV3BlockGRUCell</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.DreamerV3BlockGRU.html">DreamerV3BlockGRU</a></li>
@@ -2711,6 +2723,13 @@ tensordict data structures, making it easy to build and compose RL models.</p>
 </li>
 </ul>
 </div>
+</section>
+<section id="dreamerv3-recurrent-components">
+<h2>DreamerV3 recurrent components<a class="headerlink" href="#dreamerv3-recurrent-components" title="Link to this heading">#</a></h2>
+<p>The recurrent components are also exported directly from <code class="docutils literal notranslate"><span class="pre">torchrl.modules</span></code>:
+<a class="reference internal" href="generated/torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3" title="torchrl.modules.RSSMPriorV3"><code class="xref py py-class docutils literal notranslate"><span class="pre">RSSMPriorV3</span></code></a>,
+<a class="reference internal" href="generated/torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3" title="torchrl.modules.RSSMPosteriorV3"><code class="xref py py-class docutils literal notranslate"><span class="pre">RSSMPosteriorV3</span></code></a>, and
+<a class="reference internal" href="generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3" title="torchrl.modules.RSSMRolloutV3"><code class="xref py py-class docutils literal notranslate"><span class="pre">RSSMRolloutV3</span></code></a>. See <a class="reference internal" href="dreamer_v3.html"><span class="doc">DreamerV3 in a nutshell</span></a> for their composition.</p>
 </section>
 </section>
 
@@ -2834,6 +2853,7 @@ tensordict data structures, making it easy to build and compose RL models.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-features">Key Features</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-example">Quick Example</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-sections">Documentation Sections</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dreamerv3-recurrent-components">DreamerV3 recurrent components</a></li>
 </ul>
   </nav></div>
     
@@ -3086,7 +3106,7 @@ tensordict data structures, making it easy to build and compose RL models.</p>
        "headline": "torchrl.modules package",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules.html",
-       "articleBody": "torchrl.modules package# TorchRL offers a comprehensive collection of RL-specific neural network modules built on top of tensordict.nn.TensorDictModule. These modules are designed to work seamlessly with tensordict data structures, making it easy to build and compose RL models. Key Features# Spec-based construction: Automatically configure output layers based on action specs Probabilistic modules: Built-in support for stochastic policies Exploration strategies: Modular exploration wrappers (\u03b5-greedy, Ornstein-Uhlenbeck, etc.) Value networks: Q-value, distributional, and dueling architectures Safe modules: Automatic projection to satisfy action constraints Model-based RL: World model and dynamics modules Quick Example# from torchrl.modules import ProbabilisticActor, TanhNormal from torchrl.envs import GymEnv from tensordict.nn import TensorDictModule import torch.nn as nn env = GymEnv(\"Pendulum-v1\") # Create a probabilistic actor actor = ProbabilisticActor( module=TensorDictModule( nn.Sequential(nn.Linear(3, 64), nn.ReLU(), nn.Linear(64, 2)), in_keys=[\"observation\"], out_keys=[\"loc\", \"scale\"], ), in_keys=[\"loc\", \"scale\"], distribution_class=TanhNormal, spec=env.action_spec, ) Documentation Sections# Actor Modules TensorDictModules and SafeModules Probabilistic actors Q-Value actors Exploration Strategies AdditiveGaussianModule ConsistentDropoutModule EGreedyModule OrnsteinUhlenbeckProcessModule Helpers Value Networks and Critics ValueOperator ValueNorm PopArtValueNorm RunningValueNorm PercentileValueNorm DuelingCnnDQNet DistributionalDQNnet ConvNet CrossCriticGroupSpec CrossGroupCritic MLP DdpgCnnActor DdpgCnnQNet DdpgMlpActor DdpgMlpQNet LSTMModule GRUModule canonicalize_rnn_subset set_recurrent_mode OnlineDTActor DTActor DecisionTransformer Value transforms Recurrent modules Execution modes Backend selection Optimized GRU scan backward Triton precision controls Choosing a layout and backend See also torchrl.modules.mcts package MCTS Scores Robot Learning World Models and Model-Based RL WorldModel WorldModelWrapper DreamerActor ObsEncoder ObsDecoder RSSMPosterior RSSMPrior RSSMRollout SymExpTwoHot DreamerV3BlockGRUCell DreamerV3BlockGRU DreamerV3MLP DreamerV3ImageEncoder DreamerV3ImageDecoder PILCO Distribution Classes Delta IndependentNormal MaskedCategorical NormalParamExtractor OneHotCategorical ReparamGradientStrategy TanhDelta TanhNormal TruncatedNormal Sampling utilities sample_and_log_prob rsample_and_log_prob composite_entropy has_analytic_entropy has_analytic_kl Inference Server Core API Transport Backends Usage Utilities and Helpers ActorValueOperator ActorCriticOperator ActorCriticWrapper get_primers_from_module get_env_transforms_from_module get_recurrent_matmul_precision set_recurrent_matmul_precision RecurrentMatmulPrecision RecurrentMatmulPrecisionUserMode SquashDims Recurrent state lifecycle Minimal recurrent PPO wiring The path at a glance What is_init means When hidden state resets vs. is carried forward Mid-batch done Hidden outputs and recurrent backends Common debugging symptoms What to check, in order See also",
+       "articleBody": "torchrl.modules package# TorchRL offers a comprehensive collection of RL-specific neural network modules built on top of tensordict.nn.TensorDictModule. These modules are designed to work seamlessly with tensordict data structures, making it easy to build and compose RL models. Key Features# Spec-based construction: Automatically configure output layers based on action specs Probabilistic modules: Built-in support for stochastic policies Exploration strategies: Modular exploration wrappers (\u03b5-greedy, Ornstein-Uhlenbeck, etc.) Value networks: Q-value, distributional, and dueling architectures Safe modules: Automatic projection to satisfy action constraints Model-based RL: World model and dynamics modules Quick Example# from torchrl.modules import ProbabilisticActor, TanhNormal from torchrl.envs import GymEnv from tensordict.nn import TensorDictModule import torch.nn as nn env = GymEnv(\"Pendulum-v1\") # Create a probabilistic actor actor = ProbabilisticActor( module=TensorDictModule( nn.Sequential(nn.Linear(3, 64), nn.ReLU(), nn.Linear(64, 2)), in_keys=[\"observation\"], out_keys=[\"loc\", \"scale\"], ), in_keys=[\"loc\", \"scale\"], distribution_class=TanhNormal, spec=env.action_spec, ) Documentation Sections# Actor Modules TensorDictModules and SafeModules Probabilistic actors Q-Value actors Exploration Strategies AdditiveGaussianModule ConsistentDropoutModule EGreedyModule OrnsteinUhlenbeckProcessModule Helpers Value Networks and Critics ValueOperator ValueNorm PopArtValueNorm RunningValueNorm PercentileValueNorm DuelingCnnDQNet DistributionalDQNnet ConvNet CrossCriticGroupSpec CrossGroupCritic MLP DdpgCnnActor DdpgCnnQNet DdpgMlpActor DdpgMlpQNet LSTMModule GRUModule canonicalize_rnn_subset set_recurrent_mode OnlineDTActor DTActor DecisionTransformer Value transforms Recurrent modules Execution modes Backend selection Optimized GRU scan backward Triton precision controls Choosing a layout and backend See also torchrl.modules.mcts package MCTS Scores Robot Learning World Models and Model-Based RL WorldModel WorldModelWrapper DreamerActor ObsEncoder ObsDecoder RSSMPosterior RSSMPosteriorV3 RSSMPrior RSSMPriorV3 RSSMRollout RSSMRolloutV3 RSSMStateEstimatorV3 SymExpTwoHot DreamerV3BlockGRUCell DreamerV3BlockGRU DreamerV3MLP DreamerV3ImageEncoder DreamerV3ImageDecoder PILCO Distribution Classes Delta IndependentNormal MaskedCategorical NormalParamExtractor OneHotCategorical ReparamGradientStrategy TanhDelta TanhNormal TruncatedNormal Sampling utilities sample_and_log_prob rsample_and_log_prob composite_entropy has_analytic_entropy has_analytic_kl Inference Server Core API Transport Backends Usage Utilities and Helpers ActorValueOperator ActorCriticOperator ActorCriticWrapper get_primers_from_module get_env_transforms_from_module get_recurrent_matmul_precision set_recurrent_matmul_precision RecurrentMatmulPrecision RecurrentMatmulPrecisionUserMode SquashDims Recurrent state lifecycle Minimal recurrent PPO wiring The path at a glance What is_init means When hidden state resets vs. is carried forward Mid-batch done Hidden outputs and recurrent backends Common debugging symptoms What to check, in order See also DreamerV3 recurrent components# The recurrent components are also exported directly from torchrl.modules: RSSMPriorV3, RSSMPosteriorV3, and RSSMRolloutV3. See DreamerV3 in a nutshell for their composition.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

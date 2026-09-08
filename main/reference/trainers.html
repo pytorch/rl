@@ -1893,6 +1893,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.TanhModule.html">TanhModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.RandomPolicy.html">RandomPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.ProbabilisticActor.html">ProbabilisticActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html">DreamerV3DiscreteActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeProbabilisticModule.html">SafeProbabilisticModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html">SafeProbabilisticTensorDictSequential</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.QValueActor.html">QValueActor</a></li>
@@ -2080,7 +2081,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="dreamer_v3.html">DreamerV3 in a nutshell</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="dreamer_v3.html">DreamerV3 in a nutshell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DreamerV3Loss.html">DreamerV3Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html">DreamerV3LossConfig</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2210,6 +2215,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html">DreamerV3OptimizationStepper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html">DreamerV3OptimizationStepperConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="utils.html">torchrl._utils package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2263,6 +2270,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
@@ -2640,6 +2648,12 @@ example script. See <a class="reference internal" href="dreamer_v3.html"><span c
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig" title="torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerV3OptimizerConfig</span></code></a>([lr, agc, ...])</p></td>
 <td><p>Hydra configuration for <a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer" title="torchrl.trainers.algorithms.DreamerV3Optimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DreamerV3Optimizer</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper" title="torchrl.trainers.algorithms.DreamerV3OptimizationStepper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerV3OptimizationStepper</span></code></a>(loss_module, ...)</p></td>
+<td><p>Execute a complete DreamerV3 forward/backward and optimizer update.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig" title="torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerV3OptimizationStepperConfig</span></code></a>([...])</p></td>
+<td><p>Hydra configuration for <a class="reference internal" href="generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper" title="torchrl.trainers.algorithms.DreamerV3OptimizationStepper"><code class="xref py py-class docutils literal notranslate"><span class="pre">DreamerV3OptimizationStepper</span></code></a>.</p></td>
 </tr>
 </tbody>
 </table>
@@ -3020,7 +3034,7 @@ example script. See <a class="reference internal" href="dreamer_v3.html"><span c
        "headline": "torchrl.trainers package",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/trainers.html",
-       "articleBody": "torchrl.trainers package# The trainer package provides utilities to write reusable training scripts. The core idea is to use a trainer that implements a nested loop, where the outer loop runs the data collection steps and the inner loop the optimization steps. Key Features# Modular hook system: Customize training at 18 different points in the loop Checkpointing support: Pass a torchrl.checkpoint.Checkpoint for the unified manifest format. Legacy torch, torchsnapshot, and memmap backends remain readable during the migration window. Algorithm trainers: High-level trainers for PPO, A2C, REINFORCE, SAC, offline-to-online SAC, DQN, DDPG, IQL, CQL, and TD3 with Hydra configuration Builder helpers: Utilities for constructing collectors, losses, and replay buffers Quick Example# from torchrl.trainers import Trainer from torchrl.trainers import UpdateWeights, LogScalar # Create trainer trainer = Trainer( collector=collector, total_frames=1000000, loss_module=loss, optimizer=optimizer, ) # Register hooks UpdateWeights(collector, 10).register(trainer) LogScalar(\"reward\").register(trainer) # Train trainer.train() Documentation Sections# Trainer Basics Trainer and hooks Algorithm-specific trainers Builders Utils Loggers Logger ProcessLogger RayLogger CSVLogger MLFlowLogger TensorboardLogger TrackioLogger WandbLogger get_logger generate_exp_name Monitoring collectors and replay buffers Recording utils Training Hooks BatchSubSampler ClearCudaCache CountFramesLog EarlyStopping LogScalar LRSchedulerHook OptimizerHook LogValidationReward ReplayBufferTrainer RewardNormalizer SelectKeys UpdateWeights TargetNetUpdaterHook UTDRHook ValueEstimatorHook DreamerV3 optimization# The algorithm-specific optimizer is available independently of a trainer or example script. See DreamerV3 in a nutshell for the loss and target-update composition. DreamerV3Optimizer(parameters, *[, lr, agc, ...]) DreamerV3 adaptive gradient clipping, RMS scaling and momentum. DreamerV3OptimizerConfig([lr, agc, ...]) Hydra configuration for DreamerV3Optimizer.",
+       "articleBody": "torchrl.trainers package# The trainer package provides utilities to write reusable training scripts. The core idea is to use a trainer that implements a nested loop, where the outer loop runs the data collection steps and the inner loop the optimization steps. Key Features# Modular hook system: Customize training at 18 different points in the loop Checkpointing support: Pass a torchrl.checkpoint.Checkpoint for the unified manifest format. Legacy torch, torchsnapshot, and memmap backends remain readable during the migration window. Algorithm trainers: High-level trainers for PPO, A2C, REINFORCE, SAC, offline-to-online SAC, DQN, DDPG, IQL, CQL, and TD3 with Hydra configuration Builder helpers: Utilities for constructing collectors, losses, and replay buffers Quick Example# from torchrl.trainers import Trainer from torchrl.trainers import UpdateWeights, LogScalar # Create trainer trainer = Trainer( collector=collector, total_frames=1000000, loss_module=loss, optimizer=optimizer, ) # Register hooks UpdateWeights(collector, 10).register(trainer) LogScalar(\"reward\").register(trainer) # Train trainer.train() Documentation Sections# Trainer Basics Trainer and hooks Algorithm-specific trainers Builders Utils Loggers Logger ProcessLogger RayLogger CSVLogger MLFlowLogger TensorboardLogger TrackioLogger WandbLogger get_logger generate_exp_name Monitoring collectors and replay buffers Recording utils Training Hooks BatchSubSampler ClearCudaCache CountFramesLog EarlyStopping LogScalar LRSchedulerHook OptimizerHook LogValidationReward ReplayBufferTrainer RewardNormalizer SelectKeys UpdateWeights TargetNetUpdaterHook UTDRHook ValueEstimatorHook DreamerV3 optimization# The algorithm-specific optimizer is available independently of a trainer or example script. See DreamerV3 in a nutshell for the loss and target-update composition. DreamerV3Optimizer(parameters, *[, lr, agc, ...]) DreamerV3 adaptive gradient clipping, RMS scaling and momentum. DreamerV3OptimizerConfig([lr, agc, ...]) Hydra configuration for DreamerV3Optimizer. DreamerV3OptimizationStepper(loss_module, ...) Execute a complete DreamerV3 forward/backward and optimizer update. DreamerV3OptimizationStepperConfig([...]) Hydra configuration for DreamerV3OptimizationStepper.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -175,6 +175,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Key Features](reference/modules.html#key-features)
 - [Quick Example](reference/modules.html#quick-example)
 - [Documentation Sections](reference/modules.html#documentation-sections)
+- [DreamerV3 recurrent components](reference/modules.html#dreamerv3-recurrent-components)
 - [torchrl.objectives package](reference/objectives.html)
 
 - [Key Features](reference/objectives.html#key-features)

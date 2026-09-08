@@ -182,6 +182,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Key Features](reference/modules.html#key-features)
 - [Quick Example](reference/modules.html#quick-example)
 - [Documentation Sections](reference/modules.html#documentation-sections)
+- [DreamerV3 recurrent components](reference/modules.html#dreamerv3-recurrent-components)
 - [torchrl.objectives package](reference/objectives.html)
 
 - [Key Features](reference/objectives.html#key-features)
@@ -3165,6 +3166,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`NetworkConfig`](generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html#torchrl.trainers.algorithms.configs.modules.NetworkConfig)([_partial_]) | Parent class to configure a network. |
 | [`MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig)(_partial_, in_features, ...) | A class to configure a multi-layer perceptron. |
 | [`DreamerV3MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig)([_partial_, in_features, ...]) | A class to configure a DreamerV3 multilayer perceptron. |
+| [`DreamerV3DiscreteActorConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig)([_partial_, ...]) | Hydra configuration for `DreamerV3DiscreteActor`. |
 | [`DreamerV3ImageEncoderConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig)(_partial_, ...) | Hydra configuration for [`DreamerV3ImageEncoder`](generated/torchrl.modules.DreamerV3ImageEncoder.html#torchrl.modules.DreamerV3ImageEncoder). |
 | [`DreamerV3ImageDecoderConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig)(_partial_, ...) | Hydra configuration for [`DreamerV3ImageDecoder`](generated/torchrl.modules.DreamerV3ImageDecoder.html#torchrl.modules.DreamerV3ImageDecoder). |
 | [`ConvNetConfig`](generated/torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html#torchrl.trainers.algorithms.configs.modules.ConvNetConfig)(_partial_, in_features, depth, ...) | A class to configure a convolutional network. |
@@ -4982,6 +4984,17 @@ objects. In the TorchRL API:
 | **Slow critic**, **target critic**, or **EMA critic** | A lagged copy of the online critic. It is updated by Polyak averaging and provides a stable auxiliary target for critic regularization. "Slow" refers to its parameter updates, not its optimizer or runtime. |
 | **Continuation** | The learned probability that an imagined trajectory continues. It replaces a fixed survival assumption when weighting returns and losses. |
 
+For acting in a real environment, compose the encoder,
+[`RSSMStateEstimatorV3`](generated/torchrl.modules.RSSMStateEstimatorV3.html#torchrl.modules.RSSMStateEstimatorV3) and actor with
+[`TensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential). The estimator resets recurrent
+context per stream and samples only the observation-conditioned posterior.
+The collector carries its state, belief and action into the next step.
+For discrete actions, `DreamerV3DiscreteActor` provides
+an importable one-hot policy with DreamerV3 initialization, uniform probability
+mixing and float32 logits under autocast. Its `get_dist()` method supports
+straight-through sampling for imagination, and its input and output keys can
+be nested. Network construction and sampling require no recipe imports.
+
 ## How the RSSM works
 
 The RSSM splits its latent representation into a deterministic recurrent state
@@ -5163,7 +5176,42 @@ loss = replay_td["loss_replay_value"]
 Because the input features stay attached, this term also trains the RSSM
 representation when the world-model loss returns live features.
 
+## Reconstruction heads
+
+Vector and image reconstruction can be composed in the public model loss.
+Use symlog distance for vector observations and raw distance for normalized
+images. Integer images are scaled by 255 when symlog is disabled. Each head
+sums its event dimensions before the batch/time average, unless
+`global_average=True`; the resulting head losses are added together.
+
+```
+model_loss = DreamerV3ModelLoss(world_model, reco_symlog=[True, False])
+model_loss.set_keys(
+ pixels=[("sensors", "vector"), ("sensors", "image")],
+ reco_pixels=["reco_vector", "reco_pixels"],
+)
+losses, posterior = model_loss(replay_sample)
+losses["loss_model_reco"].backward()
+```
+
 ## Optimization and training loop
+
+The public [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss) composes the model, actor,
+critic and replay-value objectives. Its detached `replay_context` output can
+be written back through native replay's generation-checked update operation.
+[`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper) owns the
+forward/backward, optimizer and target-update sequence. It can run inside a
+`Trainer` or a custom loop using `step(None, sample)`. It returns scalar
+metrics and writes detached posterior features to `sample["replay_context"]`
+for replay updates. Its `warmup(sample)`
+method prepares compilation and capture before collection starts, preserving
+normalization buffers, RNG state and captured gradient storage. Keep shared
+modules in one compile scope; do not compile the RSSM separately when using
+whole-step compilation.
+
+| [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)(*args, **kwargs) | Compose DreamerV3 world-model, imagination and replay-value objectives. |
+| --- | --- |
+| [`DreamerV3LossConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html#torchrl.trainers.algorithms.configs.DreamerV3LossConfig)([_partial_, model_loss, ...]) | Hydra configuration for [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss). |
 
 The loss modules do not create optimizers. This keeps optimizer ownership and
 the update schedule explicit. A typical update cycle is:
@@ -33881,7 +33929,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f9eb33eea20>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f0b07efc9f0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47153,7 +47201,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f9eb5c2c400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0b09ce0400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -212223,6 +212271,93 @@ Tuple of (posterior_mean, posterior_std, state).
 
 ---
 
+# RSSMPosteriorV3
+
+*class*torchrl.modules.RSSMPosteriorV3(*hidden_dim: int = 512*, *num_categoricals: int = 32*, *num_classes: int = 32*, *rnn_hidden_dim: int | None = None*, *obs_embed_dim: int | None = None*, *device=None*, ***, *use_rms_norm: bool = False*, *num_layers: int = 1*, *norm_eps: float = 0.0001*, *unimix: float = 0.0*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMPosteriorV3)
+
+DreamerV3 posterior (representation model) with discrete categorical latent.
+
+See [DreamerV3 in a nutshell](../dreamer_v3.html) for the
+relationship between the posterior, prior, stochastic state, and belief.
+
+Given the deterministic hidden state `h_t` and an observation embedding
+`e_t`, produces the posterior distribution over the stochastic latent:
+
+```
+z_t ~ Cat(MLP([h_t, e_t]))
+```
+
+Reference: [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104)
+
+Parameters:
+
+- **hidden_dim** (*int**,**optional*) - Hidden dimension of the projector MLP.
+Defaults to 512.
+- **num_categoricals** (*int**,**optional*) - Number of categorical variables.
+Defaults to 32.
+- **num_classes** (*int**,**optional*) - Number of classes per categorical variable.
+Defaults to 32.
+- **rnn_hidden_dim** (*int**,**optional*) - Belief dimension. If provided along with
+`obs_embed_dim`, uses explicit `nn.Linear`. Defaults to None.
+- **obs_embed_dim** (*int**,**optional*) - Observation embedding dimension. If provided
+along with `rnn_hidden_dim`, uses explicit `nn.Linear`. Defaults to None.
+- **use_rms_norm** (*bool**,**optional*) - Build the observation predictor from
+RMS-normalized DreamerV3 layers. Defaults to `False` for checkpoint
+compatibility.
+- **num_layers** (*int**,**optional*) - Number of observation predictor layers when
+`use_rms_norm=True`. Defaults to 1.
+- **norm_eps** (*float**,**optional*) - RMS normalization epsilon. Defaults to
+`1e-4`.
+- **unimix** (*float**,**optional*) - Fraction of uniform probability mixed into
+categorical samples. Defaults to `0.0` for compatibility.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - Device. Defaults to None.
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.modules.models.model_based import RSSMPosteriorV3
+>>> posterior = RSSMPosteriorV3(
+... hidden_dim=16,
+... num_categoricals=4,
+... num_classes=4,
+... rnn_hidden_dim=8,
+... obs_embed_dim=12,
+... )
+>>> belief = torch.randn(3, 8)
+>>> obs_embed = torch.randn(3, 12)
+>>> logits, state = posterior(belief, obs_embed)
+>>> logits.shape, state.shape
+(torch.Size([3, 4, 4]), torch.Size([3, 16]))
+```
+
+forward(*belief: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *obs_embedding: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *_uniform: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)][[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMPosteriorV3.forward)
+
+Compute posterior distribution given belief and observation embedding.
+
+Parameters:
+
+- **belief** - Deterministic GRU hidden state from prior, shape
+`[..., rnn_hidden_dim]`.
+- **obs_embedding** - Encoded observation, shape `[..., obs_embed_dim]`.
+- **_uniform** - Optional pre-sampled uniforms used by the scan backend.
+
+Returns:
+
+Raw logits, shape
+
+`[..., num_categoricals, num_classes]`.
+
+state (torch.Tensor): Sampled state (straight-through), shape
+
+`[..., num_categoricals * num_classes]`.
+
+Return type:
+
+posterior_logits ([torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor))
+
+---
+
 # RSSMPrior
 
 *class*torchrl.modules.RSSMPrior(*action_spec*, *hidden_dim=200*, *rnn_hidden_dim=200*, *state_dim=30*, *scale_lb=0.1*, *action_dim=None*, *device=None*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMPrior)
@@ -212266,6 +212401,115 @@ If None, samples from standard normal. Used for deterministic testing.
 Returns:
 
 Tuple of (prior_mean, prior_std, state, belief).
+
+---
+
+# RSSMPriorV3
+
+*class*torchrl.modules.RSSMPriorV3(*action_spec=None*, *hidden_dim: int = 512*, *rnn_hidden_dim: int = 512*, *num_categoricals: int = 32*, *num_classes: int = 32*, *action_dim: int | None = None*, *device=None*, ***, *action_shape: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | tuple[int, ...] | None = None*, *recurrent_model: Literal['gru', 'block_gru'] = 'gru'*, *num_blocks: int = 8*, *num_layers: int = 1*, *prior_num_layers: int = 2*, *norm_eps: float = 0.0001*, *unimix: float = 0.0*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMPriorV3)
+
+DreamerV3 prior network with discrete categorical latent state.
+
+See [DreamerV3 in a nutshell](../dreamer_v3.html) for the prior's
+role in observation-conditioned filtering and latent imagination.
+
+Implements the sequence model and dynamics predictor from DreamerV3.
+The GRU updates the deterministic hidden state:
+
+```
+h_t = GRU(h_{t-1}, [z_{t-1}, a_{t-1}])
+```
+
+Then the prior predicts a distribution over the stochastic latent:
+
+```
+z_hat_t ~ Cat(MLP(h_t))
+```
+
+Reference: [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104)
+
+Parameters:
+
+- **action_spec** ([*TensorSpec*](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*,**optional*) - Action spec. Used only to read
+`action_spec.shape`; mutually exclusive with `action_shape`.
+- **action_shape** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or**tuple**of**int**,**optional*) - Action tensor
+shape. Mutually exclusive with `action_spec`.
+- **hidden_dim** (*int**,**optional*) - Hidden dimension of the linear projector.
+Defaults to 512.
+- **rnn_hidden_dim** (*int**,**optional*) - GRU hidden state dimension (belief size).
+Defaults to 512.
+- **num_categoricals** (*int**,**optional*) - Number of categorical variables in the
+discrete latent. Defaults to 32.
+- **num_classes** (*int**,**optional*) - Number of classes per categorical variable.
+Defaults to 32.
+- **action_dim** (*int**,**optional*) - Action dimension. If provided (along with
+`num_categoricals * num_classes`), uses explicit `nn.Linear`
+instead of `nn.LazyLinear`. Defaults to None.
+- **recurrent_model** (*"gru"**or**"block_gru"**,**optional*) - Recurrent core.
+`"gru"` preserves the historical TorchRL implementation while
+`"block_gru"` selects the grouped DreamerV3 core. Defaults to
+`"gru"`.
+- **num_blocks** (*int**,**optional*) - Number of groups in the block GRU.
+Defaults to 8.
+- **num_layers** (*int**,**optional*) - Number of block-linear dynamics layers.
+Defaults to 1.
+- **prior_num_layers** (*int**,**optional*) - Number of prior predictor layers in
+block-GRU mode. Defaults to 2.
+- **norm_eps** (*float**,**optional*) - RMS normalization epsilon. Defaults to
+`1e-4`.
+- **unimix** (*float**,**optional*) - Fraction of uniform probability mixed into
+categorical samples. Defaults to `0.0` for compatibility.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - Device. Defaults to None.
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.modules.models.model_based import RSSMPriorV3
+>>> prior = RSSMPriorV3(
+... action_shape=torch.Size([2]),
+... hidden_dim=16,
+... rnn_hidden_dim=8,
+... num_categoricals=4,
+... num_classes=4,
+... action_dim=2,
+... )
+>>> state = torch.zeros(3, 16)
+>>> belief = torch.zeros(3, 8)
+>>> action = torch.randn(3, 2)
+>>> logits, next_state, next_belief = prior(state, belief, action)
+>>> logits.shape, next_state.shape, next_belief.shape
+(torch.Size([3, 4, 4]), torch.Size([3, 16]), torch.Size([3, 8]))
+```
+
+forward(*state: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *belief: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *action: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *_uniform: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)][[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMPriorV3.forward)
+
+Compute prior distribution and update GRU belief.
+
+Parameters:
+
+- **state** - Previous stochastic state, shape `[..., num_categoricals * num_classes]`.
+- **belief** - Previous GRU hidden state, shape `[..., rnn_hidden_dim]`.
+- **action** - Current action, shape `[..., action_dim]`.
+- **_uniform** - Optional pre-sampled uniforms used by the scan backend.
+
+Returns:
+
+Raw logits, shape
+
+`[..., num_categoricals, num_classes]`.
+
+state (torch.Tensor): Sampled state (straight-through), shape
+
+`[..., num_categoricals * num_classes]`.
+
+belief (torch.Tensor): Updated GRU hidden state, shape
+
+`[..., rnn_hidden_dim]`.
+
+Return type:
+
+prior_logits ([torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor))
 
 ---
 
@@ -212315,6 +212559,185 @@ p(s_{t+1} s_t | o_t, a_t, s_{t-1}, a_{t-1}) = p(s_{t+1} | s_t, a_t, b_t) q(s_t |
 - A posterior distribution of the form q(s_{t+1} | b_{t+1}, o_{t+1})
 
 which amends to q(s_{t+1} | s_t, a_t, o_{t+1})
+
+---
+
+# RSSMRolloutV3
+
+*class*torchrl.modules.RSSMRolloutV3(**args*, ***kwargs*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3)
+
+Roll out the DreamerV3 RSSM over a sequence.
+
+See [DreamerV3 in a nutshell](../dreamer_v3.html) for the RSSM
+data flow and terminology used by this rollout.
+
+Given encoded observations and actions for `T` time steps, this module
+runs the prior (GRU + categorical) then the posterior (categorical) at each
+step and returns a stacked TensorDict of all intermediate states.
+
+The previous posterior state `z_t` is used as the prior input for step
+`t+1`, matching the recurrent structure of DreamerV3.
+
+The module picks one of two paths at construction: tensors when the
+modules use the standard DreamerV3 key wiring, TensorDicts otherwise. Both
+give identical results, and the tensor path shares storage for the entries
+it does not overwrite. See `compile_rollout()`.
+
+Reference: [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104)
+
+Parameters:
+
+- **rssm_prior** (*TensorDictModule*) - Prior module wrapping [`RSSMPriorV3`](torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3).
+- **rssm_posterior** (*TensorDictModule*) - Posterior module wrapping
+[`RSSMPosteriorV3`](torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3).
+- **reset_key** (*NestedKey**or**None**,**optional*) - Boolean key marking the first
+transition of an episode. The rollout zeroes the state, belief and
+action there. Defaults to `"is_init"`.
+- **action_key** (*NestedKey**or**None**,**optional*) - Action key, zeroed on a reset
+step. Defaults to `None`: the module then takes the
+`rssm_prior` input key that is not `"state"` or `"belief"`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule
+>>> from torchrl.modules.models.model_based import (
+... RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3,
+... )
+>>> prior = TensorDictModule(
+... RSSMPriorV3(action_shape=torch.Size([2]), hidden_dim=8,
+... rnn_hidden_dim=8, num_categoricals=4, num_classes=4,
+... action_dim=2),
+... in_keys=["state", "belief", "action"],
+... out_keys=[("next", "prior_logits"), ("next", "state"), ("next", "belief")],
+... )
+>>> posterior = TensorDictModule(
+... RSSMPosteriorV3(hidden_dim=8, num_categoricals=4, num_classes=4,
+... rnn_hidden_dim=8, obs_embed_dim=6),
+... in_keys=[("next", "belief"), ("next", "encoded_latents")],
+... out_keys=[("next", "posterior_logits"), ("next", "state")],
+... )
+>>> rollout = RSSMRolloutV3(prior, posterior)
+>>> td = TensorDict({
+... "state": torch.zeros(2, 4, 16),
+... "belief": torch.zeros(2, 4, 8),
+... "action": torch.randn(2, 4, 2),
+... "next": {"encoded_latents": torch.randn(2, 4, 6)},
+... }, [2, 4])
+>>> out = rollout(td)
+>>> out.shape
+torch.Size([2, 4])
+```
+
+compile_rollout(*scope: Literal['step', 'scan'] = 'step'*, ***, *unroll: int = 1*, ***compile_kwargs*) → None[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.compile_rollout)
+
+Compile the recurrence with [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
+
+`"step"` compiles one deterministic step of the default explicit
+loop. `"scan"` selects and compiles the higher-order scan backend.
+Random samples are supplied as higher-order scan inputs. Eager and
+compiled executions are not expected to consume identical RNG streams.
+
+Both scopes need the tensor path.
+
+Parameters:
+
+- **scope** (*"step"**or**"scan"**,**optional*) - Part of the recurrence to
+compile. Defaults to `"step"`.
+- **unroll** (*int**,**optional*) - Number of scan steps to trace in each
+higher-order scan iteration. Larger values can improve runtime
+at the cost of compilation time and graph size. Only applies
+to `scope="scan"`. Defaults to `1`.
+- ****compile_kwargs** - Keyword arguments for [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
+`dynamic` defaults to `False`.
+
+forward(*tensordict*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.forward)
+
+Roll out the RSSM for one episode chunk.
+
+Parameters:
+
+**tensordict** (*TensorDictBase*) - Input with shape `[*batch, T]` containing
+actions, encoded observations, and initial state/belief.
+
+Returns:
+
+Stacked outputs with shape `[*batch, T]`.
+
+Return type:
+
+TensorDictBase
+
+---
+
+# RSSMStateEstimatorV3
+
+*class*torchrl.modules.RSSMStateEstimatorV3(**args*, ***kwargs*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMStateEstimatorV3)
+
+Update the DreamerV3 acting state from an encoded observation.
+
+The estimator shares the trained prior and posterior modules. It advances
+the recurrent belief and samples the observation-conditioned posterior,
+without evaluating or sampling the unused prior distribution. Reset entries
+discard the preceding state, belief and action independently in each stream.
+Compose this module between an observation encoder and a probabilistic actor
+with [`TensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential).
+
+Reference: Hafner et al., "Mastering Diverse Domains through World Models"
+(2023), [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104).
+
+Parameters:
+
+- **prior** ([*RSSMPriorV3*](torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3)) - Trained recurrent prior, shared with the world model.
+- **posterior** ([*RSSMPosteriorV3*](torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3)) - Trained observation-conditioned posterior.
+
+Keyword Arguments:
+
+- **in_keys** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**NestedKey**,**optional*) - Five keys, in order: previous
+stochastic state, previous belief, previous action, encoded current
+observation and reset flag. Defaults to `["state", "belief",
+"previous_action", "encoded_latents", "is_init"]`. Features have
+one trailing dimension; reset flags may omit their singleton feature
+dimension. Keys are fixed at construction.
+- **out_keys** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**NestedKey**,**optional*) - Two keys receiving the posterior
+state and updated belief, in that order. Defaults to `["state",
+"belief"]`, replacing the input entries. Outputs are float32 for
+recurrent collection, including under autocast.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.modules import RSSMPriorV3, RSSMPosteriorV3, RSSMStateEstimatorV3
+>>> prior = RSSMPriorV3(
+... action_shape=(2,), action_dim=2, hidden_dim=8,
+... rnn_hidden_dim=8, num_categoricals=2, num_classes=4,
+... )
+>>> posterior = RSSMPosteriorV3(
+... hidden_dim=8, rnn_hidden_dim=8, obs_embed_dim=6,
+... num_categoricals=2, num_classes=4,
+... )
+>>> estimator = RSSMStateEstimatorV3(prior, posterior)
+>>> data = TensorDict({
+... "state": torch.randn(2, 8), "belief": torch.randn(2, 8),
+... "previous_action": torch.randn(2, 2),
+... "encoded_latents": torch.randn(2, 6),
+... "is_init": torch.tensor([True, False]),
+... }, [2])
+>>> with torch.no_grad():
+... result = estimator(data)
+>>> assert result["state"].shape == (2, 8)
+>>> assert torch.allclose(result["state"].reshape(2, 2, 4).sum(-1), torch.ones(2, 2))
+```
+
+See also `RSSMStateEstimatorV3Config`.
+
+forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMStateEstimatorV3.forward)
+
+Write the current posterior state and belief into the input TensorDict.
 
 ---
 
@@ -231368,6 +231791,74 @@ torch.Size([4, 2])
 
 ---
 
+# DreamerV3DiscreteActor
+
+*class*torchrl.modules.tensordict_module.DreamerV3DiscreteActor(**args*, ***kwargs*)[[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#DreamerV3DiscreteActor)
+
+DreamerV3 one-hot categorical policy over stochastic state and belief.
+
+The RMS-normalized SiLU network concatenates belief before state, initializes
+its output weights with scale `0.01`, and mixes categorical probabilities
+with a uniform distribution. Logits remain in float32 under autocast.
+Calling the actor writes logits, a hard one-hot action and its log probability
+into the input tensordict. Sampling is random by default and respects
+[`set_exploration_type()`](torchrl.envs.set_exploration_type.html#torchrl.envs.set_exploration_type). Use `get_dist()` for
+differentiable straight-through sampling with `distribution.rsample()`.
+
+Reference: Hafner et al., DreamerV3 (2023),
+[https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104).
+
+Parameters:
+
+- **in_features** (*int*) - Sum of the flattened stochastic state and belief widths.
+- **out_features** (*int*) - Number of discrete actions.
+
+Keyword Arguments:
+
+- **depth** (*int**,**optional*) - Number of hidden layers. Must be positive.
+Defaults to `3`.
+- **num_cells** (*int**,**optional*) - Width of each hidden layer. Defaults to `1024`.
+- **norm_eps** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - RMS normalization epsilon. Defaults to `1e-4`.
+- **unimix** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - Uniform probability fraction in `[0, 1)`.
+Defaults to `0.01`.
+- **in_keys** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**NestedKey**] or**None**,**optional*) - Exactly two input keys,
+in stochastic state, then belief order. Defaults to
+`["state", "belief"]` when `None`.
+- **action_key** (*NestedKey**,**optional*) - Output one-hot action key. Defaults to
+`"action"`.
+- **logits_key** (*NestedKey**,**optional*) - Output mixed log-probability key.
+Defaults to `"logits"`.
+- **log_prob_key** (*NestedKey**,**optional*) - Output sampled-action log-probability
+key. Defaults to `"action_log_prob"`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**or**None**,**optional*) - Initial parameter device.
+Defaults to `None`, using the default torch device.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.envs import ExplorationType, set_exploration_type
+>>> from torchrl.modules import DreamerV3DiscreteActor
+>>> actor = DreamerV3DiscreteActor(12, 3, depth=2, num_cells=32)
+>>> data = TensorDict({"state": torch.randn(4, 8), "belief": torch.randn(4, 4)}, [4])
+>>> with set_exploration_type(ExplorationType.DETERMINISTIC):
+... result = actor(data)
+>>> result["action"].sum(-1).tolist()
+[1, 1, 1, 1]
+>>> distribution = actor.get_dist(data)
+>>> action = distribution.rsample()
+>>> (action * torch.arange(3)).sum().backward()
+>>> distribution.log_prob(action).shape
+torch.Size([4])
+```
+
+See also
+
+`DreamerV3DiscreteActorConfig`
+
+---
+
 # MultiStepActorWrapper
 
 *class*torchrl.modules.tensordict_module.MultiStepActorWrapper(**args*, ***kwargs*)[[source]](../../_modules/torchrl/modules/tensordict_module/actors.html#MultiStepActorWrapper)
@@ -235921,6 +236412,220 @@ EMA of the low return quantile (0-dim view of `retnorm.low`).
 
 ---
 
+# DreamerV3Loss
+
+*class*torchrl.objectives.DreamerV3Loss(**args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#DreamerV3Loss)
+
+Compose DreamerV3 world-model, imagination and replay-value objectives.
+
+See also [`DreamerV3LossConfig`](torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html#torchrl.trainers.algorithms.configs.DreamerV3LossConfig).
+
+Posterior states start imagination with detached features. The replay-value
+term instead retains its path to the world model. The returned TensorDict
+contains scalar loss entries and detached posterior features under
+`replay_context` for generation-checked replay updates. Sum the entries
+whose names start with `loss_` to obtain the training objective.
+
+Reference: Hafner et al., "Mastering Diverse Domains through World Models"
+(2023), [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104).
+
+Parameters:
+
+- **model_loss** ([*DreamerV3ModelLoss*](torchrl.objectives.DreamerV3ModelLoss.html#torchrl.objectives.DreamerV3ModelLoss)) - World-model objective. Must use
+`detach_output=False` when the replay-value weight is nonzero.
+- **actor_loss** ([*DreamerV3ActorLoss*](torchrl.objectives.DreamerV3ActorLoss.html#torchrl.objectives.DreamerV3ActorLoss)) - Imagination objective, sharing the
+world-model dynamics and the online value network.
+- **value_loss** ([*DreamerV3ValueLoss*](torchrl.objectives.DreamerV3ValueLoss.html#torchrl.objectives.DreamerV3ValueLoss)) - Critic objective for imagined and real
+sequences.
+
+Keyword Arguments:
+
+- **replay_value_loss_weight** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - Replay-value contribution
+to the total objective; zero disables this term. Default: `0.3`.
+- **continuation_horizon** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - Horizon used for replay-value
+targets. Default: `333.0`.
+- **lmbda** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - Lambda-return coefficient for replay-value
+targets. Default: `0.95`.
+
+Examples
+
+This small learner shares dynamics and reward parameters between real
+sequences and imagined rollouts. All components are public imports.
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import (
+... NormalParamExtractor,
+... ProbabilisticTensorDictModule,
+... ProbabilisticTensorDictSequential,
+... TensorDictModule,
+... TensorDictSequential,
+... )
+>>> from torchrl.data import Bounded, Composite, Unbounded
+>>> from torchrl.envs.model_based import DreamerEnv
+>>> from torchrl.modules import (
+... MLP,
+... RSSMPriorV3,
+... RSSMPosteriorV3,
+... RSSMRolloutV3,
+... TanhNormal,
+... WorldModelWrapper,
+... )
+>>> from torchrl.objectives import (
+... DreamerV3ActorLoss,
+... DreamerV3Loss,
+... DreamerV3ModelLoss,
+... DreamerV3ValueLoss,
+... SoftUpdate,
+... )
+>>> prior_net = RSSMPriorV3(
+... action_shape=(1,),
+... hidden_dim=8,
+... rnn_hidden_dim=8,
+... num_categoricals=2,
+... num_classes=2,
+... action_dim=1,
+... )
+>>> posterior_net = RSSMPosteriorV3(
+... hidden_dim=8,
+... rnn_hidden_dim=8,
+... num_categoricals=2,
+... num_classes=2,
+... obs_embed_dim=8,
+... )
+>>> prior = TensorDictModule(
+... prior_net,
+... in_keys=["state", "belief", "action"],
+... out_keys=[
+... ("next", "prior_logits"),
+... ("next", "state"),
+... ("next", "belief"),
+... ],
+... )
+>>> posterior = TensorDictModule(
+... posterior_net,
+... in_keys=[("next", "belief"), ("next", "encoded")],
+... out_keys=[("next", "posterior_logits"), ("next", "state")],
+... )
+>>> reward_net = MLP(in_features=12, out_features=1, num_cells=8, depth=1)
+>>> world_model = TensorDictSequential(
+... TensorDictModule(
+... torch.nn.Linear(3, 8),
+... in_keys=[("next", "observation")],
+... out_keys=[("next", "encoded")],
+... ),
+... RSSMRolloutV3(prior, posterior, reset_key="is_init"),
+... TensorDictModule(
+... MLP(in_features=12, out_features=3, num_cells=8, depth=1),
+... in_keys=[("next", "state"), ("next", "belief")],
+... out_keys=[("next", "reco_pixels")],
+... ),
+... TensorDictModule(
+... reward_net,
+... in_keys=[("next", "state"), ("next", "belief")],
+... out_keys=[("next", "reward")],
+... ),
+... )
+>>> imagination = WorldModelWrapper(
+... TensorDictModule(
+... prior_net,
+... in_keys=["state", "belief", "action"],
+... out_keys=["_", "state", "belief"],
+... ),
+... TensorDictModule(
+... reward_net, in_keys=["state", "belief"], out_keys=["reward"]
+... ),
+... )
+>>> env = DreamerEnv(imagination, prior_shape=(4,), belief_shape=(8,))
+>>> env.observation_spec = Composite(
+... state=Unbounded(4), belief=Unbounded(8)
+... )
+>>> env.state_spec = env.observation_spec.clone()
+>>> env.action_spec = Bounded(-1, 1, (1,))
+>>> env.reward_spec = Unbounded((1,))
+>>> actor = ProbabilisticTensorDictSequential(
+... TensorDictModule(
+... MLP(in_features=12, out_features=2, num_cells=8, depth=1),
+... in_keys=["state", "belief"],
+... out_keys=["params"],
+... ),
+... TensorDictModule(
+... NormalParamExtractor(),
+... in_keys=["params"],
+... out_keys=["loc", "scale"],
+... ),
+... ProbabilisticTensorDictModule(
+... in_keys=["loc", "scale"],
+... out_keys=["action"],
+... distribution_class=TanhNormal,
+... return_log_prob=True,
+... ),
+... )
+>>> value = TensorDictModule(
+... MLP(in_features=12, out_features=1, num_cells=8, depth=1),
+... in_keys=["state", "belief"],
+... out_keys=["state_value"],
+... )
+>>> model_loss = DreamerV3ModelLoss(
+... world_model, reward_two_hot=False, detach_output=False
+... )
+>>> model_loss.set_keys(pixels="observation")
+>>> actor_loss = DreamerV3ActorLoss(
+... actor, value, env, imagination_horizon=3
+... )
+>>> value_loss = DreamerV3ValueLoss(
+... value, actor_loss=actor_loss, slow_critic_regularization=1.0
+... )
+>>> target_updater = SoftUpdate(value_loss, tau=0.02)
+>>> loss_module = DreamerV3Loss(model_loss, actor_loss, value_loss)
+>>> sample = TensorDict(
+... {
+... "state": torch.zeros(2, 3, 4),
+... "belief": torch.zeros(2, 3, 8),
+... "action": torch.zeros(2, 3, 1),
+... "is_init": torch.zeros(2, 3, 1, dtype=torch.bool),
+... "next": {
+... "observation": torch.randn(2, 3, 3),
+... "reward": torch.randn(2, 3, 1),
+... "done": torch.zeros(2, 3, 1, dtype=torch.bool),
+... "terminated": torch.zeros(2, 3, 1, dtype=torch.bool),
+... },
+... },
+... [2, 3],
+... )
+>>> losses = loss_module(sample)
+>>> sum(
+... value for key, value in losses.items() if key.startswith("loss_")
+... ).backward()
+>>> assert losses["replay_context"].batch_size == sample.batch_size
+>>> assert not losses["replay_context", "state"].requires_grad
+```
+
+default_keys
+
+alias of `_AcceptedKeys`
+
+forward(*sample: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#DreamerV3Loss.forward)
+
+Compute scalar objectives and detached posterior replay features.
+
+Parameters:
+
+**sample** (*TensorDictBase*) - Real transition sequences with batch
+dimensions `[batch, time]`.
+
+Returns:
+
+Scalar loss and metric entries, plus a posterior TensorDict under
+the configured `replay_context` key.
+
+*property*in_keys*: list[NestedKey]*
+
+World-model inputs, reset marker and real transition targets.
+
+---
+
 # DreamerV3ModelLoss
 
 *class*torchrl.objectives.DreamerV3ModelLoss(**args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#DreamerV3ModelLoss)
@@ -235971,7 +236676,14 @@ distributions. Defaults to 0.0 for compatibility.
 Default: 0.8.
 - **free_bits** (*float**,**optional*) - Minimum KL per categorical in nats.
 Default: 1.0.
-- **reco_loss** (*"l1"**or**"l2"**,**optional*) - Loss type. Default: `"l2"`.
+- **reco_loss** (*"l1"**or**"l2"**,**optional*) - Reconstruction distance for each
+observation head. Default: `"l2"`.
+- **reco_symlog** (*bool**or**list**of**bool**,**optional*) - Apply symlog to targets
+and predictions before computing reconstruction distance. A bool
+applies to all heads; a list follows the order of `pixels` and
+`reco_pixels` in `set_keys()`. For heads set to `False`,
+integer image targets are converted to float and divided by 255;
+floating targets are used unchanged. Default: `True`.
 - **reward_two_hot** (*bool**,**optional*) - If `True`, the reward head is
 expected to output **logits over** `num_reward_bins` and the loss
 is two-hot cross-entropy. If `False`, the reward head outputs a
@@ -264472,6 +265184,112 @@ Signal that training should stop at the next loop boundary.
 
 ---
 
+# DreamerV3OptimizationStepper
+
+*class*torchrl.trainers.algorithms.DreamerV3OptimizationStepper(*loss_module: [DreamerV3Loss](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)*, *optimizer: [Optimizer](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)*, *target_updater: TargetNetUpdater | None = None*, ***, *compile_train_step: bool = False*, *compile_mode: Literal['default', 'reduce-overhead', 'max-autotune', 'max-autotune-no-cudagraphs'] = 'default'*, *cudagraph: bool = False*, *warmup_steps: int = 5*, *mixed_precision: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper)
+
+Execute a complete DreamerV3 forward/backward and optimizer update.
+
+One optional compile scope owns all shared loss modules. CUDA graph capture
+covers forward/backward only; optimizer and target updates run afterwards.
+Call `warmup()` with a representative replay sample before starting
+collection when compilation or capture is enabled. Warm-up preserves model
+buffers and global RNG state and never advances the optimizer or targets.
+Returned scalar metrics and posterior features written to the input's
+`replay_context` key retain their values after later captured updates.
+
+Parameters:
+
+- **loss_module** ([*DreamerV3Loss*](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)) - Complete learner objective.
+- **optimizer** ([*torch.optim.Optimizer*](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)) - Optimizer owning the shared learner
+parameters once each.
+- **target_updater** (*TargetNetUpdater**,**optional*) - Target update performed
+after each optimizer step. Default: `None`.
+
+Keyword Arguments:
+
+- **compile_train_step** (*bool**,**optional*) - Compile the complete
+forward/backward pass. Requires PyTorch's
+`torch._dynamo.config.inline_inbuilt_nn_modules` support to be
+enabled for functional parameter contexts. Default: `False`.
+- **compile_mode** (*str**,**optional*) - PyTorch compile mode. Default: `"default"`.
+- **cudagraph** (*bool**,**optional*) - Capture forward/backward on CUDA.
+Default: `False`.
+- **warmup_steps** (*int**,**optional*) - Representative forward/backward calls
+before training. Must be positive. Default: `5`.
+- **mixed_precision** (*bool**,**optional*) - Use bfloat16 autocast for CUDA
+forward/backward. Default: `False`.
+
+Note
+
+Shared modules must not also have an independently compiled execution
+scope. Pause collection and synchronize pending replay operations before
+warm-up or checkpointing. Distributed execution is outside this stepper's
+supported modes.
+
+Examples
+
+Continue from the runnable [`DreamerV3Loss`](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)
+example, which constructs `loss_module`, `target_updater` and
+`sample` from public components:
+
+```
+>>> from torchrl.trainers.algorithms import (
+... DreamerV3OptimizationStepper, DreamerV3Optimizer,
+... )
+>>> optimizer = DreamerV3Optimizer(loss_module.parameters(), warmup_steps=0)
+>>> stepper = DreamerV3OptimizationStepper(
+... loss_module, optimizer, target_updater, warmup_steps=1,
+... )
+>>> stepper.warmup(sample)
+>>> before = [parameter.detach().clone() for parameter in loss_module.parameters()]
+>>> metrics = stepper.step(None, sample)
+>>> assert any(
+... not torch.equal(parameter, previous)
+... for parameter, previous in zip(loss_module.parameters(), before)
+... )
+>>> assert not sample["replay_context", "state"].requires_grad
+```
+
+See also [`DreamerV3OptimizationStepperConfig`](torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig).
+
+load_state_dict(*state_dict: dict[str, Any]*) → None[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.load_state_dict)
+
+Restore optimizer state without replacing captured gradient buffers.
+
+state_dict() → dict[str, Any][[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.state_dict)
+
+Return optimizer and target-update progress; checkpoint the loss separately.
+
+step(*trainer: [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer) | None*, *sub_batch: TensorDictBase*) → TensorDictBase[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.step)
+
+Update learner parameters and targets, returning detached metrics.
+
+Parameters:
+
+- **trainer** ([*Trainer*](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)*or**None*) - Owning trainer, or `None` for a custom
+training loop. An owning trainer must use this stepper's loss.
+- **sub_batch** (*TensorDictBase*) - Real transition sequences with the
+schema supplied to `warmup()` when capture is enabled.
+Detached posterior features are written under the loss's
+configured `replay_context` key for subsequent replay updates.
+
+Returns:
+
+Detached scalar metrics suitable for Trainer logging.
+
+warmup(*sample: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.warmup)
+
+Prepare execution using representative data without training updates.
+
+Parameters:
+
+**sample** (*TensorDictBase*) - Sample with the shape, keys, dtype and
+device used for subsequent updates. Collection and replay
+operations must be quiescent for CUDA capture.
+
+---
+
 # DreamerV3Optimizer
 
 *class*torchrl.trainers.algorithms.DreamerV3Optimizer(*parameters: Iterable[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | Iterable[dict[str, Any]]*, ***, *lr: float = 4e-05*, *agc: float = 0.3*, *parameter_norm_min: float = 0.001*, *beta1: float = 0.9*, *beta2: float = 0.999*, *eps: float = 1e-20*, *warmup_steps: int = 1000*)[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3Optimizer)
@@ -265471,6 +266289,53 @@ Signal that training should stop at the next loop boundary.
 
 ---
 
+# DreamerV3LossConfig
+
+*class*torchrl.trainers.algorithms.configs.DreamerV3LossConfig(*_partial_: bool = False*, *model_loss: Any = None*, *actor_loss: Any = None*, *value_loss: Any = None*, *replay_value_loss_weight: float = 0.3*, *continuation_horizon: float = 333.0*, *lmbda: float = 0.95*, *_target_: str = 'torchrl.objectives.DreamerV3Loss'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/objectives.html#DreamerV3LossConfig)
+
+Hydra configuration for [`DreamerV3Loss`](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss).
+
+Examples
+
+With the component losses from the `DreamerV3Loss` example:
+
+```
+>>> from hydra.utils import instantiate
+>>> from torchrl.trainers.algorithms.configs import DreamerV3LossConfig
+>>> configured_loss = instantiate(
+... DreamerV3LossConfig(), model_loss=model_loss,
+... actor_loss=actor_loss, value_loss=value_loss,
+... )
+>>> losses = configured_loss(sample)
+>>> assert not losses["replay_context", "state"].requires_grad
+```
+
+---
+
+# DreamerV3OptimizationStepperConfig
+
+*class*torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig(*loss_module: Any = None*, *optimizer: Any = None*, *target_updater: Any = None*, *compile_train_step: bool = False*, *compile_mode: str = 'default'*, *cudagraph: bool = False*, *warmup_steps: int = 5*, *mixed_precision: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.DreamerV3OptimizationStepper'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#DreamerV3OptimizationStepperConfig)
+
+Hydra configuration for [`DreamerV3OptimizationStepper`](torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper).
+
+Examples
+
+With the learner and optimizer from the public stepper example:
+
+```
+>>> from hydra.utils import instantiate
+>>> from torchrl.trainers.algorithms.configs import DreamerV3OptimizationStepperConfig
+>>> configured_stepper = instantiate(
+... DreamerV3OptimizationStepperConfig(),
+... loss_module=loss_module, optimizer=optimizer,
+... target_updater=target_updater,
+... )
+>>> metrics = configured_stepper.step(None, sample)
+>>> assert not sample["replay_context", "state"].requires_grad
+```
+
+---
+
 # DreamerV3OptimizerConfig
 
 *class*torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig(*lr: float = 4e-05*, *agc: float = 0.3*, *parameter_norm_min: float = 0.001*, *beta1: float = 0.9*, *beta2: float = 0.999*, *eps: float = 1e-20*, *warmup_steps: int = 1000*, *_target_: str = 'torchrl.trainers.algorithms.DreamerV3Optimizer'*, *_partial_: bool = True*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/utils.html#DreamerV3OptimizerConfig)
@@ -266128,6 +266993,27 @@ Example
 See also
 
 [`torchrl.modules.ConvNet`](torchrl.modules.ConvNet.html#torchrl.modules.ConvNet)
+
+---
+
+# torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig
+
+*class*torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig(*_partial_: bool = False*, *in_features: int = '???'*, *out_features: int = '???'*, *depth: int = 3*, *num_cells: int = 1024*, *norm_eps: float = 0.0001*, *unimix: float = 0.01*, *in_keys: Any = None*, *action_key: Any = 'action'*, *logits_key: Any = 'logits'*, *log_prob_key: Any = 'action_log_prob'*, *device: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.modules._make_dreamer_v3_discrete_actor'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/modules.html#DreamerV3DiscreteActorConfig)
+
+Hydra configuration for `DreamerV3DiscreteActor`.
+
+Examples
+
+```
+>>> import torch
+>>> from hydra.utils import instantiate
+>>> from tensordict import TensorDict
+>>> from torchrl.trainers.algorithms.configs import DreamerV3DiscreteActorConfig
+>>> actor = instantiate(DreamerV3DiscreteActorConfig(in_features=12, out_features=3))
+>>> data = TensorDict({"state": torch.randn(4, 8), "belief": torch.randn(4, 4)}, [4])
+>>> actor(data)["action"].shape
+torch.Size([4, 3])
+```
 
 ---
 
@@ -271638,6 +272524,7 @@ in the rollout loop
 - [Inference Server](modules_inference_server.html)
 - [Utilities and Helpers](modules_utils.html)
 - [Recurrent state lifecycle](recurrent_state_lifecycle.html)
+- [DreamerV3 recurrent components](modules.html#dreamerv3-recurrent-components)
 - [torchrl.objectives package](objectives.html)
 
 - [Key Features](objectives.html#key-features)
@@ -271778,6 +272665,8 @@ in the rollout loop
 
 - [DreamerV3Optimizer](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html)
 - [DreamerV3OptimizerConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html)
+- [DreamerV3OptimizationStepper](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html)
+- [DreamerV3OptimizationStepperConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html)
 - [torchrl._utils package](utils.html)
 
 - [implement_for](generated/torchrl.implement_for.html)
@@ -273453,8 +274342,12 @@ actor = ProbabilisticActor(
 - [ObsEncoder](generated/torchrl.modules.ObsEncoder.html)
 - [ObsDecoder](generated/torchrl.modules.ObsDecoder.html)
 - [RSSMPosterior](generated/torchrl.modules.RSSMPosterior.html)
+- [RSSMPosteriorV3](generated/torchrl.modules.RSSMPosteriorV3.html)
 - [RSSMPrior](generated/torchrl.modules.RSSMPrior.html)
+- [RSSMPriorV3](generated/torchrl.modules.RSSMPriorV3.html)
 - [RSSMRollout](generated/torchrl.modules.RSSMRollout.html)
+- [RSSMRolloutV3](generated/torchrl.modules.RSSMRolloutV3.html)
+- [RSSMStateEstimatorV3](generated/torchrl.modules.RSSMStateEstimatorV3.html)
 - [SymExpTwoHot](generated/torchrl.modules.SymExpTwoHot.html)
 - [DreamerV3BlockGRUCell](generated/torchrl.modules.DreamerV3BlockGRUCell.html)
 - [DreamerV3BlockGRU](generated/torchrl.modules.DreamerV3BlockGRU.html)
@@ -273509,6 +274402,13 @@ actor = ProbabilisticActor(
 - [What to check, in order](recurrent_state_lifecycle.html#what-to-check-in-order)
 - [See also](recurrent_state_lifecycle.html#see-also)
 
+## DreamerV3 recurrent components
+
+The recurrent components are also exported directly from `torchrl.modules`:
+[`RSSMPriorV3`](generated/torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3),
+[`RSSMPosteriorV3`](generated/torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3), and
+[`RSSMRolloutV3`](generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3). See [DreamerV3 in a nutshell](dreamer_v3.html) for their composition.
+
 ---
 
 # Actor Modules
@@ -273531,6 +274431,7 @@ or stochastically.
 
 | [`ProbabilisticActor`](generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor)(*args, **kwargs) | General class for probabilistic actors in RL. |
 | --- | --- |
+| [`DreamerV3DiscreteActor`](generated/torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html#torchrl.modules.tensordict_module.DreamerV3DiscreteActor)(*args, **kwargs) | DreamerV3 one-hot categorical policy over stochastic state and belief. |
 | [`SafeProbabilisticModule`](generated/torchrl.modules.tensordict_module.SafeProbabilisticModule.html#torchrl.modules.tensordict_module.SafeProbabilisticModule)(*args, **kwargs) | [`tensordict.nn.ProbabilisticTensorDictModule`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) subclass that accepts a `TensorSpec` as an argument to control the output domain. |
 | [`SafeProbabilisticTensorDictSequential`](generated/torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html#torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential)(*args, ...) | [`tensordict.nn.ProbabilisticTensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential) subclass that accepts a `TensorSpec` as argument to control the output domain. |
 
@@ -274005,8 +274906,12 @@ For an overview of how the DreamerV3 components fit together, see
 | [`ObsEncoder`](generated/torchrl.modules.ObsEncoder.html#torchrl.modules.ObsEncoder)([channels, num_layers, ...]) | Observation encoder network. |
 | [`ObsDecoder`](generated/torchrl.modules.ObsDecoder.html#torchrl.modules.ObsDecoder)([channels, num_layers, ...]) | Observation decoder network. |
 | [`RSSMPosterior`](generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior)([hidden_dim, state_dim, ...]) | The posterior network of the RSSM. |
+| [`RSSMPosteriorV3`](generated/torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3)([hidden_dim, ...]) | DreamerV3 posterior (representation model) with discrete categorical latent. |
 | [`RSSMPrior`](generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior)(action_spec[, hidden_dim, ...]) | The prior network of the RSSM. |
+| [`RSSMPriorV3`](generated/torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3)([action_spec, hidden_dim, ...]) | DreamerV3 prior network with discrete categorical latent state. |
 | [`RSSMRollout`](generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout)(*args, **kwargs) | Rollout the RSSM network. |
+| [`RSSMRolloutV3`](generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3)(*args, **kwargs) | Roll out the DreamerV3 RSSM over a sequence. |
+| [`RSSMStateEstimatorV3`](generated/torchrl.modules.RSSMStateEstimatorV3.html#torchrl.modules.RSSMStateEstimatorV3)(*args, **kwargs) | Update the DreamerV3 acting state from an encoded observation. |
 | [`SymExpTwoHot`](generated/torchrl.modules.SymExpTwoHot.html#torchrl.modules.SymExpTwoHot)([num_bins]) | DreamerV3 categorical scalar representation. |
 | [`DreamerV3BlockGRUCell`](generated/torchrl.modules.DreamerV3BlockGRUCell.html#torchrl.modules.DreamerV3BlockGRUCell)(input_size, ...) | Single-step DreamerV3 block-diagonal GRU cell. |
 | [`DreamerV3BlockGRU`](generated/torchrl.modules.DreamerV3BlockGRU.html#torchrl.modules.DreamerV3BlockGRU)(input_size, hidden_size, ...) | Batch-major DreamerV3 block-diagonal GRU sequence module. |
@@ -274370,6 +275275,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [How the RSSM works](dreamer_v3.html#how-the-rssm-works)
 - [Selecting the sequence backend](dreamer_v3.html#selecting-the-sequence-backend)
 - [The three objectives](dreamer_v3.html#the-three-objectives)
+- [Reconstruction heads](dreamer_v3.html#reconstruction-heads)
 - [Optimization and training loop](dreamer_v3.html#optimization-and-training-loop)
 - [API map](dreamer_v3.html#api-map)
 
@@ -276606,6 +277512,8 @@ example script. See [DreamerV3 in a nutshell](dreamer_v3.html) for the loss and 
 | [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer)(parameters, *[, lr, agc, ...]) | DreamerV3 adaptive gradient clipping, RMS scaling and momentum. |
 | --- | --- |
 | [`DreamerV3OptimizerConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig)([lr, agc, ...]) | Hydra configuration for [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer). |
+| [`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper)(loss_module, ...) | Execute a complete DreamerV3 forward/backward and optimizer update. |
+| [`DreamerV3OptimizationStepperConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig)([...]) | Hydra configuration for [`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper). |
 
 ---
 

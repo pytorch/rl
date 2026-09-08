@@ -48,7 +48,14 @@ distributions. Defaults to 0.0 for compatibility.
 Default: 0.8.
 - **free_bits** (*float**,**optional*) - Minimum KL per categorical in nats.
 Default: 1.0.
-- **reco_loss** (*"l1"**or**"l2"**,**optional*) - Loss type. Default: `"l2"`.
+- **reco_loss** (*"l1"**or**"l2"**,**optional*) - Reconstruction distance for each
+observation head. Default: `"l2"`.
+- **reco_symlog** (*bool**or**list**of**bool**,**optional*) - Apply symlog to targets
+and predictions before computing reconstruction distance. A bool
+applies to all heads; a list follows the order of `pixels` and
+`reco_pixels` in `set_keys()`. For heads set to `False`,
+integer image targets are converted to float and divided by 255;
+floating targets are used unchanged. Default: `True`.
 - **reward_two_hot** (*bool**,**optional*) - If `True`, the reward head is
 expected to output **logits over** `num_reward_bins` and the loss
 is two-hot cross-entropy. If `False`, the reward head outputs a

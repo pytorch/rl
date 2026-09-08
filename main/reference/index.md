@@ -114,6 +114,7 @@
 - [Inference Server](modules_inference_server.html)
 - [Utilities and Helpers](modules_utils.html)
 - [Recurrent state lifecycle](recurrent_state_lifecycle.html)
+- [DreamerV3 recurrent components](modules.html#dreamerv3-recurrent-components)
 - [torchrl.objectives package](objectives.html)
 
 - [Key Features](objectives.html#key-features)
@@ -254,6 +255,8 @@
 
 - [DreamerV3Optimizer](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html)
 - [DreamerV3OptimizerConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html)
+- [DreamerV3OptimizationStepper](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html)
+- [DreamerV3OptimizationStepperConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html)
 - [torchrl._utils package](utils.html)
 
 - [implement_for](generated/torchrl.implement_for.html)

@@ -58,6 +58,17 @@ objects. In the TorchRL API:
 | **Slow critic**, **target critic**, or **EMA critic** | A lagged copy of the online critic. It is updated by Polyak averaging and provides a stable auxiliary target for critic regularization. "Slow" refers to its parameter updates, not its optimizer or runtime. |
 | **Continuation** | The learned probability that an imagined trajectory continues. It replaces a fixed survival assumption when weighting returns and losses. |
 
+For acting in a real environment, compose the encoder,
+[`RSSMStateEstimatorV3`](generated/torchrl.modules.RSSMStateEstimatorV3.html#torchrl.modules.RSSMStateEstimatorV3) and actor with
+[`TensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential). The estimator resets recurrent
+context per stream and samples only the observation-conditioned posterior.
+The collector carries its state, belief and action into the next step.
+For discrete actions, `DreamerV3DiscreteActor` provides
+an importable one-hot policy with DreamerV3 initialization, uniform probability
+mixing and float32 logits under autocast. Its `get_dist()` method supports
+straight-through sampling for imagination, and its input and output keys can
+be nested. Network construction and sampling require no recipe imports.
+
 ## How the RSSM works
 
 The RSSM splits its latent representation into a deterministic recurrent state
@@ -239,7 +250,42 @@ loss = replay_td["loss_replay_value"]
 Because the input features stay attached, this term also trains the RSSM
 representation when the world-model loss returns live features.
 
+## Reconstruction heads
+
+Vector and image reconstruction can be composed in the public model loss.
+Use symlog distance for vector observations and raw distance for normalized
+images. Integer images are scaled by 255 when symlog is disabled. Each head
+sums its event dimensions before the batch/time average, unless
+`global_average=True`; the resulting head losses are added together.
+
+```
+model_loss = DreamerV3ModelLoss(world_model, reco_symlog=[True, False])
+model_loss.set_keys(
+ pixels=[("sensors", "vector"), ("sensors", "image")],
+ reco_pixels=["reco_vector", "reco_pixels"],
+)
+losses, posterior = model_loss(replay_sample)
+losses["loss_model_reco"].backward()
+```
+
 ## Optimization and training loop
+
+The public [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss) composes the model, actor,
+critic and replay-value objectives. Its detached `replay_context` output can
+be written back through native replay's generation-checked update operation.
+[`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper) owns the
+forward/backward, optimizer and target-update sequence. It can run inside a
+`Trainer` or a custom loop using `step(None, sample)`. It returns scalar
+metrics and writes detached posterior features to `sample["replay_context"]`
+for replay updates. Its `warmup(sample)`
+method prepares compilation and capture before collection starts, preserving
+normalization buffers, RNG state and captured gradient storage. Keep shared
+modules in one compile scope; do not compile the RSSM separately when using
+whole-step compilation.
+
+| [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)(*args, **kwargs) | Compose DreamerV3 world-model, imagination and replay-value objectives. |
+| --- | --- |
+| [`DreamerV3LossConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html#torchrl.trainers.algorithms.configs.DreamerV3LossConfig)([_partial_, model_loss, ...]) | Hydra configuration for [`DreamerV3Loss`](generated/torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss). |
 
 The loss modules do not create optimizers. This keeps optimizer ownership and
 the update schedule explicit. A typical update cycle is:
