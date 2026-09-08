@@ -30,6 +30,7 @@ from .random import (
 from .slice import SliceSampler
 from .slice_without_replacement import SliceSamplerWithoutReplacement
 from .staleness import StalenessAwareSampler
+from .streaming_slice import StreamingSliceSampler
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -58,6 +59,7 @@ __all__ = [
     "SliceSampler",
     "SliceSamplerWithoutReplacement",
     "StalenessAwareSampler",
+    "StreamingSliceSampler",
     "SumSegmentTreeFp32",
     "SumSegmentTreeFp64",
 ]
@@ -70,6 +72,7 @@ for _export in (
     SamplerWithoutReplacement,
     _default_staleness_weight,
     StalenessAwareSampler,
+    StreamingSliceSampler,
     PrioritizedSampler,
     SliceSampler,
     SliceSamplerWithoutReplacement,
