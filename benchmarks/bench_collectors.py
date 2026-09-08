@@ -95,6 +95,11 @@ class BenchmarkResult:
     elapsed_s: float = 0.0
     frames_per_s: float = 0.0
     decisions_per_s: float = 0.0
+    # CPU time (user + system) of the driver process per collected frame over
+    # the measured window. With process-backed environments and inference this
+    # is the driver's own transition-path cost; thread backends include the
+    # coordinator and inference-server threads.
+    driver_cpu_ms_per_frame: float = 0.0
     failure: str = ""
     policy_stats: dict[str, float | int] = field(default_factory=dict)
 
@@ -378,6 +383,8 @@ def bench(
             collector.server_stats(reset=True)
         latencies = []
         initial_frames = collector._frames
+        process = psutil.Process()
+        cpu_start = process.cpu_times()
         t0 = previous = time_module.perf_counter()
         if replay_mode == "background":
             iterator.close()
@@ -402,9 +409,12 @@ def bench(
                 if total >= total_frames:
                     break
         elapsed = time_module.perf_counter() - t0
+        cpu_end = process.cpu_times()
+        driver_cpu_s = (cpu_end.user - cpu_start.user) + (
+            cpu_end.system - cpu_start.system
+        )
         if hasattr(collector, "server_stats"):
             policy_stats = collector.server_stats()
-        process = psutil.Process()
         host_rss = process.memory_info().rss
         for child in process.children(recursive=True):
             try:
@@ -445,6 +455,7 @@ def bench(
             elapsed_s=elapsed,
             frames_per_s=fps,
             decisions_per_s=fps,
+            driver_cpu_ms_per_frame=driver_cpu_s * 1000 / total if total else 0.0,
             policy_stats=policy_stats,
         )
     except Exception as err:
@@ -508,7 +519,7 @@ def _print_summary(results: list[BenchmarkResult]) -> None:
     print("=" * 132)
     print(
         f"{'collector':<28} {'backend':<16} {'batch rule':<18} "
-        f"{'envs':>5} {'status':<8} {'fps':>10} {'avg_bs':>8} "
+        f"{'envs':>5} {'status':<8} {'fps':>10} {'drv_ms/f':>9} {'avg_bs':>8} "
         f"{'p95_q_ms':>10} {'p95_fwd_ms':>11} failure"
     )
     print("-" * 132)
@@ -518,6 +529,7 @@ def _print_summary(results: list[BenchmarkResult]) -> None:
             f"{result.collector:<28} {result.backend:<16} "
             f"{result.batch_rule:<18} {result.num_envs:>5} "
             f"{result.status:<8} {result.frames_per_s:>10.1f} "
+            f"{result.driver_cpu_ms_per_frame:>9.3f} "
             f"{float(stats.get('avg_batch_size', 0.0)):>8.2f} "
             f"{float(stats.get('p95_queue_ms', 0.0)):>10.2f} "
             f"{float(stats.get('p95_forward_ms', 0.0)):>11.2f} "
