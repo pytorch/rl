@@ -696,6 +696,8 @@ class TestDDPG(LossModuleTestBase):
     )
     def test_ddpg_prioritized_weights(self):
         """Test DDPG with prioritized replay buffer weighted loss reduction."""
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
         n_obs = 4
         n_act = 2
         batch_size = 32
