@@ -121,4 +121,6 @@ Compiled TQC now has a bounded 15-minute setup budget without changing its timed
 workload. CPU and GPU publication is independent, only successful suites enter
 the trend, and partial output remains available as diagnostic artifacts.
 Failures still mark the workflow failed. Manual branch runs cannot contaminate
-main history.
+main history. A performance alert (a series more than twice as slow as its
+previous point) does not fail the upload job; the upload job summary compares
+every series with its previous point.
