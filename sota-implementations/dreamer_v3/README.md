@@ -26,8 +26,10 @@ without relying on wall-clock-dependent training iterations.
 
 The Walker task is seeded from `env.seed`, as every other TorchRL example is;
 pass `env.use_seed=false` for the JAX implementation's unseeded DMC resets. The
-step axis counts initial and reset-only driver records as that
-implementation does.
+step axis counts initial and reset-only driver records as that implementation
+does. Those counts are reporting and update-scheduling semantics only: replay
+stores the canonical transitions emitted by the collector and does not insert
+synthetic reset records.
 
 This is deliberately a reproduction of the pinned JAX `dmc_proprio` preset,
 not of the paper's proprioceptive protocol. The two protocols differ:
@@ -49,6 +51,23 @@ Real collection and evaluation environments run on CPU; `optimization.device`
 selects where the models, losses and policy run and defaults to `null`, which
 auto-selects an available accelerator. Pass `optimization.device=cpu` to force
 CPU execution.
+
+Replay is assembled entirely from reusable TorchRL components. One
+`TensorDictReplayBuffer` is allocated per environment stream and the configured
+`replay_buffer.buffer_size` is split across them. A routed
+`ReplayBufferEnsemble` writes synchronous collector batches by their environment
+dimension and asynchronous batches by `env_index`. Sampling chooses ready
+streams according to their available windows. `replay_buffer.online=true` uses
+`StreamingSliceSampler` to consume newly completed, non-overlapping windows
+before uniform fallback; `false` uses regular uniform `SliceSampler` sampling.
+Both modes sample `seq_len + 1` transitions so the learner can train on the
+first `seq_len` and conditionally refresh the following records' latent state.
+
+Set `collector.backend=async` to use `AsyncBatchedCollector`; the default is the
+synchronous `Collector`. `collector.async_env_backend` selects `threading` or
+`multiprocessing` for asynchronous environments. In both cases collection
+post-processing, episode reporting, device normalization, and replay writes
+happen through the collector's standard replay integration.
 
 For a three-seed median and interquartile reproduction run:
 
@@ -75,6 +94,13 @@ The timing excludes replay sampling and environment collection. Use the
 benchmark arguments to change the batch size, sequence length, scan unroll,
 warmup, or number of measured updates. Compilation and graph capture happen
 during warmup and are excluded from the reported samples.
+
+Pass `--replay-device cpu` or `--replay-device cuda` to benchmark the complete
+learner with the same routed replay stack used by training. Replay uses its
+built-in one-batch prefetch and ordered conditional updates, allowing sampling
+and latent writeback to overlap learner work. CPU replay samples are pinned and
+the complete contiguous sequence is transferred non-blockingly before it is
+sliced on the learner device.
 
 On one NVIDIA GB200 with PyTorch 2.12.0, CUDA 13.0, BF16, batch size 16,
 sequence length 64, scan unroll 8, 10 warmup updates and 50 measured updates:
