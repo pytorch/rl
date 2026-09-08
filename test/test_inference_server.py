@@ -49,6 +49,7 @@ from torchrl.data import (
     ListStorage,
     ReplayBuffer,
     ReplayBufferEnsemble,
+    StreamingSliceSampler,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
 )
@@ -2914,19 +2915,26 @@ class TestAsyncBatchedCollector:
             collector.shutdown()
 
     @pytest.mark.parametrize(
-        ("env_backend", "env_exchange", "envs_per_worker", "process_slots"),
+        ("env_backend", "env_exchange", "envs_per_worker", "process_slots", "chunk"),
         [
-            ("threading", "queue", 1, False),
-            ("multiprocessing", "queue", 1, False),
-            ("multiprocessing", "shm", 1, False),
-            ("multiprocessing", "queue", 2, False),
-            ("multiprocessing", "shm", 2, False),
-            ("multiprocessing", "queue", 1, True),
+            ("threading", "queue", 1, False, 1),
+            ("multiprocessing", "queue", 1, False, 1),
+            ("multiprocessing", "shm", 1, False, 1),
+            ("multiprocessing", "queue", 2, False, 1),
+            ("multiprocessing", "shm", 2, False, 1),
+            ("multiprocessing", "queue", 1, True, 1),
+            ("multiprocessing", "queue", 1, True, 4),
         ],
     )
     @pytest.mark.parametrize("background", [False, True])
     def test_parent_replay_write_and_post_collect_hook(
-        self, env_backend, env_exchange, envs_per_worker, process_slots, background
+        self,
+        env_backend,
+        env_exchange,
+        envs_per_worker,
+        process_slots,
+        chunk,
+        background,
     ):
         """Post-processing, hooks and routed writes run in the parent."""
         parent_thread = threading.get_ident()
@@ -2971,6 +2979,7 @@ class TestAsyncBatchedCollector:
             replay_buffer=replay_buffer,
             env_exchange=env_exchange,
             envs_per_worker=envs_per_worker,
+            transition_chunk_size=chunk,
             env_backend=env_backend,
         )
         try:
@@ -3000,18 +3009,19 @@ class TestAsyncBatchedCollector:
             assert (stored["env_index"] == env_id).all()
 
     @pytest.mark.parametrize(
-        ("env_backend", "env_exchange", "envs_per_worker", "process_slots"),
+        ("env_backend", "env_exchange", "envs_per_worker", "process_slots", "chunk"),
         [
-            ("threading", "queue", 1, False),
-            ("multiprocessing", "queue", 1, False),
-            ("multiprocessing", "shm", 1, False),
-            ("multiprocessing", "queue", 2, False),
-            ("multiprocessing", "shm", 2, False),
-            ("multiprocessing", "queue", 1, True),
+            ("threading", "queue", 1, False, 1),
+            ("multiprocessing", "queue", 1, False, 1),
+            ("multiprocessing", "shm", 1, False, 1),
+            ("multiprocessing", "queue", 2, False, 1),
+            ("multiprocessing", "shm", 2, False, 1),
+            ("multiprocessing", "queue", 1, True, 1),
+            ("multiprocessing", "queue", 1, True, 3),
         ],
     )
     def test_replay_backpressure_does_not_block_shutdown(
-        self, env_backend, env_exchange, envs_per_worker, process_slots
+        self, env_backend, env_exchange, envs_per_worker, process_slots, chunk
     ):
         replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(64))
         collector = AsyncBatchedCollector(
@@ -3028,6 +3038,7 @@ class TestAsyncBatchedCollector:
             replay_buffer=replay_buffer,
             env_exchange=env_exchange,
             envs_per_worker=envs_per_worker,
+            transition_chunk_size=chunk,
             env_backend=env_backend,
         )
         iterator = iter(collector)
@@ -3720,6 +3731,146 @@ class TestAsyncBatchedCollector:
         finally:
             collector.shutdown()
         assert not any(worker.is_alive() for worker in workers)
+
+    @pytest.mark.parametrize("total_frames", [24, 26])
+    def test_process_slot_chunks_are_dense_and_ordered(self, total_frames):
+        """Chunked results form dense batches that keep each stream in order."""
+        num_envs = 3
+        collector = AsyncBatchedCollector(
+            create_env_fn=[ft.partial(_counting_env_factory, max_steps=10_000)]
+            * num_envs,
+            policy_factory=_make_counting_policy,
+            transport=_counting_process_transport(num_envs),
+            frames_per_batch=10,
+            total_frames=total_frames,
+            transition_chunk_size=4,
+            env_backend="multiprocessing",
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=num_envs
+            ),
+        )
+        try:
+            batches = list(collector)
+        finally:
+            collector.shutdown()
+        # Exact budgets: chunks are split only where a batch or the total ends.
+        assert [batch.numel() for batch in batches] == [10, 10, total_frames - 20]
+        for batch in batches:
+            assert type(batch) is TensorDict
+            assert batch["env_index"].dtype == torch.long
+        stored = torch.cat(batches, 0)
+        assert stored["env_index"].unique().numel() > 1
+        for env_id in range(num_envs):
+            obs = stored[stored["env_index"] == env_id]["observation"].flatten()
+            torch.testing.assert_close(obs, torch.arange(len(obs), dtype=obs.dtype))
+
+    def test_process_slot_chunks_route_streams_and_sample_windows(self):
+        """Chunked writes reach the right stream and sample as contiguous windows."""
+        num_envs, slice_len = 3, 4
+        members = [
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(64),
+                sampler=StreamingSliceSampler(
+                    slice_len=slice_len, end_key=("next", "done")
+                ),
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+            )
+            for _ in range(num_envs)
+        ]
+        replay = ReplayBufferEnsemble(
+            *members,
+            p="sampleable",
+            num_buffer_sampled=2,
+            routing_key="env_index",
+            batch_size=2 * slice_len,
+        )
+        collector = AsyncBatchedCollector(
+            create_env_fn=[ft.partial(_counting_env_factory, max_steps=10_000)]
+            * num_envs,
+            policy_factory=_make_counting_policy,
+            transport=_counting_process_transport(num_envs),
+            frames_per_batch=12,
+            total_frames=96,
+            transition_chunk_size=slice_len,
+            replay_buffer=replay,
+            env_backend="multiprocessing",
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=num_envs
+            ),
+        )
+        try:
+            collector.start()
+            collector._replay_thread.join(timeout=30)
+            assert not collector._replay_thread.is_alive()
+            assert replay.stats()["write_count"] == 96
+            for env_id, member in enumerate(members):
+                if not len(member):
+                    continue
+                stored = member[:]
+                assert (stored["env_index"] == env_id).all()
+                obs = stored["observation"].flatten()
+                torch.testing.assert_close(obs, torch.arange(len(obs), dtype=obs.dtype))
+            assert replay.can_sample()
+            for _ in range(4):
+                sample = replay.sample()
+                env_index = sample["env_index"].reshape(2, slice_len)
+                assert (env_index == env_index[:, :1]).all()
+                steps = sample["observation"].reshape(2, slice_len)
+                torch.testing.assert_close(
+                    steps - steps[:, :1],
+                    torch.arange(slice_len, dtype=steps.dtype).expand(2, -1),
+                )
+        finally:
+            collector.async_shutdown()
+
+    def test_process_slot_chunks_yield_completed_trajectories(self):
+        num_envs = 2
+        collector = AsyncBatchedCollector(
+            create_env_fn=[ft.partial(_counting_env_factory, max_steps=5)] * num_envs,
+            policy_factory=_make_counting_policy,
+            transport=_counting_process_transport(num_envs),
+            frames_per_batch=1,
+            total_frames=-1,
+            transition_chunk_size=4,
+            yield_completed_trajectories=True,
+            env_backend="multiprocessing",
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=num_envs
+            ),
+        )
+        try:
+            iterator = iter(collector)
+            trajectories = [next(iterator) for _ in range(4)]
+        finally:
+            collector.shutdown()
+        for trajectory in trajectories:
+            assert trajectory.numel() == 6
+            env_index = trajectory["env_index"]
+            assert (env_index == env_index[0]).all()
+            obs = trajectory["observation"].flatten()
+            torch.testing.assert_close(obs, torch.arange(6, dtype=obs.dtype))
+            done = trajectory["next", "done"].flatten()
+            assert done[-1] and not done[:-1].any()
+
+    def test_transition_chunk_size_validation(self):
+        with pytest.raises(ValueError, match="positive integer"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy_factory=_make_counting_policy,
+                transport=_counting_process_transport(2),
+                frames_per_batch=4,
+                transition_chunk_size=0,
+                env_backend="multiprocessing",
+                server_config=InferenceServerConfig(service_backend="process"),
+            )
+        with pytest.raises(ValueError, match="requires a ProcessSlotTransport"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=4,
+                transition_chunk_size=2,
+                env_backend="threading",
+            )
 
     @pytest.mark.parametrize("failure", ["reset", "worker_death"])
     def test_process_slot_worker_failure_with_active_stream(self, failure):

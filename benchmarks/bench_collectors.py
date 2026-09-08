@@ -10,6 +10,11 @@ Examples:
     python benchmarks/bench_collectors.py --num-envs 1,2,4,8 --policy-delay-ms 20
     python benchmarks/bench_collectors.py --backends async-env-mp --replay-mode iterator
     python benchmarks/bench_collectors.py --backends async-env-mp --replay-mode background
+    # Replay throughput of direct process slots, per-transition vs chunked results
+    python benchmarks/bench_collectors.py --num-envs 8 --backends async-process-slot \
+        --replay-mode background --total-frames 4096 --transition-chunk-size 1
+    python benchmarks/bench_collectors.py --num-envs 8 --backends async-process-slot \
+        --replay-mode background --total-frames 4096 --transition-chunk-size 64
     python benchmarks/bench_collectors.py --num-envs 64 \
         --backends async-env-mp --env-exchange shm \
         --env-step-latency-ms 50 --policy-hidden-features 9216 \
@@ -599,7 +604,19 @@ def main() -> None:
         "--replay-mode",
         choices=["none", "iterator", "background"],
         default="none",
-        help="Replay write mode for async-env-mp; iterator and background use identical storage.",
+        help=(
+            "Replay write mode for async-env-mp and async-process-slot; iterator "
+            "and background use identical storage."
+        ),
+    )
+    parser.add_argument(
+        "--transition-chunk-size",
+        type=int,
+        default=1,
+        help=(
+            "Transitions each environment process accumulates per message with "
+            "async-process-slot; 1 sends every transition on its own."
+        ),
     )
     parser.add_argument("--policy-device", default="auto")
     parser.add_argument("--output-device", default="cpu")
@@ -831,8 +848,15 @@ def main() -> None:
                     ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
-                            name="AsyncBatched direct process slots",
-                            backend=backend,
+                            name=(
+                                "AsyncBatched direct process slots (chunk="
+                                f"{args.transition_chunk_size}, replay={args.replay_mode})"
+                            ),
+                            backend=(
+                                f"{backend}-chunk-{args.transition_chunk_size}"
+                                f"-replay-{args.replay_mode}"
+                            ),
+                            replay_mode=args.replay_mode,
                             batch_rule=label,
                             factory=ft.partial(
                                 AsyncBatchedCollector,
@@ -844,6 +868,7 @@ def main() -> None:
                                 frames_per_batch=args.frames_per_batch,
                                 total_frames=-1,
                                 env_backend="multiprocessing",
+                                transition_chunk_size=args.transition_chunk_size,
                                 server_config=InferenceServerConfig(
                                     service_backend="process",
                                     max_batch_size=max_batch_size,

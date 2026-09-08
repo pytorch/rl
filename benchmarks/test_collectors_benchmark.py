@@ -71,6 +71,7 @@ class _ResetLatencyPixelEnv(PixelMockEnv):
         "async-shm-grouped",
         "async-process-slots",
         "async-process-slots-integrated",
+        "async-process-slots-chunked",
         pytest.param("async-shm-static", marks=pytest.mark.gpu),
         pytest.param("async-process-slots-static", marks=pytest.mark.gpu),
     ],
@@ -100,6 +101,12 @@ def _benchmark_async_collection_pixels(benchmark, mode, regime, *, num_envs=None
     if use_process and not hasattr(inference_server, "ProcessSlotTransport"):
         pytest.skip("Direct process slots are not available on this revision")
     integrated = mode in ("async-shm-integrated", "async-process-slots-integrated")
+    has_chunking = (
+        "transition_chunk_size"
+        in inspect.signature(AsyncBatchedCollector).parameters
+    )
+    if mode == "async-process-slots-chunked" and not has_chunking:
+        pytest.skip("Chunked worker results are not available on this revision")
     use_static = mode in ("async-shm-static", "async-process-slots-static") or (
         integrated and device != "cpu" and has_static
     )
@@ -113,9 +120,8 @@ def _benchmark_async_collection_pixels(benchmark, mode, regime, *, num_envs=None
     # collector accepts them; one transition per message before that.
     chunk_size = (
         64
-        if mode == "async-process-slots-integrated"
-        and "transition_chunk_size"
-        in inspect.signature(AsyncBatchedCollector).parameters
+        if mode == "async-process-slots-chunked"
+        or (mode == "async-process-slots-integrated" and has_chunking)
         else 1
     )
     if use_static:
