@@ -142,6 +142,7 @@ class WriterEnsemble(Writer):
 
     def dumps(self, path: Path):
         path = Path(path).absolute()
+        path.mkdir(parents=True, exist_ok=True)
         for i, writer in enumerate(self._writers):
             writer.dumps(path / str(i))
 

@@ -375,6 +375,7 @@ def wandb_tmp_logger(tmp_path):
 @pytest.mark.parametrize("source", ["logger", "dreamer_v3"])
 def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     calls = []
+    initializations = []
 
     class Settings:
         def __init__(self, *, base_url):
@@ -386,7 +387,10 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
 
     def init(**kwargs):
         calls.append(("init", kwargs["settings"].base_url))
-        return argparse.Namespace(config={}, define_metric=mock.Mock())
+        initializations.append(kwargs)
+        return argparse.Namespace(
+            config={}, define_metric=mock.Mock(), id="generated-run", log=mock.Mock()
+        )
 
     monkeypatch.setitem(
         sys.modules,
@@ -397,7 +401,8 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     base_url = "https://wandb.example.com"
 
     if source == "logger":
-        WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
+        logger = WandbLogger(exp_name="test", base_url=base_url, log_env_packages=False)
+        assert logger.state_dict()["local"]["id"] == "generated-run"
     else:
         if not (_has_hydra and _has_omegaconf):
             pytest.skip("requires hydra and omegaconf")
@@ -413,9 +418,22 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
         cfg = OmegaConf.load(example_dir / "config.yaml")
         cfg.logger.backend = "wandb"
         cfg.logger.base_url = base_url
-        example["_RunLogger"](cfg, None)
+        run_logger = example["_RunLogger"](cfg, None)
+        state = run_logger.logger.state_dict()
+        assert state["local"]["id"] == "generated-run"
+        run_logger.finish()
+        resumed = example["_RunLogger"](cfg, None, state)
+        assert initializations[-1]["id"] == "generated-run"
+        assert initializations[-1]["resume"] == "must"
+        resumed.log({"type": "train", "environment_steps": 32, "loss": 1.0})
+        resumed.logger.experiment.log.assert_called_once_with(
+            {"environment_steps": 32, "train/loss": 1.0}
+        )
+        resumed.finish()
 
-    assert calls == [("login", base_url), ("init", base_url)]
+    assert calls == [("login", base_url), ("init", base_url)] * (
+        1 if source == "logger" else 2
+    )
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
