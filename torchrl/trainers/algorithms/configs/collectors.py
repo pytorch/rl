@@ -195,6 +195,10 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     trajs_per_write: int | None = None
     traj_format: str | None = None
     init_fn: Any = None
+    auto_register_policy_transforms: bool | None = None
+    pre_collect_hook: Any = None
+    post_collect_hook: Any = None
+    compact_obs: bool = False
 
     _target_: str = "torchrl.collectors.MultiSyncCollector"
     _partial_: bool = False
@@ -258,6 +262,10 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     trajs_per_write: int | None = None
     traj_format: str | None = None
     init_fn: Any = None
+    auto_register_policy_transforms: bool | None = None
+    pre_collect_hook: Any = None
+    post_collect_hook: Any = None
+    compact_obs: bool = False
 
     _target_: str = "torchrl.collectors.MultiAsyncCollector"
     _partial_: bool = False

@@ -147,6 +147,10 @@ _CONFIG_PARITY_UNRESOLVED = {
     "the torch versions TorchRL currently supports.",
 }
 
+_CONFIG_PARITY_SIGNATURE_OVERRIDES = {
+    "MultiAsyncCollectorConfig": "torchrl.collectors.MultiCollector",
+}
+
 _CONFIG_PARITY_KNOWN_GAPS = frozenset(
     {
         "ActionMaskConfig",
@@ -169,7 +173,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "MeltingpotEnvConfig",
         "ModuleTransformConfig",
         "MultiStepTransformConfig",
-        "MultiSyncCollectorConfig",
         "MultiThreadedEnvConfig",
         "NormConfig",
         "ObservationNormConfig",
@@ -277,9 +280,11 @@ class TestConfigClassParity:
       Config field and the corresponding ``__init__`` kwarg is NOT enforced, so
       a Config default that drifts from the constructor's default still passes.
     - Wrapped ``__init__`` signatures made up purely of ``*args``/``**kwargs``
-      expose no named parameters to diff, so their configs pass vacuously, and
-      a ``**kwargs`` catch-all next to named parameters hides any kwarg that is
-      only reachable through it.
+      expose no named parameters to diff. Known wrappers can point to the class
+      that owns their constructor contract through
+      ``_CONFIG_PARITY_SIGNATURE_OVERRIDES``. An unmapped wrapper still passes
+      vacuously, and a ``**kwargs`` catch-all next to named parameters hides any
+      kwarg that is only reachable through it.
 
     Resolving a ``_target_`` can import optional-dependency modules; when such
     an import fails the case is skipped rather than failed, so the test stays
@@ -299,10 +304,13 @@ class TestConfigClassParity:
         cfg_cls = _discover_leaf_configs()[config_name]
         fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
         target_path = fields["_target_"].default
+        signature_target_path = _CONFIG_PARITY_SIGNATURE_OVERRIDES.get(
+            config_name, target_path
+        )
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                wrapped_cls = _resolve_wrapped_class(target_path)
+                wrapped_cls = _resolve_wrapped_class(signature_target_path)
         except ImportError as err:
             # Resolving a _target_ may import modules that require optional
             # dependencies (e.g. the vLLM weight-sync schemes pull in modules
@@ -310,10 +318,11 @@ class TestConfigClassParity:
             # a parity failure.
             pytest.skip(
                 f"optional dependency missing while resolving "
-                f"{config_name}._target_ = {target_path!r}: {err}"
+                f"{config_name} signature target = {signature_target_path!r}: {err}"
             )
         assert wrapped_cls is not None, (
-            f"{config_name}._target_ = {target_path!r} could not be resolved to "
+            f"{config_name} signature target = {signature_target_path!r} could not "
+            "be resolved to "
             "a class (not a class itself, and not a function with a class "
             "return annotation)."
         )
