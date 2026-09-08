@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-09-07
+# Flaky Test Report - 2026-09-08
 
 ## Summary
 
-- **Flaky tests**: 32
-- **Newly flaky** (last 7 days): 32
+- **Flaky tests**: 17
+- **Newly flaky** (last 7 days): 0
 - **Resolved**: 0
-- **Total tests analyzed**: 31588
+- **Total tests analyzed**: 29509
 - **CI runs analyzed**: 60
 
 ---
@@ -14,62 +14,24 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...DreamerV3::test_dreamer_v3_actor_loss_cuda_graph[device0]` 🆕 | 10.8% (7/65) | 7 | 0.22 | 2026-09-06 |
-| `...dreamer_v3_full_learner_cuda_graph_matches_eager[device0]` 🆕 | 10.8% (7/65) | 7 | 0.22 | 2026-09-06 |
-| `...ibuted.py::TestRayRB::test_ray_replay_with_nccl_transport` 🆕 | 7.1% (5/70) | 5 | 0.14 | 2026-09-06 |
-| `...joco::test_microduck_collision_meshes_use_runtime_proxies` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...dreamer_v3_actor_loss[ValueEstimators.TD0-True-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...dreamer_v3_actor_loss[ValueEstimators.TD0-True-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...reamer_v3_actor_loss[ValueEstimators.TD0-False-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...reamer_v3_actor_loss[ValueEstimators.TD0-False-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...dreamer_v3_actor_loss[ValueEstimators.TD1-True-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...dreamer_v3_actor_loss[ValueEstimators.TD1-True-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...reamer_v3_actor_loss[ValueEstimators.TD1-False-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...reamer_v3_actor_loss[ValueEstimators.TD1-False-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...er_v3_actor_loss[ValueEstimators.TDLambda-True-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...er_v3_actor_loss[ValueEstimators.TDLambda-True-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...r_v3_actor_loss[ValueEstimators.TDLambda-False-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...r_v3_actor_loss[ValueEstimators.TDLambda-False-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...reamerV3::test_dreamer_v3_actor_loss[None-True-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...reamerV3::test_dreamer_v3_actor_loss[None-True-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...eamerV3::test_dreamer_v3_actor_loss[None-False-3-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
-| `...eamerV3::test_dreamer_v3_actor_loss[None-False-5-device0]` 🆕 | 5.2% (8/154) | 8 | 0.10 | 2026-09-06 |
+| `...test_configs.py::TestHydraParsing::test_simple_env_config` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...est_configs.py::TestHydraParsing::test_batched_env_config` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...py::TestHydraParsing::test_batched_env_with_one_transform` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...y::TestHydraParsing::test_batched_env_with_two_transforms` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...gs.py::TestHydraParsing::test_simple_config_instantiation` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `test/test_configs.py::TestHydraParsing::test_env_parsing` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `..._configs.py::TestHydraParsing::test_env_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...gs.py::TestHydraParsing::test_collector_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...figs.py::TestHydraParsing::test_trainer_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `....py::TestHydraParsing::test_dqn_trainer_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...stHydraParsing::test_dqn_trainer_parsing_with_hook_config` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...ydraParsing::test_dqn_trainer_iql_style_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...draParsing::test_dqn_trainer_qmix_style_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...py::TestHydraParsing::test_ddpg_trainer_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `....py::TestHydraParsing::test_iql_trainer_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `....py::TestHydraParsing::test_cql_trainer_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
+| `...:TestHydraParsing::test_transformed_env_parsing_with_file` | 5.3% (8/150) | 8 | 0.11 | 2026-06-27 |
 
-
-### Newly Flaky Tests
-
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss_cuda_graph[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_full_learner_cuda_graph_matches_eager[device0]`
-- `test/rb/test_rb_distributed.py::TestRayRB::test_ray_replay_with_nccl_transport`
-- `test/libs/test_mujoco.py::TestMujoco::test_microduck_collision_meshes_use_runtime_proxies`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD0-True-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD0-True-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD0-False-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD0-False-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD1-True-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD1-True-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD1-False-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TD1-False-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TDLambda-True-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TDLambda-True-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TDLambda-False-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[ValueEstimators.TDLambda-False-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[None-True-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[None-True-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[None-False-3-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss[None-False-5-device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_continuation_lambda_and_weights[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_categorical_value_exposes_decoded_value[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_slow_critic_checkpoint_and_online_bootstrap[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_actor_loss_reinforce[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_reinforce_return_normalization[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_reparam_return_normalization[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_reparam_return_statistics_update[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_return_statistics_checkpoint[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_legacy_retnorm_checkpoint_migrates[device0]`
-- `test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_value_loss_sync_gamma[device0]`
-- `test/objectives/test_ppo.py::TestObjectiveEntropy::test_ppo_entropy_mc_when_analytic_is_nonfinite[True]`
-- `test/test_trainer.py::TestTrainerCheckpointComponents::test_torch_checkpoint_roundtrips_optimizer_state`
 
 ---
 
@@ -82,4 +44,4 @@
 
 ---
 
-*Generated at 2026-09-07T06:30:47.469831+00:00*
+*Generated at 2026-09-08T06:23:31.643000+00:00*
