@@ -2530,6 +2530,9 @@ def test_dreamer_v3_native_replay_collection_smoke(
     cfg.env.name = PENDULUM_VERSIONED()
     cfg.optimization.separate_policy_rng = collector_backend == "async" and not custom
     cfg.optimization.device = device
+    # This test covers collection and replay; keep the learner eager apart
+    # from the explicit capture below.
+    cfg.optimization.compile = "off"
     cfg.optimization.cudagraph_train_step = device == "cuda"
     cfg.optimization.updates_per_batch = 1
     cfg.optimization.train_ratio = None
@@ -2847,7 +2850,7 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
     ).stdout.splitlines()
     assert smoke[:3] == [expected_benchmark, "--output-dir", "dmc_walker_smoke"]
     assert "replay_buffer.buffer_size=400" in smoke
-    assert "optimization.compile_rssm=null" in smoke
+    assert "optimization.compile=off" in smoke
     assert "optimization.updates_per_batch=1" in smoke
     assert "optimization.train_ratio=null" in smoke
 
@@ -2892,6 +2895,124 @@ def test_dreamer_v3_optimizer_updates_and_resume(device):
         current.step()
     torch.testing.assert_close(restored_parameter, parameter)
     assert not torch.equal(parameter, expected)
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+class TestDreamerV3CompileStrategy:
+    """`optimization.compile` resolves to concrete decisions, and the stepper follows them."""
+
+    @staticmethod
+    def _load(monkeypatch, run_name):
+        example_dir = Path(__file__).parents[2] / "sota-implementations/dreamer_v3"
+        monkeypatch.syspath_prepend(str(example_dir))
+        return example_dir, runpy.run_path(example_dir / "train.py", run_name=run_name)
+
+    def test_resolve_compile_settings(self, monkeypatch):
+        from omegaconf import OmegaConf
+
+        example_dir, example = self._load(monkeypatch, "dreamer_v3_compile_settings")
+        resolve = example["resolve_compile_settings"]
+        cpu, cuda = torch.device("cpu"), torch.device("cuda")
+        cfg = OmegaConf.load(example_dir / "config.yaml")
+
+        # auto: the whole fast path on CUDA, eager elsewhere.
+        fast = resolve(cfg, cuda)
+        assert (fast.train_step, fast.rssm, fast.cudagraph) == (True, "scan", True)
+        assert fast.scan_unroll == cfg.optimization.rssm_scan_unroll
+        assert fast.enabled
+        eager = resolve(cfg, cpu)
+        assert (eager.train_step, eager.rssm, eager.cudagraph) == (False, None, False)
+        assert not eager.enabled
+
+        # off: nothing, unless a switch is set explicitly.
+        cfg.optimization.compile = "off"
+        assert not resolve(cfg, cuda).enabled
+        cfg.optimization.compile_rssm = "scan"
+        explicit = resolve(cfg, cuda)
+        assert (explicit.train_step, explicit.rssm, explicit.cudagraph) == (
+            False,
+            "scan",
+            False,
+        )
+
+        # an explicit switch overrides one decision of auto.
+        cfg.optimization.compile = "auto"
+        cfg.optimization.compile_rssm = None
+        cfg.optimization.compile_train_step = False
+        partial = resolve(cfg, cuda)
+        assert (partial.train_step, partial.rssm, partial.cudagraph) == (
+            False,
+            "scan",
+            True,
+        )
+
+        cfg.optimization.compile = "sometimes"
+        with pytest.raises(ValueError, match="'auto' or 'off'"):
+            resolve(cfg, cuda)
+        cfg.optimization.compile = "auto"
+        cfg.optimization.cudagraph_train_step = True
+        with pytest.raises(ValueError, match="requires a CUDA training device"):
+            resolve(cfg, cpu)
+
+    def test_stepper_defaults_follow_the_device(self, monkeypatch):
+        from torchrl.trainers.algorithms import DreamerV3OptimizationStepper
+
+        example_dir, example = self._load(monkeypatch, "dreamer_v3_stepper_defaults")
+        cfg = TestDreamerV3()._small_sota_config(
+            example_dir, compile_train_step=False, cudagraph_train_step=False
+        )
+        cfg.optimization.compile_rssm = None
+        device = torch.device("cpu")
+        learner = example["_build_learner"](cfg, device, 3, 1)
+        loss_module = example["_make_learner_update"](cfg, device, learner).loss_module
+        stepper = DreamerV3OptimizationStepper(
+            loss_module, learner.optimizer, learner.value_target_updater
+        )
+        assert stepper.resolve(torch.device("cuda")) == (True, True)
+        assert stepper.resolve(device) == (False, False)
+        # On CPU the defaults run eagerly without a warm-up.
+        sample = example["_fake_learner_sample"](cfg, device, 3, 1)
+        before = [parameter.detach().clone() for parameter in loss_module.parameters()]
+        stepper.step(None, sample)
+        assert any(
+            not torch.equal(parameter, previous)
+            for parameter, previous in zip(loss_module.parameters(), before)
+        )
+
+    def test_compiled_step_selects_the_scan_for_untouched_rollouts(self, monkeypatch):
+        example_dir, example = self._load(monkeypatch, "dreamer_v3_stepper_scan")
+        cfg = TestDreamerV3()._small_sota_config(
+            example_dir, compile_train_step=True, cudagraph_train_step=False
+        )
+        device = torch.device("cpu")
+        learner = example["_build_learner"](cfg, device, 3, 1)
+        update = example["_make_learner_update"](cfg, device, learner)
+        rollouts = [
+            module
+            for module in update.loss_module.modules()
+            if isinstance(module, RSSMRolloutV3)
+        ]
+        assert rollouts
+        # The builder left the rollouts eager for the compiled step.
+        assert all(
+            rollout._scan_fn is None and rollout._step_fn is None
+            for rollout in rollouts
+        )
+        selected = update._select_scan_backends()
+        assert selected == rollouts
+        assert all(
+            isinstance(rollout._scan_fn, ft.partial)
+            and rollout._scan_fn.keywords
+            == {"unroll": cfg.optimization.rssm_scan_unroll}
+            for rollout in rollouts
+        )
+        # A rollout with a backend keeps it, and the selection is idempotent.
+        assert update._select_scan_backends() == []
+        update.rssm_scan_unroll = None
+        assert update._select_scan_backends() == []
 
 
 if __name__ == "__main__":

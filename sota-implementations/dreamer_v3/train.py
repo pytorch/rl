@@ -49,6 +49,7 @@ from dreamer_v3_utils import (
     LEARNER_RNG_STREAM,
     plot_enabled,
     REPLAY_RNG_STREAM,
+    resolve_compile_settings,
     save_run_plot,
     stream_seed,
     training_episode_returns,
@@ -219,14 +220,17 @@ def _make_learner_update(
         continuation_horizon=cfg.optimization.continuation_horizon,
         lmbda=cfg.optimization.lmbda,
     )
+    settings = resolve_compile_settings(cfg, device)
     return DreamerV3OptimizationStepper(
         loss_module,
         learner.optimizer,
         learner.value_target_updater,
-        compile_train_step=cfg.optimization.compile_train_step,
-        compile_mode=cfg.optimization.compile_train_step_mode,
-        cudagraph=cfg.optimization.cudagraph_train_step,
-        warmup_steps=cudagraph_warmup if cfg.optimization.cudagraph_train_step else 1,
+        compile_train_step=settings.train_step,
+        compile_mode=settings.mode,
+        cudagraph=settings.cudagraph,
+        # Inside the compiled step only the scan or the explicit loop exist.
+        rssm_scan_unroll=settings.scan_unroll if settings.rssm == "scan" else None,
+        warmup_steps=cudagraph_warmup if settings.cudagraph else 1,
         mixed_precision=cfg.optimization.mixed_precision and device.type == "cuda",
     )
 
@@ -283,11 +287,7 @@ def _warm_up_learner(
     obs_dim: int,
     action_dim: int,
 ) -> None:
-    if not (
-        cfg.optimization.compile_train_step
-        or cfg.optimization.compile_rssm
-        or cfg.optimization.cudagraph_train_step
-    ):
+    if not resolve_compile_settings(cfg, device).enabled:
         return
     learner_update.warmup(_fake_learner_sample(cfg, device, obs_dim, action_dim))
 
@@ -350,6 +350,7 @@ def _build_learner(
     pixels_shape: tuple[int, int, int] | None = None,
     discrete: bool = False,
 ) -> _Learner:
+    settings = resolve_compile_settings(cfg, device)
     (
         world_model,
         prior_net,
@@ -361,18 +362,17 @@ def _build_learner(
         obs_dim=obs_dim,
         action_dim=action_dim,
         pixels_shape=pixels_shape,
-        compile_rollout=not cfg.optimization.compile_train_step,
+        compile_rollout=not settings.train_step,
+        rssm_backend=settings.rssm,
+        rssm_scan_unroll=settings.scan_unroll,
     )
     world_model = world_model.to(device)
     imagination_model = build_imagination_model(
         prior_net=prior_net,
         reward_net=reward_net,
         reward_decoder=reward_decoder,
-        # The whole-step compile owns shared modules and subsumes RSSM compile.
-        compile_prior=(
-            cfg.optimization.compile_rssm == "scan"
-            and not cfg.optimization.compile_train_step
-        ),
+        # The whole-step compile owns the shared modules and traces the prior.
+        compile_prior=settings.rssm == "scan" and not settings.train_step,
     ).to(device)
     continuation_model = build_continuation_model(continuation_net=continuation_net).to(
         device
@@ -786,21 +786,19 @@ def main(cfg: DictConfig):
         torch.device(cfg.replay_buffer.device) if cfg.replay_buffer.device else device
     )
     use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
+    compile_settings = resolve_compile_settings(cfg, device)
     torchrl_logger.info(
-        "DreamerV3 execution: device=%s, replay_device=%s, rssm_backend=%s, "
-        "rssm_scan_unroll=%s, mixed_precision=%s, compile_train_step=%s, "
-        "cudagraph_train_step=%s",
+        "DreamerV3 execution: device=%s, replay_device=%s, compile=%s "
+        "(train_step=%s, rssm_backend=%s, rssm_scan_unroll=%s, cudagraph=%s), "
+        "mixed_precision=%s",
         device,
         replay_device,
-        cfg.optimization.compile_rssm or "eager",
-        (
-            cfg.optimization.rssm_scan_unroll
-            if cfg.optimization.compile_rssm == "scan"
-            else "n/a"
-        ),
+        compile_settings.strategy,
+        compile_settings.train_step,
+        compile_settings.rssm or "eager",
+        compile_settings.scan_unroll if compile_settings.rssm == "scan" else "n/a",
+        compile_settings.cudagraph,
         use_bfloat16,
-        cfg.optimization.compile_train_step,
-        cfg.optimization.cudagraph_train_step,
     )
     num_envs = cfg.collector.num_envs
     count_reset_records = cfg.collector.count_reset_records

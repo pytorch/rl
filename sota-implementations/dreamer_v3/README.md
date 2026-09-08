@@ -147,29 +147,46 @@ over most of the run, so the script refuses one before launching anything. The
 command above keeps the 50,000-step window and still fills two of them with
 about 48 episodes each.
 
-`optimization.compile_rssm` compiles the RSSM recurrence and is off by default,
-since a short run never repays the build. `step` compiles the deterministic work
-and draws the same categories as an eager run; `scan` compiles the unrolled
-recurrence and the imagination prior, and is faster, but its draws fall inside
-the compiled region, so a seeded run diverges from an eager one. The scan uses
-`optimization.rssm_scan_unroll=8` by default; lower values reduce compilation
-time and graph size, while `1` disables manual unrolling.
+`optimization.compile=auto` (the default) takes the fastest supported path for
+the training device without further input: on CUDA the complete learner forward
+and backward is compiled with TorchInductor around a higher-order scan of the
+RSSM recurrence and then captured in a CUDA graph; on other devices everything
+runs eagerly, since a short CPU run never repays the build.
+`optimization.compile=off` disables all of it. The three switches
+`optimization.compile_train_step`, `optimization.compile_rssm` and
+`optimization.cudagraph_train_step` default to `null`, which follows the
+strategy; setting one overrides that single decision, for example
+`optimization.compile_train_step=false` keeps the compiled scan and the CUDA
+graph but not the whole-step compile.
+
+`optimization.compile_rssm` selects the recurrence backend. `step` compiles the
+deterministic work of the explicit loop and draws the same categories as an
+eager run; `scan` uses the higher-order scan, unrolled by
+`optimization.rssm_scan_unroll=8` steps (lower values reduce compilation time
+and graph size, `1` disables manual unrolling), and is faster, but its draws
+fall inside the compiled region, so a seeded run diverges from an eager one.
+On its own the scan gets its own `torch.compile`, together with the imagination
+prior. Inside a compiled step it is selected without a nested compile, so Dynamo
+traces one scan of `rssm_scan_unroll` steps; the explicit loop would be unrolled
+over the whole sequence there, which makes the compile of a long sequence very
+slow (a 256-step batch was still compiling after 15 minutes).
 `optimization.compile_train_step=true` compiles the complete learner forward
-and backward with TorchInductor, including the model, actor, value, and replay
-value losses. `optimization.compile_rssm` then selects the recurrence backend
-inside that compiled step without a nested `torch.compile`: with `scan`, Dynamo
-traces one higher-order scan of `rssm_scan_unroll` steps, whereas the default
-explicit loop is unrolled over the whole sequence and makes the compile of a
-long sequence very slow. The compile mode defaults to
-`optimization.compile_train_step_mode=default`; autotuning modes are opt-in.
-Compilation and CUDA-graph warmup use a fixed-shape synthetic batch before the
-collector is constructed, so async collection is not live while Dynamo runs.
-When combined with `optimization.cudagraph_train_step=true`, the
-Inductor-compiled function is warmed up before CUDA graph capture.
-`optimization.cudagraph_train_step=true` captures the learner forward and
-backward after five warmup calls. It requires CUDA and fixed input shapes;
-optimizer and target-network steps remain outside capture so their schedules
-continue to advance normally.
+and backward, including the model, actor, value, and replay value losses. The
+compile mode defaults to `optimization.compile_train_step_mode=default`;
+autotuning modes are opt-in. Compilation and CUDA-graph warmup use a
+fixed-shape synthetic batch before the collector is constructed, so async
+collection is not live while Dynamo runs. When combined with
+`optimization.cudagraph_train_step=true`, the Inductor-compiled function is
+warmed up before CUDA graph capture. `optimization.cudagraph_train_step=true`
+captures the learner forward and backward after five warmup calls. It requires
+CUDA and fixed input shapes; optimizer and target-network steps remain outside
+capture so their schedules continue to advance normally.
+
+The public :class:`~torchrl.trainers.algorithms.DreamerV3OptimizationStepper`
+follows the same defaults: `compile_train_step=None` and `cudagraph=None`
+resolve from the sample device at `warmup`, and a compiled step switches every
+`RSSMRolloutV3` of its loss to the scan (`rssm_scan_unroll=8`) unless a backend
+was already selected.
 
 Train-update timing remains asynchronous by default. Set
 `optimization.sync_timers=true` when completed GPU timing is needed; this

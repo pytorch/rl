@@ -13,6 +13,7 @@ from tensordict import TensorDictBase
 from tensordict.nn import CudaGraphModule
 
 from torchrl.checkpoint import GlobalRNGState
+from torchrl.modules.models.model_based import RSSMRolloutV3
 from torchrl.objectives.dreamer_v3 import DreamerV3Loss
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.trainers.trainers import OptimizationStepper
@@ -208,13 +209,21 @@ class DreamerV3OptimizationStepper(OptimizationStepper):
             after each optimizer step. Default: ``None``.
 
     Keyword Args:
-        compile_train_step (bool, optional): Compile the complete
-            forward/backward pass. Requires PyTorch's
+        compile_train_step (bool or None, optional): Compile the complete
+            forward/backward pass with TorchInductor. Requires PyTorch's
             ``torch._dynamo.config.inline_inbuilt_nn_modules`` support to be
-            enabled for functional parameter contexts. Default: ``False``.
+            enabled for functional parameter contexts. ``None`` picks the
+            fastest supported path for the sample device: compiled on CUDA,
+            eager elsewhere. Default: ``None``.
         compile_mode (str, optional): PyTorch compile mode. Default: ``"default"``.
-        cudagraph (bool, optional): Capture forward/backward on CUDA.
-            Default: ``False``.
+        cudagraph (bool or None, optional): Capture forward/backward on CUDA.
+            ``None`` captures on CUDA and stays eager elsewhere. Default: ``None``.
+        rssm_scan_unroll (int or None, optional): When the step is compiled,
+            every :class:`~torchrl.modules.RSSMRolloutV3` of the loss without a
+            selected backend switches to the higher-order scan, unrolled by this
+            many steps, so the compile traces one scan instead of the explicit
+            loop over the whole sequence. ``None`` leaves the rollouts as they
+            are. Default: ``8``.
         warmup_steps (int, optional): Representative forward/backward calls
             before training. Must be positive. Default: ``5``.
         mixed_precision (bool, optional): Use bfloat16 autocast for CUDA
@@ -225,6 +234,11 @@ class DreamerV3OptimizationStepper(OptimizationStepper):
         scope. Pause collection and synchronize pending replay operations before
         warm-up or checkpointing. Distributed execution is outside this stepper's
         supported modes.
+
+    .. note::
+        The device decides the defaults, so a stepper built with the default
+        arguments must call :meth:`warmup` before its first update on CUDA;
+        on CPU the first update runs eagerly without it.
 
     Examples:
         Continue from the runnable :class:`~torchrl.objectives.DreamerV3Loss`
@@ -256,33 +270,83 @@ class DreamerV3OptimizationStepper(OptimizationStepper):
         optimizer: torch.optim.Optimizer,
         target_updater: TargetNetUpdater | None = None,
         *,
-        compile_train_step: bool = False,
+        compile_train_step: bool | None = None,
         compile_mode: Literal[
             "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"
         ] = "default",
-        cudagraph: bool = False,
+        cudagraph: bool | None = None,
+        rssm_scan_unroll: int | None = 8,
         warmup_steps: int = 5,
         mixed_precision: bool = False,
     ):
         if warmup_steps < 1:
             raise ValueError("warmup_steps must be positive.")
-        if compile_train_step and not getattr(
-            torch._dynamo.config, "inline_inbuilt_nn_modules", False
+        if rssm_scan_unroll is not None and (
+            not isinstance(rssm_scan_unroll, int)
+            or isinstance(rssm_scan_unroll, bool)
+            or rssm_scan_unroll < 1
         ):
-            raise RuntimeError(
-                "Whole-step compilation requires a PyTorch runtime with "
-                "torch._dynamo.config.inline_inbuilt_nn_modules enabled."
+            raise ValueError(
+                f"rssm_scan_unroll must be a positive integer or None, got "
+                f"{rssm_scan_unroll!r}."
             )
+        if compile_train_step:
+            self._check_compile_support()
         self.loss_module = loss_module
         self.optimizer = optimizer
         self.target_updater = target_updater
         self.compile_train_step = compile_train_step
         self.compile_mode = compile_mode
         self.cudagraph = cudagraph
+        self.rssm_scan_unroll = rssm_scan_unroll
         self.warmup_steps = warmup_steps
         self.mixed_precision = mixed_precision
-        self._ready = not (compile_train_step or cudagraph)
+        self._ready = compile_train_step is False and cudagraph is False
         self._train_step = self._forward_backward
+
+    @staticmethod
+    def _check_compile_support() -> None:
+        if not getattr(torch._dynamo.config, "inline_inbuilt_nn_modules", False):
+            raise RuntimeError(
+                "Whole-step compilation requires a PyTorch runtime with "
+                "torch._dynamo.config.inline_inbuilt_nn_modules enabled."
+            )
+
+    def resolve(self, device: torch.device) -> tuple[bool, bool]:
+        """Return the ``(compile_train_step, cudagraph)`` pair used on ``device``.
+
+        ``None`` requests resolve to ``True`` on CUDA and ``False`` elsewhere;
+        explicit requests are returned unchanged.
+        """
+        is_cuda = device.type == "cuda"
+        compile_train_step = (
+            is_cuda if self.compile_train_step is None else self.compile_train_step
+        )
+        cudagraph = is_cuda if self.cudagraph is None else self.cudagraph
+        return compile_train_step, cudagraph
+
+    def _select_scan_backends(self) -> list[RSSMRolloutV3]:
+        """Switch the loss's rollouts without a backend to the higher-order scan.
+
+        The scan is selected without its own :func:`torch.compile` so that the
+        compiled step traces one scan of ``rssm_scan_unroll`` steps. Rollouts
+        with a backend, compiled or not, keep it.
+        """
+        if self.rssm_scan_unroll is None:
+            return []
+        selected = []
+        for module in self.loss_module.modules():
+            if (
+                isinstance(module, RSSMRolloutV3)
+                and module._fast_path
+                and module._step_fn is None
+                and module._scan_fn is None
+            ):
+                module.compile_rollout(
+                    "scan", unroll=self.rssm_scan_unroll, compile=False
+                )
+                selected.append(module)
+        return selected
 
     def _prepare_sample(self, sample: TensorDictBase) -> TensorDictBase:
         sample = sample.select(*self.loss_module.in_keys, strict=False)
@@ -323,13 +387,16 @@ class DreamerV3OptimizationStepper(OptimizationStepper):
         """
         sample = self._prepare_sample(sample)
         reference = sample.get(self.loss_module.in_keys[0])
-        if self.cudagraph and reference.device.type != "cuda":
+        compile_train_step, cudagraph = self.resolve(reference.device)
+        if cudagraph and reference.device.type != "cuda":
             raise RuntimeError("CUDA graph learner updates require CUDA inputs.")
         self._ready = False
         train_step = self._forward_backward
-        if self.compile_train_step:
+        if compile_train_step:
+            self._check_compile_support()
+            self._select_scan_backends()
             train_step = torch.compile(train_step, mode=self.compile_mode)
-        if self.cudagraph:
+        if cudagraph:
             train_step = CudaGraphModule(
                 train_step, warmup=self.warmup_steps, device=reference.device
             )
@@ -376,9 +443,17 @@ class DreamerV3OptimizationStepper(OptimizationStepper):
                     "Distributed DreamerV3 updates are not supported."
                 )
         if not self._ready:
-            raise RuntimeError(
-                "Call warmup(sample) before compiled or captured learner updates."
-            )
+            sample = self._prepare_sample(sub_batch)
+            reference = sample.get(self.loss_module.in_keys[0])
+            if any(self.resolve(reference.device)):
+                raise RuntimeError(
+                    "Call warmup(sample) before compiled or captured learner "
+                    "updates. On CUDA the defaults compile and capture the step; "
+                    "pass compile_train_step=False and cudagraph=False to run "
+                    "eagerly without a warm-up."
+                )
+            self._train_step = self._forward_backward
+            self._ready = True
         result = self._train_step(self._prepare_sample(sub_batch))
         if not any(
             parameter.grad is not None

@@ -72,17 +72,25 @@ optimization:
   deferred_policy_sync: false
   separate_policy_rng: false
   mixed_precision: false
-  # Compile the RSSM recurrence: null, "step" or "scan". "scan" is faster but
-  # changes the random stream; see the README.
+  # Compile strategy. "auto" takes the fastest supported path for the training
+  # device: on CUDA the complete learner forward/backward is compiled with
+  # TorchInductor around a higher-order scan of the recurrence and captured in
+  # a CUDA graph; elsewhere everything runs eagerly. "off" disables all of it.
+  # The three switches below default to null, which follows this strategy; set
+  # one to override that single decision.
+  compile: auto
+  # Compile the complete learner forward/backward with TorchInductor.
+  compile_train_step: null
+  # torch.compile mode for the complete learner step.
+  compile_train_step_mode: default
+  # RSSM recurrence backend: null, "step" or "scan". Inside a compiled step
+  # "scan" is traced as one higher-order scan; on its own it gets its own
+  # torch.compile. "scan" changes the random stream; see the README.
   compile_rssm: null
   # Number of RSSM steps traced per higher-order scan iteration.
   rssm_scan_unroll: 8
-  # Compile the complete learner forward/backward with TorchInductor.
-  compile_train_step: false
-  # torch.compile mode for the complete learner step.
-  compile_train_step_mode: default
   # Capture the fixed-shape learner forward/backward on CUDA after warmup.
-  cudagraph_train_step: false
+  cudagraph_train_step: null
   # Synchronize CUDA around train-update timing. This disables CPU/GPU overlap.
   sync_timers: false
   collection_warmup_seconds: 0
