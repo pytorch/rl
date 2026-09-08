@@ -47,6 +47,7 @@ from torchrl.trainers.algorithms.configs.data import (
     SliceSamplerWithoutReplacementConfig,
     StorageEnsembleConfig,
     StorageEnsembleWriterConfig,
+    StreamingSliceSamplerConfig,
     TensorDictReplayBufferConfig,
     TensorStorageConfig,
     TransitionConfig,
@@ -407,6 +408,7 @@ __all__ = [
     "SamplerWithoutReplacementConfig",
     "SliceSamplerConfig",
     "SliceSamplerWithoutReplacementConfig",
+    "StreamingSliceSamplerConfig",
     # Losses
     "A2CLossConfig",
     "CQLLossConfig",
@@ -696,6 +698,11 @@ def _register_configs():
         group="sampler",
         name="slice_without_replacement",
         node=SliceSamplerWithoutReplacementConfig,
+    )
+    cs.store(
+        group="sampler",
+        name="streaming_slice",
+        node=StreamingSliceSamplerConfig,
     )
     cs.store(group="storage", name="lazy_stack", node=LazyStackStorageConfig)
     cs.store(group="storage", name="list", node=ListStorageConfig)

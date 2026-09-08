@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -85,6 +86,129 @@ class TestEnsemble:
                 batch_size=[90],
             )
         raise NotImplementedError
+
+    @staticmethod
+    def _make_routed_member(max_size=8, *, sampler=None):
+        if sampler is None:
+            sampler = RandomSampler()
+        return TensorDictReplayBuffer(
+            storage=LazyTensorStorage(max_size),
+            sampler=sampler,
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+        )
+
+    def test_routed_write_and_conditional_update(self):
+        members = [self._make_routed_member(2) for _ in range(2)]
+        rb = ReplayBufferEnsemble(*members, routing_key=("collector", "env_id"))
+        data = TensorDict(
+            {
+                "value": torch.tensor([0, 10, 1, 11]),
+                ("collector", "env_id"): torch.tensor([0, 1, 0, 1]),
+            },
+            [4],
+        )
+
+        metadata = rb.extend(data)
+
+        assert metadata["buffer_ids"].tolist() == [0, 1, 0, 1]
+        assert metadata["index"].tolist() == [0, 0, 1, 1]
+        assert metadata["index_generation"].tolist() == [0, 0, 0, 0]
+        assert members[0][:]["value"].tolist() == [0, 1]
+        assert members[1][:]["value"].tolist() == [10, 11]
+
+        rb.extend(
+            TensorDict(
+                {
+                    "value": torch.tensor([2, 3]),
+                    ("collector", "env_id"): torch.zeros(2, dtype=torch.long),
+                },
+                [2],
+            )
+        )
+        result = rb.update_if_present(
+            index=metadata.select("buffer_ids", "index"),
+            generation=metadata["index_generation"],
+            patch={"value": data["value"] + 100},
+        )
+
+        assert result.updated.tolist() == [False, True, False, True]
+        assert members[0][:]["value"].tolist() == [2, 3]
+        assert members[1][:]["value"].tolist() == [110, 111]
+        assert rb.stats() == {
+            "size": 4,
+            "write_count": 6,
+            "prefetch_queue_size": 0,
+            "initialized": True,
+            "capacity": 4,
+            "utilization": 1.0,
+            "num_buffers": 2,
+        }
+        restored_members = [self._make_routed_member(2) for _ in range(2)]
+        restored = ReplayBufferEnsemble(
+            *restored_members, routing_key=("collector", "env_id")
+        )
+        restored.load_state_dict(rb.state_dict())
+        assert restored_members[0][:]["value"].tolist() == [2, 3]
+        assert restored_members[1][:]["value"].tolist() == [110, 111]
+        assert restored.stats()["write_count"] == 6
+
+    def test_routing_dim_preserves_member_order(self):
+        members = [self._make_routed_member() for _ in range(2)]
+        rb = ReplayBufferEnsemble(*members, routing_dim=1)
+        data = TensorDict(
+            {"value": torch.tensor([[0, 10], [1, 11]])}, batch_size=[2, 2]
+        )
+
+        metadata = rb.extend(data)
+
+        assert metadata.batch_size == (4,)
+        assert metadata["buffer_ids"].tolist() == [0, 1, 0, 1]
+        assert members[0][:]["value"].tolist() == [0, 1]
+        assert members[1][:]["value"].tolist() == [10, 11]
+
+    def test_sampleable_routing_groups_member_samples(self):
+        lengths = (1, 4, 8)
+        samplers = [SliceSampler(slice_len=2) for _ in lengths]
+        members = [
+            self._make_routed_member(16, sampler=sampler) for sampler in samplers
+        ]
+        for member_id, (member, length) in enumerate(zip(members, lengths)):
+            member.extend(
+                TensorDict(
+                    {
+                        "value": torch.arange(length),
+                        "episode": torch.full((length,), member_id),
+                    },
+                    [length],
+                )
+            )
+            sampler = samplers[member_id]
+            sampler.sample = mock.MagicMock(wraps=sampler.sample)
+        generator = torch.Generator().manual_seed(0)
+        rb = ReplayBufferEnsemble(
+            *members,
+            p="sampleable",
+            num_buffer_sampled=1_000,
+            generator=generator,
+        )
+
+        index, _ = rb.sampler.sample(rb.storage, 2_000)
+        counts = torch.bincount(index["buffer_ids"], minlength=3)
+
+        assert counts[0] == 0
+        assert 0.25 < counts[1] / (counts[1] + counts[2]) < 0.35
+        assert samplers[0].sample.call_count == 0
+        assert samplers[1].sample.call_count == 1
+        assert samplers[2].sample.call_count == 1
+        assert rb.can_sample(2_000)
+
+    def test_routed_write_configuration_validation(self):
+        members = [self._make_routed_member() for _ in range(2)]
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            ReplayBufferEnsemble(*members, routing_key="member", routing_dim=0)
+        rb = ReplayBufferEnsemble(*members)
+        with pytest.raises(RuntimeError, match="writes are disabled"):
+            rb.extend(TensorDict({"value": torch.arange(2)}, [2]))
 
     def _make_sampler(self, sampler_type):
         if sampler_type is SamplerWithoutReplacement:
