@@ -67,7 +67,7 @@ Examples
 torch.Size([2, 4])
 ```
 
-compile_rollout(*scope: Literal['step', 'scan'] = 'step'*, ***, *unroll: int = 1*, ***compile_kwargs*) → None[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.compile_rollout)
+compile_rollout(*scope: Literal['step', 'scan'] = 'step'*, ***, *unroll: int = 1*, *compile: bool = True*, ***compile_kwargs*) → None[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.compile_rollout)
 
 Compile the recurrence with [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
 
@@ -86,8 +86,15 @@ compile. Defaults to `"step"`.
 higher-order scan iteration. Larger values can improve runtime
 at the cost of compilation time and graph size. Only applies
 to `scope="scan"`. Defaults to `1`.
+- **compile** (*bool**,**optional*) - If `False`, select the backend without
+wrapping it in [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), for a rollout that runs
+inside an enclosing compiled region such as a compiled learner
+step. The enclosing compile then traces one higher-order scan
+of `unroll` steps instead of unrolling the explicit loop over
+the whole sequence. Defaults to `True`.
 - ****compile_kwargs** - Keyword arguments for [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
-`dynamic` defaults to `False`.
+`dynamic` defaults to `False`. Ignored when `compile` is
+`False`.
 
 forward(*tensordict*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.forward)
 

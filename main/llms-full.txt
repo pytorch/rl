@@ -34019,7 +34019,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f6c4999bd30>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f30b6f745e0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47291,7 +47291,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f6c4c940400>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f30b9a2c4a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -212721,7 +212721,7 @@ Examples
 torch.Size([2, 4])
 ```
 
-compile_rollout(*scope: Literal['step', 'scan'] = 'step'*, ***, *unroll: int = 1*, ***compile_kwargs*) → None[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.compile_rollout)
+compile_rollout(*scope: Literal['step', 'scan'] = 'step'*, ***, *unroll: int = 1*, *compile: bool = True*, ***compile_kwargs*) → None[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.compile_rollout)
 
 Compile the recurrence with [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
 
@@ -212740,8 +212740,15 @@ compile. Defaults to `"step"`.
 higher-order scan iteration. Larger values can improve runtime
 at the cost of compilation time and graph size. Only applies
 to `scope="scan"`. Defaults to `1`.
+- **compile** (*bool**,**optional*) - If `False`, select the backend without
+wrapping it in [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), for a rollout that runs
+inside an enclosing compiled region such as a compiled learner
+step. The enclosing compile then traces one higher-order scan
+of `unroll` steps instead of unrolling the explicit loop over
+the whole sequence. Defaults to `True`.
 - ****compile_kwargs** - Keyword arguments for [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
-`dynamic` defaults to `False`.
+`dynamic` defaults to `False`. Ignored when `compile` is
+`False`.
 
 forward(*tensordict*)[[source]](../../_modules/torchrl/modules/models/model_based.html#RSSMRolloutV3.forward)
 
@@ -265349,7 +265356,7 @@ Signal that training should stop at the next loop boundary.
 
 # DreamerV3OptimizationStepper
 
-*class*torchrl.trainers.algorithms.DreamerV3OptimizationStepper(*loss_module: [DreamerV3Loss](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)*, *optimizer: [Optimizer](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)*, *target_updater: TargetNetUpdater | None = None*, ***, *compile_train_step: bool = False*, *compile_mode: Literal['default', 'reduce-overhead', 'max-autotune', 'max-autotune-no-cudagraphs'] = 'default'*, *cudagraph: bool = False*, *warmup_steps: int = 5*, *mixed_precision: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper)
+*class*torchrl.trainers.algorithms.DreamerV3OptimizationStepper(*loss_module: [DreamerV3Loss](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)*, *optimizer: [Optimizer](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)*, *target_updater: TargetNetUpdater | None = None*, ***, *compile_train_step: bool | None = None*, *compile_mode: Literal['default', 'reduce-overhead', 'max-autotune', 'max-autotune-no-cudagraphs'] = 'default'*, *cudagraph: bool | None = None*, *rssm_scan_unroll: int | None = 8*, *warmup_steps: int = 5*, *mixed_precision: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper)
 
 Execute a complete DreamerV3 forward/backward and optimizer update.
 
@@ -265371,13 +265378,21 @@ after each optimizer step. Default: `None`.
 
 Keyword Arguments:
 
-- **compile_train_step** (*bool**,**optional*) - Compile the complete
-forward/backward pass. Requires PyTorch's
+- **compile_train_step** (*bool**or**None**,**optional*) - Compile the complete
+forward/backward pass with TorchInductor. Requires PyTorch's
 `torch._dynamo.config.inline_inbuilt_nn_modules` support to be
-enabled for functional parameter contexts. Default: `False`.
+enabled for functional parameter contexts. `None` picks the
+fastest supported path for the sample device: compiled on CUDA,
+eager elsewhere. Default: `None`.
 - **compile_mode** (*str**,**optional*) - PyTorch compile mode. Default: `"default"`.
-- **cudagraph** (*bool**,**optional*) - Capture forward/backward on CUDA.
-Default: `False`.
+- **cudagraph** (*bool**or**None**,**optional*) - Capture forward/backward on CUDA.
+`None` captures on CUDA and stays eager elsewhere. Default: `None`.
+- **rssm_scan_unroll** (*int**or**None**,**optional*) - When the step is compiled,
+every [`RSSMRolloutV3`](torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3) of the loss without a
+selected backend switches to the higher-order scan, unrolled by this
+many steps, so the compile traces one scan instead of the explicit
+loop over the whole sequence. `None` leaves the rollouts as they
+are. Default: `8`.
 - **warmup_steps** (*int**,**optional*) - Representative forward/backward calls
 before training. Must be positive. Default: `5`.
 - **mixed_precision** (*bool**,**optional*) - Use bfloat16 autocast for CUDA
@@ -265389,6 +265404,12 @@ Shared modules must not also have an independently compiled execution
 scope. Pause collection and synchronize pending replay operations before
 warm-up or checkpointing. Distributed execution is outside this stepper's
 supported modes.
+
+Note
+
+The device decides the defaults, so a stepper built with the default
+arguments must call `warmup()` before its first update on CUDA;
+on CPU the first update runs eagerly without it.
 
 Examples
 
@@ -265419,6 +265440,13 @@ See also [`DreamerV3OptimizationStepperConfig`](torchrl.trainers.algorithms.conf
 load_state_dict(*state_dict: dict[str, Any]*) → None[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.load_state_dict)
 
 Restore optimizer state without replacing captured gradient buffers.
+
+resolve(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*) → tuple[bool, bool][[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.resolve)
+
+Return the `(compile_train_step, cudagraph)` pair used on `device`.
+
+`None` requests resolve to `True` on CUDA and `False` elsewhere;
+explicit requests are returned unchanged.
 
 state_dict() → dict[str, Any][[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.state_dict)
 
@@ -266526,7 +266554,7 @@ With the component losses from the `DreamerV3Loss` example:
 
 # DreamerV3OptimizationStepperConfig
 
-*class*torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig(*loss_module: Any = None*, *optimizer: Any = None*, *target_updater: Any = None*, *compile_train_step: bool = False*, *compile_mode: str = 'default'*, *cudagraph: bool = False*, *warmup_steps: int = 5*, *mixed_precision: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.DreamerV3OptimizationStepper'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#DreamerV3OptimizationStepperConfig)
+*class*torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig(*loss_module: Any = None*, *optimizer: Any = None*, *target_updater: Any = None*, *compile_train_step: bool | None = None*, *compile_mode: str = 'default'*, *cudagraph: bool | None = None*, *rssm_scan_unroll: int | None = 8*, *warmup_steps: int = 5*, *mixed_precision: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.DreamerV3OptimizationStepper'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#DreamerV3OptimizationStepperConfig)
 
 Hydra configuration for [`DreamerV3OptimizationStepper`](torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper).
 

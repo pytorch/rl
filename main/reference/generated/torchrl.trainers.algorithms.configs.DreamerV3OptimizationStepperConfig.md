@@ -1,6 +1,6 @@
 # DreamerV3OptimizationStepperConfig
 
-*class*torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig(*loss_module: Any = None*, *optimizer: Any = None*, *target_updater: Any = None*, *compile_train_step: bool = False*, *compile_mode: str = 'default'*, *cudagraph: bool = False*, *warmup_steps: int = 5*, *mixed_precision: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.DreamerV3OptimizationStepper'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#DreamerV3OptimizationStepperConfig)
+*class*torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig(*loss_module: Any = None*, *optimizer: Any = None*, *target_updater: Any = None*, *compile_train_step: bool | None = None*, *compile_mode: str = 'default'*, *cudagraph: bool | None = None*, *rssm_scan_unroll: int | None = 8*, *warmup_steps: int = 5*, *mixed_precision: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.DreamerV3OptimizationStepper'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#DreamerV3OptimizationStepperConfig)
 
 Hydra configuration for [`DreamerV3OptimizationStepper`](torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper).
 

@@ -1,6 +1,6 @@
 # DreamerV3OptimizationStepper
 
-*class*torchrl.trainers.algorithms.DreamerV3OptimizationStepper(*loss_module: [DreamerV3Loss](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)*, *optimizer: [Optimizer](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)*, *target_updater: TargetNetUpdater | None = None*, ***, *compile_train_step: bool = False*, *compile_mode: Literal['default', 'reduce-overhead', 'max-autotune', 'max-autotune-no-cudagraphs'] = 'default'*, *cudagraph: bool = False*, *warmup_steps: int = 5*, *mixed_precision: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper)
+*class*torchrl.trainers.algorithms.DreamerV3OptimizationStepper(*loss_module: [DreamerV3Loss](torchrl.objectives.DreamerV3Loss.html#torchrl.objectives.DreamerV3Loss)*, *optimizer: [Optimizer](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)*, *target_updater: TargetNetUpdater | None = None*, ***, *compile_train_step: bool | None = None*, *compile_mode: Literal['default', 'reduce-overhead', 'max-autotune', 'max-autotune-no-cudagraphs'] = 'default'*, *cudagraph: bool | None = None*, *rssm_scan_unroll: int | None = 8*, *warmup_steps: int = 5*, *mixed_precision: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper)
 
 Execute a complete DreamerV3 forward/backward and optimizer update.
 
@@ -22,13 +22,21 @@ after each optimizer step. Default: `None`.
 
 Keyword Arguments:
 
-- **compile_train_step** (*bool**,**optional*) - Compile the complete
-forward/backward pass. Requires PyTorch's
+- **compile_train_step** (*bool**or**None**,**optional*) - Compile the complete
+forward/backward pass with TorchInductor. Requires PyTorch's
 `torch._dynamo.config.inline_inbuilt_nn_modules` support to be
-enabled for functional parameter contexts. Default: `False`.
+enabled for functional parameter contexts. `None` picks the
+fastest supported path for the sample device: compiled on CUDA,
+eager elsewhere. Default: `None`.
 - **compile_mode** (*str**,**optional*) - PyTorch compile mode. Default: `"default"`.
-- **cudagraph** (*bool**,**optional*) - Capture forward/backward on CUDA.
-Default: `False`.
+- **cudagraph** (*bool**or**None**,**optional*) - Capture forward/backward on CUDA.
+`None` captures on CUDA and stays eager elsewhere. Default: `None`.
+- **rssm_scan_unroll** (*int**or**None**,**optional*) - When the step is compiled,
+every [`RSSMRolloutV3`](torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3) of the loss without a
+selected backend switches to the higher-order scan, unrolled by this
+many steps, so the compile traces one scan instead of the explicit
+loop over the whole sequence. `None` leaves the rollouts as they
+are. Default: `8`.
 - **warmup_steps** (*int**,**optional*) - Representative forward/backward calls
 before training. Must be positive. Default: `5`.
 - **mixed_precision** (*bool**,**optional*) - Use bfloat16 autocast for CUDA
@@ -40,6 +48,12 @@ Shared modules must not also have an independently compiled execution
 scope. Pause collection and synchronize pending replay operations before
 warm-up or checkpointing. Distributed execution is outside this stepper's
 supported modes.
+
+Note
+
+The device decides the defaults, so a stepper built with the default
+arguments must call `warmup()` before its first update on CUDA;
+on CPU the first update runs eagerly without it.
 
 Examples
 
@@ -70,6 +84,13 @@ See also [`DreamerV3OptimizationStepperConfig`](torchrl.trainers.algorithms.conf
 load_state_dict(*state_dict: dict[str, Any]*) → None[[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.load_state_dict)
 
 Restore optimizer state without replacing captured gradient buffers.
+
+resolve(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*) → tuple[bool, bool][[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.resolve)
+
+Return the `(compile_train_step, cudagraph)` pair used on `device`.
+
+`None` requests resolve to `True` on CUDA and `False` elsewhere;
+explicit requests are returned unchanged.
 
 state_dict() → dict[str, Any][[source]](../../_modules/torchrl/trainers/algorithms/dreamer_v3.html#DreamerV3OptimizationStepper.state_dict)
 
