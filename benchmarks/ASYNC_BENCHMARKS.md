@@ -51,6 +51,14 @@ becomes public in #4272. They keep one environment per worker because that
 transport rejects grouped workers. The same workload and batching limits apply;
 these remain separate series alongside the grouped integrated curve.
 
+`test_async_collection_pixels_64_envs[mode]` adds a separate CUDA acceptance
+comparison for `async-shm` and `async-process-slots`: 64 environments, one per
+worker, with the same CNN plus two 1024-wide layers, one-millisecond environment
+steps, batches, warm-up and measured rounds described above. It runs in the
+same three fresh-process repetitions. Compare those two series with each other;
+they keep worker count fixed and do not replace the existing 32-environment
+trends. The policy is a pixel-collection proxy, not the complete DreamerV3 actor.
+
 Follow **`async-shm-integrated`** for the cumulative performance curve. It starts
 with eager inference and one environment per worker, enables static inference
 on GPU when that public option becomes available, and uses four environments

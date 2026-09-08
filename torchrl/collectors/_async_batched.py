@@ -23,6 +23,7 @@ from tensordict import (
     TensorDictBase,
 )
 from torchrl._comm import MailboxTransportError
+from torchrl._comm.mailbox import _exit_on_parent_exit
 from torchrl._utils import (
     _maybe_record_function_decorator,
     logger as torchrl_logger,
@@ -155,6 +156,7 @@ def _process_env_loop(
     env_id: int,
     client: PolicyClientModule,
     result_queue,
+    result_capacity,
     shutdown_event,
     pause_event,
     paused_event,
@@ -168,6 +170,7 @@ def _process_env_loop(
     try:
         if worker_affinity is not None:
             os.sched_setaffinity(0, worker_affinity)
+        threading.Thread(target=_exit_on_parent_exit, daemon=True).start()
         torch.set_num_threads(1)
         env = env_factory(**create_env_kwargs)
         observation = env.reset()
@@ -177,6 +180,13 @@ def _process_env_loop(
                 while pause_event.is_set() and not shutdown_event.is_set():
                     shutdown_event.wait(0.01)
                 paused_event.clear()
+                continue
+            # Reserve capacity before inference/stepping. A full result queue
+            # must still let the worker observe pause and shutdown requests.
+            if not result_capacity.acquire(timeout=0.01):
+                continue
+            if pause_event.is_set() or shutdown_event.is_set():
+                result_capacity.release()
                 continue
             policy_output = client(observation)
             action_td = observation.update(policy_output)
@@ -198,7 +208,7 @@ def _process_env_loop(
                 # Transfer one shared storage instead of negotiating a file
                 # descriptor for every tensor leaf of every transition.
                 transition = transition.consolidate()
-            result_queue.put(transition)
+            result_queue.put(transition, block=False)
     except Exception as exc:
         if not shutdown_event.is_set():
             error_queue.put(RuntimeError(f"Environment {env_id} failed: {exc!r}"))
@@ -357,6 +367,8 @@ class AsyncBatchedCollector(BaseCollector):
     * With a :class:`~torchrl.modules.inference_server.ProcessSlotTransport`,
       each multiprocessing environment worker talks directly to the dedicated
       inference process; the driver receives completed transitions only.
+      Completed and in-flight transitions are bounded to twice the environment
+      count. Workers and the inference server exit when their owner dies.
     * The :class:`~torchrl.modules.InferenceServer` running in a background
       thread continuously drains observation submissions, batches them, runs
       a single forward pass, and fans actions back out.
@@ -588,6 +600,16 @@ class AsyncBatchedCollector(BaseCollector):
             raise TypeError("create_env_fn must be a list of env factories.")
         self._create_env_fn = list(create_env_fn)
         self._num_envs = len(create_env_fn)
+        if create_env_kwargs is not None and not isinstance(create_env_kwargs, Mapping):
+            if (
+                not isinstance(create_env_kwargs, Sequence)
+                or len(create_env_kwargs) != self._num_envs
+                or not all(isinstance(kwargs, Mapping) for kwargs in create_env_kwargs)
+            ):
+                raise ValueError(
+                    "create_env_kwargs must be a dict or a list of dicts with "
+                    f"length {self._num_envs}."
+                )
         self._create_env_kwargs = create_env_kwargs
 
         # ---- resolve backends -------------------------------------------------
@@ -783,8 +805,15 @@ class AsyncBatchedCollector(BaseCollector):
 
     def _ensure_started(self) -> None:
         """Create the env pool, start the server and coordinator threads."""
-        if self._workers and all(w.is_alive() for w in self._workers):
-            return
+        if self._workers:
+            if self._uses_process_env_workers:
+                self._check_process_workers()
+                if self._shutdown_event.is_set():
+                    raise RuntimeError(
+                        "Environment workers have stopped; create a new collector."
+                    )
+            if all(w.is_alive() for w in self._workers):
+                return
 
         original_affinity = None
         try:
@@ -813,14 +842,13 @@ class AsyncBatchedCollector(BaseCollector):
                     create_env_kwargs = [
                         dict(create_env_kwargs) for _ in range(self._num_envs)
                     ]
-                elif len(create_env_kwargs) != self._num_envs:
-                    raise ValueError(
-                        "create_env_kwargs must be a dict or a list of dicts with "
-                        f"length {self._num_envs}."
-                    )
 
                 ctx = self._transport._ctx
-                self._result_queue = ctx.Queue()
+                # Count completed and in-flight transitions together. Queue
+                # capacity alone cannot prevent workers from blocking in put().
+                capacity = 2 * self._num_envs
+                self._result_queue = ctx.Queue(maxsize=capacity)
+                self._result_capacity = ctx.BoundedSemaphore(capacity)
                 self._worker_error_queue = ctx.Queue()
                 self._worker_check_timer = timeit(
                     "AsyncBatchedCollector.worker_liveness", sync=False
@@ -849,6 +877,7 @@ class AsyncBatchedCollector(BaseCollector):
                                 "env_id": env_id,
                                 "client": client,
                                 "result_queue": self._result_queue,
+                                "result_capacity": self._result_capacity,
                                 "shutdown_event": self._shutdown_event,
                                 "pause_event": self._process_pause_event,
                                 "paused_event": self._process_paused_events[env_id],
@@ -862,6 +891,7 @@ class AsyncBatchedCollector(BaseCollector):
                                 "storing_device": self._storing_device,
                             },
                             name=f"AsyncBatchedCollector-env-{env_id}",
+                            daemon=True,
                         )
                         process.start()
                         self._workers.append(process)
@@ -968,9 +998,11 @@ class AsyncBatchedCollector(BaseCollector):
         """Pause environment coordination and policy inference.
 
         In-flight policy and environment requests finish before the context is
-        entered. The coordinator threads then remain parked until the context
-        exits, leaving the inference server idle. This provides a quiescent
-        boundary for operations such as a lazy :func:`torch.compile` call.
+        entered. The coordinator threads or environment processes then remain
+        parked until the context exits, leaving the inference server idle.
+        Completed transitions can remain buffered for the next iteration.
+        This provides a quiescent boundary for operations such as a lazy
+        :func:`torch.compile` call.
 
         Compile and warm up modules before starting collection whenever
         possible. Use this context when compilation after collection has
@@ -1189,6 +1221,8 @@ class AsyncBatchedCollector(BaseCollector):
                     "An environment worker result could not be received."
                 ) from exc
             self._check_worker_result(td)
+            if self._uses_process_env_workers:
+                self._result_capacity.release()
             return td
 
     @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_frames")
@@ -1233,6 +1267,8 @@ class AsyncBatchedCollector(BaseCollector):
                         "An environment worker result could not be received."
                     ) from exc
                 self._check_worker_result(td)
+                if self._uses_process_env_workers:
+                    self._result_capacity.release()
                 if self._uses_batched_coordinator:
                     for transition in td.unbind(0):
                         if collected < frames_to_collect:

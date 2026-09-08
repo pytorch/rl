@@ -11,6 +11,7 @@ from collections.abc import Callable
 
 from tensordict.base import TensorDictBase
 
+from torchrl.modules.inference_server._slot_utils import _take_ready_slots
 from torchrl.modules.inference_server._transport import InferenceTransport
 
 
@@ -240,28 +241,21 @@ class SlotTransport(InferenceTransport):
                     break
 
         items: list[TensorDictBase] = []
-        slot_ids: list[int] = []
         submitted_at: list[float | None] = []
-        start = self._sweep_start
-        for offset in range(self._num_slots):
-            i = (start + offset) % self._num_slots
-            if self._obs_ready[i]:
-                self._obs_ready[i] = False
-                submitted_at.append(self._submitted_at[i])
-                self._submitted_at[i] = None
-                if self._obs_buffer is not None:
-                    # Flush first-time observations that arrived before the
-                    # buffer existed into the buffer.
-                    if self._obs[i] is not None:
-                        self._obs_buffer[i].update_(self._obs[i])
-                        self._obs[i] = None
-                    items.append(self._obs_buffer[i])
-                else:
-                    items.append(self._obs[i])
+        slot_ids = _take_ready_slots(self._obs_ready, self._sweep_start, max_items)
+        for i in slot_ids:
+            submitted_at.append(self._submitted_at[i])
+            self._submitted_at[i] = None
+            if self._obs_buffer is not None:
+                # Flush first-time observations that arrived before the
+                # buffer existed into the buffer.
+                if self._obs[i] is not None:
+                    self._obs_buffer[i].update_(self._obs[i])
                     self._obs[i] = None
-                slot_ids.append(i)
-                if len(slot_ids) >= max_items:
-                    break
+                items.append(self._obs_buffer[i])
+            else:
+                items.append(self._obs[i])
+                self._obs[i] = None
         if slot_ids:
             self._sweep_start = (slot_ids[-1] + 1) % self._num_slots
         return items, slot_ids, submitted_at

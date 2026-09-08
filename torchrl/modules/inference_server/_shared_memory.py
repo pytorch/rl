@@ -7,12 +7,12 @@ from __future__ import annotations
 import multiprocessing as mp
 import queue
 
-import torch
-from tensordict.base import _is_leaf_nontensor, TensorDictBase
+from tensordict.base import TensorDictBase
 from tensordict.utils import NestedKey
 
 from torchrl._comm import MailboxClient, MailboxFuture
 from torchrl.modules.inference_server._queue_transport import QueueBasedTransport
+from torchrl.modules.inference_server._slot_utils import _make_slot_bank
 
 _MISSING = object()
 
@@ -240,8 +240,12 @@ class SharedMemoryTransport(QueueBasedTransport):
         self._ctx = ctx if ctx is not None else mp.get_context("spawn")
         self._copy_result = bool(copy_result)
 
-        self._request_slots = self._make_slots(request_spec, "request_spec")
-        self._response_slots = self._make_slots(response_spec, "response_spec")
+        self._request_slots = _make_slot_bank(
+            request_spec, self._num_slots, type(self).__name__, "request_spec"
+        )
+        self._response_slots = _make_slot_bank(
+            response_spec, self._num_slots, type(self).__name__, "response_spec"
+        )
         self._request_keys = list(
             request_spec.keys(include_nested=True, leaves_only=True)
         )
@@ -261,35 +265,6 @@ class SharedMemoryTransport(QueueBasedTransport):
         peer_alive = self._ctx.Event()
         peer_alive.set()
         self._set_peer_alive(peer_alive)
-
-    def _make_slots(self, spec: TensorDictBase, argname: str) -> TensorDictBase:
-        # _is_leaf_nontensor surfaces NonTensorData leaves (excluded by the
-        # default leaf iterator) so they are rejected instead of ignored.
-        leaves = list(
-            spec.items(
-                include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor
-            )
-        )
-        if not leaves:
-            raise ValueError(f"{argname} must contain at least one tensor leaf.")
-        for key, value in leaves:
-            if not isinstance(value, torch.Tensor):
-                raise TypeError(
-                    f"SharedMemoryTransport specs only support tensor leaves; "
-                    f"{argname} has a {type(value).__name__} at key {key!r}. "
-                    "Encode small metadata as tensors or use MPTransport."
-                )
-            if value.device.type != "cpu":
-                raise ValueError(
-                    f"SharedMemoryTransport slots live in CPU shared memory; "
-                    f"{argname} has a {value.device} tensor at key {key!r}."
-                )
-        return (
-            spec.unsqueeze(0)
-            .expand(self._num_slots, *spec.batch_size)
-            .clone()
-            .share_memory_()
-        )
 
     def _make_response_queue(self) -> mp.Queue:
         return self._ctx.Queue()
