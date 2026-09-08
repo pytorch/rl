@@ -5,12 +5,13 @@
 from __future__ import annotations
 
 import contextlib
+import multiprocessing as mp
 import os
 import queue
 import threading
 import time
 from collections import deque, OrderedDict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Literal
 
 import torch
@@ -21,11 +22,15 @@ from tensordict import (
     NestedKey,
     TensorDictBase,
 )
-
 from torchrl._comm import MailboxTransportError
-from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
+from torchrl._utils import (
+    _maybe_record_function_decorator,
+    logger as torchrl_logger,
+    timeit,
+)
 from torchrl.collectors._base import BaseCollector
-from torchrl.envs import AsyncEnvPool, EnvBase
+from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs import AsyncEnvPool, EnvBase, EnvCreator
 from torchrl.envs.async_envs import _validate_cpu_affinity
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
@@ -33,6 +38,7 @@ from torchrl.modules.inference_server import (
     InferenceServerConfig,
     PolicyClientModule,
     ProcessInferenceServer,
+    ProcessSlotTransport,
     ThreadingTransport,
 )
 from torchrl.modules.inference_server._config import _resolve_device_config
@@ -141,6 +147,65 @@ def _env_loop(
     except Exception as exc:
         if not shutdown_event.is_set():
             result_queue.put(exc)
+
+
+def _process_env_loop(
+    env_factory: Callable[[], EnvBase],
+    create_env_kwargs: dict,
+    env_id: int,
+    client: PolicyClientModule,
+    result_queue,
+    shutdown_event,
+    pause_event,
+    paused_event,
+    error_queue,
+    worker_affinity: Sequence[int] | None,
+    env_device: torch.device | None,
+    storing_device: torch.device | None,
+):
+    """Run environment stepping and remote inference in one worker process."""
+    env = None
+    try:
+        if worker_affinity is not None:
+            os.sched_setaffinity(0, worker_affinity)
+        torch.set_num_threads(1)
+        env = env_factory(**create_env_kwargs)
+        observation = env.reset()
+        while not shutdown_event.is_set():
+            if pause_event.is_set():
+                paused_event.set()
+                while pause_event.is_set() and not shutdown_event.is_set():
+                    shutdown_event.wait(0.01)
+                paused_event.clear()
+                continue
+            policy_output = client(observation)
+            action_td = observation.update(policy_output)
+            if env_device is not None:
+                action_td = action_td.to(env_device)
+            transition, observation = env.step_and_maybe_reset(action_td)
+            transition.set(_ENV_IDX_KEY, env_id)
+            # multiprocessing.Queue serializes on a feeder thread after put()
+            # returns. Own the transition storage before the environment or
+            # inference response slot can be reused.
+            transition = transition.clone()
+            if storing_device is not None:
+                transition = transition.to(storing_device)
+            if all(
+                value.device.type == "cpu"
+                for value in transition.values(True, True)
+                if isinstance(value, torch.Tensor)
+            ):
+                # Transfer one shared storage instead of negotiating a file
+                # descriptor for every tensor leaf of every transition.
+                transition = transition.consolidate()
+            result_queue.put(transition)
+    except Exception as exc:
+        if not shutdown_event.is_set():
+            error_queue.put(RuntimeError(f"Environment {env_id} failed: {exc!r}"))
+            shutdown_event.wait()
+    finally:
+        if env is not None:
+            env.close()
 
 
 def _env_ids(tensordict: TensorDictBase) -> list[int]:
@@ -289,6 +354,9 @@ class AsyncBatchedCollector(BaseCollector):
       whichever environments are ready and submits their observations without
       blocking. Other exchanges use one lightweight coordinator thread per
       environment.
+    * With a :class:`~torchrl.modules.inference_server.ProcessSlotTransport`,
+      each multiprocessing environment worker talks directly to the dedicated
+      inference process; the driver receives completed transitions only.
     * The :class:`~torchrl.modules.InferenceServer` running in a background
       thread continuously drains observation submissions, batches them, runs
       a single forward pass, and fans actions back out.
@@ -327,9 +395,12 @@ class AsyncBatchedCollector(BaseCollector):
         server_timeout (float, optional): seconds the server waits for work
             before dispatching a partial batch.  Defaults to ``0.01``.
         transport (InferenceTransport, optional): a pre-built transport
-            object.  When provided, it takes precedence over
-            ``policy_backend``.  When ``None`` (default) a transport is
-            created automatically from the resolved ``policy_backend``.
+            object. When provided, it takes precedence over ``policy_backend``.
+            A :class:`~torchrl.modules.inference_server.ProcessSlotTransport`
+            together with multiprocessing environment and server backends runs
+            the complete acting loop in environment worker processes. When
+            ``None`` (default), a transport is created from the resolved
+            ``policy_backend``.
         device (torch.device or str, optional): device for policy inference
             (shorthand for ``InferenceDeviceConfig(policy_device=...)``).
             Defaults to ``None``.
@@ -604,6 +675,38 @@ class AsyncBatchedCollector(BaseCollector):
                 effective_policy_backend, num_slots=self._num_envs
             )
         self._transport = transport
+        self._uses_process_env_workers = isinstance(transport, ProcessSlotTransport)
+        if self._uses_process_env_workers:
+            if envs_per_worker != 1:
+                raise ValueError("ProcessSlotTransport requires envs_per_worker=1.")
+            if (
+                server_backend != "process"
+                or effective_env_backend != "multiprocessing"
+            ):
+                raise ValueError(
+                    "ProcessSlotTransport requires both a process inference server "
+                    "and env_backend='multiprocessing'."
+                )
+            if env_exchange != "queue":
+                raise ValueError(
+                    "env_exchange does not apply when ProcessSlotTransport owns "
+                    "the environment-worker exchange; leave it as 'queue'."
+                )
+            if transport._num_slots < self._num_envs:
+                raise ValueError(
+                    f"ProcessSlotTransport needs at least one slot per environment "
+                    f"({self._num_envs}), but has {transport._num_slots}."
+                )
+            for name, target_device in (
+                ("env_device", self._env_device),
+                ("storing_device", self._storing_device),
+            ):
+                if target_device is not None and target_device.type != "cpu":
+                    raise ValueError(
+                        f"ProcessSlotTransport requires a CPU {name}; got "
+                        f"{target_device}. Keep CUDA policy execution in the "
+                        "inference server process."
+                    )
 
         # ---- build inference server -------------------------------------------
         if server_backend == "process":
@@ -623,6 +726,7 @@ class AsyncBatchedCollector(BaseCollector):
                 stats_window_size=_server_defaults.stats_window_size,
                 policy_version=policy_version,
                 policy_version_key=policy_version_key,
+                mp_context=(transport._ctx if self._uses_process_env_workers else None),
             )
         else:
             self._server = InferenceServer(
@@ -658,10 +762,11 @@ class AsyncBatchedCollector(BaseCollector):
         self._iter = -1
 
         # ---- runtime state (created lazily) -----------------------------------
-        self._shutdown_event: threading.Event | None = None
-        self._result_queue: queue.Queue | None = None
+        self._shutdown_event: object | None = None
+        self._result_queue: object | None = None
+        self._worker_error_queue = None
         self._env_pool: AsyncEnvPool | None = None
-        self._workers: list[threading.Thread] = []
+        self._workers: list[threading.Thread | mp.Process] = []
         self._clients: list[Callable] | None = None
         self._uses_batched_coordinator = False
         self._pause_request: list[_PauseRequest | None] = [None]
@@ -686,6 +791,90 @@ class AsyncBatchedCollector(BaseCollector):
             if self._driver_affinity is not None:
                 original_affinity = os.sched_getaffinity(0)
                 os.sched_setaffinity(0, self._driver_affinity)
+
+            if self._uses_process_env_workers:
+                if self._clients is None:
+                    self._clients = [
+                        PolicyClientModule(
+                            self._transport.client(),
+                            max_inflight=self._max_inflight_per_env,
+                        )
+                        for _ in range(self._num_envs)
+                    ]
+                if self._server.static_batch_size is not None:
+                    self._server.prepare_cudagraph(self._transport._request_slots[0])
+                if not self._server.is_alive:
+                    self._server.start()
+
+                create_env_kwargs = self._create_env_kwargs
+                if create_env_kwargs is None:
+                    create_env_kwargs = [{} for _ in range(self._num_envs)]
+                elif isinstance(create_env_kwargs, Mapping):
+                    create_env_kwargs = [
+                        dict(create_env_kwargs) for _ in range(self._num_envs)
+                    ]
+                elif len(create_env_kwargs) != self._num_envs:
+                    raise ValueError(
+                        "create_env_kwargs must be a dict or a list of dicts with "
+                        f"length {self._num_envs}."
+                    )
+
+                ctx = self._transport._ctx
+                self._result_queue = ctx.Queue()
+                self._worker_error_queue = ctx.Queue()
+                self._worker_check_timer = timeit(
+                    "AsyncBatchedCollector.worker_liveness", sync=False
+                )
+                self._worker_check_timer.start()
+                self._shutdown_event = ctx.Event()
+                self._process_pause_event = ctx.Event()
+                self._process_paused_events = [
+                    ctx.Event() for _ in range(self._num_envs)
+                ]
+                self._workers = []
+                self._uses_batched_coordinator = False
+                try:
+                    for env_id, (env_factory, env_kwargs, client) in enumerate(
+                        zip(self._create_env_fn, create_env_kwargs, self._clients)
+                    ):
+                        if not isinstance(
+                            env_factory, (EnvCreator, CloudpickleWrapper)
+                        ):
+                            env_factory = CloudpickleWrapper(env_factory)
+                        process = ctx.Process(
+                            target=_process_env_loop,
+                            kwargs={
+                                "env_factory": env_factory,
+                                "create_env_kwargs": env_kwargs,
+                                "env_id": env_id,
+                                "client": client,
+                                "result_queue": self._result_queue,
+                                "shutdown_event": self._shutdown_event,
+                                "pause_event": self._process_pause_event,
+                                "paused_event": self._process_paused_events[env_id],
+                                "error_queue": self._worker_error_queue,
+                                "worker_affinity": (
+                                    self._worker_affinity[env_id]
+                                    if self._worker_affinity is not None
+                                    else None
+                                ),
+                                "env_device": self._env_device,
+                                "storing_device": self._storing_device,
+                            },
+                            name=f"AsyncBatchedCollector-env-{env_id}",
+                        )
+                        process.start()
+                        self._workers.append(process)
+                except BaseException:
+                    self._shutdown_event.set()
+                    for process in self._workers:
+                        if process.is_alive():
+                            process.terminate()
+                        process.join(timeout=1.0)
+                    self._workers = []
+                    self._server.shutdown(timeout=1.0)
+                    raise
+                return
 
             # Build the pool under the driver mask so feeder threads inherit it.
             kwargs = {}
@@ -812,6 +1001,22 @@ class AsyncBatchedCollector(BaseCollector):
                     "thread has exited."
                 )
 
+            if self._uses_process_env_workers:
+                self._process_pause_event.set()
+                pause_timer = timeit("AsyncBatchedCollector.process_pause", sync=False)
+                pause_timer.start()
+                while not all(event.is_set() for event in self._process_paused_events):
+                    self._check_process_workers()
+                    if not self._server.is_alive:
+                        raise RuntimeError("The inference server exited while pausing.")
+                    if timeout is not None and pause_timer.elapsed() >= timeout:
+                        raise TimeoutError(
+                            "Timed out while waiting for environment workers to pause."
+                        )
+                    self._shutdown_event.wait(0.01)
+                yield None
+                return
+
             request = (threading.Barrier(len(workers) + 1), threading.Event())
             self._pause_request[0] = request
             try:
@@ -830,6 +1035,14 @@ class AsyncBatchedCollector(BaseCollector):
             yield None
         finally:
             try:
+                if self._uses_process_env_workers and workers:
+                    self._process_pause_event.clear()
+                    # Wait for acknowledgement reset before a subsequent pause.
+                    while any(event.is_set() for event in self._process_paused_events):
+                        if self._shutdown_event.wait(0.01) or not all(
+                            worker.is_alive() for worker in workers
+                        ):
+                            break
                 if request is not None:
                     if self._pause_request[0] is request:
                         self._pause_request[0] = None
@@ -842,6 +1055,11 @@ class AsyncBatchedCollector(BaseCollector):
     def env(self) -> AsyncEnvPool:
         """The underlying :class:`AsyncEnvPool`."""
         self._ensure_started()
+        if self._env_pool is None:
+            raise RuntimeError(
+                "ProcessSlotTransport runs environments directly in worker "
+                "processes and does not create an AsyncEnvPool."
+            )
         return self._env_pool
 
     @property
@@ -874,9 +1092,9 @@ class AsyncBatchedCollector(BaseCollector):
     _SERVER_DEATH_GRACE_S = 2.0
 
     def _check_worker_result(self, item):
-        """Re-raise exceptions propagated from coordinator threads.
+        """Re-raise exceptions propagated from collector workers.
 
-        Worker threads may observe a dying server before the liveness
+        Workers may observe a dying server before the liveness
         watchdog does: their transport read errors out first, and process
         teardown is asynchronous, so a killed server can still report alive
         for a moment. Mailbox transport failures identify a dead peer by
@@ -902,11 +1120,22 @@ class AsyncBatchedCollector(BaseCollector):
                 if time.monotonic() >= deadline:
                     break
                 time.sleep(0.1)
+            worker_kind = "process" if self._uses_process_env_workers else "thread"
             raise RuntimeError(
-                "A collector worker thread raised an exception."
+                f"A collector worker {worker_kind} raised an exception."
             ) from item
 
     _LIVENESS_POLL_S = 1.0
+
+    def _check_process_workers(self) -> None:
+        try:
+            error = self._worker_error_queue.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            raise RuntimeError("An environment worker failed.") from error
+        if any(not worker.is_alive() for worker in self._workers):
+            raise RuntimeError("An environment worker process exited while collecting.")
 
     def _next_result(self) -> TensorDictBase:
         """Block for the next transition, watching server and worker liveness.
@@ -918,6 +1147,12 @@ class AsyncBatchedCollector(BaseCollector):
         """
         rq = self._result_queue
         while True:
+            if (
+                self._uses_process_env_workers
+                and self._worker_check_timer.elapsed() >= self._LIVENESS_POLL_S
+            ):
+                self._worker_check_timer.start()
+                self._check_process_workers()
             try:
                 td = rq.get(timeout=self._LIVENESS_POLL_S)
             except queue.Empty:
@@ -929,10 +1164,30 @@ class AsyncBatchedCollector(BaseCollector):
                     ) from None
                 if self._workers and not any(w.is_alive() for w in self._workers):
                     raise RuntimeError(
-                        "All collector worker threads exited while the "
+                        "All collector workers exited while the "
                         "collector was waiting for transitions."
                     ) from None
+                if self._uses_process_env_workers:
+                    exited = [
+                        worker for worker in self._workers if not worker.is_alive()
+                    ]
+                    if exited:
+                        details = ", ".join(
+                            f"{worker.name} (exitcode={worker.exitcode})"
+                            for worker in exited
+                        )
+                        raise RuntimeError(
+                            "Environment worker process exited while the "
+                            f"collector was running: {details}."
+                        ) from None
                 continue
+            except (EOFError, OSError) as exc:
+                if not self._uses_process_env_workers:
+                    raise
+                self._check_process_workers()
+                raise RuntimeError(
+                    "An environment worker result could not be received."
+                ) from exc
             self._check_worker_result(td)
             return td
 
@@ -970,6 +1225,13 @@ class AsyncBatchedCollector(BaseCollector):
                     td = rq.get_nowait()
                 except queue.Empty:
                     break
+                except (EOFError, OSError) as exc:
+                    if not self._uses_process_env_workers:
+                        raise
+                    self._check_process_workers()
+                    raise RuntimeError(
+                        "An environment worker result could not be received."
+                    ) from exc
                 self._check_worker_result(td)
                 if self._uses_batched_coordinator:
                     for transition in td.unbind(0):
@@ -1049,7 +1311,7 @@ class AsyncBatchedCollector(BaseCollector):
         raise_on_error: bool = True,
     ) -> None:
         """Shut down the collector, inference server, threads and env pool."""
-        if self._shutdown_event is not None:
+        if self._shutdown_event is not None and self._workers:
             self._shutdown_event.set()
         request = self._pause_request[0]
         self._pause_request[0] = None
@@ -1057,14 +1319,45 @@ class AsyncBatchedCollector(BaseCollector):
             request[0].abort()
             request[1].set()
         self._transition_carry.clear()
-        _timeout = timeout or 5.0
-        for w in self._workers:
-            w.join(timeout=_timeout)
+        _timeout = 5.0 if timeout is None else timeout
+        shutdown_timer = timeit("AsyncBatchedCollector.shutdown").start()
+        if self._uses_process_env_workers:
+            while any(worker.is_alive() for worker in self._workers):
+                if shutdown_timer.elapsed() >= _timeout:
+                    break
+                if self._result_queue is not None:
+                    while True:
+                        try:
+                            self._result_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                        except (EOFError, OSError):
+                            # The item is already removed from the queue, but
+                            # rebuilding a discarded tensor can fail once its
+                            # worker's resource sharer has exited.
+                            continue
+                for worker in self._workers:
+                    worker.join(timeout=0.05)
+            for worker in self._workers:
+                if worker.is_alive():
+                    worker.terminate()
+                worker.join(timeout=1.0)
+        else:
+            for worker in self._workers:
+                worker.join(timeout=_timeout)
         self._workers = []
-        self._server.shutdown(timeout=_timeout)
+        self._server.shutdown(timeout=max(0.0, _timeout - shutdown_timer.elapsed()))
         if close_env and self._env_pool is not None:
             self._env_pool.close(raise_if_closed=raise_on_error)
             self._env_pool = None
+        if self._uses_process_env_workers and self._result_queue is not None:
+            self._result_queue.close()
+            self._result_queue.join_thread()
+            self._result_queue = None
+        if self._worker_error_queue is not None:
+            self._worker_error_queue.close()
+            self._worker_error_queue.join_thread()
+            self._worker_error_queue = None
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Set the seed (no-op; envs are created inside the pool)."""

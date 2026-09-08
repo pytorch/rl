@@ -47,6 +47,7 @@ lifecycle.
     SlotTransport
     MPTransport
     SharedMemoryTransport
+    ProcessSlotTransport
     RayTransport
     MonarchTransport
 
@@ -185,6 +186,51 @@ all device transfers (batches are moved to ``policy_device`` before the
 forward pass, results copied back into the CPU response slots).
 ``num_slots`` bounds the number of concurrently in-flight requests and
 provides natural backpressure.
+
+Direct process-slot transport
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For one synchronous acting loop per environment worker,
+:class:`ProcessSlotTransport` assigns one fixed request/response slot to each
+worker. Workers notify the dedicated inference process through a shared
+semaphore, and the server sweeps ready slots in round-robin order. Observation
+and action tensors therefore never cross the driver process:
+
+.. code-block:: python
+
+    import torch
+    from tensordict import TensorDict
+    from torchrl.collectors import AsyncBatchedCollector
+    from torchrl.modules.inference_server import (
+        InferenceServerConfig,
+        ProcessSlotTransport,
+    )
+
+    num_envs = 64
+    transport = ProcessSlotTransport(
+        request_spec=TensorDict({"pixels": torch.zeros(3, 84, 84, dtype=torch.uint8)}),
+        response_spec=TensorDict(
+            {
+                "action": torch.zeros(6),
+                "policy_version": torch.zeros((), dtype=torch.long),
+            }
+        ),
+        num_slots=num_envs,
+    )
+    collector = AsyncBatchedCollector(
+        create_env_fn=[make_env] * num_envs,
+        policy_factory=make_policy,
+        transport=transport,
+        env_backend="multiprocessing",
+        server_config=InferenceServerConfig(
+            service_backend="process", max_batch_size=num_envs
+        ),
+        frames_per_batch=1024,
+    )
+
+The driver continues to receive completed transitions from the workers. The
+transport requires fixed-shape CPU tensor request and response specs; policy
+execution and device transfers remain owned by the inference process.
 
 Structured Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^
