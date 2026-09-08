@@ -132,16 +132,17 @@ time and graph size, while `1` disables manual unrolling.
 backward after five warmup calls. It requires CUDA and fixed input shapes;
 optimizer and target-network steps remain outside capture so their schedules
 continue to advance normally.
+
 `optimization.compile_learner` compiles the encoder, decoder, reward,
 continuation, actor and value networks together with the value and replay-value
 losses (`losses`), or additionally the actor loss with its imagination rollout
 (`all`). `losses` is numerically identical to eager and is part of `--fast`;
 `all` moves the imagination draws inside the compiled region, like the `scan`
 backend, and needs a CUDA or CPU device: the MPS inductor backend cannot
-compile the random draws. Both shrink the number of kernels the captured graph replays, which is
-where the learner spends its time once the recurrence is compiled. On one
-NVIDIA GB10 with PyTorch 2.13.0, batch size 16, sequence length 64 and scan
-unroll 8, the learner update went from 27.8 ms (scan and capture only) to
-23.1 ms with `losses` and 17.2 ms with `all`, and the training script from 33.5
-to 43.4 and 52.0 updates per second; the upstream JAX implementation measured
-23.4 ms on the same GPU.
+compile the random draws. Both shrink the number of kernels the captured graph
+replays, which is where the learner spends its time once the recurrence is
+compiled. On one NVIDIA GB10 with PyTorch 2.13.0, batch size 16, sequence
+length 64 and scan unroll 8, the learner update went from 27.8 ms (scan and
+capture only) to 23.1 ms with `losses` and 17.2 ms with `all`, and the training
+script from 33.5 to 43.4 and 52.0 updates per second; the upstream JAX
+implementation measured 23.4 ms on the same GPU.
