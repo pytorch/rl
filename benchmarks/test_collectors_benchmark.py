@@ -40,7 +40,7 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.modules import MLP, RandomPolicy
+from torchrl.modules import inference_server, MLP, RandomPolicy
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServerConfig,
@@ -69,7 +69,9 @@ class _ResetLatencyPixelEnv(PixelMockEnv):
         "async-shm",
         "async-shm-integrated",
         "async-shm-grouped",
+        "async-process-slots",
         pytest.param("async-shm-static", marks=pytest.mark.gpu),
+        pytest.param("async-process-slots-static", marks=pytest.mark.gpu),
     ],
 )
 def test_async_collection_pixels(benchmark, mode, regime):
@@ -81,8 +83,11 @@ def test_async_collection_pixels(benchmark, mode, regime):
     has_grouping = (
         "envs_per_worker" in inspect.signature(AsyncBatchedCollector).parameters
     )
+    use_process = mode.startswith("async-process-slots")
+    if use_process and not hasattr(inference_server, "ProcessSlotTransport"):
+        pytest.skip("Direct process slots are not available on this revision")
     integrated = mode == "async-shm-integrated"
-    use_static = mode == "async-shm-static" or (
+    use_static = mode in ("async-shm-static", "async-process-slots-static") or (
         integrated and device != "cpu" and has_static
     )
     group_size = (
@@ -103,7 +108,7 @@ def test_async_collection_pixels(benchmark, mode, regime):
     rounds = 5
     warmup_rounds = 2
     gc.collect()
-    if device != "cpu":
+    if device != "cpu" and not use_process:
         torch.cuda.empty_cache()
     torch.manual_seed(0)
     old_threads = torch.get_num_threads()
@@ -138,13 +143,32 @@ def test_async_collection_pixels(benchmark, mode, regime):
         else:
             config = {"static_batch_size": num_envs} if use_static else {}
             grouped = {"envs_per_worker": group_size} if group_size > 1 else {}
+            process_options = {}
+            if use_process:
+                probe = factories[0]()
+                try:
+                    request_spec = probe.fake_tensordict().select("pixels", strict=True)
+                    response_spec = probe.rand_action().set(
+                        "policy_version",
+                        torch.zeros(probe.batch_size, dtype=torch.long),
+                    )
+                finally:
+                    probe.close()
+                process_options["transport"] = inference_server.ProcessSlotTransport(
+                    request_spec=request_spec,
+                    response_spec=response_spec,
+                    num_slots=num_envs,
+                )
+                config["service_backend"] = "process"
             collector = AsyncBatchedCollector(
                 factories,
                 policy_factory=policy_factory,
                 frames_per_batch=frames_per_batch,
                 total_frames=-1,
                 env_backend="multiprocessing",
-                env_exchange="queue" if mode == "async-queue" else "shm",
+                env_exchange=(
+                    "queue" if mode == "async-queue" or use_process else "shm"
+                ),
                 server_config=InferenceServerConfig(
                     max_batch_size=num_envs, min_batch_size=1, timeout=0.001, **config
                 ),
@@ -152,6 +176,7 @@ def test_async_collection_pixels(benchmark, mode, regime):
                     policy_device=device, output_device="cpu", storing_device="cpu"
                 ),
                 **grouped,
+                **process_options,
             )
         iterator = iter(collector)
         latencies = []
@@ -169,7 +194,7 @@ def test_async_collection_pixels(benchmark, mode, regime):
         for _ in range(warmup_rounds):
             collect_round()
         latencies.clear()
-        if device != "cpu":
+        if device != "cpu" and not use_process:
             torch.cuda.synchronize()
             torch.cuda.reset_peak_memory_stats()
         if isinstance(collector, AsyncBatchedCollector):
@@ -178,7 +203,10 @@ def test_async_collection_pixels(benchmark, mode, regime):
         latency_ms = torch.tensor(latencies[: rounds * batches_per_round]) * 1000
         process = psutil.Process()
         benchmark.extra_info.update(
-            execution=f"{'graph' if use_static else 'eager'}; {group_size} envs/worker",
+            execution=(
+                f"{'graph' if use_static else 'eager'}; {group_size} envs/worker"
+                + ("; process acting" if use_process else "")
+            ),
             num_envs=num_envs,
             frames_per_batch=frames_per_batch,
             transitions=frames_per_batch * batches_per_round,
@@ -191,7 +219,7 @@ def test_async_collection_pixels(benchmark, mode, regime):
                 for child in [process, *process.children(recursive=True)]
             ),
         )
-        if device != "cpu":
+        if device != "cpu" and not use_process:
             benchmark.extra_info[
                 "cuda_peak_allocated_bytes"
             ] = torch.cuda.max_memory_allocated()
