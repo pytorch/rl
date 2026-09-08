@@ -25,7 +25,8 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 
 # this workflow only tests the libs
 python -c "import pettingzoo"
+python -c "import lbforaging"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 --capture no -k TestPettingZoo --error-for-skips
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 --capture no -k "TestPettingZoo or TestLBForaging" --error-for-skips
 coverage combine -q
 coverage xml -i

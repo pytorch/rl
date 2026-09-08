@@ -12,7 +12,7 @@ from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
+from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
 from torchrl.envs.utils import _classproperty
 
 _has_lbforaging = importlib.util.find_spec("lbforaging") is not None
@@ -45,6 +45,8 @@ class LBForagingWrapper(_EnvWrapper):
     that structure the way every other TorchRL multi-agent wrapper does:
     per-agent entries nested under a single ``"agents"`` group, and the
     shared ``done``/``terminated``/``truncated`` at the root.
+    Reaching LBF's step limit with food still on the board is a truncation;
+    collecting the last food item is a termination, including at the step limit.
 
     Args:
         env (gymnasium.Env): a Level-Based Foraging environment, i.e. the
@@ -113,7 +115,7 @@ class LBForagingWrapper(_EnvWrapper):
         categorical_actions: bool = True,
         seed: int | None = None,
         **kwargs,
-    ) -> None:
+    ):
         if env is not None:
             kwargs["env"] = env
         self.categorical_actions = categorical_actions
@@ -145,6 +147,7 @@ class LBForagingWrapper(_EnvWrapper):
             )
         return env
 
+    @set_gym_backend("gymnasium")
     def _make_specs(self, env) -> None:
         self.n_agents = env.unwrapped.n_agents
         self.group_map = {"agents": [str(i) for i in range(self.n_agents)]}
@@ -160,7 +163,8 @@ class LBForagingWrapper(_EnvWrapper):
         self.full_observation_spec = Composite(
             {
                 "agents": Composite(
-                    {"observation": observation_spec}, shape=torch.Size((self.n_agents,))
+                    {"observation": observation_spec},
+                    shape=torch.Size((self.n_agents,)),
                 )
             }
         )
@@ -214,9 +218,7 @@ class LBForagingWrapper(_EnvWrapper):
             batch_size=torch.Size((self.n_agents,)),
             device=self.device,
         )
-        return TensorDict(
-            {"agents": agents_td}, batch_size=(), device=self.device
-        )
+        return TensorDict({"agents": agents_td}, batch_size=(), device=self.device)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(("agents", "action"))
@@ -224,6 +226,16 @@ class LBForagingWrapper(_EnvWrapper):
         observations, rewards, terminated, truncated, _info = self._env.step(
             [int(a) for a in action_np]
         )
+        # LBF reports both food completion and its native time limit as
+        # termination. Preserve bootstrapping when only the time limit ended play.
+        base_env = self._env.unwrapped
+        if (
+            terminated
+            and base_env.current_step >= base_env._max_episode_steps
+            and base_env.field.any()
+        ):
+            terminated = False
+            truncated = True
 
         agents_td = TensorDict(
             {
@@ -289,7 +301,7 @@ class LBForagingEnv(LBForagingWrapper):
         categorical_actions: bool = True,
         seed: int | None = None,
         **kwargs,
-    ) -> None:
+    ):
         if not _has_lbforaging:
             raise ImportError(
                 f"lbforaging python package was not found. Please install this dependency. "

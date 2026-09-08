@@ -18,6 +18,7 @@ from torch import nn
 
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.envs.libs.gym import set_gym_backend
 from torchrl.envs.libs.lbforaging import (
     _has_lbforaging,
     LBForagingEnv,
@@ -602,22 +603,25 @@ class TestSmacv2:
 @pytest.mark.skipif(not _has_lbforaging, reason="lbforaging not found")
 class TestLBForaging:
     @pytest.mark.parametrize("categorical_actions", [True, False])
-    @pytest.mark.parametrize("env_name", ["Foraging-8x8-2p-3f-v3", "Foraging-5x5-3p-2f-v3"])
+    @pytest.mark.parametrize(
+        "env_name", ["Foraging-8x8-2p-3f-v3", "Foraging-5x5-3p-2f-v3"]
+    )
     def test_env(self, env_name, categorical_actions):
-        env = LBForagingEnv(
-            env_name, categorical_actions=categorical_actions, seed=0
-        )
+        env = LBForagingEnv(env_name, categorical_actions=categorical_actions, seed=0)
         check_env_specs(env, seed=None)
         env.close()
 
-    def test_wrapper(self):
+    @pytest.mark.parametrize("backend", ["gym", "gymnasium"])
+    def test_wrapper(self, backend):
         import gymnasium
         import lbforaging  # noqa: F401 - registers the Foraging-* Gymnasium environments.
 
+        pytest.importorskip(backend)
         base_env = gymnasium.make("Foraging-8x8-2p-3f-v3", disable_env_checker=True)
-        env = LBForagingWrapper(base_env, categorical_actions=False, seed=0)
-        check_env_specs(env, seed=None)
-        env.close()
+        with set_gym_backend(backend):
+            env = LBForagingWrapper(base_env, categorical_actions=False, seed=0)
+            check_env_specs(env, seed=None)
+            env.close()
 
     def test_reward_and_grouping(self):
         env = LBForagingEnv("Foraging-8x8-2p-3f-v3", seed=0)
@@ -629,14 +633,41 @@ class TestLBForaging:
         assert rollout["next", "done"].shape == (5, 1)
         env.close()
 
-    def test_truncation_vs_termination(self):
-        # A step limit much shorter than an episode could otherwise take
-        # guarantees a truncation (done but not a real terminal state).
-        env = LBForagingEnv(
-            "Foraging-5x5-2p-1f-v3", seed=0, max_episode_steps=5
+    @pytest.mark.parametrize("max_episode_steps", [None, 5, 50])
+    @pytest.mark.parametrize("collect_food", [False, True])
+    def test_truncation_vs_termination(self, max_episode_steps, collect_food):
+        from lbforaging.foraging.environment import Action
+
+        kwargs = (
+            {}
+            if max_episode_steps is None
+            else {"max_episode_steps": max_episode_steps}
         )
-        rollout = env.rollout(50, break_when_any_done=False)
-        assert rollout["next", "truncated"].any()
+        env = LBForagingEnv("Foraging-5x5-2p-1f-v3", seed=0, **kwargs)
+        td = env.reset()
+        # Put both agents beside the last food item so LOAD deterministically
+        # completes the task on the final step, even when a time limit coincides.
+        base_env = env._env.unwrapped
+        base_env.field.fill(0)
+        base_env.field[2, 2] = 1
+        for player, position in zip(base_env.players, [(2, 1), (2, 3)]):
+            player.position = position
+        base_env._gen_valid_moves()
+
+        horizon = 50 if max_episode_steps is None else max_episode_steps
+        for step in range(horizon):
+            action = (
+                Action.LOAD if collect_food and step == horizon - 1 else Action.NONE
+            )
+            td["agents", "action"] = torch.full((env.n_agents,), action.value)
+            td = env.step(td)["next"]
+            assert td["done"].item() == (step == horizon - 1)
+        assert td["terminated"].item() == collect_food
+        assert td["truncated"].item() == (
+            not collect_food or max_episode_steps is not None
+        )
+        if collect_food:
+            assert td["agents", "reward"].sum() > 0
         env.close()
 
     def test_collector(self):
