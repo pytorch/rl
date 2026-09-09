@@ -51,6 +51,16 @@ becomes public in #4272. They keep one environment per worker because that
 transport rejects grouped workers. The same workload and batching limits apply;
 these remain separate series alongside the grouped integrated curve.
 
+`async-process-slots-integrated` is the cumulative curve of the direct-transport
+pipeline, the counterpart of `async-shm-integrated`. It keeps one environment per
+worker (the transport rejects grouped workers), enables static inference batches
+on GPU when that option is available, and sends 64 transitions per worker message
+once `AsyncBatchedCollector` accepts `transition_chunk_size`; before that it
+matches `async-process-slots`. Each point records its configuration in the
+`execution` field, so a step in this series can be attributed to the option that
+changed. Use the fixed `async-process-slots*` series to separate the individual
+changes.
+
 `test_async_collection_pixels_64_envs[mode]` adds a separate CUDA acceptance
 comparison for `async-shm` and `async-process-slots`: 64 environments, one per
 worker, with the same CNN plus two 1024-wide layers, one-millisecond environment
@@ -67,6 +77,40 @@ measurement budget remain fixed. Each point records the execution configuration
 in its tooltip, summary and raw JSON. These explicit configuration transitions
 show the combined pipeline as features land; use the fixed modes to separate
 individual changes and detect regressions.
+
+## DreamerV3 training series
+
+`test_dreamer_v3_async_training[backend-ratio]` (`test_dreamer_v3_benchmark.py`)
+measures the `sota-implementations/dreamer_v3` example end to end. The example
+runs unmodified in a child process, so changes to its training loop, replay
+write-back, inference wiring or process setup show up here without a dedicated
+micro-benchmark. The workload is `bench_dreamer_v3_env.py`: eight environment
+processes producing 3 x 64 x 64 uint8 pixels, an 8-float vector and three boolean
+milestones, with one-millisecond steps, six discrete actions and episode lengths
+staggered by environment index. Collection is asynchronous with shared-memory
+exchange and one environment per worker; the learner runs eagerly on the GPU
+(`optimization.compile=off`) with a small network configuration, replay batches of
+16 sequences of 32 records and replay context write-back enabled.
+
+| Series | Learner updates per collected record | Emphasis |
+| --- | --- | --- |
+| `ratio2` | `train_ratio=2`: one update per 256-transition batch | collection path, driver overhead |
+| `ratio16` | `train_ratio=16`: eight updates per batch | learner step, replay sampling and write-back |
+
+`thread` serves the acting policy from the training process; `process` serves it
+from a dedicated inference process and skips until the example exposes
+`collector.inference_backend`. The series are CUDA-only.
+
+Throughput is read from the example's own metrics log (`logger.metrics_jsonl`,
+one `train` record per 256-transition batch): after the first learner update,
+two warm-up rounds of 1,024 environment steps pass unmeasured, then five
+measured rounds each wait for the next 1,024 steps to be logged. Setup, process
+startup, replay warm-up and the final shutdown stay outside the measurement.
+The summary reports frames per second like the other series; the raw JSON adds
+learner updates per second, updates per round and the process-tree RSS. The
+pinned lock adds `hydra-core` and `omegaconf` for the example; no other series
+imports them, so the v1 trend continues. CUDA-graph inference batches stay
+disabled in this workload.
 
 ## Reading results
 
@@ -121,7 +165,8 @@ Locally, install `benchmarks/requirements.txt` and run from the repository:
 ```sh
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONHASHSEED=0 python -m pytest \
   benchmarks/test_envs_benchmark.py benchmarks/test_collectors_benchmark.py \
-  -k 'async_env_pool or async_collection_pixels' --timeout=300 \
+  benchmarks/test_dreamer_v3_benchmark.py \
+  -k 'async_env_pool or async_collection_pixels or dreamer_v3_async' --timeout=300 \
   --benchmark-only --benchmark-save-data --benchmark-json=async-1.json
 ```
 
