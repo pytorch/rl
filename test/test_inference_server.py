@@ -4187,13 +4187,20 @@ class TestAsyncBatchedCollector:
                 env_backend="threading",
             )
 
-    def test_auto_transport_serves_from_environment_processes(self):
+    @pytest.mark.parametrize(
+        "batch_size, policy_version_key",
+        [((), "policy_version"), ((2,), ("collector", "policy_version"))],
+    )
+    def test_auto_transport_serves_from_environment_processes(
+        self, batch_size, policy_version_key
+    ):
         """transport='auto' derives the slot layouts and picks process slots."""
         num_envs = 2
         collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * num_envs,
+            create_env_fn=[ft.partial(CountingEnv, batch_size=batch_size)] * num_envs,
             policy_factory=_make_counting_policy,
             transport="auto",
+            policy_version_key=policy_version_key,
             frames_per_batch=12,
             total_frames=24,
             env_backend="multiprocessing",
@@ -4206,7 +4213,8 @@ class TestAsyncBatchedCollector:
             for batch in collector:
                 frames += batch.numel()
                 assert batch["action"].eq(1).all()
-                assert "policy_version" in batch.keys()
+                assert batch[policy_version_key].shape == batch.batch_size
+                assert batch[policy_version_key].eq(0).all()
             assert frames == 24
         finally:
             collector.shutdown()

@@ -511,7 +511,9 @@ def _auto_process_slot_transport(
         return None, f"the policy did not return its outputs {missing}"
     response = output.select(*out_keys, strict=True).cpu()
     if policy_version_key is not None:
-        response.set(policy_version_key, torch.zeros((), dtype=torch.long))
+        response.set(
+            policy_version_key, torch.zeros(response.batch_size, dtype=torch.long)
+        )
     return ProcessSlotTransport(request, response, num_slots=num_slots), None
 
 
