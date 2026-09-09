@@ -2941,7 +2941,14 @@ def test_dreamer_v3_checkpoint_resume_processes(
                 assert not replay[stream][tails[stream]]["next", "terminated"].any()
             for _ in range(20):
                 sample = replay.sample().reshape(2, 4)
-                assert not sample["is_init"][:, 1:].any()
+                is_init = sample["is_init"].reshape(2, 4)
+                if collector_backend == "async":
+                    # Async streams cross episode ends: a reset follows every closed
+                    # record (the tail closed by the restart included), nothing else.
+                    done = sample["next", "done"].reshape(2, 4)
+                    assert torch.equal(is_init[:, 1:], done[:, :-1])
+                else:
+                    assert not is_init[:, 1:].any()
         finally:
             replay.shutdown()
 

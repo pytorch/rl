@@ -577,8 +577,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
         Each member must hold one chronological stream in a one-dimensional
         tensor storage, with a generation-tracking round-robin writer and a
         :class:`SliceSampler` (including :class:`StreamingSliceSampler`) configured
-        to read ``end_key``. Trajectory-ID sampling is not supported by this
-        operation because restarted producers may reuse old IDs.
+        to read ``end_key``. A sampler with a ``traj_key`` is accepted only when
+        every record of the member carries the same trajectory id (a per-stream
+        key such as the environment index); with distinct ids, restarted
+        producers may reuse old ones and the call raises.
 
         Pending samples and conditional updates finish before tail selection.
         Tail patches keep write counts and slot generations unchanged. Existing
@@ -649,7 +651,6 @@ class ReplayBufferEnsemble(ReplayBuffer):
                     or not isinstance(writer, RoundRobinWriter)
                     or not writer.tracks_generations
                     or not isinstance(sampler, SliceSampler)
-                    or sampler.traj_key is not None
                     or end_key not in (sampler.end_keys or [sampler.end_key])
                 ):
                     raise RuntimeError(
@@ -658,6 +659,26 @@ class ReplayBufferEnsemble(ReplayBuffer):
                     )
                 if not len(member):
                     continue
+                if sampler.traj_key is not None:
+                    # One trajectory id per member (a per-stream key such as the
+                    # environment index) keeps the stream a single trajectory across
+                    # restarts. Distinct ids may be reused by restarted producers,
+                    # which a tail patch cannot separate.
+                    data = storage._storage
+                    trajectory = (
+                        data.get(sampler.traj_key, default=None)
+                        if is_tensor_collection(data)
+                        else None
+                    )
+                    if trajectory is None or not bool(
+                        (trajectory[: len(member)] == trajectory[0]).all()
+                    ):
+                        raise RuntimeError(
+                            "end_streams supports trajectory-keyed slice samplers only "
+                            "when every record of a member carries the same trajectory "
+                            "id (a per-stream key such as the environment index); "
+                            "restarted producers may otherwise reuse old ids."
+                        )
                 index = torch.tensor(
                     [(int(writer._cursor) - 1) % len(member)], device=storage.device
                 )
