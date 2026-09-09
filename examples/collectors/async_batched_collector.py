@@ -53,6 +53,9 @@ def main():
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         max_batch_size=num_envs,
+        # Environment workers as processes; the shared-memory exchange is picked
+        # automatically for this fixed-shape environment.
+        env_backend="multiprocessing",
         device="cpu",
     )
 
