@@ -619,11 +619,17 @@ class DreamerV3SeededPolicy(TensorDictModuleBase):
         reference = tensordict.get("state", None)
         if reference is None:
             reference = tensordict.get(self.in_keys[0])
-        devices = [reference.device] if reference.device.type == "cuda" else []
-        with torch.random.fork_rng(devices=devices):
+        device = reference.device
+        devices = [device] if device.type != "cpu" else []
+        with torch.random.fork_rng(devices=devices, device_type=device.type):
             rng = np.random.default_rng(seed=[self.seed, self.counter, 0])
             words = rng.integers(0, np.iinfo(np.uint32).max, (2,), np.uint32)
-            torch.manual_seed((int(words[0]) << 32) | int(words[1]))
+            seed = (int(words[0]) << 32) | int(words[1])
+            torch.random.default_generator.manual_seed(seed)
+            if devices:
+                getattr(torch, device.type).set_rng_state(
+                    torch.Generator(device=device).manual_seed(seed).get_state(), device
+                )
             self.counter += 1
             return self.module(tensordict)
 
