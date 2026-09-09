@@ -95,20 +95,16 @@ Strongly encouraged (not mandatory):
 
 ### 6b. Device placement
 
-- **Create tensors and modules directly on their target device.** Pass
-  `device=` to factory functions and constructors (`torch.zeros(...,
-  device=device)`, spec and storage `device=` arguments, `nn.Linear(...,
-  device=device)`), or build a whole model under `with torch.device(device):`.
-  Do not build on CPU and move afterwards with `.to(device)`, `.cuda()` or
-  `.to(tensor)`: the detour allocates twice, serializes host-to-device copies
-  into startup, and hides placement bugs until the move.
-- The same applies to state created at run time (buffers, replay storages,
-  initial recurrent states, RNG-driven noise): derive the device from the
-  data or parameters involved and allocate there.
-- Exceptions, which must be stated in a comment: buffers that have to live on
-  the host by design (pinned staging memory, shared-memory slots, checkpoint
-  loading to CPU before dispatch), and moving user-supplied objects whose
-  device the caller chose.
+- **Create tensors and modules directly on their target device** using
+  `device=` (factories, constructors, specs, storages) or
+  `with torch.device(device):`. Do not create on CPU then call `.to(device)`,
+  `.cuda()` or `.to(tensor)`: this adds allocations and startup copies and
+  hides placement bugs.
+- For runtime state (buffers, replay storages, initial recurrent states,
+  random noise), allocate on the device of the relevant data or parameters.
+- Document exceptions in a comment: required host allocations (pinned
+  staging memory, shared-memory slots, checkpoint loading on CPU before
+  dispatch), or moving user-supplied objects whose device the caller chose.
 
 ## 7. Tests
 
