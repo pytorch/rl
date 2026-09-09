@@ -985,8 +985,8 @@ def main(cfg: DictConfig):
     reset_records = int(run_state.get("reset_records", 0)) + num_envs
     record_step = action_step + reset_records if count_reset_records else action_step
     update_step = int(run_state.get("updates", 0))
-    running_training_return = torch.zeros(num_envs)
-    seen_stream = torch.zeros(num_envs, dtype=torch.bool)
+    running_training_return = torch.zeros(num_envs, device="cpu")
+    seen_stream = torch.zeros(num_envs, dtype=torch.bool, device="cpu")
     completed_episodes: list[tuple[int, int, float]] = []
     completed_milestones: list[list[bool]] = []
     milestone_key = _normalize_hydra_key(cfg.env.milestone_key)
@@ -1015,7 +1015,9 @@ def main(cfg: DictConfig):
         if env_index is None:
             # Report synchronous episodes in time-major, then environment order.
             is_init = is_init.reshape(num_envs, -1).t().reshape(-1)
-            env_index = torch.arange(num_envs).repeat(data.numel() // num_envs)
+            env_index = torch.arange(num_envs, device="cpu").repeat(
+                data.numel() // num_envs
+            )
         else:
             env_index = env_index.reshape(-1).cpu()
         batch_reset_prefix.clear()
