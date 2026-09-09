@@ -5889,6 +5889,8 @@ the following function will return `1` when queried:
 | [`IsaacLabWrapper`](generated/torchrl.envs.IsaacLabWrapper.html#torchrl.envs.IsaacLabWrapper)(*args, **kwargs) | A wrapper for IsaacLab environments. |
 | [`JumanjiEnv`](generated/torchrl.envs.JumanjiEnv.html#torchrl.envs.JumanjiEnv)(*args, **kwargs) | Jumanji environment wrapper built with the environment name. |
 | [`JumanjiWrapper`](generated/torchrl.envs.JumanjiWrapper.html#torchrl.envs.JumanjiWrapper)(*args, **kwargs) | Jumanji's environment wrapper. |
+| [`LBForagingEnv`](generated/torchrl.envs.LBForagingEnv.html#torchrl.envs.LBForagingEnv)(*args, **kwargs) | Level-Based Foraging environment wrapper, constructed from an environment name. |
+| [`LBForagingWrapper`](generated/torchrl.envs.LBForagingWrapper.html#torchrl.envs.LBForagingWrapper)(*args, **kwargs) | Level-Based Foraging environment wrapper. |
 | [`LiberoEnv`](generated/torchrl.envs.LiberoEnv.html#torchrl.envs.LiberoEnv)(*args[, num_workers, num_envs]) | LIBERO environment built from a task-suite name and task id. |
 | [`LiberoWrapper`](generated/torchrl.envs.LiberoWrapper.html#torchrl.envs.LiberoWrapper)(*args, **kwargs) | LIBERO environment wrapper. |
 | [`MeltingpotEnv`](generated/torchrl.envs.MeltingpotEnv.html#torchrl.envs.MeltingpotEnv)(*args, **kwargs) | Meltingpot environment wrapper. |
@@ -34096,7 +34098,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f6111e72b60>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f51fd67b0b0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47413,7 +47415,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f6114f14f40>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f5200694f40>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -88376,6 +88378,122 @@ Median: 172.31 ms
 
 ---
 
+# LBForagingEnv
+
+torchrl.envs.LBForagingEnv(**args*, ***kwargs*)[[source]](../../_modules/torchrl/envs/libs/lbforaging.html#LBForagingEnv)
+
+Level-Based Foraging environment wrapper, constructed from an environment name.
+
+See `LBForagingWrapper` for a
+description of the environment and the tensordict layout it produces.
+
+Parameters:
+
+**env_name** (*str*) - the name of a registered Level-Based Foraging
+Gymnasium environment, e.g. `"Foraging-8x8-2p-3f-v3"` (an 8x8
+grid, 2 players, 3 food items). See
+`available_envs` for the full list.
+
+Keyword Arguments:
+
+- **categorical_actions** (*bool**,**optional*) - whether discrete actions
+should be provided as categorical indices or one-hot encodings.
+Defaults to `True`.
+- **seed** (*int**,**optional*) - the seed to use to reset the environment on
+the first call to [`reset()`](torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset). Defaults to `None`.
+- ****kwargs** - forwarded to `gymnasium.make`.
+
+Examples
+
+```
+>>> from torchrl.envs.libs.lbforaging import LBForagingEnv
+>>> env = LBForagingEnv("Foraging-8x8-2p-3f-v3", categorical_actions=False)
+>>> rollout = env.rollout(3)
+```
+
+---
+
+# LBForagingWrapper
+
+torchrl.envs.LBForagingWrapper(**args*, ***kwargs*)[[source]](../../_modules/torchrl/envs/libs/lbforaging.html#LBForagingWrapper)
+
+Level-Based Foraging environment wrapper.
+
+[Level-Based Foraging](https://github.com/semitable/lb-foraging) is a
+fully-cooperative, sparse-reward Gymnasium environment for evaluating
+multi-agent credit assignment: a variable number of agents, each with a
+randomly assigned level, must coordinate to collect food items that also
+have levels, and a food item is only collected when the agents currently
+adjacent to it have levels summing to at least its own.
+
+`lbforaging` exposes a single `gymnasium.Env` whose observation,
+action and reward spaces are `gymnasium.spaces.Tuple` instances, one
+entry per agent, and whose `terminated`/`truncated` flags are shared
+by the whole team (LBF episodes end when either all food is collected or
+a step limit is reached, for every agent at once). This wrapper exposes
+that structure the way every other TorchRL multi-agent wrapper does:
+per-agent entries nested under a single `"agents"` group, and the
+shared `done`/`terminated`/`truncated` at the root.
+Reaching LBF's step limit with food still on the board is a truncation;
+collecting the last food item is a termination, including at the step limit.
+
+Parameters:
+
+**env** (*gymnasium.Env*) - a Level-Based Foraging environment, i.e. the
+result of `gymnasium.make("Foraging-<...>-v3")` after
+`import lbforaging`.
+
+Keyword Arguments:
+
+- **categorical_actions** (*bool**,**optional*) - whether discrete actions
+should be provided as categorical indices or one-hot encodings.
+Defaults to `True`.
+- **seed** (*int**,**optional*) - the seed to use to reset the environment on
+the first call to [`reset()`](torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset). Defaults to `None`.
+
+Examples
+
+```
+>>> import gymnasium
+>>> import lbforaging
+>>> from torchrl.envs.libs.lbforaging import LBForagingWrapper
+>>> base_env = gymnasium.make("Foraging-8x8-2p-3f-v3")
+>>> env = LBForagingWrapper(base_env, categorical_actions=False)
+>>> env.rollout(3)
+TensorDict(
+ fields={
+ agents: TensorDict(
+ fields={
+ action: Tensor(shape=torch.Size([3, 2, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+ observation: Tensor(shape=torch.Size([3, 2, 15]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([3, 2]),
+ device=None,
+ is_shared=False),
+ done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+ next: TensorDict(
+ fields={
+ agents: TensorDict(
+ fields={
+ observation: Tensor(shape=torch.Size([3, 2, 15]), device=cpu, dtype=torch.float32, is_shared=False),
+ reward: Tensor(shape=torch.Size([3, 2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([3, 2]),
+ device=None,
+ is_shared=False),
+ done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+ terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+ truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+ batch_size=torch.Size([3]),
+ device=None,
+ is_shared=False),
+ terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+ truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+ batch_size=torch.Size([3]),
+ device=None,
+ is_shared=False)
+```
+
+---
+
 # LLMHashingEnv
 
 *class*torchrl.envs.LLMHashingEnv(**args*, ***kwargs*)[[source]](../../_modules/torchrl/envs/custom/llm.html#LLMHashingEnv)
@@ -92260,11 +92378,11 @@ RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 Background color for the `mujoco-torch` ray-cast renderer.
 Subclasses (e.g. satellite) override to a deep-space tone.
 
-REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'heading_std': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
+REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
 
 Default value of every term parameter a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) carries.
 
-REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'heading': _RegisteredTerm(fn=<function heading>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
+REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
 
 Registered reward terms by name, in weight-vector order.
 
@@ -278648,40 +278766,40 @@ loss.set_keys(
 
 # Computation times
 
-**08:22.704** total execution time for 30 files **from all galleries**:
+**00:00.000** total execution time for 30 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`reference/generated/tutorials/mujoco_cube_bowl_macros.py`) | 02:15.543 | 0.0 |
-| [TorchRL trainer: A DQN example](tutorials/coding_dqn.html#sphx-glr-tutorials-coding-dqn-py) (`reference/generated/tutorials/coding_dqn.py`) | 01:21.235 | 0.0 |
-| [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](tutorials/microduck.html#sphx-glr-tutorials-microduck-py) (`reference/generated/tutorials/microduck.py`) | 00:53.408 | 0.0 |
-| [Using pretrained models](tutorials/pretrained_models.html#sphx-glr-tutorials-pretrained-models-py) (`reference/generated/tutorials/pretrained_models.py`) | 00:37.155 | 0.0 |
-| [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:28.225 | 0.0 |
-| [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`reference/generated/tutorials/multiagent_ppo.py`) | 00:25.803 | 0.0 |
-| [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`reference/generated/tutorials/multiagent_competitive_ddpg.py`) | 00:25.401 | 0.0 |
-| [Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/coding_ppo.html#sphx-glr-tutorials-coding-ppo-py) (`reference/generated/tutorials/coding_ppo.py`) | 00:24.796 | 0.0 |
-| [TorchRL envs](tutorials/torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`reference/generated/tutorials/torchrl_envs.py`) | 00:24.699 | 0.0 |
-| [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:22.1000 | 0.0 |
-| [LLM Wrappers in TorchRL](tutorials/llm_wrappers.html#sphx-glr-tutorials-llm-wrappers-py) (`reference/generated/tutorials/llm_wrappers.py`) | 00:08.079 | 0.0 |
-| [Using the Evaluator](tutorials/evaluator.html#sphx-glr-tutorials-evaluator-py) (`reference/generated/tutorials/evaluator.py`) | 00:07.264 | 0.0 |
-| [Get started with your own first training loop](tutorials/getting-started-5.html#sphx-glr-tutorials-getting-started-5-py) (`reference/generated/tutorials/getting-started-5.py`) | 00:06.009 | 0.0 |
-| [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`reference/generated/tutorials/dqn_with_rnn.py`) | 00:05.640 | 0.0 |
-| [Introduction to TorchRL](tutorials/torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`reference/generated/tutorials/torchrl_demo.py`) | 00:05.231 | 0.0 |
-| [Pendulum: Writing your environment and transforms with TorchRL](tutorials/pendulum.html#sphx-glr-tutorials-pendulum-py) (`reference/generated/tutorials/pendulum.py`) | 00:04.469 | 0.0 |
-| [Task-specific policy in multi-task environments](tutorials/multi_task.html#sphx-glr-tutorials-multi-task-py) (`reference/generated/tutorials/multi_task.py`) | 00:04.229 | 0.0 |
-| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.907 | 0.0 |
-| [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.397 | 0.0 |
-| [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.385 | 0.0 |
-| [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.310 | 0.0 |
-| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.144 | 0.0 |
-| [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.081 | 0.0 |
-| [Get started with TorchRL's modules](tutorials/getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`reference/generated/tutorials/getting-started-1.py`) | 00:00.075 | 0.0 |
-| [Get started with logging](tutorials/getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`reference/generated/tutorials/getting-started-4.py`) | 00:00.072 | 0.0 |
-| [Getting started with model optimization](tutorials/getting-started-2.html#sphx-glr-tutorials-getting-started-2-py) (`reference/generated/tutorials/getting-started-2.py`) | 00:00.063 | 0.0 |
-| [Get started with Environments, TED and transforms](tutorials/getting-started-0.html#sphx-glr-tutorials-getting-started-0-py) (`reference/generated/tutorials/getting-started-0.py`) | 00:00.029 | 0.0 |
-| [Unified checkpointing in TorchRL](tutorials/checkpointing.html#sphx-glr-tutorials-checkpointing-py) (`reference/generated/tutorials/checkpointing.py`) | 00:00.024 | 0.0 |
-| [Render policy rollouts with rlrender](tutorials/rlrender.html#sphx-glr-tutorials-rlrender-py) (`reference/generated/tutorials/rlrender.py`) | 00:00.016 | 0.0 |
-| [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](tutorials/trl_interop.html#sphx-glr-tutorials-trl-interop-py) (`reference/generated/tutorials/trl_interop.py`) | 00:00.015 | 0.0 |
+| [Unified checkpointing in TorchRL](tutorials/checkpointing.html#sphx-glr-tutorials-checkpointing-py) (`reference/generated/tutorials/checkpointing.py`) | 00:00.000 | 0.0 |
+| [TorchRL objectives: Coding a DDPG loss](tutorials/coding_ddpg.html#sphx-glr-tutorials-coding-ddpg-py) (`reference/generated/tutorials/coding_ddpg.py`) | 00:00.000 | 0.0 |
+| [TorchRL trainer: A DQN example](tutorials/coding_dqn.html#sphx-glr-tutorials-coding-dqn-py) (`reference/generated/tutorials/coding_dqn.py`) | 00:00.000 | 0.0 |
+| [Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/coding_ppo.html#sphx-glr-tutorials-coding-ppo-py) (`reference/generated/tutorials/coding_ppo.py`) | 00:00.000 | 0.0 |
+| [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.000 | 0.0 |
+| [Recurrent DQN: Training recurrent policies](tutorials/dqn_with_rnn.html#sphx-glr-tutorials-dqn-with-rnn-py) (`reference/generated/tutorials/dqn_with_rnn.py`) | 00:00.000 | 0.0 |
+| [Using the Evaluator](tutorials/evaluator.html#sphx-glr-tutorials-evaluator-py) (`reference/generated/tutorials/evaluator.py`) | 00:00.000 | 0.0 |
+| [Exporting TorchRL modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.000 | 0.0 |
+| [Get started with Environments, TED and transforms](tutorials/getting-started-0.html#sphx-glr-tutorials-getting-started-0-py) (`reference/generated/tutorials/getting-started-0.py`) | 00:00.000 | 0.0 |
+| [Get started with TorchRL's modules](tutorials/getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`reference/generated/tutorials/getting-started-1.py`) | 00:00.000 | 0.0 |
+| [Getting started with model optimization](tutorials/getting-started-2.html#sphx-glr-tutorials-getting-started-2-py) (`reference/generated/tutorials/getting-started-2.py`) | 00:00.000 | 0.0 |
+| [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.000 | 0.0 |
+| [Get started with logging](tutorials/getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`reference/generated/tutorials/getting-started-4.py`) | 00:00.000 | 0.0 |
+| [Get started with your own first training loop](tutorials/getting-started-5.html#sphx-glr-tutorials-getting-started-5-py) (`reference/generated/tutorials/getting-started-5.py`) | 00:00.000 | 0.0 |
+| [LLM Wrappers in TorchRL](tutorials/llm_wrappers.html#sphx-glr-tutorials-llm-wrappers-py) (`reference/generated/tutorials/llm_wrappers.py`) | 00:00.000 | 0.0 |
+| [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.000 | 0.0 |
+| [MicroDuck: tasks as data, rewards as a registry, one policy for all of them](tutorials/microduck.html#sphx-glr-tutorials-microduck-py) (`reference/generated/tutorials/microduck.py`) | 00:00.000 | 0.0 |
+| [MuJoCo scripted manipulation with human-readable robot actions](tutorials/mujoco_cube_bowl_macros.html#sphx-glr-tutorials-mujoco-cube-bowl-macros-py) (`reference/generated/tutorials/mujoco_cube_bowl_macros.py`) | 00:00.000 | 0.0 |
+| [Task-specific policy in multi-task environments](tutorials/multi_task.html#sphx-glr-tutorials-multi-task-py) (`reference/generated/tutorials/multi_task.py`) | 00:00.000 | 0.0 |
+| [Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial](tutorials/multiagent_competitive_ddpg.html#sphx-glr-tutorials-multiagent-competitive-ddpg-py) (`reference/generated/tutorials/multiagent_competitive_ddpg.py`) | 00:00.000 | 0.0 |
+| [Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](tutorials/multiagent_ppo.html#sphx-glr-tutorials-multiagent-ppo-py) (`reference/generated/tutorials/multiagent_ppo.py`) | 00:00.000 | 0.0 |
+| [Pendulum: Writing your environment and transforms with TorchRL](tutorials/pendulum.html#sphx-glr-tutorials-pendulum-py) (`reference/generated/tutorials/pendulum.py`) | 00:00.000 | 0.0 |
+| [Using pretrained models](tutorials/pretrained_models.html#sphx-glr-tutorials-pretrained-models-py) (`reference/generated/tutorials/pretrained_models.py`) | 00:00.000 | 0.0 |
+| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.000 | 0.0 |
+| [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.000 | 0.0 |
+| [Render policy rollouts with rlrender](tutorials/rlrender.html#sphx-glr-tutorials-rlrender-py) (`reference/generated/tutorials/rlrender.py`) | 00:00.000 | 0.0 |
+| [Introduction to TorchRL](tutorials/torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`reference/generated/tutorials/torchrl_demo.py`) | 00:00.000 | 0.0 |
+| [TorchRL envs](tutorials/torchrl_envs.html#sphx-glr-tutorials-torchrl-envs-py) (`reference/generated/tutorials/torchrl_envs.py`) | 00:00.000 | 0.0 |
+| [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](tutorials/trl_interop.html#sphx-glr-tutorials-trl-interop-py) (`reference/generated/tutorials/trl_interop.py`) | 00:00.000 | 0.0 |
+| [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.000 | 0.0 |
 
 ---
 

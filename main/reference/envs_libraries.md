@@ -95,6 +95,8 @@ the following function will return `1` when queried:
 | [`IsaacLabWrapper`](generated/torchrl.envs.IsaacLabWrapper.html#torchrl.envs.IsaacLabWrapper)(*args, **kwargs) | A wrapper for IsaacLab environments. |
 | [`JumanjiEnv`](generated/torchrl.envs.JumanjiEnv.html#torchrl.envs.JumanjiEnv)(*args, **kwargs) | Jumanji environment wrapper built with the environment name. |
 | [`JumanjiWrapper`](generated/torchrl.envs.JumanjiWrapper.html#torchrl.envs.JumanjiWrapper)(*args, **kwargs) | Jumanji's environment wrapper. |
+| [`LBForagingEnv`](generated/torchrl.envs.LBForagingEnv.html#torchrl.envs.LBForagingEnv)(*args, **kwargs) | Level-Based Foraging environment wrapper, constructed from an environment name. |
+| [`LBForagingWrapper`](generated/torchrl.envs.LBForagingWrapper.html#torchrl.envs.LBForagingWrapper)(*args, **kwargs) | Level-Based Foraging environment wrapper. |
 | [`LiberoEnv`](generated/torchrl.envs.LiberoEnv.html#torchrl.envs.LiberoEnv)(*args[, num_workers, num_envs]) | LIBERO environment built from a task-suite name and task id. |
 | [`LiberoWrapper`](generated/torchrl.envs.LiberoWrapper.html#torchrl.envs.LiberoWrapper)(*args, **kwargs) | LIBERO environment wrapper. |
 | [`MeltingpotEnv`](generated/torchrl.envs.MeltingpotEnv.html#torchrl.envs.MeltingpotEnv)(*args, **kwargs) | Meltingpot environment wrapper. |

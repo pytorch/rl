@@ -208,6 +208,8 @@
 - [IsaacLabWrapper](reference/generated/torchrl.envs.IsaacLabWrapper.md)
 - [JumanjiEnv](reference/generated/torchrl.envs.JumanjiEnv.md)
 - [JumanjiWrapper](reference/generated/torchrl.envs.JumanjiWrapper.md)
+- [LBForagingEnv](reference/generated/torchrl.envs.LBForagingEnv.md)
+- [LBForagingWrapper](reference/generated/torchrl.envs.LBForagingWrapper.md)
 - [LLMHashingEnv](reference/generated/torchrl.envs.LLMHashingEnv.md)
 - [LiberoEnv](reference/generated/torchrl.envs.LiberoEnv.md)
 - [LiberoWrapper](reference/generated/torchrl.envs.LiberoWrapper.md)
