@@ -108,13 +108,19 @@ Whether the child process is alive.
 
 The live behavior-policy version of the child server.
 
-prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.prepare_cudagraph)
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *interaction_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | None = None*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.prepare_cudagraph)
 
 Set the representative request used for child-process capture.
 
 Parameters:
 
 **request_spec** (*TensorDictBase*) - representative unbatched request.
+
+Keyword Arguments:
+
+**interaction_type** (*InteractionType**,**optional*) - sampling mode the
+child process captures under, stamped on the stored request.
+See [`InferenceServer.prepare_cudagraph()`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.prepare_cudagraph).
 
 *property*service_backend*: str*
 

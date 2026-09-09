@@ -34,6 +34,13 @@ index. Defaults to `False`.
 - **truncated_key** (*NestedKey**,**optional*) - key populated in sampling info at
 the final record of each sampled slice. Defaults to
 `("next", "truncated")`.
+- **init_key** (*NestedKey**,**optional*) - If not `None`, the sampler marks the
+first step of every slice with `True` under this key (OR-ed with
+the flags stored in the buffer, when present) so that recurrent
+modules restart from the stored hidden state at each slice start.
+Pass `None` to leave the stored flags untouched, as required by
+models that reset their state wherever `is_init` is set, such as
+the DreamerV3 RSSM rollout. Defaults to `"is_init"`.
 - **strict_length** (*bool**,**optional*) - whether uniform fallback sampling
 rejects trajectories shorter than `slice_len`. Defaults to
 `True`.

@@ -133,13 +133,25 @@ Whether the background worker thread is running.
 
 The current behavior-policy version served with inference outputs.
 
-prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer.prepare_cudagraph)
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *interaction_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | None = None*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer.prepare_cudagraph)
 
 Capture the configured static CUDA graph before server start.
 
 Parameters:
 
 **request_spec** (*TensorDictBase*) - representative unbatched request.
+
+Keyword Arguments:
+
+**interaction_type** (*InteractionType**,**optional*) - sampling mode the
+graph is captured under; every request must then carry the
+same mode (see
+[`PolicyClientModule`](torchrl.modules.inference_server.PolicyClientModule.html#torchrl.modules.inference_server.PolicyClientModule)).
+Defaults to `None`: the mode already stamped on
+`request_spec` if any, otherwise the ambient
+`set_interaction_type()` context (or the
+module default when no context is active). Pass an explicit
+mode when other threads may change the ambient context.
 
 *property*service_backend*: str*
 

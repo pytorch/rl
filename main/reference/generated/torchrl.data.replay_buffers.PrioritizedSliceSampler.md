@@ -116,6 +116,13 @@ trajectory breaks. Defaults to `("next", "truncated")`.
 This feature only works with `TensorDictReplayBuffer`
 instances (otherwise the truncated key is returned in the info dictionary
 returned by the `sample()` method).
+- **init_key** (*NestedKey**,**optional*) - If not `None`, the sampler marks the
+first step of every slice with `True` under this key (OR-ed with
+the flags stored in the buffer, when present) so that recurrent
+modules restart from the stored hidden state at each slice start.
+Pass `None` to leave the stored flags untouched, as required by
+models that reset their state wherever `is_init` is set, such as
+the DreamerV3 RSSM rollout. Defaults to `"is_init"`.
 - **strict_length** (*bool**,**optional*) - if `False`, trajectories of length
 shorter than slice_len (or batch_size // num_slices) will be
 allowed to appear in the batch. If `True`, trajectories shorted

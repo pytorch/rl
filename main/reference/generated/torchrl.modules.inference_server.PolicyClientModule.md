@@ -42,14 +42,25 @@ asynchronous requests submitted through this module; further
 freed when its request *completes* (including errors), not when
 `result()` is first called; a timed-out `result()` keeps the
 slot. Must be at least `1`. `None` means unbounded.
+- **interaction_type** (*InteractionType**,**optional*) - sampling mode stamped
+on every request. Defaults to `None`: the caller's active
+`interaction_type()` is read at submission
+time. Pass an explicit mode whenever another thread of the
+process may set the interaction type while requests are
+submitted, since that context is process-wide (a learner
+thread's loss forward would otherwise decide how the served
+policy samples). [`AsyncBatchedCollector`](torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector)
+always passes its `exploration_type`.
 
 Note
 
-The caller's active `tensordict.nn.interaction_type()` is
-automatically attached to every transport request, and the server
-executes the remote policy under that exploration context - exactly
-as a local policy would see it. In-process (plain callable) clients
-need no propagation since the caller's context is already active.
+The interaction type travels with the request: the explicit
+`interaction_type` or, when none is given, the caller's active
+`tensordict.nn.interaction_type()` is attached to every transport
+request, and the server executes the remote policy under it - exactly
+as a local policy would see it. The serving thread's own (process-wide)
+context is never consulted. In-process (plain callable) clients enter
+the explicit context when given, otherwise retain the caller's context.
 
 Note
 

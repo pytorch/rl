@@ -1933,6 +1933,21 @@ while environment or policy calls are blocked. Call `shutdown()` for normal
 cleanup; abrupt owner death cannot guarantee environment cleanup hooks run.
 Environment factories in this mode must not start multiprocessing children.
 
+By default each worker sends every transition as its own message, and the
+driver unpickles, stacks and writes them one at a time. When many environments
+feed a replay buffer this per-transition work can leave the driver as the
+bottleneck while the environments wait for result capacity. Set
+`transition_chunk_size` (for example `64`) so that each worker accumulates
+that many consecutive transitions and sends them as one dense message. The
+driver then receives one message per chunk, concatenates whole chunks into each
+batch and performs a single routed replay write per batch, so its cost per
+transition is amortized over the chunk. Transitions reach the driver only once
+their chunk is complete, so pick a chunk size that keeps this delay acceptable
+for the environment step time; up to `transition_chunk_size - 1` transitions
+per environment remain in the worker while collection is paused or stopped.
+Chunked batches are dense [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances whose
+`env_index` is a tensor.
+
 ## Scaling `Collector` across local processes
 
 Pass `num_collectors` to [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) to run parallel local collection.
@@ -9603,7 +9618,7 @@ alias of `Literal`['directory', 'archive', 'consolidated', 'torch']
 
 # AsyncBatchedCollector
 
-*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'queue'*, *envs_per_worker: int = 1*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
+*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'queue'*, *envs_per_worker: int = 1*, *transition_chunk_size: int = 1*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.RANDOM*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
 
 Asynchronous collector with env slots and a policy server.
 
@@ -9624,8 +9639,10 @@ environment.
 - With a [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport),
 each multiprocessing environment worker talks directly to the dedicated
 inference process; the driver receives completed transitions only.
-Completed and in-flight transitions are bounded to twice the environment
-count. Workers and the inference server exit when their owner dies.
+Completed and in-flight results are bounded to twice the environment
+count; `transition_chunk_size` sets how many consecutive transitions
+one result holds. Workers and the inference server exit when their
+owner dies.
 - The `InferenceServer` running in a background
 thread continuously drains observation submissions, batches them, runs
 a single forward pass, and fans actions back out.
@@ -9709,6 +9726,21 @@ coordination from one thread. Defaults to `"queue"`.
 multiprocessing worker. Grouped workers share one coordinator that
 drains ready environments without waiting for a complete group.
 Defaults to `1`.
+- **transition_chunk_size** (*int**,**optional*) - number of consecutive
+transitions each environment worker process accumulates before
+sending them to the driver as one dense message. Requires a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport).
+`1` (default) sends every transition as soon as it completes.
+Larger values take the driver off the per-transition path: it
+receives one message per chunk, concatenates whole chunks into
+each batch and writes each batch to `replay_buffer` with a
+single routed `extend`, so its per-transition Python work is
+amortized over the chunk. The cost is latency: a transition
+reaches the driver only once its chunk is complete, and up to
+`transition_chunk_size - 1` transitions per environment stay in
+the worker while collection is paused or stopped. Batches are then
+dense [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances and `env_index`
+is a tensor. Defaults to `1`.
 - **policy_backend** (*str**,**optional*) - backend for the inference transport
 used to communicate with the
 `InferenceServer`. One of
@@ -9719,6 +9751,15 @@ Defaults to `None`.
 start of every collection batch. Defaults to `False`.
 - **postproc** (*Callable**,**optional*) - post-processing transform applied to
 each collected batch before yielding. Defaults to `None`.
+- **exploration_type** (*ExplorationType**,**optional*) - interaction mode used
+when collecting data, one of
+`torchrl.envs.utils.ExplorationType.RANDOM`, `MODE`, `MEAN`
+or `DETERMINISTIC`. Every inference request is stamped with it
+and, when `static_batch_size` is set, the CUDA graph is captured
+under it, independently of the process-wide
+`set_exploration_type()` context, which a
+learner thread of the same process may change at any time.
+Defaults to `ExplorationType.RANDOM`.
 - **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - replay buffer to extend in the
 collector's parent thread after post-processing. When provided,
 iteration yields `None` instead of full rollout batches.
@@ -30280,8 +30321,10 @@ Close each member's current stream before restarted producers append.
 Each member must hold one chronological stream in a one-dimensional
 tensor storage, with a generation-tracking round-robin writer and a
 `SliceSampler` (including `StreamingSliceSampler`) configured
-to read `end_key`. Trajectory-ID sampling is not supported by this
-operation because restarted producers may reuse old IDs.
+to read `end_key`. A sampler with a `traj_key` is accepted only when
+every record of the member carries the same trajectory id (a per-stream
+key such as the environment index); with distinct ids, restarted
+producers may reuse old ones and the call raises.
 
 Pending samples and conditional updates finish before tail selection.
 Tail patches keep write counts and slot generations unchanged. Existing
@@ -34014,7 +34057,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f58cd6a8900>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f21ebbb7e20>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47286,7 +47329,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f58d08404a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f21ee7604a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -52671,6 +52714,13 @@ trajectory breaks. Defaults to `("next", "truncated")`.
 This feature only works with `TensorDictReplayBuffer`
 instances (otherwise the truncated key is returned in the info dictionary
 returned by the `sample()` method).
+- **init_key** (*NestedKey**,**optional*) - If not `None`, the sampler marks the
+first step of every slice with `True` under this key (OR-ed with
+the flags stored in the buffer, when present) so that recurrent
+modules restart from the stored hidden state at each slice start.
+Pass `None` to leave the stored flags untouched, as required by
+models that reset their state wherever `is_init` is set, such as
+the DreamerV3 RSSM rollout. Defaults to `"is_init"`.
 - **strict_length** (*bool**,**optional*) - if `False`, trajectories of length
 shorter than slice_len (or batch_size // num_slices) will be
 allowed to appear in the batch. If `True`, trajectories shorted
@@ -53220,6 +53270,13 @@ trajectory breaks. Defaults to `("next", "truncated")`.
 This feature only works with `TensorDictReplayBuffer`
 instances (otherwise the truncated key is returned in the info dictionary
 returned by the `sample()` method).
+- **init_key** (*NestedKey**,**optional*) - If not `None`, the sampler marks the
+first step of every slice with `True` under this key (OR-ed with
+the flags stored in the buffer, when present) so that recurrent
+modules restart from the stored hidden state at each slice start.
+Pass `None` to leave the stored flags untouched, as required by
+models that reset their state wherever `is_init` is set, such as
+the DreamerV3 RSSM rollout. Defaults to `"is_init"`.
 - **strict_length** (*bool**,**optional*) - if `False`, trajectories of length
 shorter than slice_len (or batch_size // num_slices) will be
 allowed to appear in the batch. If `True`, trajectories shorted
@@ -53551,6 +53608,13 @@ trajectory breaks. Defaults to `("next", "truncated")`.
 This feature only works with `TensorDictReplayBuffer`
 instances (otherwise the truncated key is returned in the info dictionary
 returned by the `sample()` method).
+- **init_key** (*NestedKey**,**optional*) - If not `None`, the sampler marks the
+first step of every slice with `True` under this key (OR-ed with
+the flags stored in the buffer, when present) so that recurrent
+modules restart from the stored hidden state at each slice start.
+Pass `None` to leave the stored flags untouched, as required by
+models that reset their state wherever `is_init` is set, such as
+the DreamerV3 RSSM rollout. Defaults to `"is_init"`.
 - **strict_length** (*bool**,**optional*) - if `False`, trajectories of length
 shorter than slice_len (or batch_size // num_slices) will be
 allowed to appear in the batch. If `True`, trajectories shorted
@@ -53987,6 +54051,13 @@ index. Defaults to `False`.
 - **truncated_key** (*NestedKey**,**optional*) - key populated in sampling info at
 the final record of each sampled slice. Defaults to
 `("next", "truncated")`.
+- **init_key** (*NestedKey**,**optional*) - If not `None`, the sampler marks the
+first step of every slice with `True` under this key (OR-ed with
+the flags stored in the buffer, when present) so that recurrent
+modules restart from the stored hidden state at each slice start.
+Pass `None` to leave the stored flags untouched, as required by
+models that reset their state wherever `is_init` is set, such as
+the DreamerV3 RSSM rollout. Defaults to `"is_init"`.
 - **strict_length** (*bool**,**optional*) - whether uniform fallback sampling
 rejects trajectories shorter than `slice_len`. Defaults to
 `True`.
@@ -214209,13 +214280,25 @@ Whether the background worker thread is running.
 
 The current behavior-policy version served with inference outputs.
 
-prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer.prepare_cudagraph)
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *interaction_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | None = None*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer.prepare_cudagraph)
 
 Capture the configured static CUDA graph before server start.
 
 Parameters:
 
 **request_spec** (*TensorDictBase*) - representative unbatched request.
+
+Keyword Arguments:
+
+**interaction_type** (*InteractionType**,**optional*) - sampling mode the
+graph is captured under; every request must then carry the
+same mode (see
+[`PolicyClientModule`](torchrl.modules.inference_server.PolicyClientModule.html#torchrl.modules.inference_server.PolicyClientModule)).
+Defaults to `None`: the mode already stamped on
+`request_spec` if any, otherwise the ambient
+`set_interaction_type()` context (or the
+module default when no context is active). Pass an explicit
+mode when other threads may change the ambient context.
 
 *property*service_backend*: str*
 
@@ -214558,14 +214641,25 @@ asynchronous requests submitted through this module; further
 freed when its request *completes* (including errors), not when
 `result()` is first called; a timed-out `result()` keeps the
 slot. Must be at least `1`. `None` means unbounded.
+- **interaction_type** (*InteractionType**,**optional*) - sampling mode stamped
+on every request. Defaults to `None`: the caller's active
+`interaction_type()` is read at submission
+time. Pass an explicit mode whenever another thread of the
+process may set the interaction type while requests are
+submitted, since that context is process-wide (a learner
+thread's loss forward would otherwise decide how the served
+policy samples). [`AsyncBatchedCollector`](torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector)
+always passes its `exploration_type`.
 
 Note
 
-The caller's active `tensordict.nn.interaction_type()` is
-automatically attached to every transport request, and the server
-executes the remote policy under that exploration context - exactly
-as a local policy would see it. In-process (plain callable) clients
-need no propagation since the caller's context is already active.
+The interaction type travels with the request: the explicit
+`interaction_type` or, when none is given, the caller's active
+`tensordict.nn.interaction_type()` is attached to every transport
+request, and the server executes the remote policy under it - exactly
+as a local policy would see it. The serving thread's own (process-wide)
+context is never consulted. In-process (plain callable) clients enter
+the explicit context when given, otherwise retain the caller's context.
 
 Note
 
@@ -214762,13 +214856,19 @@ Whether the child process is alive.
 
 The live behavior-policy version of the child server.
 
-prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.prepare_cudagraph)
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *interaction_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | None = None*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.prepare_cudagraph)
 
 Set the representative request used for child-process capture.
 
 Parameters:
 
 **request_spec** (*TensorDictBase*) - representative unbatched request.
+
+Keyword Arguments:
+
+**interaction_type** (*InteractionType**,**optional*) - sampling mode the
+child process captures under, stamped on the stored request.
+See [`InferenceServer.prepare_cudagraph()`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.prepare_cudagraph).
 
 *property*service_backend*: str*
 
@@ -266763,7 +266863,7 @@ Configuration for sampling without replacement.
 
 # torchrl.trainers.algorithms.configs.data.SliceSamplerConfig
 
-*class*torchrl.trainers.algorithms.configs.data.SliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSampler'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *step_key: Any = 'step_count'*, *fragmented: bool = False*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *strict_length: bool = True*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerConfig)
+*class*torchrl.trainers.algorithms.configs.data.SliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSampler'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *step_key: Any = 'step_count'*, *fragmented: bool = False*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerConfig)
 
 Configuration for slice sampling from replay buffer.
 
@@ -266771,7 +266871,7 @@ Configuration for slice sampling from replay buffer.
 
 # torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig
 
-*class*torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSamplerWithoutReplacement'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *strict_length: bool = True*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerWithoutReplacementConfig)
+*class*torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSamplerWithoutReplacement'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerWithoutReplacementConfig)
 
 Configuration for slice sampling without replacement.
 
@@ -266804,7 +266904,7 @@ Fields match `WriterEnsembleConfig`
 
 # torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig
 
-*class*torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.StreamingSliceSampler'*, *slice_len: int = '???'*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *strict_length: bool = True*, *pad_output: bool = False*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#StreamingSliceSamplerConfig)
+*class*torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.StreamingSliceSampler'*, *slice_len: int = '???'*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *pad_output: bool = False*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#StreamingSliceSamplerConfig)
 
 Hydra configuration for `StreamingSliceSampler`.
 
@@ -274935,9 +275035,18 @@ In-place parameter copies preserve the captured graph; for example, use
 storage-replacing update raises an error and disables the graph, leaving the
 server on the safe eager path until it is stopped and prepared again. This
 avoids capturing while collector or environment threads are live. The
-interaction type is frozen to its effective value at capture time, including an ambient
-`set_interaction_type` context; later requests using another type are
-rejected.
+interaction type is fixed at capture time: pass it to
+[`prepare_cudagraph()`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.prepare_cudagraph)
+([`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector) passes its
+`exploration_type`). Without an explicit mode, capture uses the mode stamped on
+the request specification, otherwise the ambient `set_interaction_type`
+context, or the policy default when no context is active. Raw, unstamped requests
+also retain their ambient-context behavior. Pass an explicit mode when other
+threads may change this process-wide context.
+Requests must carry the captured mode, which
+[`PolicyClientModule`](generated/torchrl.modules.inference_server.PolicyClientModule.html#torchrl.modules.inference_server.PolicyClientModule) stamps from its
+`interaction_type` argument or, when none is given, from the caller's active
+context; requests stamped with another mode are rejected.
 
 CUDA operations using PyTorch's default generator advance its graph-safe state
 across replays. Custom generators must manage CUDA graph state explicitly, and

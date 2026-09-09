@@ -1,6 +1,6 @@
 # AsyncBatchedCollector
 
-*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'queue'*, *envs_per_worker: int = 1*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
+*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'queue'*, *envs_per_worker: int = 1*, *transition_chunk_size: int = 1*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.RANDOM*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
 
 Asynchronous collector with env slots and a policy server.
 
@@ -21,8 +21,10 @@ environment.
 - With a [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport),
 each multiprocessing environment worker talks directly to the dedicated
 inference process; the driver receives completed transitions only.
-Completed and in-flight transitions are bounded to twice the environment
-count. Workers and the inference server exit when their owner dies.
+Completed and in-flight results are bounded to twice the environment
+count; `transition_chunk_size` sets how many consecutive transitions
+one result holds. Workers and the inference server exit when their
+owner dies.
 - The `InferenceServer` running in a background
 thread continuously drains observation submissions, batches them, runs
 a single forward pass, and fans actions back out.
@@ -106,6 +108,21 @@ coordination from one thread. Defaults to `"queue"`.
 multiprocessing worker. Grouped workers share one coordinator that
 drains ready environments without waiting for a complete group.
 Defaults to `1`.
+- **transition_chunk_size** (*int**,**optional*) - number of consecutive
+transitions each environment worker process accumulates before
+sending them to the driver as one dense message. Requires a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport).
+`1` (default) sends every transition as soon as it completes.
+Larger values take the driver off the per-transition path: it
+receives one message per chunk, concatenates whole chunks into
+each batch and writes each batch to `replay_buffer` with a
+single routed `extend`, so its per-transition Python work is
+amortized over the chunk. The cost is latency: a transition
+reaches the driver only once its chunk is complete, and up to
+`transition_chunk_size - 1` transitions per environment stay in
+the worker while collection is paused or stopped. Batches are then
+dense [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances and `env_index`
+is a tensor. Defaults to `1`.
 - **policy_backend** (*str**,**optional*) - backend for the inference transport
 used to communicate with the
 `InferenceServer`. One of
@@ -116,6 +133,15 @@ Defaults to `None`.
 start of every collection batch. Defaults to `False`.
 - **postproc** (*Callable**,**optional*) - post-processing transform applied to
 each collected batch before yielding. Defaults to `None`.
+- **exploration_type** (*ExplorationType**,**optional*) - interaction mode used
+when collecting data, one of
+`torchrl.envs.utils.ExplorationType.RANDOM`, `MODE`, `MEAN`
+or `DETERMINISTIC`. Every inference request is stamped with it
+and, when `static_batch_size` is set, the CUDA graph is captured
+under it, independently of the process-wide
+`set_exploration_type()` context, which a
+learner thread of the same process may change at any time.
+Defaults to `ExplorationType.RANDOM`.
 - **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - replay buffer to extend in the
 collector's parent thread after post-processing. When provided,
 iteration yields `None` instead of full rollout batches.

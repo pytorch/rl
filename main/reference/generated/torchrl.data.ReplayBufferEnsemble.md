@@ -282,8 +282,10 @@ Close each member's current stream before restarted producers append.
 Each member must hold one chronological stream in a one-dimensional
 tensor storage, with a generation-tracking round-robin writer and a
 `SliceSampler` (including `StreamingSliceSampler`) configured
-to read `end_key`. Trajectory-ID sampling is not supported by this
-operation because restarted producers may reuse old IDs.
+to read `end_key`. A sampler with a `traj_key` is accepted only when
+every record of the member carries the same trajectory id (a per-stream
+key such as the environment index); with distinct ids, restarted
+producers may reuse old ones and the call raises.
 
 Pending samples and conditional updates finish before tail selection.
 Tail patches keep write counts and slot generations unchanged. Existing

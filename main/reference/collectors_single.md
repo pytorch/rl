@@ -197,6 +197,21 @@ while environment or policy calls are blocked. Call `shutdown()` for normal
 cleanup; abrupt owner death cannot guarantee environment cleanup hooks run.
 Environment factories in this mode must not start multiprocessing children.
 
+By default each worker sends every transition as its own message, and the
+driver unpickles, stacks and writes them one at a time. When many environments
+feed a replay buffer this per-transition work can leave the driver as the
+bottleneck while the environments wait for result capacity. Set
+`transition_chunk_size` (for example `64`) so that each worker accumulates
+that many consecutive transitions and sends them as one dense message. The
+driver then receives one message per chunk, concatenates whole chunks into each
+batch and performs a single routed replay write per batch, so its cost per
+transition is amortized over the chunk. Transitions reach the driver only once
+their chunk is complete, so pick a chunk size that keeps this delay acceptable
+for the environment step time; up to `transition_chunk_size - 1` transitions
+per environment remain in the worker while collection is paused or stopped.
+Chunked batches are dense [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances whose
+`env_index` is a tensor.
+
 ## Scaling `Collector` across local processes
 
 Pass `num_collectors` to [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) to run parallel local collection.
