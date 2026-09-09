@@ -5,7 +5,7 @@
 """Fixed fake image-and-vector workload for the DreamerV3 training benchmark.
 
 The environment is importable by name from environment worker processes and by
-the example's ``env.factory`` option (``bench_dreamer_v3_env:make_env``). Keep
+the example's ``env.factory`` option (``bench_dreamer_v3_env:FakePixelEnv``). Keep
 its observation layout and step cost stable: the continuous benchmark compares
 revisions on this exact workload (see ASYNC_BENCHMARKS.md).
 """
@@ -95,8 +95,3 @@ class FakePixelEnv(EnvBase):
         observation.set("done", done)
         observation.set("terminated", done)
         return observation
-
-
-def make_env(*, seed, env_index, num_envs, **kwargs) -> FakePixelEnv:
-    """``env.factory`` entry point of the DreamerV3 example."""
-    return FakePixelEnv(seed=seed, env_index=env_index, num_envs=num_envs, **kwargs)

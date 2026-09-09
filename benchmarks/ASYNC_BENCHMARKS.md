@@ -1,8 +1,9 @@
 # Continuous async environment benchmarks
 
 The [Continuous Benchmark workflow](https://github.com/pytorch/rl/actions/workflows/benchmarks.yml)
-runs the short async suite after each main-branch merge touching TorchRL or
-benchmarks. The full suite still runs through the nightly orchestrator.
+runs the short async suite after each main-branch merge touching TorchRL,
+benchmarks or the DreamerV3 example. The full suite still runs through the nightly
+orchestrator.
 The [async trend dashboard](https://pytorch.org/rl/dev/bench/async/) appears after
 the first successful main run. Each point links to its source commit. Branch
 runs produce the same summary and downloadable artifacts without publishing to
@@ -82,17 +83,22 @@ individual changes and detect regressions.
 
 `test_dreamer_v3_async_training[backend-ratio]` (`test_dreamer_v3_benchmark.py`)
 measures the `sota-implementations/dreamer_v3` example end to end. The example
-runs unmodified in a child process, so changes to its training loop, replay
-write-back, inference wiring or process setup show up here without a dedicated
-micro-benchmark. The workload is `bench_dreamer_v3_env.py`: eight environment
-processes producing 3 x 64 x 64 uint8 pixels, an 8-float vector and three boolean
+runs unmodified in a child process using the fixed `dreamer_v3.yaml` benchmark
+configuration, independent of the example defaults. Changes to its training loop,
+replay write-back and inference wiring show up here. The workload is
+`bench_dreamer_v3_env.py`: eight environment processes producing 3 x 64 x 64 uint8
+pixels, an 8-float vector and three boolean
 milestones, with one-millisecond steps, six discrete actions and episode lengths
 staggered by environment index. Collection is asynchronous with shared-memory
 exchange and one environment per worker; the learner runs eagerly on the GPU
 (`optimization.compile=off`) with a small network configuration, replay batches of
-16 sequences of 32 records and replay context write-back enabled.
+16 sequences of 32 records and replay context write-back enabled. Inference is
+limited to one request per batch: the current thread backend can mix exploration
+contexts while the learner runs, causing larger batches to fail. Keep this limit
+fixed after the bug is resolved; the collection-only series measures batched
+inference.
 
-| Series | Learner updates per collected record | Emphasis |
+| Series | Learner updates per collected batch | Emphasis |
 | --- | --- | --- |
 | `ratio2` | `train_ratio=2`: one update per 256-transition batch | collection path, driver overhead |
 | `ratio16` | `train_ratio=16`: eight updates per batch | learner step, replay sampling and write-back |
@@ -107,10 +113,9 @@ two warm-up rounds of 1,024 environment steps pass unmeasured, then five
 measured rounds each wait for the next 1,024 steps to be logged. Setup, process
 startup, replay warm-up and the final shutdown stay outside the measurement.
 The summary reports frames per second like the other series; the raw JSON adds
-learner updates per second, updates per round and the process-tree RSS. The
-pinned lock adds `hydra-core` and `omegaconf` for the example; no other series
-imports them, so the v1 trend continues. CUDA-graph inference batches stay
-disabled in this workload.
+learner updates per second, total measured updates and the process-tree RSS. The
+pinned lock includes `hydra-core` and `omegaconf` for the example. CUDA-graph
+inference batches stay disabled in this workload.
 
 ## Reading results
 
@@ -158,7 +163,8 @@ To rerun the complete nightly workload, choose `suite: full`.
 Merging a pull request that carries the `benchmarks/trigger` label dispatches
 the full suite on main immediately (`benchmarks_post_merge.yml`), so the merge
 gets a trend point without waiting for the nightly sample. The short async
-suite still runs on every main merge touching `torchrl/` or `benchmarks/`.
+suite also runs on main merges touching `torchrl/`, `benchmarks/` or
+`sota-implementations/dreamer_v3/`.
 
 Locally, install `benchmarks/requirements.txt` and run from the repository:
 
@@ -174,11 +180,10 @@ Repeat in three separate processes with filenames `async-1.json` through
 `async-3.json`, then run
 `python .github/scripts/summarize_async_benchmarks.py <results-directory> --summary summary.md`.
 
-Merge this benchmark/CI change before #4269 to record the current eager baseline.
-Then review #4269, #4271 and #4272 in order. Their graph, grouping and coordination
-changes appear against the continuing eager series. Replay integration follows
-#4273, #4274 and #4275; it must retain these collection workloads and introduce
-separately named replay-inclusive series if the measured operation changes.
+Merge the benchmark additions and record a successful main-branch run before
+merging #4304, #4305, #4306, #4307 or #4308. Keep the workload fixed while those
+changes land; the process-inference series starts when #4304 exposes its config
+option, alongside the continuing thread-inference baseline.
 
 ## CI health and publication
 

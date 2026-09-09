@@ -14,104 +14,55 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Literal
 
 import psutil
 import pytest
 import torch
 
+_has_hydra = importlib.util.find_spec("hydra") is not None
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_DIR = REPO_ROOT / "sota-implementations" / "dreamer_v3"
 BENCHMARK_DIR = Path(__file__).resolve().parent
 
-NUM_ENVS = 8
-FRAMES_PER_BATCH = 256
 ROUND_FRAMES = 1024
 WARMUP_ROUNDS = 2
 MEASURED_ROUNDS = 5
 START_TIMEOUT_S = 180.0
 ROUND_TIMEOUT_S = 120.0
 
-# Runs the example's entry point without Hydra's command line, as the
-# checkpoint-resume test does.
-_RUNNER = """\
-from __future__ import annotations
-import runpy
-import sys
-from pathlib import Path
-from omegaconf import OmegaConf
-if __name__ == "__main__":
-    sys.path.insert(0, sys.argv[3])
-    sys.path.insert(0, str(Path(sys.argv[1]).parent))
-    example = runpy.run_path(sys.argv[1])
-    example["main"].__wrapped__(OmegaConf.load(sys.argv[2]))
-"""
-
 
 def _benchmark_config(
-    *, inference_backend: str, train_ratio: float, device: str, metrics: Path
+    *,
+    inference_backend: Literal["thread", "process"],
+    train_ratio: float,
+    device: str,
+    metrics: Path,
 ):
+    if not (_has_hydra and _has_omegaconf):
+        pytest.skip("The DreamerV3 example requires hydra-core and omegaconf")
     from omegaconf import OmegaConf
 
-    cfg = OmegaConf.load(EXAMPLE_DIR / "config.yaml")
-    if inference_backend != "thread" and "inference_backend" not in cfg.collector:
+    example_cfg = OmegaConf.load(EXAMPLE_DIR / "config.yaml")
+    has_backend = "inference_backend" in example_cfg.collector
+    if inference_backend != "thread" and not has_backend:
         pytest.skip(
             "collector.inference_backend is not available in the example on this revision"
         )
-    # Keep these inputs stable across merges: they define the series.
-    cfg.env.backend = "custom"
-    cfg.env.name = "fake-pixels"
-    cfg.env.factory = "bench_dreamer_v3_env:make_env"
-    cfg.env.factory_kwargs = {
-        "episode_length": 200,
-        "num_actions": 6,
-        "step_latency_s": 0.001,
-    }
-    # Episode lengths are set by the environment; the step limit must not cut them.
-    cfg.env.max_episode_steps = 1000
-    cfg.env.vector_key = "vector"
-    cfg.env.pixels_key = "pixels"
-    cfg.env.milestone_key = "obtained"
-    cfg.env.milestone_names = ["quarter", "half", "three_quarters"]
-    cfg.collector.backend = "async"
-    cfg.collector.async_env_backend = "multiprocessing"
-    cfg.collector.env_exchange = "shm"
-    cfg.collector.envs_per_worker = 1
-    cfg.collector.num_envs = NUM_ENVS
-    cfg.collector.frames_per_batch = FRAMES_PER_BATCH
-    cfg.collector.total_frames = -1
-    if inference_backend != "thread":
+    cfg = OmegaConf.load(BENCHMARK_DIR / "dreamer_v3.yaml")
+    if has_backend:
         cfg.collector.inference_backend = inference_backend
-    cfg.replay_buffer.device = "cpu"
-    cfg.replay_buffer.buffer_size = NUM_ENVS * 2048
-    cfg.replay_buffer.batch_size = 16
-    cfg.replay_buffer.seq_len = 32
-    cfg.replay_buffer.online = True
-    cfg.replay_buffer.warmup_factor = 1
-    cfg.networks.rnn_hidden_dim = 256
-    cfg.networks.num_categoricals = 8
-    cfg.networks.num_classes = 8
-    cfg.networks.hidden_dim = 128
-    cfg.networks.encoder_layers = 1
-    cfg.networks.decoder_layers = 1
-    cfg.networks.actor_layers = 2
-    cfg.networks.value_layers = 2
-    cfg.networks.image_depth = 16
     cfg.optimization.device = device
-    # The eager learner keeps the series free of compilation time and its variance.
-    cfg.optimization.compile = "off"
     cfg.optimization.train_ratio = train_ratio
-    # Safety ceiling only: the benchmark stops the run after the measured rounds.
-    cfg.optimization.max_time = 600.0
-    cfg.logger.backend = None
     cfg.logger.metrics_jsonl = str(metrics)
-    cfg.logger.train_every = FRAMES_PER_BATCH
-    cfg.logger.eval_every = 0
-    cfg.logger.output_plot = None
     return cfg
 
 
@@ -189,11 +140,13 @@ def _stop(process: subprocess.Popen) -> None:
 
 
 def _run_training_benchmark(
-    benchmark, *, inference_backend: str, train_ratio: float, device: str, tmp_path
+    benchmark,
+    *,
+    inference_backend: Literal["thread", "process"],
+    train_ratio: float,
+    device: str,
+    tmp_path: Path,
 ):
-    for module in ("hydra", "omegaconf"):
-        if importlib.util.find_spec(module) is None:
-            pytest.skip(f"The DreamerV3 example requires {module}")
     metrics = tmp_path / "metrics.jsonl"
     cfg = _benchmark_config(
         inference_backend=inference_backend,
@@ -205,22 +158,28 @@ def _run_training_benchmark(
 
     config_path = tmp_path / "config.yaml"
     OmegaConf.save(cfg, config_path)
-    runner = tmp_path / "run_example.py"
-    runner.write_text(_RUNNER)
     log_path = tmp_path / "example.log"
     tail = _MetricsTail(metrics)
     with log_path.open("w") as log:
         process = subprocess.Popen(
             [
                 sys.executable,
-                str(runner),
                 str(EXAMPLE_DIR / "train.py"),
-                str(config_path),
-                str(BENCHMARK_DIR),
+                "--config-path",
+                str(tmp_path),
+                "--config-name",
+                "config",
+                f"hydra.run.dir={tmp_path}",
             ],
             stdout=log,
             stderr=subprocess.STDOUT,
             cwd=str(tmp_path),
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    [str(BENCHMARK_DIR), os.environ.get("PYTHONPATH", "")]
+                ),
+            },
         )
     try:
         first = _wait_for_train_record(
@@ -268,10 +227,11 @@ def _run_training_benchmark(
         benchmark.extra_info.update(
             execution=(
                 f"eager learner on {device}; {inference_backend} inference; "
-                f"train ratio {train_ratio:g}; {NUM_ENVS} envs"
+                f"train ratio {train_ratio:g}; {cfg.collector.num_envs} envs; "
+                f"inference batch <= {cfg.collector.inference_max_batch_size}"
             ),
-            num_envs=NUM_ENVS,
-            frames_per_batch=FRAMES_PER_BATCH,
+            num_envs=cfg.collector.num_envs,
+            frames_per_batch=cfg.collector.frames_per_batch,
             transitions=ROUND_FRAMES,
             warmup_rounds=WARMUP_ROUNDS,
             measured_rounds=MEASURED_ROUNDS,
@@ -296,3 +256,7 @@ def test_dreamer_v3_async_training(benchmark, inference_backend, train_ratio, tm
         device="cuda:0",
         tmp_path=tmp_path,
     )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", *sys.argv[1:]])

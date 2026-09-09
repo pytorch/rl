@@ -11,6 +11,7 @@ on:
     paths:
       - 'torchrl/**'
       - 'benchmarks/**'
+      - 'sota-implementations/dreamer_v3/**'
       - '.github/workflows/benchmarks.yml'
       - '.github/async-benchmark-requirements.txt'
       - '.github/scripts/summarize_async_benchmarks.py'
