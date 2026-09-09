@@ -234,7 +234,9 @@ def main() -> None:
     if args.device == "cuda" or args.replay_device == "cuda":
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA devices were requested but CUDA is unavailable.")
-    elif any("cuda_graph" in variant for variant in args.variants):
+    if args.device != "cuda" and any(
+        "cuda_graph" in variant for variant in args.variants
+    ):
         raise RuntimeError("CUDA graph variants require --device cuda.")
 
     repo_root = Path(__file__).parents[2]
