@@ -2259,32 +2259,40 @@ class TestStreamingSliceSampler:
         assert sample["collector", "mask"][:3].all()
         assert sample["collector", "mask"].shape == (6,)
 
-    def test_state_dict_restores_queue_and_pending_window(self):
-        rb = self._make_buffer()
-        rb.extend(
-            TensorDict(
-                {
-                    "obs": torch.arange(5),
-                    ("next", "done"): torch.zeros(5, 1, dtype=torch.bool),
-                },
-                [5],
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_state_dict_restores_queue_and_pending_window(self, default_device):
+        with torch.device(default_device):
+            rb = self._make_buffer()
+            rb.extend(
+                TensorDict(
+                    {
+                        "obs": torch.arange(5, device="cpu"),
+                        ("next", "done"): torch.zeros(
+                            5, 1, dtype=torch.bool, device="cpu"
+                        ),
+                    },
+                    [5],
+                    device="cpu",
+                )
             )
-        )
-        restored = self._make_buffer()
-        restored.load_state_dict(rb.state_dict())
-        restored.extend(
-            TensorDict(
-                {
-                    "obs": torch.arange(5, 6),
-                    ("next", "done"): torch.zeros(1, 1, dtype=torch.bool),
-                },
-                [1],
+            restored = self._make_buffer()
+            restored.load_state_dict(rb.state_dict())
+            restored.extend(
+                TensorDict(
+                    {
+                        "obs": torch.arange(5, 6, device="cpu"),
+                        ("next", "done"): torch.zeros(
+                            1, 1, dtype=torch.bool, device="cpu"
+                        ),
+                    },
+                    [1],
+                    device="cpu",
+                )
             )
-        )
 
-        sample = restored.sample()
+            sample = restored.sample()
 
-        assert sample["obs"].reshape(2, 3).tolist() == [[0, 1, 2], [3, 4, 5]]
+            assert sample["obs"].reshape(2, 3).tolist() == [[0, 1, 2], [3, 4, 5]]
 
     def test_seeded_uniform_fallback_is_deterministic(self):
         buffers = [
