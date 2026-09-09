@@ -93,6 +93,23 @@ Strongly encouraged (not mandatory):
 - Do not work around this by overriding `to()` or `_apply()` to synchronize a
   device cache; that still encodes an invalid single-device assumption.
 
+### 6b. Device placement
+
+- **Create tensors and modules directly on their target device.** Pass
+  `device=` to factory functions and constructors (`torch.zeros(...,
+  device=device)`, spec and storage `device=` arguments, `nn.Linear(...,
+  device=device)`), or build a whole model under `with torch.device(device):`.
+  Do not build on CPU and move afterwards with `.to(device)`, `.cuda()` or
+  `.to(tensor)`: the detour allocates twice, serializes host-to-device copies
+  into startup, and hides placement bugs until the move.
+- The same applies to state created at run time (buffers, replay storages,
+  initial recurrent states, RNG-driven noise): derive the device from the
+  data or parameters involved and allocate there.
+- Exceptions, which must be stated in a comment: buffers that have to live on
+  the host by design (pinned staging memory, shared-memory slots, checkpoint
+  loading to CPU before dispatch), and moving user-supplied objects whose
+  device the caller chose.
+
 ## 7. Tests
 
 - Every new public class / function needs tests.
