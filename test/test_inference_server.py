@@ -4224,7 +4224,8 @@ class TestAsyncBatchedCollector:
         try:
             assert collector._uses_process_env_workers
             assert collector.server_backend == "process"
-            assert collector._transition_chunk_size == 12 // num_envs
+            # At least 64 per message, capped at one batch.
+            assert collector._transition_chunk_size == 12
             frames = 0
             for batch in collector:
                 frames += batch.numel()
@@ -4360,7 +4361,7 @@ class TestAsyncBatchedCollector:
         try:
             assert collector.server_backend == "process"
             assert collector._env_backend == "multiprocessing"
-            assert collector._transition_chunk_size == 2
+            assert collector._transition_chunk_size == 4
             assert sum(batch.numel() for batch in collector) == 8
         finally:
             collector.shutdown()

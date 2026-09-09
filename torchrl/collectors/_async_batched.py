@@ -57,6 +57,9 @@ from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 _ENV_IDX_KEY = "env_index"
 
 _POLICY_BACKENDS = ("threading", "multiprocessing", "ray", "monarch")
+# Consecutive transitions per worker message that transition_chunk_size="auto"
+# uses at least; see AsyncBatchedCollector.
+_AUTO_TRANSITION_CHUNK = 64
 _ENV_BACKENDS = ("threading", "multiprocessing")
 _PauseRequest = tuple[threading.Barrier, threading.Event]
 
@@ -655,10 +658,14 @@ class AsyncBatchedCollector(BaseCollector):
             transitions each environment worker process accumulates before
             sending them to the driver as one dense message. Requires a
             :class:`~torchrl.modules.inference_server.ProcessSlotTransport`.
-            ``"auto"`` (default) uses ``frames_per_batch // len(create_env_fn)``
-            with process workers, so each batch holds one contiguous run per
-            environment like the synchronous collectors and a transition waits
-            at most one batch; it resolves to ``1`` otherwise.
+            ``"auto"`` (default) uses at least 64 consecutive transitions per
+            message with process workers, ``frames_per_batch //
+            len(create_env_fn)`` when that is larger, and never more than
+            ``frames_per_batch``: the driver's work per message competes with
+            training, and smaller messages measurably slow collection down. A
+            transition reaches the driver once its message is complete, about
+            64 environment steps later; pass ``1`` for step-level delivery.
+            It resolves to ``1`` without process workers.
             ``1`` sends every transition as soon as it completes.
             Larger values take the driver off the per-transition path: it
             receives one message per chunk, concatenates whole chunks into
@@ -1074,10 +1081,15 @@ class AsyncBatchedCollector(BaseCollector):
 
         # ---- resolve the chunk size -------------------------------------------
         if transition_chunk_size == "auto":
-            # One contiguous run per environment and batch, the layout of the
-            # synchronous collectors, so a transition waits at most one batch.
+            # The driver's work per message competes with training: with 64
+            # environments and 1024-frame batches, frames_per_batch // num_envs
+            # (16) collected 17% slower than 64 transitions per message. Never
+            # more than one batch per message.
             transition_chunk_size = (
-                max(1, frames_per_batch // self._num_envs)
+                min(
+                    max(frames_per_batch // self._num_envs, _AUTO_TRANSITION_CHUNK),
+                    max(frames_per_batch, 1),
+                )
                 if uses_process_env_workers
                 else 1
             )

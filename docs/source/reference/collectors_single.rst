@@ -222,15 +222,18 @@ environment cleanup hooks run. Environment factories in this mode must not start
 multiprocessing children.
 
 With process workers, ``transition_chunk_size="auto"`` (the default) makes each
-worker accumulate ``frames_per_batch // num_envs`` consecutive transitions and
-send them as one dense message, so every batch holds one contiguous run per
-environment, the layout of the synchronous collectors, and a transition waits at
-most one batch. The driver then receives one message per chunk, concatenates
-whole chunks into each batch and performs a single routed replay write per
-batch, so its cost per transition is amortized over the chunk. Pass ``1`` to
-send every transition as soon as it completes, or a larger value to amortize
-further; up to ``transition_chunk_size - 1`` transitions per environment remain
-in the worker while collection is paused or stopped. Chunked batches are dense
+worker accumulate at least 64 consecutive transitions, or
+``frames_per_batch // num_envs`` when that is larger and never more than
+``frames_per_batch``, and send them as one dense message. The driver then
+receives one message per chunk, concatenates whole chunks into each batch and
+performs a single routed replay write per batch, so its cost per transition is
+amortized over the chunk; that work competes with training, and on a
+64-environment pixel workload 16-transition messages collected 17% slower than
+64-transition ones. A transition reaches the driver once its chunk is complete,
+about 64 environment steps later. Pass ``1`` to send every transition as soon as
+it completes, or another value to trade delivery latency against driver work; up
+to ``transition_chunk_size - 1`` transitions per environment remain in the worker
+while collection is paused or stopped. Chunked batches are dense
 :class:`~tensordict.TensorDict` instances whose ``env_index`` is a tensor.
 
 Scaling ``Collector`` across local processes
