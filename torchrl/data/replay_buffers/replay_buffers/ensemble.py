@@ -325,7 +325,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             id_shape = [1] * data.ndim
             id_shape[routing_dim] = data.shape[routing_dim]
             buffer_ids = (
-                torch.arange(data.shape[routing_dim], device=data.device)
+                torch.arange(data.shape[routing_dim], device=data.device or "cpu")
                 .reshape(id_shape)
                 .expand(data.batch_size)
                 .reshape(-1)
@@ -382,7 +382,9 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 if isinstance(member_index, tuple):
                     member_index = torch.stack(member_index, -1)
                 else:
-                    member_index = torch.as_tensor(member_index)
+                    member_index = torch.as_tensor(
+                        member_index, device=buffer_ids.device
+                    )
                 if member_index.ndim == 0:
                     member_index = member_index.unsqueeze(0)
                 member_index = member_index.to(buffer_ids.device)

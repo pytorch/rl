@@ -437,21 +437,26 @@ class TestEnsemble:
         finally:
             replay.shutdown()
 
-    def test_routing_dim_preserves_member_order(self):
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_routing_dim_preserves_member_order(self, default_device):
         members = [self._make_routed_member() for _ in range(2)]
         rb = ReplayBufferEnsemble(*members, routing_dim=1)
         data = TensorDict(
             {"value": torch.tensor([[0, 10], [1, 11]])}, batch_size=[2, 2]
         )
 
-        metadata = rb.extend(data)
+        with torch.device(default_device):
+            metadata = rb.extend(data)
 
         assert metadata.batch_size == (4,)
         assert metadata["buffer_ids"].tolist() == [0, 1, 0, 1]
+        assert metadata["index"].tolist() == [0, 0, 1, 1]
+        assert metadata["index_generation"].tolist() == [0, 0, 0, 0]
         assert members[0][:]["value"].tolist() == [0, 1]
         assert members[1][:]["value"].tolist() == [10, 11]
 
-    def test_sampleable_routing_groups_member_samples(self):
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_sampleable_routing_groups_member_samples(self, default_device):
         lengths = (1, 4, 8)
         samplers = [SliceSampler(slice_len=2) for _ in lengths]
         members = [
@@ -477,7 +482,8 @@ class TestEnsemble:
             generator=generator,
         )
 
-        index, _ = rb.sampler.sample(rb.storage, 2_000)
+        with torch.device(default_device):
+            index, _ = rb.sampler.sample(rb.storage, 2_000)
         counts = torch.bincount(index["buffer_ids"], minlength=3)
 
         assert counts[0] == 0

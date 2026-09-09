@@ -2356,6 +2356,8 @@ def test_dreamer_v3_native_stream_replay(monkeypatch, online, count_reset_record
         run_name=f"dreamer_v3_native_replay_{online}",
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
     cfg.collector.num_envs = 2
     cfg.collector.count_reset_records = count_reset_records
     cfg.collector.total_frames = 16
@@ -2432,6 +2434,8 @@ def test_dreamer_v3_replay_samples_keep_episode_starts(monkeypatch, online):
         example_dir / "train.py", run_name=f"dreamer_v3_episode_starts_{online}"
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
     cfg.collector.num_envs = 1
     cfg.replay_buffer.buffer_size = 64
     cfg.replay_buffer.batch_size = 4
@@ -2684,6 +2688,8 @@ def test_dreamer_v3_native_replay_benchmark_step_cpu(monkeypatch):
         run_name="dreamer_v3_replay_benchmark_helpers_test",
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
     cfg.replay_buffer.batch_size = 2
     cfg.replay_buffer.seq_len = 3
 
@@ -2835,8 +2841,11 @@ def test_dreamer_v3_native_replay_collection_smoke(
             for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
         ]
         if budget == "time":
-            assert records[-1]["total_action_steps"] > 0
-            assert records[-1]["elapsed_seconds"] < 5
+            # The budget is checked after each batch, so an expired budget stops
+            # the run at the first batch. Wall time is not asserted: starting
+            # the inference and environment processes on a loaded CI runner
+            # can take longer than the budget itself.
+            assert records[-1]["total_action_steps"] == cfg.collector.frames_per_batch
         else:
             assert records[-1]["total_action_steps"] == 16
             assert (records[-1]["updates"] > 0) == (budget != "warmup")
@@ -2911,6 +2920,9 @@ def test_dreamer_v3_checkpoint_resume_processes(
     cfg.optimization.train_ratio = 1.5
     cfg.optimization.checkpoint_include_replay = include_replay
     cfg.collector.backend = collector_backend
+    # The seeded policy state is checkpointed from the training process; a
+    # process-hosted acting policy keeps its own copy in the inference process.
+    cfg.collector.inference_backend = "thread"
     cfg.collector.num_envs = 2
     cfg.collector.frames_per_batch = 8
     cfg.collector.total_frames = 100_000 if terminate else 16
@@ -3075,6 +3087,124 @@ def test_dreamer_v3_checkpoint_resume_processes(
                     assert not is_init[:, 1:].any()
         finally:
             replay.shutdown()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("separate_policy_rng", [False, True])
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda:0",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA"),
+            ],
+        ),
+    ],
+)
+def test_dreamer_v3_process_inference_collection_smoke(
+    monkeypatch, tmp_path, separate_policy_rng, device
+):
+    """A process-hosted inference server collects, trains and syncs weights."""
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_process_inference"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.optimization.device = device
+    cfg.optimization.compile = "off"
+    cfg.optimization.separate_policy_rng = separate_policy_rng
+    cfg.optimization.updates_per_batch = 1
+    cfg.optimization.train_ratio = None
+    cfg.collector.backend = "async"
+    cfg.collector.async_env_backend = "multiprocessing"
+    cfg.collector.inference_backend = "process"
+    cfg.collector.envs_per_worker = 1
+    cfg.collector.num_envs = 2
+    cfg.collector.frames_per_batch = 8
+    cfg.collector.total_frames = 16
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 2
+    cfg.replay_buffer.warmup_factor = 1
+    cfg.env.backend = "custom"
+    cfg.env.factory = f"{__name__}:_DreamerV3TestEnv"
+    cfg.env.factory_kwargs = {"pixels": False, "discrete": False}
+    cfg.env.vector_key = ["sensors", "vector"]
+    cfg.env.pixels_key = None
+    cfg.env.milestone_key = ["episode", "milestones"]
+    cfg.env.milestone_names = ["started", "completed"]
+    cfg.logger.eval_every = 0
+    cfg.logger.train_every = 8
+    cfg.logger.output_plot = None
+    cfg.logger.backend = "csv"
+    cfg.logger.log_dir = str(tmp_path / "logs")
+    cfg.logger.metrics_jsonl = str(tmp_path / "metrics.jsonl")
+    example["main"].__wrapped__(cfg)
+    records = [
+        json.loads(line)
+        for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
+    ]
+    assert records[-1]["total_action_steps"] == 16
+    assert records[-1]["updates"] > 0
+    assert any(record["type"] == "train_episode" for record in records)
+
+    cfg.collector.envs_per_worker = 2
+    with pytest.raises(ValueError, match="envs_per_worker=1"):
+        example["main"].__wrapped__(cfg)
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("separate_policy_rng", [False, True])
+def test_dreamer_v3_behavior_policy_weights_match_served_policy(
+    monkeypatch, separate_policy_rng
+):
+    """The weights pushed to the inference process fit the rebuilt policy exactly.
+
+    A mismatch would surface as a key or shape error inside the server
+    process, not in the driver, so the layout is checked here directly.
+    """
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_serving_layout"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.optimization.device = "cpu"
+    cfg.optimization.compile = "off"
+    cfg.optimization.separate_policy_rng = separate_policy_rng
+    obs_dim, action_dim = 3, 1
+    learner = example["_build_learner"](cfg, torch.device("cpu"), obs_dim, action_dim)
+    served = example["build_serving_policy"](
+        OmegaConf.to_container(cfg, resolve=True),
+        obs_dim,
+        action_dim,
+        None,
+        False,
+        torch.device("cpu"),
+    )
+    weights = example["_behavior_policy_weights"](cfg, learner)
+    if isinstance(weights, torch.nn.Module):
+        weights = TensorDict.from_module(weights)
+    served_weights = TensorDict.from_module(served)
+    assert set(weights.keys(True, True)) == set(served_weights.keys(True, True))
+    for key, value in weights.items(True, True):
+        assert value.shape == served_weights[key].shape, key
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="requires bash")

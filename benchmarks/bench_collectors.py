@@ -828,6 +828,9 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="multiprocessing",
                                 env_exchange=args.env_exchange,
+                                # Driver-mediated process server; process slots are
+                                # the separate backend below.
+                                transport="driver",
                                 server_config=InferenceServerConfig(
                                     service_backend="process",
                                     max_batch_size=max_batch_size,

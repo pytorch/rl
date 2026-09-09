@@ -123,18 +123,13 @@ class SamplerEnsemble(Sampler):
             if isinstance(self.p, str):
                 counts = torch.tensor(
                     [
-                        float(
-                            torch.as_tensor(
-                                sampler._sampleable_count(
-                                    member_storage, sub_batch_size
-                                )
-                            ).item()
-                        )
+                        float(sampler._sampleable_count(member_storage, sub_batch_size))
                         for member_storage, sampler in zip(
                             storage._storages, self._samplers
                         )
                     ],
                     dtype=torch.float,
+                    device=self._rng.device if self._rng is not None else "cpu",
                 )
                 if not counts.any():
                     raise RuntimeError(

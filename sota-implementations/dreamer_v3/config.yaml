@@ -15,10 +15,21 @@ env:
   milestone_names: []
 
 collector:
-  backend: sync  # one of: sync, async
-  async_env_backend: threading  # one of: threading, multiprocessing
-  env_exchange: queue
+  # auto runs asynchronous collection on CPU and CUDA training devices and the
+  # synchronous collector elsewhere (MPS cannot serve the policy off-thread).
+  backend: auto  # one of: auto, sync, async
+  async_env_backend: multiprocessing  # one of: threading, multiprocessing
+  env_exchange: auto  # one of: auto, queue, shm
   envs_per_worker: 1
+  # Where the acting policy runs with the async collector. auto serves it from a
+  # dedicated process that the environment workers reach directly when
+  # async_env_backend is multiprocessing with one environment per worker, and
+  # from a thread of this process otherwise; thread and process force one of the
+  # two.
+  inference_backend: auto  # one of: auto, thread, process
+  # Consecutive transitions per environment-worker message with the process
+  # backend; auto sends one contiguous run per environment and batch.
+  transition_chunk_size: auto
   policy_device: null
   inference_max_batch_size: null  # null uses num_envs
   inference_min_batch_size: 1

@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import contextlib
 import functools as ft
+import itertools
 import multiprocessing as mp
 import os
 import queue
 import threading
 import time
+import warnings
 from collections import deque, OrderedDict
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Literal
@@ -418,6 +420,108 @@ def _env_batch_loop(
             _put_result(result_queue, exc, shutdown_event)
 
 
+def _env_kwargs(create_env_kwargs, index: int) -> dict:
+    if create_env_kwargs is None:
+        return {}
+    if isinstance(create_env_kwargs, Mapping):
+        return dict(create_env_kwargs)
+    return dict(create_env_kwargs[index])
+
+
+def _process_slot_blocker(
+    *,
+    env_backend: str,
+    envs_per_worker: int,
+    policy_factory: Callable | None,
+    policy_backend: str | None,
+    server_backend: str,
+    policy_device: torch.device | None,
+    env_device: torch.device | None,
+    storing_device: torch.device | None,
+) -> str | None:
+    """Why environment workers cannot reach a dedicated inference process directly.
+
+    Returns ``None`` when a :class:`ProcessSlotTransport` can serve the
+    collector, otherwise a short reason for the log.
+    """
+    if env_backend != "multiprocessing":
+        return "environment workers are threads (env_backend='multiprocessing' is required)"
+    if envs_per_worker != 1:
+        return "the transport hosts one environment per worker process"
+    if policy_factory is None:
+        return (
+            "policy_factory is required to rebuild the policy in the inference process"
+        )
+    if policy_backend not in (None, "multiprocessing"):
+        return f"policy_backend={policy_backend!r} selects another inference transport"
+    if server_backend not in ("thread", "process"):
+        return f"service_backend={server_backend!r} selects another inference server"
+    if policy_device is not None and policy_device.type not in ("cpu", "cuda"):
+        # Weight updates cross process boundaries as shared CPU storage or CUDA IPC handles.
+        return (
+            f"policy_device={policy_device} cannot share weights with another process"
+        )
+    for name, target_device in (
+        ("env_device", env_device),
+        ("storing_device", storing_device),
+    ):
+        if target_device is not None and target_device.type != "cpu":
+            return f"{name}={target_device} is not a CPU device"
+    return None
+
+
+def _auto_process_slot_transport(
+    env_factory: Callable[..., EnvBase],
+    env_kwargs: dict,
+    policy: Callable,
+    *,
+    num_slots: int,
+    policy_version_key: NestedKey | None,
+) -> tuple[ProcessSlotTransport | None, str | None]:
+    """Derive fixed request and response layouts from one environment and one policy pass.
+
+    Returns the transport, or ``None`` with the reason the layouts could not be
+    derived.
+    """
+    in_keys = getattr(policy, "in_keys", None)
+    out_keys = getattr(policy, "out_keys", None)
+    if not in_keys or not out_keys:
+        return None, "the policy does not declare in_keys and out_keys"
+    env = env_factory(**env_kwargs)
+    try:
+        fake = env.fake_tensordict()
+    finally:
+        env.close()
+    missing = [key for key in in_keys if key not in fake.keys(True, True)]
+    if missing:
+        return None, f"the environment does not produce the policy inputs {missing}"
+    request = fake.select(*in_keys, strict=True).cpu()
+    reference = None
+    if isinstance(policy, torch.nn.Module):
+        reference = next(itertools.chain(policy.parameters(), policy.buffers()), None)
+    probe_device = reference.device if reference is not None else torch.device("cpu")
+    try:
+        with torch.no_grad():
+            output = policy(request.clone().unsqueeze(0).to(probe_device))
+    except Exception as err:  # noqa: BLE001
+        return None, f"the policy could not run on a sample request ({err!r})"
+    output = output.squeeze(0) if output.batch_dims else output
+    missing = [key for key in out_keys if key not in output.keys(True, True)]
+    if missing:
+        return None, f"the policy did not return its outputs {missing}"
+    response = output.select(*out_keys, strict=True).cpu()
+    if policy_version_key is not None:
+        response.set(
+            policy_version_key,
+            torch.zeros(response.batch_size, dtype=torch.long, device=response.device),
+        )
+    try:
+        transport = ProcessSlotTransport(request, response, num_slots=num_slots)
+    except (TypeError, ValueError) as err:
+        return None, f"the request/response layouts cannot use process slots ({err!r})"
+    return transport, None
+
+
 class AsyncBatchedCollector(BaseCollector):
     """Asynchronous collector with env slots and a policy server.
 
@@ -451,7 +555,10 @@ class AsyncBatchedCollector(BaseCollector):
     processes whatever observations have accumulated.
 
     The user simply provides env factories and a policy; the collector
-    handles all wiring internally.
+    handles all wiring internally. With ``transport="auto"``, multiprocessing
+    environment workers and a ``policy_factory``, it also derives the fixed
+    request and response layouts and serves the policy from a dedicated
+    process that the workers reach directly.
 
     Args:
         create_env_fn (list[Callable[[], EnvBase]]): a list of callables, each
@@ -479,20 +586,34 @@ class AsyncBatchedCollector(BaseCollector):
             ``1`` (default) dispatches immediately.
         server_timeout (float, optional): seconds the server waits for work
             before dispatching a partial batch.  Defaults to ``0.01``.
-        transport (InferenceTransport, optional): a pre-built transport
-            object. When provided, it takes precedence over ``policy_backend``.
-            A :class:`~torchrl.modules.inference_server.ProcessSlotTransport`
-            together with multiprocessing environment and server backends runs
-            the complete acting loop in environment worker processes. When
-            ``None`` (default), a transport is created from the resolved
-            ``policy_backend``.
+        transport (InferenceTransport, "auto" or "thread", optional): the
+            inference transport. A pre-built transport object takes precedence
+            over ``policy_backend``; a
+            :class:`~torchrl.modules.inference_server.ProcessSlotTransport`
+            runs the complete acting loop in environment worker processes and
+            implies a process inference server and multiprocessing environment
+            workers. ``"auto"`` builds that transport when environment workers
+            are processes with one environment each and a ``policy_factory``
+            is given: the request and response layouts come from one
+            environment's ``fake_tensordict()`` and one policy pass. When
+            those conditions do not hold, or the layouts cannot be derived,
+            the policy is served from a thread of this process and the reason
+            is logged. ``"driver"`` always relays requests through the
+            driver's coordinator threads to the transport derived from
+            ``policy_backend`` (a thread server by default, a process server
+            with ``service_backend="process"``). ``None`` (default) behaves like
+            ``"driver"`` and emits a
+            :class:`FutureWarning` when ``"auto"`` would pick process slots:
+            in v0.15 the default becomes ``"auto"``.
         device (torch.device or str, optional): device for policy inference
             (shorthand for ``InferenceDeviceConfig(policy_device=...)``).
             Defaults to ``None``.
         server_config (InferenceServerConfig, optional): structured server
             configuration: execution ``backend`` (``"thread"`` runs the serve
             loop in this process, ``"process"`` a dedicated server process
-            requiring ``policy_factory``), batching, optional static
+            requiring ``policy_factory``; a
+            :class:`~torchrl.modules.inference_server.ProcessSlotTransport`
+            turns ``"thread"`` into ``"process"``), batching, optional static
             CUDA-graph execution, and stats settings.
             Mutually exclusive with the ``max_batch_size``,
             ``min_batch_size``, and ``server_timeout`` keyword arguments.
@@ -509,7 +630,11 @@ class AsyncBatchedCollector(BaseCollector):
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
             One of ``"threading"``, ``"multiprocessing"``, ``"ray"``, or
-            ``"monarch"``.  Defaults to ``"threading"``.
+            ``"monarch"``.  Defaults to ``None``: environment workers run in
+            threads and inference uses the threading transport. In v0.15 the
+            environment-worker default changes to ``"multiprocessing"``; a
+            :class:`FutureWarning` is emitted until then when neither
+            ``backend`` nor ``env_backend`` is given.
         env_backend (str, optional): backend for the
             :class:`~torchrl.envs.AsyncEnvPool` that runs environments.  One
             of ``"threading"`` or ``"multiprocessing"``.  Falls back to
@@ -518,16 +643,23 @@ class AsyncBatchedCollector(BaseCollector):
         env_exchange (str, optional): data exchange of a multiprocessing
             :class:`~torchrl.envs.AsyncEnvPool`, one of ``"queue"``, ``"shm"``
             or ``"auto"``. The shared-memory exchange also enables batched
-            coordination from one thread. Defaults to ``"queue"``.
+            coordination from one thread; ``"auto"`` selects it whenever the
+            environment schema allows. It does not apply when a
+            :class:`~torchrl.modules.inference_server.ProcessSlotTransport`
+            owns the worker exchange. Defaults to ``"auto"``.
         envs_per_worker (int, optional): Number of environments hosted by each
             multiprocessing worker. Grouped workers share one coordinator that
             drains ready environments without waiting for a complete group.
             Defaults to ``1``.
-        transition_chunk_size (int, optional): number of consecutive
+        transition_chunk_size (int or "auto", optional): number of consecutive
             transitions each environment worker process accumulates before
             sending them to the driver as one dense message. Requires a
             :class:`~torchrl.modules.inference_server.ProcessSlotTransport`.
-            ``1`` (default) sends every transition as soon as it completes.
+            ``"auto"`` (default) uses ``frames_per_batch // len(create_env_fn)``
+            with process workers, so each batch holds one contiguous run per
+            environment like the synchronous collectors and a transition waits
+            at most one batch; it resolves to ``1`` otherwise.
+            ``1`` sends every transition as soon as it completes.
             Larger values take the driver off the per-transition path: it
             receives one message per chunk, concatenates whole chunks into
             each batch and writes each batch to ``replay_buffer`` with a
@@ -537,7 +669,7 @@ class AsyncBatchedCollector(BaseCollector):
             ``transition_chunk_size - 1`` transitions per environment stay in
             the worker while collection is paused or stopped. Batches are then
             dense :class:`~tensordict.TensorDict` instances and ``env_index``
-            is a tensor. Defaults to ``1``.
+            is a tensor. Defaults to ``"auto"``.
         policy_backend (str, optional): backend for the inference transport
             used to communicate with the
             :class:`~torchrl.modules.InferenceServer`.  One of
@@ -615,6 +747,7 @@ class AsyncBatchedCollector(BaseCollector):
         ...     policy=policy,
         ...     frames_per_batch=200,
         ...     total_frames=1000,
+        ...     env_backend="multiprocessing",
         ... )
         >>> for batch in collector:
         ...     print(batch.shape)
@@ -633,15 +766,14 @@ class AsyncBatchedCollector(BaseCollector):
         max_batch_size: int | None = None,
         min_batch_size: int | None = None,
         server_timeout: float | None = None,
-        transport: InferenceTransport | None = None,
+        transport: InferenceTransport | Literal["auto", "driver"] | None = None,
         device: torch.device | str | None = None,
-        backend: Literal[
-            "threading", "multiprocessing", "ray", "monarch"
-        ] = "threading",
+        backend: Literal["threading", "multiprocessing", "ray", "monarch"]
+        | None = None,
         env_backend: Literal["threading", "multiprocessing"] | None = None,
-        env_exchange: Literal["queue", "shm", "auto"] = "queue",
+        env_exchange: Literal["queue", "shm", "auto"] = "auto",
         envs_per_worker: int = 1,
-        transition_chunk_size: int = 1,
+        transition_chunk_size: int | Literal["auto"] = "auto",
         policy_backend: (
             Literal["threading", "multiprocessing", "ray", "monarch"] | None
         ) = None,
@@ -699,11 +831,7 @@ class AsyncBatchedCollector(BaseCollector):
         self._env_device = _devices.env_device
         self._storing_device = _devices.storing_device
 
-        # ---- resolve policy ---------------------------------------------------
         self._policy_factory = policy_factory
-        if policy_factory is not None and server_backend != "process":
-            policy = policy_factory()
-        self._policy = policy
 
         # ---- env config -------------------------------------------------------
         if not isinstance(create_env_fn, Sequence):
@@ -723,10 +851,35 @@ class AsyncBatchedCollector(BaseCollector):
         self._create_env_kwargs = create_env_kwargs
 
         # ---- resolve backends -------------------------------------------------
-        effective_env_backend = env_backend if env_backend is not None else backend
-        effective_policy_backend = (
-            policy_backend if policy_backend is not None else backend
-        )
+        explicit_transport = isinstance(transport, InferenceTransport)
+        if transport is not None and not explicit_transport:
+            if transport not in ("auto", "driver"):
+                raise ValueError(
+                    "transport must be an InferenceTransport, 'auto', 'driver' or "
+                    f"None, got {transport!r}."
+                )
+        if env_backend is not None:
+            effective_env_backend = env_backend
+        elif backend is not None:
+            effective_env_backend = backend
+        elif explicit_transport and isinstance(transport, ProcessSlotTransport):
+            # The transport only works with environment worker processes.
+            effective_env_backend = "multiprocessing"
+        else:
+            warnings.warn(
+                "AsyncBatchedCollector runs environment workers in threads when "
+                "neither backend nor env_backend is given. In v0.15 this default "
+                "will change to env_backend='multiprocessing'. Pass "
+                "env_backend='threading' to keep the current behavior, or "
+                "env_backend='multiprocessing' to adopt the future default now.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            effective_env_backend = "threading"
+        if policy_backend is not None:
+            effective_policy_backend = policy_backend
+        else:
+            effective_policy_backend = backend if backend is not None else "threading"
         if effective_env_backend not in _ENV_BACKENDS:
             raise ValueError(
                 f"env_backend={effective_env_backend!r} is not supported. "
@@ -763,17 +916,15 @@ class AsyncBatchedCollector(BaseCollector):
                 "env_backend='multiprocessing'."
             )
         self._envs_per_worker = envs_per_worker
-        if (
+        if transition_chunk_size != "auto" and (
             isinstance(transition_chunk_size, bool)
             or not isinstance(transition_chunk_size, int)
             or transition_chunk_size < 1
         ):
             raise ValueError(
-                "transition_chunk_size must be a positive integer, got "
+                "transition_chunk_size must be a positive integer or 'auto', got "
                 f"{transition_chunk_size!r}."
             )
-        self._transition_chunk_size = transition_chunk_size
-        self._uses_chunked_results = transition_chunk_size > 1
         if worker_affinity is None:
             self._worker_affinity = None
         else:
@@ -802,29 +953,73 @@ class AsyncBatchedCollector(BaseCollector):
             if driver_affinity is not None
             else None
         )
-        self._server_backend = server_backend
-        if server_backend == "process":
-            if policy_backend not in (None, "multiprocessing"):
-                raise ValueError(
-                    "InferenceServerConfig(service_backend='process') requires "
-                    "policy_backend=None or 'multiprocessing'."
+        # ---- resolve the transport --------------------------------------------
+        # Environment worker processes can talk to a dedicated inference
+        # process directly when the policy can be rebuilt there and no tensor
+        # has to cross the driver on the action path.
+        blocker = _process_slot_blocker(
+            env_backend=effective_env_backend,
+            envs_per_worker=envs_per_worker,
+            policy_factory=policy_factory,
+            policy_backend=policy_backend,
+            server_backend=server_backend,
+            policy_device=policy_device,
+            env_device=self._env_device,
+            storing_device=self._storing_device,
+        )
+        probe_policy = None
+        if explicit_transport:
+            pass
+        elif transport == "auto":
+            if blocker is None:
+                probe_policy = policy_factory()
+                transport, blocker = _auto_process_slot_transport(
+                    self._create_env_fn[0],
+                    _env_kwargs(create_env_kwargs, 0),
+                    probe_policy,
+                    num_slots=self._num_envs,
+                    policy_version_key=policy_version_key,
                 )
-            effective_policy_backend = "multiprocessing"
-        self._policy_backend = effective_policy_backend
+            if blocker is not None:
+                transport = None
+                torchrl_logger.info(
+                    "AsyncBatchedCollector(transport='auto') serves the policy "
+                    "from a thread of this process: %s.",
+                    blocker,
+                )
+            else:
+                torchrl_logger.info(
+                    "AsyncBatchedCollector(transport='auto') serves the policy "
+                    "from a dedicated process that the %d environment worker "
+                    "processes reach directly.",
+                    self._num_envs,
+                )
+        elif transport is None:
+            if blocker is None:
+                warnings.warn(
+                    "AsyncBatchedCollector serves the policy from a thread of this "
+                    "process by default. In v0.15, when environment workers are "
+                    "processes and a policy_factory is given, the default will "
+                    "become transport='auto', which serves the policy from a "
+                    "dedicated process that the environment workers reach "
+                    "directly. Pass transport='driver' to keep the current "
+                    "behavior, or transport='auto' to adopt the future default now.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
+        else:  # transport == "driver"
+            transport = None
 
-        # ---- build transport --------------------------------------------------
-        if transport is None:
-            transport = _make_transport(
-                effective_policy_backend, num_slots=self._num_envs
-            )
-        self._transport = transport
-        self._uses_process_env_workers = isinstance(transport, ProcessSlotTransport)
-        if self._uses_chunked_results and not self._uses_process_env_workers:
-            raise ValueError(
-                "transition_chunk_size > 1 requires a ProcessSlotTransport so "
-                "that environment worker processes assemble the chunks."
-            )
-        if self._uses_process_env_workers:
+        uses_process_env_workers = isinstance(transport, ProcessSlotTransport)
+        if uses_process_env_workers:
+            if server_backend == "thread":
+                # The transport reaches a dedicated inference process by design.
+                server_backend = "process"
+            if policy_factory is None:
+                raise TypeError(
+                    "ProcessSlotTransport requires policy_factory so the policy "
+                    "can be constructed inside the inference server process."
+                )
             if envs_per_worker != 1:
                 raise ValueError("ProcessSlotTransport requires envs_per_worker=1.")
             if (
@@ -835,15 +1030,21 @@ class AsyncBatchedCollector(BaseCollector):
                     "ProcessSlotTransport requires both a process inference server "
                     "and env_backend='multiprocessing'."
                 )
-            if env_exchange != "queue":
+            if env_exchange == "shm":
                 raise ValueError(
                     "env_exchange does not apply when ProcessSlotTransport owns "
-                    "the environment-worker exchange; leave it as 'queue'."
+                    "the environment-worker exchange; leave it as 'auto'."
                 )
             if transport._num_slots < self._num_envs:
                 raise ValueError(
                     f"ProcessSlotTransport needs at least one slot per environment "
                     f"({self._num_envs}), but has {transport._num_slots}."
+                )
+            if policy_device is not None and policy_device.type not in ("cpu", "cuda"):
+                raise ValueError(
+                    "ProcessSlotTransport requires a CPU or CUDA policy_device so "
+                    f"weight updates can be shared with the inference process; got "
+                    f"{policy_device}."
                 )
             for name, target_device in (
                 ("env_device", self._env_device),
@@ -855,6 +1056,43 @@ class AsyncBatchedCollector(BaseCollector):
                         f"{target_device}. Keep CUDA policy execution in the "
                         "inference server process."
                     )
+        self._server_backend = server_backend
+        if server_backend == "process":
+            if policy_backend not in (None, "multiprocessing"):
+                raise ValueError(
+                    "InferenceServerConfig(service_backend='process') requires "
+                    "policy_backend=None or 'multiprocessing'."
+                )
+            effective_policy_backend = "multiprocessing"
+        self._policy_backend = effective_policy_backend
+        if transport is None:
+            transport = _make_transport(
+                effective_policy_backend, num_slots=self._num_envs
+            )
+        self._transport = transport
+        self._uses_process_env_workers = uses_process_env_workers
+
+        # ---- resolve the chunk size -------------------------------------------
+        if transition_chunk_size == "auto":
+            # One contiguous run per environment and batch, the layout of the
+            # synchronous collectors, so a transition waits at most one batch.
+            transition_chunk_size = (
+                max(1, frames_per_batch // self._num_envs)
+                if uses_process_env_workers
+                else 1
+            )
+        self._transition_chunk_size = transition_chunk_size
+        self._uses_chunked_results = transition_chunk_size > 1
+        if self._uses_chunked_results and not uses_process_env_workers:
+            raise ValueError(
+                "transition_chunk_size > 1 requires a ProcessSlotTransport so "
+                "that environment worker processes assemble the chunks."
+            )
+
+        # ---- resolve policy ---------------------------------------------------
+        if policy_factory is not None and server_backend != "process":
+            policy = probe_policy if probe_policy is not None else policy_factory()
+        self._policy = policy
 
         # ---- build inference server -------------------------------------------
         if server_backend == "process":
@@ -930,6 +1168,8 @@ class AsyncBatchedCollector(BaseCollector):
         self._replay_lock = threading.Lock()
         self._replay_thread: threading.Thread | None = None
         self._replay_error: Exception | None = None
+        # Weights received before a process server started; applied at start.
+        self._pending_weights: TensorDictBase | None = None
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -974,6 +1214,7 @@ class AsyncBatchedCollector(BaseCollector):
                     )
                 if not self._server.is_alive:
                     self._server.start()
+                self._apply_pending_weights()
 
                 create_env_kwargs = self._create_env_kwargs
                 if create_env_kwargs is None:
@@ -1083,6 +1324,7 @@ class AsyncBatchedCollector(BaseCollector):
             # Start inference server
             if not self._server.is_alive:
                 self._server.start()
+            self._apply_pending_weights()
 
             # Start coordinator threads. Shared slots can be drained safely in
             # ready batches, avoiding one Python thread and one clone per env.
@@ -1253,6 +1495,11 @@ class AsyncBatchedCollector(BaseCollector):
                 self._pause_lock.release()
 
     @property
+    def server_backend(self) -> str:
+        """The resolved inference server backend: ``"thread"``, ``"process"`` or ``"ray"``."""
+        return self._server_backend
+
+    @property
     def env(self) -> AsyncEnvPool:
         """The underlying :class:`AsyncEnvPool`."""
         self._ensure_started()
@@ -1308,11 +1555,24 @@ class AsyncBatchedCollector(BaseCollector):
         weights = weights.detach().clone()
         update_model_weights = getattr(self._server, "update_model_weights", None)
         if update_model_weights is not None:
+            if not self._server.is_alive:
+                # The server process starts with the first iteration. Keep the
+                # latest weights and apply them right after it starts, before
+                # any request is served, so a policy rebuilt from a factory acts
+                # with the trainer's weights from the first step.
+                self._pending_weights = weights
+                return
             update_model_weights(weights)
         else:
             self._server.update_model(
                 ft.partial(WeightStrategy().apply_weights, weights=weights)
             )
+
+    def _apply_pending_weights(self) -> None:
+        if self._pending_weights is None:
+            return
+        weights, self._pending_weights = self._pending_weights, None
+        self._server.update_model_weights(weights)
 
     # ------------------------------------------------------------------
     # Rollout: drain the result queue

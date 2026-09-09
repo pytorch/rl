@@ -128,9 +128,9 @@ class StreamingSliceSampler(SliceSampler):
             use_gpu=use_gpu,
         )
         self._queued_slices = collections.deque()
-        self._pending_indices = torch.empty(0, dtype=torch.long)
-        self._pending_versions = torch.empty(0, dtype=torch.long)
-        self._slot_versions = torch.empty(0, dtype=torch.long)
+        self._pending_indices = torch.empty(0, dtype=torch.long, device="cpu")
+        self._pending_versions = torch.empty(0, dtype=torch.long, device="cpu")
+        self._slot_versions = torch.empty(0, dtype=torch.long, device="cpu")
         self._last_traj = None
         self._last_was_done = False
 
@@ -138,7 +138,7 @@ class StreamingSliceSampler(SliceSampler):
         if self._slot_versions.numel() >= min_size:
             return
         size = min(capacity, max(min_size, 2 * self._slot_versions.numel(), 1024))
-        versions = torch.zeros(size, dtype=torch.long)
+        versions = torch.zeros(size, dtype=torch.long, device="cpu")
         versions[: self._slot_versions.numel()] = self._slot_versions
         self._slot_versions = versions
 
@@ -161,7 +161,9 @@ class StreamingSliceSampler(SliceSampler):
             raise RuntimeError(
                 "StreamingSliceSampler requires one-dimensional write indices."
             )
-        storage_index = torch.as_tensor(index, dtype=torch.long).reshape(-1)
+        storage_index = torch.as_tensor(index, dtype=torch.long, device="cpu").reshape(
+            -1
+        )
         if not storage_index.numel():
             return
         if storage_index.numel() > storage.max_size:
@@ -182,8 +184,8 @@ class StreamingSliceSampler(SliceSampler):
         if self._pending_indices.numel() and not torch.equal(
             self._slot_versions[self._pending_indices], self._pending_versions
         ):
-            self._pending_indices = torch.empty(0, dtype=torch.long)
-            self._pending_versions = torch.empty(0, dtype=torch.long)
+            self._pending_indices = torch.empty(0, dtype=torch.long, device="cpu")
+            self._pending_versions = torch.empty(0, dtype=torch.long, device="cpu")
 
         data = storage.get(storage_index)
         if not isinstance(data, TensorDictBase):
@@ -200,7 +202,7 @@ class StreamingSliceSampler(SliceSampler):
             if trajectory is not None:
                 trajectory = trajectory.reshape(num_records, -1).cpu()
 
-        done = torch.zeros(num_records, dtype=torch.bool)
+        done = torch.zeros(num_records, dtype=torch.bool, device="cpu")
         boundary_keys = self.end_keys or (self.end_key,)
         for key in boundary_keys:
             value = data.get(key, default=None)
@@ -227,7 +229,7 @@ class StreamingSliceSampler(SliceSampler):
             combined_indices = torch.cat((self._pending_indices, indices))
             combined_versions = torch.cat((self._pending_versions, occurrence_versions))
             combined_done = torch.cat(
-                (torch.zeros(pending_size, dtype=torch.bool), done)
+                (torch.zeros(pending_size, dtype=torch.bool, device="cpu"), done)
             )
         else:
             pending_size = 0
@@ -237,15 +239,20 @@ class StreamingSliceSampler(SliceSampler):
 
         starts = torch.cat(
             (
-                torch.zeros(1, dtype=torch.long),
+                torch.zeros(1, dtype=torch.long, device="cpu"),
                 boundary_before.nonzero().flatten() + pending_size,
             )
         ).unique(sorted=True)
         stops = torch.cat(
-            (starts[1:], torch.tensor([combined_indices.numel()], dtype=torch.long))
+            (
+                starts[1:],
+                torch.tensor(
+                    [combined_indices.numel()], dtype=torch.long, device="cpu"
+                ),
+            )
         )
-        self._pending_indices = torch.empty(0, dtype=torch.long)
-        self._pending_versions = torch.empty(0, dtype=torch.long)
+        self._pending_indices = torch.empty(0, dtype=torch.long, device="cpu")
+        self._pending_versions = torch.empty(0, dtype=torch.long, device="cpu")
         for segment_id, (start, stop) in enumerate(
             zip(starts.tolist(), stops.tolist())
         ):
@@ -339,8 +346,8 @@ class StreamingSliceSampler(SliceSampler):
 
     def _end_stream(self, index: torch.Tensor, *, storage: Storage) -> None:
         super()._end_stream(index, storage=storage)
-        self._pending_indices = torch.empty(0, dtype=torch.long)
-        self._pending_versions = torch.empty(0, dtype=torch.long)
+        self._pending_indices = torch.empty(0, dtype=torch.long, device="cpu")
+        self._pending_versions = torch.empty(0, dtype=torch.long, device="cpu")
         self._last_traj = None
         self._last_was_done = True
 
@@ -348,9 +355,9 @@ class StreamingSliceSampler(SliceSampler):
         super()._empty()
         self._cache.clear()
         self._queued_slices.clear()
-        self._pending_indices = torch.empty(0, dtype=torch.long)
-        self._pending_versions = torch.empty(0, dtype=torch.long)
-        self._slot_versions = torch.empty(0, dtype=torch.long)
+        self._pending_indices = torch.empty(0, dtype=torch.long, device="cpu")
+        self._pending_versions = torch.empty(0, dtype=torch.long, device="cpu")
+        self._slot_versions = torch.empty(0, dtype=torch.long, device="cpu")
         self._last_traj = None
         self._last_was_done = False
 
@@ -360,8 +367,12 @@ class StreamingSliceSampler(SliceSampler):
             queued_indices = torch.stack(queued_indices)
             queued_versions = torch.stack(queued_versions)
         else:
-            queued_indices = torch.empty((0, self.slice_len), dtype=torch.long)
-            queued_versions = torch.empty((0, self.slice_len), dtype=torch.long)
+            queued_indices = torch.empty(
+                (0, self.slice_len), dtype=torch.long, device="cpu"
+            )
+            queued_versions = torch.empty(
+                (0, self.slice_len), dtype=torch.long, device="cpu"
+            )
         return {
             "slot_versions": self._slot_versions.clone(),
             "queued_indices": queued_indices,
@@ -371,11 +382,11 @@ class StreamingSliceSampler(SliceSampler):
             "last_traj": (
                 self._last_traj.clone()
                 if self._last_traj is not None
-                else torch.empty(0)
+                else torch.empty(0, device="cpu")
             ),
-            "has_last_traj": torch.tensor(self._last_traj is not None),
-            "last_was_done": torch.tensor(self._last_was_done),
-            "slice_len": torch.tensor(self.slice_len),
+            "has_last_traj": torch.tensor(self._last_traj is not None, device="cpu"),
+            "last_was_done": torch.tensor(self._last_was_done, device="cpu"),
+            "slice_len": torch.tensor(self.slice_len, device="cpu"),
         }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
@@ -385,17 +396,17 @@ class StreamingSliceSampler(SliceSampler):
                 f"Cannot restore slice_len={slice_len} into a "
                 f"slice_len={self.slice_len} StreamingSliceSampler."
             )
-        self._slot_versions = state_dict["slot_versions"].clone()
+        self._slot_versions = state_dict["slot_versions"].cpu().clone()
         self._queued_slices = collections.deque(
             zip(
-                state_dict["queued_indices"].clone().unbind(0),
-                state_dict["queued_versions"].clone().unbind(0),
+                state_dict["queued_indices"].cpu().clone().unbind(0),
+                state_dict["queued_versions"].cpu().clone().unbind(0),
             )
         )
-        self._pending_indices = state_dict["pending_indices"].clone()
-        self._pending_versions = state_dict["pending_versions"].clone()
+        self._pending_indices = state_dict["pending_indices"].cpu().clone()
+        self._pending_versions = state_dict["pending_versions"].cpu().clone()
         self._last_traj = (
-            state_dict["last_traj"].clone()
+            state_dict["last_traj"].cpu().clone()
             if bool(state_dict["has_last_traj"])
             else None
         )

@@ -8,12 +8,14 @@ import concurrent.futures
 import contextlib
 import functools as ft
 import importlib.util
+import logging
 import multiprocessing as mp
 import os
 import pickle
 import queue
 import threading
 import time
+import warnings
 
 import psutil
 import pytest
@@ -1970,7 +1972,8 @@ class TestProcessSlotTransport:
             assert server.stats()["requests"] == 6
         assert all(result_queue.get(timeout=1.0) is True for _ in processes)
 
-    def test_batched_slot_io(self):
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_batched_slot_io(self, default_device):
         """Slots are gathered and scattered as batches, in the drained order."""
         request_spec = TensorDict({"agent": {"observation": torch.zeros(4)}})
         response_spec = TensorDict(
@@ -1979,7 +1982,8 @@ class TestProcessSlotTransport:
                 "policy_version": torch.zeros((), dtype=torch.long),
             }
         )
-        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
+        with torch.device(default_device):
+            transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
         clients = [transport.client() for _ in range(4)]
         futures = [
             client.submit(
@@ -1998,7 +2002,8 @@ class TestProcessSlotTransport:
         assert requests.get(_REMOTE_INTERACTION_TYPE_KEY).shape == (4,)
         # Rows follow the given order, not the slot numbering, and the tail
         # rows of the staging batch stay untouched.
-        transport.gather_requests([2, 0], out=requests)
+        with torch.device(default_device):
+            transport.gather_requests([2, 0], out=requests)
         assert torch.equal(
             requests["agent", "observation"],
             torch.tensor([2.0, 0.0, 0.0, 0.0]).unsqueeze(-1).expand(4, 4),
@@ -2014,7 +2019,8 @@ class TestProcessSlotTransport:
         with pytest.raises(RuntimeError, match="batch size"):
             transport.resolve_batch([2, 0], responses[:3])
         assert not futures[2].done()
-        transport.resolve_batch([2, 0], responses[:2])
+        with torch.device(default_device):
+            transport.resolve_batch([2, 0], responses[:2])
         assert torch.equal(
             futures[2].result(timeout=1.0)["agent", "action"], torch.full((2,), 20.0)
         )
@@ -2798,6 +2804,38 @@ class _BatchCountingPolicy(TensorDictModule):
 
 def _make_counting_policy():
     return _BatchCountingPolicy()
+
+
+class _MetadataCountingPolicy(_BatchCountingPolicy):
+    def __init__(self):
+        super().__init__()
+        self.out_keys = ["action", ("metadata", "label")]
+
+    def forward(self, td: TensorDictBase) -> TensorDictBase:
+        td = super().forward(td)
+        return td.set(
+            ("metadata", "label"), NonTensorData("example", batch_size=td.batch_size)
+        )
+
+
+class _ScaledCountingPolicy(TensorDictModule):
+    """Counting policy whose increment is a parameter, so weight pushes are visible."""
+
+    def __init__(self):
+        super().__init__(
+            module=nn.Module(),  # placeholder
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        self.scale = nn.Parameter(torch.ones(()))
+
+    def forward(self, td: TensorDictBase) -> TensorDictBase:
+        obs = td.get("observation")
+        return td.set("action", torch.full_like(obs, int(self.scale.item())))
+
+
+def _make_scaled_counting_policy():
+    return _ScaledCountingPolicy()
 
 
 class _BadProcessPolicy(nn.Module):
@@ -3969,6 +4007,9 @@ class TestAsyncBatchedCollector:
             frames_per_batch=12,
             total_frames=total_frames,
             env_backend="multiprocessing",
+            # One transition per message: the capacity accounting below counts
+            # transitions, not chunks.
+            transition_chunk_size=1,
             server_config=InferenceServerConfig(
                 service_backend="process", max_batch_size=num_envs
             ),
@@ -4162,6 +4203,168 @@ class TestAsyncBatchedCollector:
                 env_backend="threading",
             )
 
+    @pytest.mark.parametrize(
+        "batch_size, policy_version_key",
+        [((), "policy_version"), ((2,), ("collector", "policy_version"))],
+    )
+    def test_auto_transport_serves_from_environment_processes(
+        self, batch_size, policy_version_key
+    ):
+        """transport='auto' derives the slot layouts and picks process slots."""
+        num_envs = 2
+        collector = AsyncBatchedCollector(
+            create_env_fn=[ft.partial(CountingEnv, batch_size=batch_size)] * num_envs,
+            policy_factory=_make_counting_policy,
+            transport="auto",
+            policy_version_key=policy_version_key,
+            frames_per_batch=12,
+            total_frames=24,
+            env_backend="multiprocessing",
+        )
+        try:
+            assert collector._uses_process_env_workers
+            assert collector.server_backend == "process"
+            assert collector._transition_chunk_size == 12 // num_envs
+            frames = 0
+            for batch in collector:
+                frames += batch.numel()
+                assert batch["action"].eq(1).all()
+                assert batch[policy_version_key].shape == batch.batch_size
+                assert batch[policy_version_key].eq(0).all()
+            assert frames == 24
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize(
+        "options, reason",
+        [
+            ({"policy": _make_counting_policy()}, "policy_factory"),
+            (
+                {"policy_factory": _make_counting_policy, "envs_per_worker": 2},
+                "one environment per worker",
+            ),
+            (
+                {
+                    "policy_factory": _make_counting_policy,
+                    "env_backend": "threading",
+                },
+                "threads",
+            ),
+            (
+                {"policy_factory": _MetadataCountingPolicy},
+                "NonTensorData",
+            ),
+        ],
+    )
+    def test_auto_transport_falls_back_to_a_thread_server(
+        self, options, reason, caplog
+    ):
+        options = {"env_backend": "multiprocessing", **options}
+        with caplog.at_level(logging.INFO, logger="torchrl"):
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                transport="auto",
+                frames_per_batch=4,
+                total_frames=4,
+                **options,
+            )
+        try:
+            assert not collector._uses_process_env_workers
+            assert collector.server_backend == "thread"
+            assert collector._transition_chunk_size == 1
+            assert reason in caplog.text
+            frames = 0
+            for batch in collector:
+                frames += batch.numel()
+                assert batch["action"].eq(1).all()
+                if options.get("policy_factory") is _MetadataCountingPolicy:
+                    assert all(row["metadata", "label"] == "example" for row in batch)
+            assert frames == 4
+        finally:
+            collector.shutdown()
+
+    def test_auto_transport_falls_back_when_policy_inputs_are_missing(self, caplog):
+        policy = TensorDictModule(
+            lambda observation: observation + 1,
+            in_keys=["missing_key"],
+            out_keys=["action"],
+        )
+        with caplog.at_level(logging.INFO, logger="torchrl"):
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy_factory=lambda: policy,
+                transport="auto",
+                frames_per_batch=4,
+                env_backend="multiprocessing",
+            )
+        try:
+            assert not collector._uses_process_env_workers
+            assert "missing_key" in caplog.text
+        finally:
+            collector.shutdown()
+
+    def test_default_transport_warns_before_the_process_slot_default(self):
+        kwargs = {
+            "create_env_fn": [_counting_env_factory] * 2,
+            "policy_factory": _make_counting_policy,
+            "frames_per_batch": 4,
+            "env_backend": "multiprocessing",
+        }
+        with pytest.warns(FutureWarning, match="transport='driver'"):
+            collector = AsyncBatchedCollector(**kwargs)
+        collector.shutdown()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            collector = AsyncBatchedCollector(transport="driver", **kwargs)
+            collector.shutdown()
+            # Without a policy_factory the default cannot change, so no warning.
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=4,
+                env_backend="multiprocessing",
+            )
+            collector.shutdown()
+
+    def test_weights_pushed_before_start_reach_the_process_server(self):
+        """A policy rebuilt from a factory acts with pushed weights from its first step."""
+        trained = _ScaledCountingPolicy()
+        with torch.no_grad():
+            trained.scale.fill_(2.0)
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_scaled_counting_policy,
+            transport="auto",
+            frames_per_batch=8,
+            total_frames=8,
+            env_backend="multiprocessing",
+        )
+        try:
+            assert collector.server_backend == "process"
+            # The server process does not exist yet; the update must wait for it.
+            collector.update_policy_weights_(trained)
+            batch = next(iter(collector))
+            assert batch["action"].eq(2).all()
+        finally:
+            collector.shutdown()
+
+    def test_process_slot_transport_implies_process_server_and_workers(self):
+        """An explicit ProcessSlotTransport needs no server or env backend settings."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_counting_policy,
+            transport=_counting_process_transport(2),
+            frames_per_batch=4,
+            total_frames=8,
+        )
+        try:
+            assert collector.server_backend == "process"
+            assert collector._env_backend == "multiprocessing"
+            assert collector._transition_chunk_size == 2
+            assert sum(batch.numel() for batch in collector) == 8
+        finally:
+            collector.shutdown()
+
     @pytest.mark.parametrize("failure", ["reset", "worker_death"])
     def test_process_slot_worker_failure_with_active_stream(self, failure):
         entered = mp.get_context("spawn").Event()
@@ -4291,6 +4494,10 @@ class TestAsyncBatchedCollector:
                 {"device_config": InferenceDeviceConfig(env_device="cuda")},
                 "CPU env_device",
             ),
+            (
+                {"device_config": InferenceDeviceConfig(policy_device="meta")},
+                "CPU or CUDA policy_device",
+            ),
         ],
     )
     def test_process_slots_reject_unsupported_collection(self, override, message):
@@ -4322,6 +4529,25 @@ class TestAsyncBatchedCollector:
     def test_invalid_server_backend_raises(self):
         with pytest.raises(ValueError, match="backend"):
             InferenceServerConfig(service_backend="not-a-backend")
+
+    def test_default_env_backend_warns_before_the_multiprocessing_default(self):
+        with pytest.warns(FutureWarning, match="env_backend='multiprocessing'"):
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=4,
+            )
+        assert collector._env_backend == "threading"
+        collector.shutdown()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=4,
+                env_backend="threading",
+            )
+            collector.shutdown()
 
     def test_server_death_raises_instead_of_hanging(self):
         """Killing the server process surfaces an error in the iterator."""
