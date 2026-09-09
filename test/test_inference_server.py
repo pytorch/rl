@@ -2802,6 +2802,18 @@ def _make_counting_policy():
     return _BatchCountingPolicy()
 
 
+class _MetadataCountingPolicy(_BatchCountingPolicy):
+    def __init__(self):
+        super().__init__()
+        self.out_keys = ["action", ("metadata", "label")]
+
+    def forward(self, td: TensorDictBase) -> TensorDictBase:
+        td = super().forward(td)
+        return td.set(
+            ("metadata", "label"), NonTensorData("example", batch_size=td.batch_size)
+        )
+
+
 class _ScaledCountingPolicy(TensorDictModule):
     """Counting policy whose increment is a parameter, so weight pushes are visible."""
 
@@ -4234,6 +4246,10 @@ class TestAsyncBatchedCollector:
                 },
                 "threads",
             ),
+            (
+                {"policy_factory": _MetadataCountingPolicy},
+                "NonTensorData",
+            ),
         ],
     )
     def test_auto_transport_falls_back_to_a_thread_server(
@@ -4253,7 +4269,13 @@ class TestAsyncBatchedCollector:
             assert collector.server_backend == "thread"
             assert collector._transition_chunk_size == 1
             assert reason in caplog.text
-            assert sum(batch.numel() for batch in collector) == 4
+            frames = 0
+            for batch in collector:
+                frames += batch.numel()
+                assert batch["action"].eq(1).all()
+                if options.get("policy_factory") is _MetadataCountingPolicy:
+                    assert all(row["metadata", "label"] == "example" for row in batch)
+            assert frames == 4
         finally:
             collector.shutdown()
 

@@ -514,7 +514,11 @@ def _auto_process_slot_transport(
         response.set(
             policy_version_key, torch.zeros(response.batch_size, dtype=torch.long)
         )
-    return ProcessSlotTransport(request, response, num_slots=num_slots), None
+    try:
+        transport = ProcessSlotTransport(request, response, num_slots=num_slots)
+    except (TypeError, ValueError) as err:
+        return None, f"the request/response layouts cannot use process slots ({err!r})"
+    return transport, None
 
 
 class AsyncBatchedCollector(BaseCollector):
