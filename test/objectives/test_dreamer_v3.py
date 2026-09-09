@@ -2841,8 +2841,11 @@ def test_dreamer_v3_native_replay_collection_smoke(
             for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
         ]
         if budget == "time":
-            assert records[-1]["total_action_steps"] > 0
-            assert records[-1]["elapsed_seconds"] < 5
+            # The budget is checked after each batch, so an expired budget stops
+            # the run at the first batch. Wall time is not asserted: starting
+            # the inference and environment processes on a loaded CI runner
+            # can take longer than the budget itself.
+            assert records[-1]["total_action_steps"] == cfg.collector.frames_per_batch
         else:
             assert records[-1]["total_action_steps"] == 16
             assert (records[-1]["updates"] > 0) == (budget != "warmup")
