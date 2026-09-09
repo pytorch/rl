@@ -8,6 +8,7 @@ import concurrent.futures
 import contextlib
 import functools as ft
 import importlib.util
+import logging
 import multiprocessing as mp
 import os
 import pickle
@@ -3970,6 +3971,9 @@ class TestAsyncBatchedCollector:
             frames_per_batch=12,
             total_frames=total_frames,
             env_backend="multiprocessing",
+            # One transition per message: the capacity accounting below counts
+            # transitions, not chunks.
+            transition_chunk_size=1,
             server_config=InferenceServerConfig(
                 service_backend="process", max_batch_size=num_envs
             ),
@@ -4163,6 +4167,128 @@ class TestAsyncBatchedCollector:
                 env_backend="threading",
             )
 
+    def test_auto_transport_serves_from_environment_processes(self):
+        """transport='auto' derives the slot layouts and picks process slots."""
+        num_envs = 2
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy_factory=_make_counting_policy,
+            transport="auto",
+            frames_per_batch=12,
+            total_frames=24,
+            env_backend="multiprocessing",
+        )
+        try:
+            assert collector._uses_process_env_workers
+            assert collector.server_backend == "process"
+            assert collector._transition_chunk_size == 12 // num_envs
+            frames = 0
+            for batch in collector:
+                frames += batch.numel()
+                assert batch["action"].eq(1).all()
+                assert "policy_version" in batch.keys()
+            assert frames == 24
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize(
+        "options, reason",
+        [
+            ({"policy": _make_counting_policy()}, "policy_factory"),
+            (
+                {"policy_factory": _make_counting_policy, "envs_per_worker": 2},
+                "one environment per worker",
+            ),
+            (
+                {
+                    "policy_factory": _make_counting_policy,
+                    "env_backend": "threading",
+                },
+                "threads",
+            ),
+        ],
+    )
+    def test_auto_transport_falls_back_to_a_thread_server(
+        self, options, reason, caplog
+    ):
+        options = {"env_backend": "multiprocessing", **options}
+        with caplog.at_level(logging.INFO, logger="torchrl"):
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                transport="auto",
+                frames_per_batch=4,
+                total_frames=4,
+                **options,
+            )
+        try:
+            assert not collector._uses_process_env_workers
+            assert collector.server_backend == "thread"
+            assert collector._transition_chunk_size == 1
+            assert reason in caplog.text
+            assert sum(batch.numel() for batch in collector) == 4
+        finally:
+            collector.shutdown()
+
+    def test_auto_transport_falls_back_when_policy_inputs_are_missing(self, caplog):
+        policy = TensorDictModule(
+            lambda observation: observation + 1,
+            in_keys=["missing_key"],
+            out_keys=["action"],
+        )
+        with caplog.at_level(logging.INFO, logger="torchrl"):
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy_factory=lambda: policy,
+                transport="auto",
+                frames_per_batch=4,
+                env_backend="multiprocessing",
+            )
+        try:
+            assert not collector._uses_process_env_workers
+            assert "missing_key" in caplog.text
+        finally:
+            collector.shutdown()
+
+    def test_default_transport_warns_before_the_process_slot_default(self):
+        kwargs = {
+            "create_env_fn": [_counting_env_factory] * 2,
+            "policy_factory": _make_counting_policy,
+            "frames_per_batch": 4,
+            "env_backend": "multiprocessing",
+        }
+        with pytest.warns(FutureWarning, match="transport='auto'"):
+            collector = AsyncBatchedCollector(**kwargs)
+        collector.shutdown()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            collector = AsyncBatchedCollector(transport="thread", **kwargs)
+            collector.shutdown()
+            # Without a policy_factory the default cannot change, so no warning.
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=4,
+                env_backend="multiprocessing",
+            )
+            collector.shutdown()
+
+    def test_process_slot_transport_implies_process_server_and_workers(self):
+        """An explicit ProcessSlotTransport needs no server or env backend settings."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_counting_policy,
+            transport=_counting_process_transport(2),
+            frames_per_batch=4,
+            total_frames=8,
+        )
+        try:
+            assert collector.server_backend == "process"
+            assert collector._env_backend == "multiprocessing"
+            assert collector._transition_chunk_size == 2
+            assert sum(batch.numel() for batch in collector) == 8
+        finally:
+            collector.shutdown()
+
     @pytest.mark.parametrize("failure", ["reset", "worker_death"])
     def test_process_slot_worker_failure_with_active_stream(self, failure):
         entered = mp.get_context("spawn").Event()
@@ -4291,6 +4417,10 @@ class TestAsyncBatchedCollector:
             (
                 {"device_config": InferenceDeviceConfig(env_device="cuda")},
                 "CPU env_device",
+            ),
+            (
+                {"device_config": InferenceDeviceConfig(policy_device="meta")},
+                "CPU or CUDA policy_device",
             ),
         ],
     )

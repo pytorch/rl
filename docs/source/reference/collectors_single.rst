@@ -187,41 +187,48 @@ Kubernetes CPU Manager considerations.
   idle time.
 - Supports ``yield_completed_trajectories=True`` for episode-level yields.
 
-For many fixed-schema CPU environments, set ``env_backend="multiprocessing"``
-and ``env_exchange="shm"``. The collector then drains ready shared-memory slots
-in batches from one coordinator thread, while keeping faster environments
+For many fixed-schema CPU environments, set ``env_backend="multiprocessing"``.
+The default exchange (``env_exchange="auto"``) then uses shared memory whenever
+the environment schema allows, and the collector drains ready shared-memory
+slots in batches from one coordinator thread while keeping faster environments
 independent of slower ones. This path is intended for environments whose step
 latency dominates its millisecond-scale coordinator polling interval.
 
 When both environment stepping and inference should leave the driver process,
-pass a :class:`~torchrl.modules.inference_server.ProcessSlotTransport` together
-with ``env_backend="multiprocessing"`` and an
-:class:`~torchrl.modules.inference_server.InferenceServerConfig` whose
-``service_backend`` is ``"process"``. Each environment process then performs
-its own reset/infer/step loop against a fixed shared-memory inference slot; the
-driver receives completed transitions only. This mode bounds completed and
-in-flight transitions together to twice the environment count. Workers park
-before reserving capacity when the driver stops consuming, and ``pause()``
-still works with a full buffer. Environment workers are daemonic and both the
-workers and inference server exit if their owning process dies, including
-while environment or policy calls are blocked. Call ``shutdown()`` for normal
-cleanup; abrupt owner death cannot guarantee environment cleanup hooks run.
-Environment factories in this mode must not start multiprocessing children.
+pass ``transport="auto"`` together with ``env_backend="multiprocessing"`` and a
+``policy_factory``. The collector derives the fixed request and response
+layouts from one environment's ``fake_tensordict()`` and one policy pass, builds
+a :class:`~torchrl.modules.inference_server.ProcessSlotTransport` and serves the
+policy from a dedicated process. Each environment process then performs its own
+reset/infer/step loop against a fixed shared-memory inference slot; the driver
+receives completed transitions only. When the conditions do not hold (threaded
+environment workers, grouped workers, no ``policy_factory``, or a policy whose
+inputs the environment does not produce), the policy is served from a thread of
+the driver process and the reason is logged. A pre-built
+:class:`~torchrl.modules.inference_server.ProcessSlotTransport` can be passed
+instead; it implies the process inference server and multiprocessing workers.
+In v0.15 ``transport="auto"`` becomes the default; until then the collector
+emits a :class:`FutureWarning` when the default would change its behavior.
+This mode bounds completed and in-flight transitions together to twice the
+environment count. Workers park before reserving capacity when the driver stops
+consuming, and ``pause()`` still works with a full buffer. Environment workers
+are daemonic and both the workers and inference server exit if their owning
+process dies, including while environment or policy calls are blocked. Call
+``shutdown()`` for normal cleanup; abrupt owner death cannot guarantee
+environment cleanup hooks run. Environment factories in this mode must not start
+multiprocessing children.
 
-By default each worker sends every transition as its own message, and the
-driver unpickles, stacks and writes them one at a time. When many environments
-feed a replay buffer this per-transition work can leave the driver as the
-bottleneck while the environments wait for result capacity. Set
-``transition_chunk_size`` (for example ``64``) so that each worker accumulates
-that many consecutive transitions and sends them as one dense message. The
-driver then receives one message per chunk, concatenates whole chunks into each
-batch and performs a single routed replay write per batch, so its cost per
-transition is amortized over the chunk. Transitions reach the driver only once
-their chunk is complete, so pick a chunk size that keeps this delay acceptable
-for the environment step time; up to ``transition_chunk_size - 1`` transitions
-per environment remain in the worker while collection is paused or stopped.
-Chunked batches are dense :class:`~tensordict.TensorDict` instances whose
-``env_index`` is a tensor.
+With process workers, ``transition_chunk_size="auto"`` (the default) makes each
+worker accumulate ``frames_per_batch // num_envs`` consecutive transitions and
+send them as one dense message, so every batch holds one contiguous run per
+environment, the layout of the synchronous collectors, and a transition waits at
+most one batch. The driver then receives one message per chunk, concatenates
+whole chunks into each batch and performs a single routed replay write per
+batch, so its cost per transition is amortized over the chunk. Pass ``1`` to
+send every transition as soon as it completes, or a larger value to amortize
+further; up to ``transition_chunk_size - 1`` transitions per environment remain
+in the worker while collection is paused or stopped. Chunked batches are dense
+:class:`~tensordict.TensorDict` instances whose ``env_index`` is a tensor.
 
 Scaling ``Collector`` across local processes
 --------------------------------------------
