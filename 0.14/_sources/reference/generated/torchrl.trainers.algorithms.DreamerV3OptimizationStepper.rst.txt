@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms
+
+
+DreamerV3OptimizationStepper
+============================
+
+.. autoclass:: DreamerV3OptimizationStepper
+    :members:

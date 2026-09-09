@@ -24,19 +24,43 @@ environment instances themselves.
 - **exchange** (*Literal**[**"queue"**,**"shm"**,**"auto"**]**,**optional*) -
 
 Data exchange
-used by the multiprocessing backend. `"shm"` stores fixed-shape
-tensor data in shared slots and sends only readiness descriptors
-through queues; it requires identical, fixed-shape, CPU, tensor-only
-schemas across workers. `"auto"` selects `"shm"` when the env
-schema supports it and falls back to `"queue"` otherwise (the
-resolution is reported by `resolved_exchange` and logged on
-fallback). Defaults to `"queue"`.
+used by the multiprocessing backend. `"queue"` supports dynamic
+data and copies received tensors out of multiprocessing shared
+memory so retaining results does not retain one mapping per tensor.
+`"shm"` stores fixed-shape tensor data in shared slots and sends
+only readiness descriptors through queues; it requires identical,
+fixed-shape, CPU, tensor-only schemas across workers. `"auto"`
+selects `"shm"` when the env schema supports it and falls back to
+`"queue"` otherwise (the resolution is reported by
+`resolved_exchange` and logged on fallback). Defaults to
+`"queue"`.
 
 Warning
 
 The default will change from `"queue"` to `"auto"` in
 v0.15 for the multiprocessing backend. A `FutureWarning` is
 emitted when the default is relied upon.
+- **worker_affinity** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**] or**Callable**[**[**int**]**,*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**]**,**optional*) -
+
+Optional Linux CPU placement for multiprocessing workers. This is
+useful when environment workers share a constrained CPU set with
+CPU-heavy simulators or other services: without affinity, the
+scheduler may place them on the same CPUs and increase environment
+step-time jitter. Most users should leave this as `None`.
+
+TorchRL can discover which CPUs the current process may use, but
+it cannot infer which CPUs the application has reserved for other
+work or how many threads an environment and its subprocesses need.
+It therefore does not choose a partition automatically. Provide
+one mask per worker process, or a callable mapping a worker
+index to its mask. The mask is applied before environment threads
+and factories start and is inherited by subprocesses they start.
+Defaults to `None`. See [CPU affinity (Linux)](../envs_vectorized.html#async-env-pool-cpu-affinity) for an
+example and deployment guidance.
+- **envs_per_worker** (*int**,**optional*) - Number of environments hosted by each
+multiprocessing worker process. Environments within a worker are
+executed concurrently in threads. This option is only supported by
+the multiprocessing backend. Defaults to `1`.
 - **create_env_kwargs** (*dict**,**optional*) - Keyword arguments to pass to the environment maker. Defaults to {}.
 
 Variables:
@@ -44,6 +68,8 @@ Variables:
 - **min_get** (*int*) - Minimum number of environments to process in a batch.
 - **env_makers** (*list*) - List of environment makers or environments.
 - **num_envs** (*int*) - Number of environments in the pool.
+- **envs_per_worker** (*int*) - Number of environments hosted by each
+multiprocessing worker.
 - **backend** (*str*) - Backend used for parallel execution.
 - **stack** (*str*) - Method used for stacking environment outputs.
 
@@ -883,6 +909,12 @@ self
 Return type:
 
 Module
+
+*property*exchange_keys*: tuple[NestedKey, ...]*
+
+The tensor keys accepted by the active shared-memory exchange.
+
+Returns an empty tuple when the resolved exchange is `"queue"`.
 
 extra_repr() → str
 

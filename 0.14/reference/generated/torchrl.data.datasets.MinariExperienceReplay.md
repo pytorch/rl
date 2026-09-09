@@ -181,6 +181,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+can_sample(*batch_size: int | None = None*) → bool
+
+Returns whether the replay buffer can serve a sample batch.
+
+Parameters:
+
+**batch_size** (*int**,**optional*) - requested batch size. Defaults to the
+batch size configured on the replay buffer.
+
 client() → T
 
 Return `self` for the zero-overhead direct backend.
@@ -691,7 +700,12 @@ Sets a new writer in the replay buffer and returns the previous writer.
 
 shutdown(*timeout: float | None = None*) → None
 
-Mark this direct replay-buffer owner as shut down.
+Wait for pending replay work and close this direct replay buffer.
+
+Pending prefetched samples and asynchronous conditional updates are
+allowed to finish before their executors are closed. Any background
+exception is re-raised after both executors have been shut down.
+Repeated calls are safe.
 
 start() → T
 
@@ -749,6 +763,70 @@ Examples
 The storage of the replay buffer.
 
 The storage must be an instance of [`Storage`](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage).
+
+submit_update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → Future[[ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)]
+
+Submits an ordered conditional update on a background thread.
+
+The update runs after all samples that were already prefetched when
+this method was called. Samples prefetched after this call wait for
+the update, while unrelated prefetch work remains parallel. Multiple
+submitted updates execute in submission order.
+
+Inputs are retained by reference until the returned future completes.
+Callers must not mutate `index`, `generation`, `patch` or
+`version` in that interval. In particular, values backed by static
+CUDA-graph output buffers must be cloned before submission.
+
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
+Keyword arguments have the same meaning as in
+`update_if_present()`.
+
+Returns:
+
+A `concurrent.futures.Future` whose result is the
+`ConditionalUpdateResult` returned by
+`update_if_present()`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage,
+... TensorDictReplayBuffer,
+... TensorDictRoundRobinWriter,
+... )
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(4),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... )
+>>> index = rb.extend(
+... TensorDict({"value": torch.zeros(4)}, batch_size=[4])
+... )
+>>> generation = rb.writer.generations_of(index)
+>>> future = rb.submit_update_if_present(
+... index=index,
+... generation=generation,
+... patch={"value": torch.ones(4)},
+... )
+>>> future.result().updated_count
+4
+>>> rb.shutdown()
+```
+
+synchronize() → None
+
+Wait for pending samples and asynchronous updates.
+
+Prefetched results remain queued and are returned by subsequent calls
+to `sample()` in the same order. Background exceptions are
+propagated to the caller.
 
 *property*transform*: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*
 

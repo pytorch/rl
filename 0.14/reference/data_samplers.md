@@ -22,6 +22,7 @@ wraparound and the write cursor -- are documented in
 | [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler)(*args, **kwargs) | Samples slices of data along the first dimension, given start and stop signals. |
 | [`SliceSamplerWithoutReplacement`](generated/torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html#torchrl.data.replay_buffers.SliceSamplerWithoutReplacement)(*args, **kwargs) | Samples slices of data along the first dimension, given start and stop signals, without replacement. |
 | [`StalenessAwareSampler`](generated/torchrl.data.replay_buffers.StalenessAwareSampler.html#torchrl.data.replay_buffers.StalenessAwareSampler)(*args, **kwargs) | A sampler that weights entries by freshness and filters stale entries. |
+| [`StreamingSliceSampler`](generated/torchrl.data.replay_buffers.StreamingSliceSampler.html#torchrl.data.replay_buffers.StreamingSliceSampler)(*args, **kwargs) | A slice sampler that prioritizes newly completed streaming windows. |
 
 ## Writers
 

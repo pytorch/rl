@@ -52,7 +52,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="RoundRobinWriter" href="torchrl.data.replay_buffers.RoundRobinWriter.html" />
+    <link rel="next" title="StreamingSliceSampler" href="torchrl.data.replay_buffers.StreamingSliceSampler.html" />
     <link rel="prev" title="SliceSamplerWithoutReplacement" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1570,6 +1570,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html">SliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html">SliceSamplerWithoutReplacement</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">StalenessAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StreamingSliceSampler.html">StreamingSliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.RoundRobinWriter.html">RoundRobinWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictMaxValueWriter.html">TensorDictMaxValueWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html">TensorDictRoundRobinWriter</a></li>
@@ -1777,6 +1778,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.IsaacLabWrapper.html">IsaacLabWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiEnv.html">JumanjiEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiWrapper.html">JumanjiWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingEnv.html">LBForagingEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingWrapper.html">LBForagingWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoEnv.html">LiberoEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoWrapper.html">LiberoWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.MeltingpotEnv.html">MeltingpotEnv</a></li>
@@ -1892,6 +1895,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.TanhModule.html">TanhModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.RandomPolicy.html">RandomPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.ProbabilisticActor.html">ProbabilisticActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html">DreamerV3DiscreteActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3SeededPolicy.html">DreamerV3SeededPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html">SafeProbabilisticModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html">SafeProbabilisticTensorDictSequential</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.QValueActor.html">QValueActor</a></li>
@@ -1979,6 +1984,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessSlotTransport.html">ProcessSlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2078,7 +2084,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.DreamerV3Loss.html">DreamerV3Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html">DreamerV3LossConfig</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2206,6 +2216,12 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3UpdateRatio.html">DreamerV3UpdateRatio</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html">DreamerV3UpdateRatioConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html">DreamerV3OptimizationStepper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html">DreamerV3OptimizationStepperConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../utils.html">torchrl._utils package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2259,6 +2275,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html">torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html">torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig</a></li>
@@ -2343,6 +2363,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html">torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.ListStorageConfig.html">torchrl.trainers.algorithms.configs.data.ListStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.TensorStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig</a></li>
@@ -2638,6 +2659,12 @@ and are recomputed on every <code class="xref py py-meth docutils literal notran
 maintained incrementally.  Sharing the segment-tree machinery
 would add complexity without benefit.</p>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.StalenessAwareSampler.can_sample">
+<span class="sig-name descname"><span class="pre">can_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.storages.Storage"><span class="pre">Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.data.replay_buffers.StalenessAwareSampler.can_sample" title="Link to this definition">#</a></dt>
+<dd><p>Returns whether the sampler can draw the requested batch.</p>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.StalenessAwareSampler.consumer_version">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">consumer_version</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrl.data.replay_buffers.StalenessAwareSampler.consumer_version" title="Link to this definition">#</a></dt>
@@ -2712,11 +2739,11 @@ would add complexity without benefit.</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.data.replay_buffers.RoundRobinWriter.html"
+       href="torchrl.data.replay_buffers.StreamingSliceSampler.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">RoundRobinWriter</p>
+        <p class="prev-next-title">StreamingSliceSampler</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2751,11 +2778,11 @@ would add complexity without benefit.</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.data.replay_buffers.RoundRobinWriter.html"
+       href="torchrl.data.replay_buffers.StreamingSliceSampler.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">RoundRobinWriter</p>
+        <p class="prev-next-title">StreamingSliceSampler</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2778,6 +2805,7 @@ would add complexity without benefit.</p>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.StalenessAwareSampler"><code class="docutils literal notranslate"><span class="pre">StalenessAwareSampler</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.StalenessAwareSampler.can_sample"><code class="docutils literal notranslate"><span class="pre">StalenessAwareSampler.can_sample()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.StalenessAwareSampler.consumer_version"><code class="docutils literal notranslate"><span class="pre">StalenessAwareSampler.consumer_version</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.StalenessAwareSampler.increment_consumer_version"><code class="docutils literal notranslate"><span class="pre">StalenessAwareSampler.increment_consumer_version()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.StalenessAwareSampler.max_staleness"><code class="docutils literal notranslate"><span class="pre">StalenessAwareSampler.max_staleness</span></code></a></li>
@@ -3035,7 +3063,7 @@ would add complexity without benefit.</p>
        "headline": "StalenessAwareSampler",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.StalenessAwareSampler.html",
-       "articleBody": "StalenessAwareSampler# class torchrl.data.replay_buffers.StalenessAwareSampler(*args, **kwargs)# A sampler that weights entries by freshness and filters stale entries. This sampler is designed for asynchronous training setups (e.g., async PPO) where collected data may come from older policy versions. It reads a policy_version field from the storage and uses it to: Hard gate: Exclude entries whose staleness exceeds max_staleness. Freshness weighting: Sample proportionally to a weight that decays with staleness (default: 1 / (staleness + 1)). The training loop is responsible for updating consumer_version (typically after each optimizer step or weight update) so the sampler can compute staleness = consumer_version - policy_version. Parameters: max_staleness (int, optional) \u2013 Hard cutoff. Entries with staleness \u003e max_staleness are excluded from sampling. -1 (default) means no cutoff. staleness_weight_fn (callable, optional) \u2013 A callable that maps a staleness tensor (int) to a weight tensor (float). Defaults to lambda s: 1.0 / (s.float() + 1.0). version_key (NestedKey, optional) \u2013 The key in the storage holding the policy version. Defaults to \"policy_version\". Examples \u003e\u003e\u003e from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage \u003e\u003e\u003e from torchrl.data.replay_buffers.samplers import StalenessAwareSampler \u003e\u003e\u003e sampler = StalenessAwareSampler(max_staleness=5) \u003e\u003e\u003e buffer = TensorDictReplayBuffer( ... storage=LazyTensorStorage(1000), ... sampler=sampler, ... batch_size=32, ... ) \u003e\u003e\u003e # In training loop: \u003e\u003e\u003e # sampler.consumer_version = current_training_step Integration with Collector and PolicyVersion: from torchrl.collectors import Collector from torchrl.envs.transforms import PolicyVersion from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage sampler = StalenessAwareSampler(max_staleness=10) buffer = TensorDictReplayBuffer( storage=LazyTensorStorage(10_000), sampler=sampler, batch_size=256, ) collector = Collector( env, policy, frames_per_batch=1000, total_frames=100_000, env_transforms=[PolicyVersion(collector)], ) for step, data in enumerate(collector): buffer.extend(data) sampler.consumer_version = step batch = buffer.sample() # ... train on batch ... Note StalenessAwareSampler intentionally does not inherit from PrioritizedSampler. PrioritizedSampler maintains a segment-tree over per-transition TD-error priorities that are updated after each training step. Staleness weighting is fundamentally different: weights are derived from a single scalar (consumer_version) and per-entry policy_version stamps, and are recomputed on every sample() call rather than maintained incrementally. Sharing the segment-tree machinery would add complexity without benefit. property consumer_version: int# The current training iteration / consumer version. increment_consumer_version()[source]# Increment the consumer version by 1. property max_staleness: int# The maximum allowed staleness. -1 means no limit.",
+       "articleBody": "StalenessAwareSampler# class torchrl.data.replay_buffers.StalenessAwareSampler(*args, **kwargs)# A sampler that weights entries by freshness and filters stale entries. This sampler is designed for asynchronous training setups (e.g., async PPO) where collected data may come from older policy versions. It reads a policy_version field from the storage and uses it to: Hard gate: Exclude entries whose staleness exceeds max_staleness. Freshness weighting: Sample proportionally to a weight that decays with staleness (default: 1 / (staleness + 1)). The training loop is responsible for updating consumer_version (typically after each optimizer step or weight update) so the sampler can compute staleness = consumer_version - policy_version. Parameters: max_staleness (int, optional) \u2013 Hard cutoff. Entries with staleness \u003e max_staleness are excluded from sampling. -1 (default) means no cutoff. staleness_weight_fn (callable, optional) \u2013 A callable that maps a staleness tensor (int) to a weight tensor (float). Defaults to lambda s: 1.0 / (s.float() + 1.0). version_key (NestedKey, optional) \u2013 The key in the storage holding the policy version. Defaults to \"policy_version\". Examples \u003e\u003e\u003e from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage \u003e\u003e\u003e from torchrl.data.replay_buffers.samplers import StalenessAwareSampler \u003e\u003e\u003e sampler = StalenessAwareSampler(max_staleness=5) \u003e\u003e\u003e buffer = TensorDictReplayBuffer( ... storage=LazyTensorStorage(1000), ... sampler=sampler, ... batch_size=32, ... ) \u003e\u003e\u003e # In training loop: \u003e\u003e\u003e # sampler.consumer_version = current_training_step Integration with Collector and PolicyVersion: from torchrl.collectors import Collector from torchrl.envs.transforms import PolicyVersion from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage sampler = StalenessAwareSampler(max_staleness=10) buffer = TensorDictReplayBuffer( storage=LazyTensorStorage(10_000), sampler=sampler, batch_size=256, ) collector = Collector( env, policy, frames_per_batch=1000, total_frames=100_000, env_transforms=[PolicyVersion(collector)], ) for step, data in enumerate(collector): buffer.extend(data) sampler.consumer_version = step batch = buffer.sample() # ... train on batch ... Note StalenessAwareSampler intentionally does not inherit from PrioritizedSampler. PrioritizedSampler maintains a segment-tree over per-transition TD-error priorities that are updated after each training step. Staleness weighting is fundamentally different: weights are derived from a single scalar (consumer_version) and per-entry policy_version stamps, and are recomputed on every sample() call rather than maintained incrementally. Sharing the segment-tree machinery would add complexity without benefit. can_sample(storage: Storage, batch_size: int) \u2192 bool# Returns whether the sampler can draw the requested batch. property consumer_version: int# The current training iteration / consumer version. increment_consumer_version()[source]# Increment the consumer version by 1. property max_staleness: int# The maximum allowed staleness. -1 means no limit.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -34,6 +34,7 @@ lifecycle.
 | [`SlotTransport`](generated/torchrl.modules.inference_server.SlotTransport.html#torchrl.modules.inference_server.SlotTransport)(num_slots, *[, preallocate]) | Lock-free, in-process transport using per-env slots. |
 | [`MPTransport`](generated/torchrl.modules.inference_server.MPTransport.html#torchrl.modules.inference_server.MPTransport)([ctx, use_manager]) | Cross-process transport using `multiprocessing` queues. |
 | [`SharedMemoryTransport`](generated/torchrl.modules.inference_server.SharedMemoryTransport.html#torchrl.modules.inference_server.SharedMemoryTransport)(request_spec, ...[, ...]) | Cross-process transport backed by shared-memory TensorDict slots. |
+| [`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)(request_spec, ...[, ...]) | Fixed-slot shared-memory transport for environment worker processes. |
 | [`RayTransport`](generated/torchrl.modules.inference_server.RayTransport.html#torchrl.modules.inference_server.RayTransport)(*[, max_queue_size]) | Transport using Ray queues for distributed inference. |
 | [`MonarchTransport`](generated/torchrl.modules.inference_server.MonarchTransport.html#torchrl.modules.inference_server.MonarchTransport)(*[, max_queue_size]) | Transport using Monarch for distributed inference on GPU clusters. |
 
@@ -68,6 +69,75 @@ with concurrent.futures.ThreadPoolExecutor(16) as pool:
 
 server.shutdown()
 ```
+
+### Static CUDA-graph batches
+
+CUDA policies can remove Python dispatch and kernel-launch overhead by setting
+`static_batch_size` together with an explicit CUDA `policy_device`. The
+server clones the last real request into any pad rows, replays a
+[`tensordict.nn.CudaGraphModule`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule) at the fixed size, and discards padded
+outputs before returning an owned copy to each actor. The static size must be
+at least `max_batch_size`:
+
+```
+import torch
+from tensordict import TensorDict
+
+request_spec = TensorDict(
+ {
+ "observation": torch.zeros(64),
+ "state": torch.zeros(32 * 64),
+ "belief": torch.zeros(512),
+ "previous_action": torch.zeros(20),
+ "is_init": torch.zeros(1, dtype=torch.bool),
+ }
+)
+server = InferenceServer(
+ policy,
+ ThreadingTransport(),
+ max_batch_size=64,
+ static_batch_size=64,
+ request_spec=request_spec,
+ policy_device="cuda:0",
+ output_device="cpu",
+)
+server.start() # warm-up and capture finish before the worker starts
+```
+
+The representative `request_spec` is required when constructing a server
+directly. It may be supplied without `response_spec` for transports whose
+layout is dynamic. [`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector) derives
+the request from the environment specs and calls
+[`prepare_cudagraph()`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.prepare_cudagraph)
+before starting its inference and coordinator threads. Initial weight
+synchronization also finishes before capture. Recurrent tensor inputs such as
+`state`, `belief`, and `is_init` remain inside the graph. The first real
+request is checked for every captured policy input key so an incomplete
+`request_spec` cannot silently leave stale input values in the graph.
+
+In-place parameter copies preserve the captured graph; for example, use
+`TensorDict.from_module(learner).to_module(behavior, inplace=True)`. A
+storage-replacing update raises an error and disables the graph, leaving the
+server on the safe eager path until it is stopped and prepared again. This
+avoids capturing while collector or environment threads are live. The
+interaction type is fixed at capture time: pass it to
+[`prepare_cudagraph()`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.prepare_cudagraph)
+([`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector) passes its
+`exploration_type`). Without an explicit mode, capture uses the mode stamped on
+the request specification, otherwise the ambient `set_interaction_type`
+context, or the policy default when no context is active. Raw, unstamped requests
+also retain their ambient-context behavior. Pass an explicit mode when other
+threads may change this process-wide context.
+Requests must carry the captured mode, which
+[`PolicyClientModule`](generated/torchrl.modules.inference_server.PolicyClientModule.html#torchrl.modules.inference_server.PolicyClientModule) stamps from its
+`interaction_type` argument or, when none is given, from the caller's active
+context; requests stamped with another mode are rejected.
+
+CUDA operations using PyTorch's default generator advance its graph-safe state
+across replays. Custom generators must manage CUDA graph state explicitly, and
+policies that reseed with `manual_seed` during each forward cannot be
+captured. Consequently, DreamerV3's `separate_policy_rng` mode and
+`static_batch_size` cannot be enabled together.
 
 ### Shared-memory transport
 
@@ -110,13 +180,68 @@ forward pass, results copied back into the CPU response slots).
 `num_slots` bounds the number of concurrently in-flight requests and
 provides natural backpressure.
 
+### Direct process-slot transport
+
+For one synchronous acting loop per environment worker,
+[`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) assigns one fixed request/response slot to each
+worker. Workers notify the dedicated inference process through a shared
+semaphore, and the server sweeps ready slots in round-robin order. Observation
+and action tensors therefore never cross the driver process:
+
+```
+import torch
+from tensordict import TensorDict
+from torchrl.collectors import AsyncBatchedCollector
+from torchrl.modules.inference_server import (
+ InferenceServerConfig,
+ ProcessSlotTransport,
+)
+
+num_envs = 64
+transport = ProcessSlotTransport(
+ request_spec=TensorDict({"pixels": torch.zeros(3, 84, 84, dtype=torch.uint8)}),
+ response_spec=TensorDict(
+ {
+ "action": torch.zeros(6),
+ "policy_version": torch.zeros((), dtype=torch.long),
+ }
+ ),
+ num_slots=num_envs,
+)
+collector = AsyncBatchedCollector(
+ create_env_fn=[make_env] * num_envs,
+ policy_factory=make_policy,
+ transport=transport,
+ env_backend="multiprocessing",
+ server_config=InferenceServerConfig(
+ service_backend="process", max_batch_size=num_envs
+ ),
+ frames_per_batch=1024,
+)
+```
+
+The driver continues to receive completed transitions from the workers. The
+transport requires fixed-shape CPU tensor request and response specs; policy
+execution and device transfers remain owned by the inference process.
+
+Because every slot has a fixed layout, the server serves this transport with
+one batched pass per sweep instead of collating and resolving requests one by
+one: the ready slots are gathered into a host staging batch (pinned when the
+policy runs on CUDA), copied to a persistent policy-device batch with
+non-blocking transfers, and the declared response keys are copied back and
+scattered into the response slots with one copy per leaf. A single CUDA event
+per pass waits for the response copy instead of a device-wide synchronize.
+The batched pass applies to stacking collate functions (the default,
+`lazy_stack()`, `maybe_dense_stack()` and
+[`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack)); a custom `collate_fn` keeps the per-request path.
+
 ### Structured Configuration
 
 Server execution, batching, and device placement are grouped into two
 dataclasses instead of loose keyword arguments: [`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)
 collects the execution `service_backend` (`"thread"` or `"process"`) and the
-batching/instrumentation knobs (`max_batch_size`, `min_batch_size`,
-`timeout`, `collect_stats`, `stats_window_size`), and
+batching/instrumentation knobs (`max_batch_size`, `static_batch_size`,
+`min_batch_size`, `timeout`, `collect_stats`, `stats_window_size`), and
 [`InferenceDeviceConfig`](generated/torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) describes device placement across the
 collection pipeline (`policy_device`, `output_device`, `env_device`,
 `storing_device`). Both [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) and
@@ -140,6 +265,7 @@ collector = AsyncBatchedCollector(
  create_env_fn=[make_env] * 8,
  policy=my_policy,
  frames_per_batch=200,
+ env_backend="multiprocessing",
  server_config=InferenceServerConfig(max_batch_size=8, timeout=0.005),
  device_config=InferenceDeviceConfig(
  policy_device="cuda:0",
@@ -220,6 +346,7 @@ collector = AsyncBatchedCollector(
  frames_per_batch=200,
  total_frames=10_000,
  max_batch_size=8,
+ env_backend="multiprocessing",
 )
 
 for data in collector:

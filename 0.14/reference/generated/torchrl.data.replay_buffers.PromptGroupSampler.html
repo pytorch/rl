@@ -1570,6 +1570,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html">SliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html">SliceSamplerWithoutReplacement</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StalenessAwareSampler.html">StalenessAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StreamingSliceSampler.html">StreamingSliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.RoundRobinWriter.html">RoundRobinWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictMaxValueWriter.html">TensorDictMaxValueWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html">TensorDictRoundRobinWriter</a></li>
@@ -1777,6 +1778,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.IsaacLabWrapper.html">IsaacLabWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiEnv.html">JumanjiEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiWrapper.html">JumanjiWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingEnv.html">LBForagingEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingWrapper.html">LBForagingWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoEnv.html">LiberoEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoWrapper.html">LiberoWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.MeltingpotEnv.html">MeltingpotEnv</a></li>
@@ -1892,6 +1895,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.TanhModule.html">TanhModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.RandomPolicy.html">RandomPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.ProbabilisticActor.html">ProbabilisticActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html">DreamerV3DiscreteActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3SeededPolicy.html">DreamerV3SeededPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html">SafeProbabilisticModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html">SafeProbabilisticTensorDictSequential</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.QValueActor.html">QValueActor</a></li>
@@ -1979,6 +1984,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessSlotTransport.html">ProcessSlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2078,7 +2084,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.DreamerV3Loss.html">DreamerV3Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html">DreamerV3LossConfig</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2206,6 +2216,12 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3UpdateRatio.html">DreamerV3UpdateRatio</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html">DreamerV3UpdateRatioConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html">DreamerV3OptimizationStepper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html">DreamerV3OptimizationStepperConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../utils.html">torchrl._utils package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2259,6 +2275,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html">torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html">torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig</a></li>
@@ -2343,6 +2363,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html">torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.ListStorageConfig.html">torchrl.trainers.algorithms.configs.data.ListStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.TensorStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig</a></li>
@@ -2656,6 +2677,12 @@ advantage engine these batches feed into.</p>
 <span class="go">8</span>
 </pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.PromptGroupSampler.can_sample">
+<span class="sig-name descname"><span class="pre">can_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage" title="torchrl.data.replay_buffers.storages.Storage"><span class="pre">Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.data.replay_buffers.PromptGroupSampler.can_sample" title="Link to this definition">#</a></dt>
+<dd><p>Returns whether the sampler can draw the requested batch.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -2777,7 +2804,10 @@ advantage engine these batches feed into.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.PromptGroupSampler"><code class="docutils literal notranslate"><span class="pre">PromptGroupSampler</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.PromptGroupSampler"><code class="docutils literal notranslate"><span class="pre">PromptGroupSampler</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.PromptGroupSampler.can_sample"><code class="docutils literal notranslate"><span class="pre">PromptGroupSampler.can_sample()</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
     
@@ -3030,7 +3060,7 @@ advantage engine these batches feed into.</p>
        "headline": "PromptGroupSampler",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.PromptGroupSampler.html",
-       "articleBody": "PromptGroupSampler# class torchrl.data.replay_buffers.PromptGroupSampler(*args, **kwargs)# A sampler that draws complete groups of items sharing a common key. This sampler partitions the storage into groups whose items share the same value under group_key (for LLM post-training, the prompt or query). Every call to sample() returns samples_per_group items for each of num_groups selected groups, so a batch is laid out as balanced groups rather than independent items. This is the layout required by group-relative objectives such as GRPOLoss. Sampling never consumes the storage, so past generations for a group remain available and can be replayed across policy updates. Combined with a persistent replay buffer (one that is not emptied between iterations), this turns an on-policy GRPO loop into the replay-enhanced regime of RePO (\u201cRePO: Replay-Enhanced Policy Optimization\u201d, Li et al. 2025, https://arxiv.org/abs/2506.09340), where each update mixes fresh on-policy groups with off-policy groups retrieved from the buffer. Keyword Arguments: num_groups (int, optional) \u2013 the number of distinct groups to draw per batch. Exactly one of num_groups or samples_per_group must be provided; the other is inferred from the batch_size passed to sample(). samples_per_group (int, optional) \u2013 the number of items to draw from each selected group. Exactly one of num_groups or samples_per_group must be provided. group_key (NestedKey, optional) \u2013 the tensordict key identifying the group each item belongs to. Stored values may be integers (e.g. a prompt id) or strings (e.g. the prompt text). Defaults to \"query\". strategy (str, optional) \u2013 the retrieval strategy. One of: \"random\" (default): groups are chosen uniformly at random and items within a group are drawn uniformly at random. \"recency\": the most recently inserted items are drawn from each group. \"reward\": the highest-reward items are drawn from each group. \"variance\": the fixed-size subset that maximizes reward variance is drawn from each group, breaking ties by total reward. This targets the vanishing-gradient case described by RePO. reward_key (NestedKey, optional) \u2013 the key holding a numeric reward, required by the \"reward\" and \"variance\" strategies. It is reduced to one scalar per item by averaging over any trailing dimensions. Defaults to (\"next\", \"reward\"). cache_groups (bool, optional) \u2013 if True (default), the group index is cached and rebuilt only when items are added to the storage. Set to False if the stored group values may change in place. Note This sampler supports single-dimensional TensorDict-backed storages, including LazyTensorStorage, LazyMemmapStorage, and LazyStackStorage. Plain ListStorage is unsupported because its slices return Python lists. Warning When a group holds fewer than samples_per_group items (or the storage holds fewer than num_groups groups), the missing draws are completed by sampling with replacement and a warning is raised once. See also MCAdvantage, the group-relative advantage engine these batches feed into. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torchrl.data import LazyStackStorage, ReplayBuffer \u003e\u003e\u003e from torchrl.data.replay_buffers.samplers import PromptGroupSampler \u003e\u003e\u003e rb = ReplayBuffer( ... storage=LazyStackStorage(100), ... sampler=PromptGroupSampler(num_groups=2, group_key=\"prompt\"), ... batch_size=8, ... ) \u003e\u003e\u003e data = TensorDict( ... { ... \"prompt\": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]), ... \"reward\": torch.arange(12.0), ... }, ... batch_size=[12], ... ) \u003e\u003e\u003e _ = rb.extend(data) \u003e\u003e\u003e sample = rb.sample() \u003e\u003e\u003e int(sample[\"prompt\"].unique().numel()) 2 \u003e\u003e\u003e int(sample.shape[0]) 8",
+       "articleBody": "PromptGroupSampler# class torchrl.data.replay_buffers.PromptGroupSampler(*args, **kwargs)# A sampler that draws complete groups of items sharing a common key. This sampler partitions the storage into groups whose items share the same value under group_key (for LLM post-training, the prompt or query). Every call to sample() returns samples_per_group items for each of num_groups selected groups, so a batch is laid out as balanced groups rather than independent items. This is the layout required by group-relative objectives such as GRPOLoss. Sampling never consumes the storage, so past generations for a group remain available and can be replayed across policy updates. Combined with a persistent replay buffer (one that is not emptied between iterations), this turns an on-policy GRPO loop into the replay-enhanced regime of RePO (\u201cRePO: Replay-Enhanced Policy Optimization\u201d, Li et al. 2025, https://arxiv.org/abs/2506.09340), where each update mixes fresh on-policy groups with off-policy groups retrieved from the buffer. Keyword Arguments: num_groups (int, optional) \u2013 the number of distinct groups to draw per batch. Exactly one of num_groups or samples_per_group must be provided; the other is inferred from the batch_size passed to sample(). samples_per_group (int, optional) \u2013 the number of items to draw from each selected group. Exactly one of num_groups or samples_per_group must be provided. group_key (NestedKey, optional) \u2013 the tensordict key identifying the group each item belongs to. Stored values may be integers (e.g. a prompt id) or strings (e.g. the prompt text). Defaults to \"query\". strategy (str, optional) \u2013 the retrieval strategy. One of: \"random\" (default): groups are chosen uniformly at random and items within a group are drawn uniformly at random. \"recency\": the most recently inserted items are drawn from each group. \"reward\": the highest-reward items are drawn from each group. \"variance\": the fixed-size subset that maximizes reward variance is drawn from each group, breaking ties by total reward. This targets the vanishing-gradient case described by RePO. reward_key (NestedKey, optional) \u2013 the key holding a numeric reward, required by the \"reward\" and \"variance\" strategies. It is reduced to one scalar per item by averaging over any trailing dimensions. Defaults to (\"next\", \"reward\"). cache_groups (bool, optional) \u2013 if True (default), the group index is cached and rebuilt only when items are added to the storage. Set to False if the stored group values may change in place. Note This sampler supports single-dimensional TensorDict-backed storages, including LazyTensorStorage, LazyMemmapStorage, and LazyStackStorage. Plain ListStorage is unsupported because its slices return Python lists. Warning When a group holds fewer than samples_per_group items (or the storage holds fewer than num_groups groups), the missing draws are completed by sampling with replacement and a warning is raised once. See also MCAdvantage, the group-relative advantage engine these batches feed into. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torchrl.data import LazyStackStorage, ReplayBuffer \u003e\u003e\u003e from torchrl.data.replay_buffers.samplers import PromptGroupSampler \u003e\u003e\u003e rb = ReplayBuffer( ... storage=LazyStackStorage(100), ... sampler=PromptGroupSampler(num_groups=2, group_key=\"prompt\"), ... batch_size=8, ... ) \u003e\u003e\u003e data = TensorDict( ... { ... \"prompt\": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]), ... \"reward\": torch.arange(12.0), ... }, ... batch_size=[12], ... ) \u003e\u003e\u003e _ = rb.extend(data) \u003e\u003e\u003e sample = rb.sample() \u003e\u003e\u003e int(sample[\"prompt\"].unique().numel()) 2 \u003e\u003e\u003e int(sample.shape[0]) 8 can_sample(storage: Storage, batch_size: int) \u2192 bool# Returns whether the sampler can draw the requested batch.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

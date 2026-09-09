@@ -177,6 +177,7 @@ rb.update_tensordict_priority(sample)
 - [SliceSampler](generated/torchrl.data.replay_buffers.SliceSampler.html)
 - [SliceSamplerWithoutReplacement](generated/torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html)
 - [StalenessAwareSampler](generated/torchrl.data.replay_buffers.StalenessAwareSampler.html)
+- [StreamingSliceSampler](generated/torchrl.data.replay_buffers.StreamingSliceSampler.html)
 - [Writers](data_samplers.html#writers)
 - [Datasets](data_datasets.html)
 
@@ -199,3 +200,12 @@ rb.update_tensordict_priority(sample)
 - [UnboundedContinuous](generated/torchrl.data.UnboundedContinuous.html)
 - [UnboundedDiscrete](generated/torchrl.data.UnboundedDiscrete.html)
 - [Supported PyTorch Operations](data_specs.html#supported-pytorch-operations)
+
+## Ending replay streams on restart
+
+[`end_streams()`](generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble.end_streams) closes each member's current
+trajectory before restarted environments append new data. It drains pending
+replay work, preserves row generations and terminal flags, and resets incomplete
+fresh windows and cached uniform boundaries. Call it with collection paused and
+before resuming producers. See its API documentation for supported member storage,
+writer and sampler combinations and configurable nested boundary keys.

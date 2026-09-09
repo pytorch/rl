@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.replay_buffers
+
+
+StreamingSliceSampler
+=====================
+
+.. autoclass:: StreamingSliceSampler
+    :members:
+    :inherited-members:

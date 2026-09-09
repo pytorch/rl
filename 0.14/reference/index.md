@@ -52,6 +52,7 @@
 - [Sampling Strategies](data_samplers.html)
 - [Datasets](data_datasets.html)
 - [TensorSpec System](data_specs.html)
+- [Ending replay streams on restart](data.html#ending-replay-streams-on-restart)
 - [Data layout: contiguous trajectories](data_layout.html)
 
 - [Trajectory boundary keys](data_layout.html#trajectory-boundary-keys)
@@ -114,6 +115,7 @@
 - [Inference Server](modules_inference_server.html)
 - [Utilities and Helpers](modules_utils.html)
 - [Recurrent state lifecycle](recurrent_state_lifecycle.html)
+- [DreamerV3 recurrent components](modules.html#dreamerv3-recurrent-components)
 - [torchrl.objectives package](objectives.html)
 
 - [Key Features](objectives.html#key-features)
@@ -250,6 +252,14 @@
 - [Trainer Basics](trainers_basics.html)
 - [Loggers](trainers_loggers.html)
 - [Training Hooks](trainers_hooks.html)
+- [DreamerV3 optimization](trainers.html#dreamerv3-optimization)
+
+- [DreamerV3Optimizer](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html)
+- [DreamerV3OptimizerConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html)
+- [DreamerV3UpdateRatio](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html)
+- [DreamerV3UpdateRatioConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html)
+- [DreamerV3OptimizationStepper](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html)
+- [DreamerV3OptimizationStepperConfig](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html)
 - [torchrl._utils package](utils.html)
 
 - [implement_for](generated/torchrl.implement_for.html)

@@ -45,7 +45,9 @@ Defaults to `True`.
 
 Note
 
-This behavior will switch to `False` in v0.9.
+If this argument is omitted, nesting
+`TransformedEnv` instances emits an informational warning
+and uses `auto_unwrap=True`.
 
 See also
 

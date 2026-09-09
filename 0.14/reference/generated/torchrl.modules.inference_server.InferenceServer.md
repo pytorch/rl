@@ -1,6 +1,6 @@
 # InferenceServer
 
-*class*torchrl.modules.inference_server.InferenceServer(*model: nn.Module | Callable[[TensorDictBase], TensorDictBase] | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'thread', 'process', 'ray', 'shared_memory', 'direct', 'distributed'] = 'auto'*, ***, *policy_factory: Callable[[], nn.Module | Callable[[TensorDictBase], TensorDictBase]] | None = None*, *service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *service_backend_options: dict[str, Any] | None = None*, *transport_options: dict[str, Any] | None = None*, *request_spec: TensorDictBase | None = None*, *response_spec: TensorDictBase | None = None*, *num_clients: int | None = None*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *shutdown_event: threading.Event | MPEvent | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer)
+*class*torchrl.modules.inference_server.InferenceServer(*model: nn.Module | Callable[[TensorDictBase], TensorDictBase] | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'thread', 'process', 'ray', 'shared_memory', 'process_slot', 'direct', 'distributed'] = 'auto'*, ***, *policy_factory: Callable[[], nn.Module | Callable[[TensorDictBase], TensorDictBase]] | None = None*, *service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *service_backend_options: dict[str, Any] | None = None*, *transport_options: dict[str, Any] | None = None*, *request_spec: TensorDictBase | None = None*, *response_spec: TensorDictBase | None = None*, *num_clients: int | None = None*, *max_batch_size: int | None = None*, *static_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *shutdown_event: threading.Event | MPEvent | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer)
 
 Auto-batching inference server.
 
@@ -34,14 +34,23 @@ transport. For `"distributed"`, `backend` selects `"gloo"`
 or `"nccl"`. Explicit selectors never fall back to another
 transport.
 - **request_spec** (*TensorDictBase**,**optional*) - static request layout for
-shared-memory or process-owned distributed transports. Ray-owned
-distributed transports infer and bind this layout on first use.
+`"shared_memory"`, `"process_slot"`, or process-owned
+distributed transports, and the representative unbatched request
+used for CUDA-graph capture when `static_batch_size` is set.
+Ray-owned distributed transports infer and bind this layout on first use.
 - **response_spec** (*TensorDictBase**,**optional*) - static response layout paired
 with `request_spec`.
 - **num_clients** (*int**,**optional*) - expected concurrent client count for
 transports that allocate a fixed number of slots.
 - **max_batch_size** (*int**,**optional*) - upper bound on the number of requests
 processed in a single forward pass. Default: `64`.
+- **static_batch_size** (*int**,**optional*) - fixed leading batch size used to
+CUDA-graph the served policy. Partial batches repeat their last
+request up to this size, and padded outputs are discarded. The
+graph is captured before the serve loop starts using
+`request_spec`. Requires an explicit CUDA `policy_device` and
+must be at least `max_batch_size`. Defaults to `None` (eager
+policy execution).
 - **min_batch_size** (*int**,**optional*) - minimum number of requests to
 accumulate before dispatching a batch. After the first request
 arrives the server keeps draining for up to `timeout` seconds
@@ -75,10 +84,10 @@ initialising the weight sync scheme on the receiver side.
 Default: `"policy"`.
 - **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
 configuration. Mutually exclusive with the `max_batch_size`,
-`min_batch_size`, `timeout`, `collect_stats`, and
-`stats_window_size` keyword arguments (passing any of them
-alongside a config raises, even when the value equals the
-default).
+`static_batch_size`, `min_batch_size`, `timeout`,
+`collect_stats`, and `stats_window_size` keyword arguments
+(passing any of them alongside a config raises, even when the value
+equals the default).
 - **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device
 placement configuration. Mutually exclusive with `device`,
 `policy_device`, and `output_device`. The server consumes
@@ -123,6 +132,26 @@ Whether the background worker thread is running.
 *property*policy_version*: int*
 
 The current behavior-policy version served with inference outputs.
+
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *interaction_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | None = None*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer.prepare_cudagraph)
+
+Capture the configured static CUDA graph before server start.
+
+Parameters:
+
+**request_spec** (*TensorDictBase*) - representative unbatched request.
+
+Keyword Arguments:
+
+**interaction_type** (*InteractionType**,**optional*) - sampling mode the
+graph is captured under; every request must then carry the
+same mode (see
+[`PolicyClientModule`](torchrl.modules.inference_server.PolicyClientModule.html#torchrl.modules.inference_server.PolicyClientModule)).
+Defaults to `None`: the mode already stamped on
+`request_spec` if any, otherwise the ambient
+`set_interaction_type()` context (or the
+module default when no context is active). Pass an explicit
+mode when other threads may change the ambient context.
 
 *property*service_backend*: str*
 

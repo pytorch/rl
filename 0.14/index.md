@@ -146,6 +146,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Quick Example](reference/data.html#quick-example)
 - [CUDA prioritized replay buffers](reference/data.html#cuda-prioritized-replay-buffers)
 - [Documentation Sections](reference/data.html#documentation-sections)
+- [Ending replay streams on restart](reference/data.html#ending-replay-streams-on-restart)
 - [Data layout: contiguous trajectories](reference/data_layout.html)
 
 - [Trajectory boundary keys](reference/data_layout.html#trajectory-boundary-keys)
@@ -175,6 +176,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Key Features](reference/modules.html#key-features)
 - [Quick Example](reference/modules.html#quick-example)
 - [Documentation Sections](reference/modules.html#documentation-sections)
+- [DreamerV3 recurrent components](reference/modules.html#dreamerv3-recurrent-components)
 - [torchrl.objectives package](reference/objectives.html)
 
 - [Key Features](reference/objectives.html#key-features)
@@ -217,6 +219,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Key Features](reference/trainers.html#key-features)
 - [Quick Example](reference/trainers.html#quick-example)
 - [Documentation Sections](reference/trainers.html#documentation-sections)
+- [DreamerV3 optimization](reference/trainers.html#dreamerv3-optimization)
 - [torchrl._utils package](reference/utils.html)
 
 - [implement_for](reference/generated/torchrl.implement_for.html)

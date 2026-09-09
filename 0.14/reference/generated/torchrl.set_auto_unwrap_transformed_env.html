@@ -1570,6 +1570,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html">SliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html">SliceSamplerWithoutReplacement</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StalenessAwareSampler.html">StalenessAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StreamingSliceSampler.html">StreamingSliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.RoundRobinWriter.html">RoundRobinWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictMaxValueWriter.html">TensorDictMaxValueWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html">TensorDictRoundRobinWriter</a></li>
@@ -1777,6 +1778,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.IsaacLabWrapper.html">IsaacLabWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiEnv.html">JumanjiEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiWrapper.html">JumanjiWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingEnv.html">LBForagingEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingWrapper.html">LBForagingWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoEnv.html">LiberoEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoWrapper.html">LiberoWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.MeltingpotEnv.html">MeltingpotEnv</a></li>
@@ -1892,6 +1895,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.TanhModule.html">TanhModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.RandomPolicy.html">RandomPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.ProbabilisticActor.html">ProbabilisticActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html">DreamerV3DiscreteActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3SeededPolicy.html">DreamerV3SeededPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html">SafeProbabilisticModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html">SafeProbabilisticTensorDictSequential</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.QValueActor.html">QValueActor</a></li>
@@ -1979,6 +1984,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessSlotTransport.html">ProcessSlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2078,7 +2084,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.DreamerV3Loss.html">DreamerV3Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html">DreamerV3LossConfig</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2206,6 +2216,12 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3UpdateRatio.html">DreamerV3UpdateRatio</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html">DreamerV3UpdateRatioConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html">DreamerV3OptimizationStepper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html">DreamerV3OptimizationStepperConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../utils.html">torchrl._utils package</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -2259,6 +2275,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html">torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html">torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig</a></li>
@@ -2343,6 +2363,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html">torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.ListStorageConfig.html">torchrl.trainers.algorithms.configs.data.ListStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.TensorStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig</a></li>
@@ -2560,8 +2581,9 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 </dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Until v0.9, this will raise a warning if <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> are nested
-and the value is not set explicitly (<cite>auto_unwrap=True</cite> default behavior).
+<p>If this value is not set explicitly, nesting
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> instances emits an informational
+warning and uses <code class="docutils literal notranslate"><span class="pre">auto_unwrap=True</span></code>.
 You can set the value of <code class="xref py py-func docutils literal notranslate"><span class="pre">auto_unwrap_transformed_env()</span></code>
 through:</p>
 <ul class="simple">
@@ -2961,7 +2983,7 @@ manager or a decorator.</p></li>
        "headline": "set_auto_unwrap_transformed_env",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.set_auto_unwrap_transformed_env.html",
-       "articleBody": "set_auto_unwrap_transformed_env# class torchrl.set_auto_unwrap_transformed_env(mode: bool)[source]# A context manager or decorator to control whether TransformedEnv should automatically unwrap nested TransformedEnv instances. Parameters: mode (bool) \u2013 Whether to automatically unwrap nested TransformedEnv instances. If False, TransformedEnv will not unwrap nested instances. Defaults to True. Note Until v0.9, this will raise a warning if TransformedEnv are nested and the value is not set explicitly (auto_unwrap=True default behavior). You can set the value of auto_unwrap_transformed_env() through: The AUTO_UNWRAP_TRANSFORMED_ENV environment variable; By setting torchrl.set_auto_unwrap_transformed_env(val: bool).set() at the beginning of your script; By using torchrl.set_auto_unwrap_transformed_env(val: bool) as a context manager or a decorator. See also TransformedEnv Examples \u003e\u003e\u003e with set_auto_unwrap_transformed_env(False): ... env = TransformedEnv(TransformedEnv(env)) ... assert not isinstance(env.base_env, TransformedEnv) \u003e\u003e\u003e @set_auto_unwrap_transformed_env(False) ... def my_function(): ... env = TransformedEnv(TransformedEnv(env)) ... assert not isinstance(env.base_env, TransformedEnv) ... return env",
+       "articleBody": "set_auto_unwrap_transformed_env# class torchrl.set_auto_unwrap_transformed_env(mode: bool)[source]# A context manager or decorator to control whether TransformedEnv should automatically unwrap nested TransformedEnv instances. Parameters: mode (bool) \u2013 Whether to automatically unwrap nested TransformedEnv instances. If False, TransformedEnv will not unwrap nested instances. Defaults to True. Note If this value is not set explicitly, nesting TransformedEnv instances emits an informational warning and uses auto_unwrap=True. You can set the value of auto_unwrap_transformed_env() through: The AUTO_UNWRAP_TRANSFORMED_ENV environment variable; By setting torchrl.set_auto_unwrap_transformed_env(val: bool).set() at the beginning of your script; By using torchrl.set_auto_unwrap_transformed_env(val: bool) as a context manager or a decorator. See also TransformedEnv Examples \u003e\u003e\u003e with set_auto_unwrap_transformed_env(False): ... env = TransformedEnv(TransformedEnv(env)) ... assert not isinstance(env.base_env, TransformedEnv) \u003e\u003e\u003e @set_auto_unwrap_transformed_env(False) ... def my_function(): ... env = TransformedEnv(TransformedEnv(env)) ... assert not isinstance(env.base_env, TransformedEnv) ... return env",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

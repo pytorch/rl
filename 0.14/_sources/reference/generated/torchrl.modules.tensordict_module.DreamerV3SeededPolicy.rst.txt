@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.tensordict_module
+
+
+DreamerV3SeededPolicy
+=====================
+
+.. autoclass:: DreamerV3SeededPolicy
+    :members:

@@ -102,6 +102,7 @@ collector = AsyncBatchedCollector(
  frames_per_batch=200,
  total_frames=10000,
  max_batch_size=8,
+ env_backend="multiprocessing",
 )
 
 for data in collector:
@@ -111,6 +112,63 @@ for data in collector:
 collector.shutdown()
 ```
 
+Compile modules and run their first warm-up calls before iterating the
+collector whenever possible. Compiler initialization can create process-wide
+worker resources, and overlapping a first compilation with the collector's
+coordinator and inference threads can stall either workload. If lazy
+compilation after collection has started is unavoidable, pause the collector
+around that call:
+
+```
+for data in collector:
+ with collector.pause():
+ compiled_learner(data)
+ break
+```
+
+The pause context finishes in-flight environment and policy requests, parks
+the coordinator threads, and leaves the inference server idle. Collection
+resumes automatically when the context exits.
+
+With `replay_buffer=buffer`, calling `collector.start()` writes complete
+batches in a background thread until `total_frames` is reached. The ordinary
+iterator still writes synchronously and yields `None`. Choose one mode per
+collector. Background mode runs post-processing and post-collect hooks on the
+writer thread; `collector.pause()` waits for writes as well as environment and
+policy work to finish. Call `collector.async_shutdown()` to join the writer,
+close workers, and propagate collection or replay errors.
+
+On Linux, `worker_affinity` assigns CPU masks to the multiprocessing
+environment workers, while `driver_affinity` assigns one mask to the
+inference-server and coordinator threads, as well as the pool's parent-side
+queue feeder threads. Dedicated process-backed inference servers use a spawned
+process and are not covered by `driver_affinity`. For example, with two
+driver CPUs followed by four two-CPU worker windows:
+
+```
+import os
+
+available_cpus = sorted(os.sched_getaffinity(0))
+driver_cpus = available_cpus[:2]
+worker_cpus = available_cpus[2:10]
+worker_masks = [
+ tuple(worker_cpus[start : start + 2])
+ for start in range(0, len(worker_cpus), 2)
+]
+collector = AsyncBatchedCollector(
+ create_env_fn=[make_env] * len(worker_masks),
+ policy=policy,
+ frames_per_batch=200,
+ env_backend="multiprocessing",
+ driver_affinity=driver_cpus,
+ worker_affinity=worker_masks,
+)
+```
+
+Build both masks from the CPUs visible through `os.sched_getaffinity(0)`.
+See [CPU affinity (Linux)](envs_vectorized.html#async-env-pool-cpu-affinity) for container cpuset, CFS quota, and
+Kubernetes CPU Manager considerations.
+
 **Key advantages over direct collection through** [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector):
 
 - The inference server automatically **batches policy forward passes** from
@@ -118,6 +176,51 @@ all environments, maximising GPU utilisation.
 - Environment stepping and inference run in **overlapping fashion**, reducing
 idle time.
 - Supports `yield_completed_trajectories=True` for episode-level yields.
+
+For many fixed-schema CPU environments, set `env_backend="multiprocessing"`.
+The default exchange (`env_exchange="auto"`) then uses shared memory whenever
+the environment schema allows, and the collector drains ready shared-memory
+slots in batches from one coordinator thread while keeping faster environments
+independent of slower ones. This path is intended for environments whose step
+latency dominates its millisecond-scale coordinator polling interval.
+
+When both environment stepping and inference should leave the driver process,
+pass `transport="auto"` together with `env_backend="multiprocessing"` and a
+`policy_factory`. The collector derives the fixed request and response
+layouts from one environment's `fake_tensordict()` and one policy pass, builds
+a [`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) and serves the
+policy from a dedicated process. Each environment process then performs its own
+reset/infer/step loop against a fixed shared-memory inference slot; the driver
+receives completed transitions only. When the conditions do not hold (threaded
+environment workers, grouped workers, no `policy_factory`, or a policy whose
+inputs the environment does not produce), the policy is served from a thread of
+the driver process and the reason is logged. A pre-built
+[`ProcessSlotTransport`](generated/torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) can be passed
+instead; it implies the process inference server and multiprocessing workers.
+`transport="driver"` keeps the driver-mediated path explicitly: coordinator
+threads relay requests to the transport derived from `policy_backend`. In
+v0.15 `transport="auto"` becomes the default; until then the collector emits
+a `FutureWarning` when the default would change its behavior.
+This mode bounds completed and in-flight transitions together to twice the
+environment count. Workers park before reserving capacity when the driver stops
+consuming, and `pause()` still works with a full buffer. Environment workers
+are daemonic and both the workers and inference server exit if their owning
+process dies, including while environment or policy calls are blocked. Call
+`shutdown()` for normal cleanup; abrupt owner death cannot guarantee
+environment cleanup hooks run. Environment factories in this mode must not start
+multiprocessing children.
+
+With process workers, `transition_chunk_size="auto"` (the default) makes each
+worker accumulate `frames_per_batch // num_envs` consecutive transitions and
+send them as one dense message, so every batch holds one contiguous run per
+environment, the layout of the synchronous collectors, and a transition waits at
+most one batch. The driver then receives one message per chunk, concatenates
+whole chunks into each batch and performs a single routed replay write per
+batch, so its cost per transition is amortized over the chunk. Pass `1` to
+send every transition as soon as it completes, or a larger value to amortize
+further; up to `transition_chunk_size - 1` transitions per environment remain
+in the worker while collection is paused or stopped. Chunked batches are dense
+[`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances whose `env_index` is a tensor.
 
 ## Scaling `Collector` across local processes
 

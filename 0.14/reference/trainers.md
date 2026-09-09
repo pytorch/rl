@@ -75,3 +75,16 @@ trainer.train()
 - [TargetNetUpdaterHook](generated/torchrl.trainers.TargetNetUpdaterHook.html)
 - [UTDRHook](generated/torchrl.trainers.UTDRHook.html)
 - [ValueEstimatorHook](generated/torchrl.trainers.ValueEstimatorHook.html)
+
+## DreamerV3 optimization
+
+The algorithm-specific optimizer is available independently of a trainer or
+example script. See [DreamerV3 in a nutshell](dreamer_v3.html) for the loss and target-update composition.
+
+| [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer)(parameters, *[, lr, agc, ...]) | DreamerV3 adaptive gradient clipping, RMS scaling and momentum. |
+| --- | --- |
+| [`DreamerV3OptimizerConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig)([lr, agc, ...]) | Hydra configuration for [`DreamerV3Optimizer`](generated/torchrl.trainers.algorithms.DreamerV3Optimizer.html#torchrl.trainers.algorithms.DreamerV3Optimizer). |
+| [`DreamerV3UpdateRatio`](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html#torchrl.trainers.algorithms.DreamerV3UpdateRatio)(ratio) | Schedule learner updates from a ratio of updates to driver records. |
+| [`DreamerV3UpdateRatioConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html#torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig)([ratio, _target_]) | Hydra configuration for [`DreamerV3UpdateRatio`](generated/torchrl.trainers.algorithms.DreamerV3UpdateRatio.html#torchrl.trainers.algorithms.DreamerV3UpdateRatio). |
+| [`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper)(loss_module, ...) | Execute a complete DreamerV3 forward/backward and optimizer update. |
+| [`DreamerV3OptimizationStepperConfig`](generated/torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html#torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig)([...]) | Hydra configuration for [`DreamerV3OptimizationStepper`](generated/torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html#torchrl.trainers.algorithms.DreamerV3OptimizationStepper). |

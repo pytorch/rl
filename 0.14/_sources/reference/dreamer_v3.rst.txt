@@ -86,6 +86,17 @@ objects. In the TorchRL API:
      - The learned probability that an imagined trajectory continues. It
        replaces a fixed survival assumption when weighting returns and losses.
 
+For acting in a real environment, compose the encoder,
+:class:`~torchrl.modules.RSSMStateEstimatorV3` and actor with
+:class:`~tensordict.nn.TensorDictSequential`. The estimator resets recurrent
+context per stream and samples only the observation-conditioned posterior.
+The collector carries its state, belief and action into the next step.
+For discrete actions, :class:`~torchrl.modules.DreamerV3DiscreteActor` provides
+an importable one-hot policy with DreamerV3 initialization, uniform probability
+mixing and float32 logits under autocast. Its ``get_dist()`` method supports
+straight-through sampling for imagination, and its input and output keys can
+be nested. Network construction and sampling require no recipe imports.
+
 How the RSSM works
 ------------------
 
@@ -276,8 +287,47 @@ reads its
 Because the input features stay attached, this term also trains the RSSM
 representation when the world-model loss returns live features.
 
+Reconstruction heads
+--------------------
+
+Vector and image reconstruction can be composed in the public model loss.
+Use symlog distance for vector observations and raw distance for normalized
+images. Integer images are scaled by 255 when symlog is disabled. Each head
+sums its event dimensions before the batch/time average, unless
+``global_average=True``; the resulting head losses are added together.
+
+.. code-block:: python
+
+    model_loss = DreamerV3ModelLoss(world_model, reco_symlog=[True, False])
+    model_loss.set_keys(
+        pixels=[("sensors", "vector"), ("sensors", "image")],
+        reco_pixels=["reco_vector", "reco_pixels"],
+    )
+    losses, posterior = model_loss(replay_sample)
+    losses["loss_model_reco"].backward()
+
 Optimization and training loop
 ------------------------------
+
+The public :class:`~torchrl.objectives.DreamerV3Loss` composes the model, actor,
+critic and replay-value objectives. Its detached ``replay_context`` output can
+be written back through native replay's generation-checked update operation.
+:class:`~torchrl.trainers.algorithms.DreamerV3OptimizationStepper` owns the
+forward/backward, optimizer and target-update sequence. It can run inside a
+``Trainer`` or a custom loop using ``step(None, sample)``. It returns scalar
+metrics and writes detached posterior features to ``sample["replay_context"]``
+for replay updates. Its ``warmup(sample)``
+method prepares compilation and capture before collection starts, preserving
+normalization buffers, RNG state and captured gradient storage. Keep shared
+modules in one compile scope; do not compile the RSSM separately when using
+whole-step compilation.
+
+.. autosummary::
+   :toctree: generated/
+   :template: rl_template_noinherit.rst
+
+   ~torchrl.objectives.DreamerV3Loss
+   ~torchrl.trainers.algorithms.configs.DreamerV3LossConfig
 
 The loss modules do not create optimizers. This keeps optimizer ownership and
 the update schedule explicit. A typical update cycle is:
@@ -291,8 +341,8 @@ the update schedule explicit. A typical update cycle is:
 5. Update the online critic on those same detached returns.
 6. Soft-update the slow critic.
 
-The runnable ``sota-implementations/dreamer_v3`` example uses a single optimizer
-over the world model, actor and critic parameters, reproducing the current JAX
+The public :class:`~torchrl.trainers.algorithms.DreamerV3Optimizer` jointly optimizes
+the world model, actor and critic parameters, reproducing the current JAX
 implementation's adaptive gradient clipping, LaProp-style RMS scaling followed
 by momentum, and warmup chain.
 Those choices belong to the training recipe rather than the loss API, so users
@@ -331,3 +381,32 @@ API map
 
 For a complete training setup, see the
 `DreamerV3 example <https://github.com/pytorch/rl/tree/main/sota-implementations/dreamer_v3>`_.
+
+
+Checkpoint ownership
+--------------------
+
+Register the composed :class:`~torchrl.objectives.DreamerV3Loss` and
+:class:`~torchrl.trainers.algorithms.DreamerV3OptimizationStepper` separately with
+:class:`~torchrl.checkpoint.Checkpoint`. The loss owns network and normalization
+state; the stepper owns optimizer and target-update progress. Restore both after
+compile/capture warm-up, which may modify parameters or running statistics.
+
+:class:`~torchrl.modules.DreamerV3SeededPolicy` includes its seed and next-draw
+counter in its module state. Register the policy and
+:class:`~torchrl.trainers.algorithms.DreamerV3UpdateRatio` directly to preserve
+policy RNG progress and fractional update scheduling. When replay is omitted,
+call the ratio's ``reset(record_count)`` while refilling it to discard owed updates.
+Restore global RNG state last, before collection begins.
+
+After loading native replay, call
+:meth:`~torchrl.data.ReplayBufferEnsemble.end_streams` before new environments
+append transitions. This closes unfinished tails and resets incomplete streaming
+windows without inventing terminal transitions. Environments restart; checkpoint
+resume does not guarantee identical trajectories.
+
+Pass saved logger state to :func:`~torchrl.record.loggers.get_logger` through
+``state_dict=...``. The logger layer reopens saved local logs or strictly resumes
+the saved W&B run ID, then restores its counters. The recipe chooses checkpoint
+paths, cadence, optional replay and when to quiesce collection; it does not inspect
+component internals to reconstruct their state.

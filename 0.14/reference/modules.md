@@ -95,12 +95,18 @@ actor = ProbabilisticActor(
 - [ObsEncoder](generated/torchrl.modules.ObsEncoder.html)
 - [ObsDecoder](generated/torchrl.modules.ObsDecoder.html)
 - [RSSMPosterior](generated/torchrl.modules.RSSMPosterior.html)
+- [RSSMPosteriorV3](generated/torchrl.modules.RSSMPosteriorV3.html)
 - [RSSMPrior](generated/torchrl.modules.RSSMPrior.html)
+- [RSSMPriorV3](generated/torchrl.modules.RSSMPriorV3.html)
 - [RSSMRollout](generated/torchrl.modules.RSSMRollout.html)
+- [RSSMRolloutV3](generated/torchrl.modules.RSSMRolloutV3.html)
+- [RSSMStateEstimatorV3](generated/torchrl.modules.RSSMStateEstimatorV3.html)
 - [SymExpTwoHot](generated/torchrl.modules.SymExpTwoHot.html)
 - [DreamerV3BlockGRUCell](generated/torchrl.modules.DreamerV3BlockGRUCell.html)
 - [DreamerV3BlockGRU](generated/torchrl.modules.DreamerV3BlockGRU.html)
 - [DreamerV3MLP](generated/torchrl.modules.DreamerV3MLP.html)
+- [DreamerV3ImageEncoder](generated/torchrl.modules.DreamerV3ImageEncoder.html)
+- [DreamerV3ImageDecoder](generated/torchrl.modules.DreamerV3ImageDecoder.html)
 - [PILCO](modules_models.html#pilco)
 - [Distribution Classes](modules_distributions.html)
 
@@ -148,3 +154,10 @@ actor = ProbabilisticActor(
 - [Common debugging symptoms](recurrent_state_lifecycle.html#common-debugging-symptoms)
 - [What to check, in order](recurrent_state_lifecycle.html#what-to-check-in-order)
 - [See also](recurrent_state_lifecycle.html#see-also)
+
+## DreamerV3 recurrent components
+
+The recurrent components are also exported directly from `torchrl.modules`:
+[`RSSMPriorV3`](generated/torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3),
+[`RSSMPosteriorV3`](generated/torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3), and
+[`RSSMRolloutV3`](generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3). See [DreamerV3 in a nutshell](dreamer_v3.html) for their composition.

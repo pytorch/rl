@@ -1570,6 +1570,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html">SliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html">SliceSamplerWithoutReplacement</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StalenessAwareSampler.html">StalenessAwareSampler</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.StreamingSliceSampler.html">StreamingSliceSampler</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.RoundRobinWriter.html">RoundRobinWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictMaxValueWriter.html">TensorDictMaxValueWriter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html">TensorDictRoundRobinWriter</a></li>
@@ -1777,6 +1778,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.IsaacLabWrapper.html">IsaacLabWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiEnv.html">JumanjiEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.JumanjiWrapper.html">JumanjiWrapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingEnv.html">LBForagingEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LBForagingWrapper.html">LBForagingWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoEnv.html">LiberoEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LiberoWrapper.html">LiberoWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.MeltingpotEnv.html">MeltingpotEnv</a></li>
@@ -1892,6 +1895,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.TanhModule.html">TanhModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.RandomPolicy.html">RandomPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.ProbabilisticActor.html">ProbabilisticActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html">DreamerV3DiscreteActor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.DreamerV3SeededPolicy.html">DreamerV3SeededPolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticModule.html">SafeProbabilisticModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html">SafeProbabilisticTensorDictSequential</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.QValueActor.html">QValueActor</a></li>
@@ -1979,6 +1984,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessSlotTransport.html">ProcessSlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2078,7 +2084,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.DreamerV3Loss.html">DreamerV3Loss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3LossConfig.html">DreamerV3LossConfig</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2206,6 +2216,12 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3Optimizer.html">DreamerV3Optimizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizerConfig.html">DreamerV3OptimizerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3UpdateRatio.html">DreamerV3UpdateRatio</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3UpdateRatioConfig.html">DreamerV3UpdateRatioConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.DreamerV3OptimizationStepper.html">DreamerV3OptimizationStepper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.DreamerV3OptimizationStepperConfig.html">DreamerV3OptimizationStepperConfig</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../utils.html">torchrl._utils package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2259,6 +2275,10 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.NetworkConfig.html">torchrl.trainers.algorithms.configs.modules.NetworkConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.MLPConfig.html">torchrl.trainers.algorithms.configs.modules.MLPConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageEncoderConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig.html">torchrl.trainers.algorithms.configs.modules.DreamerV3ImageDecoderConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.ConvNetConfig.html">torchrl.trainers.algorithms.configs.modules.ConvNetConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.html">torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.html">torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig</a></li>
@@ -2343,6 +2363,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html">torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html">torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html">torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.ListStorageConfig.html">torchrl.trainers.algorithms.configs.data.ListStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.TensorStorageConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig.html">torchrl.trainers.algorithms.configs.data.LazyTensorStorageConfig</a></li>
@@ -2563,7 +2584,7 @@ document.write(`
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">WriterEnsemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">writers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble" title="Link to this definition">#</a></dt>
 <dd><p>An ensemble of writers.</p>
 <p>This class is designed to work with <a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.
-It contains the writers but blocks writing with any of them.</p>
+It contains the member writers used by a replay-buffer ensemble.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>writers</strong> (<em>sequence</em><em> of </em><a class="reference internal" href="torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer" title="torchrl.data.replay_buffers.Writer"><em>Writer</em></a>) – the writers to make the composite writer.</p>
@@ -2571,9 +2592,9 @@ It contains the writers but blocks writing with any of them.</p>
 </dl>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>This class does not support writing.
-To extend one of the replay buffers, simply index the parent
-<a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a> object.</p>
+<p>This class does not write directly. A routed
+<a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a> dispatches writes to its
+member writers; otherwise, index the parent ensemble before writing.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.add">
@@ -2589,7 +2610,7 @@ To extend one of the replay buffers, simply index the parent
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.generations_of">
-<span class="sig-name descname"><span class="pre">generations_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.generations_of" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">generations_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.14)"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers/ensemble.html#WriterEnsemble.generations_of"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.generations_of" title="Link to this definition">#</a></dt>
 <dd><p>Returns the generation stamp for each physical slot in <code class="docutils literal notranslate"><span class="pre">index</span></code>.</p>
 <p>A slot’s stamp advances once per write it receives, so a single
 <code class="docutils literal notranslate"><span class="pre">extend</span></code> that wraps the storage advances a reused slot once per write.
@@ -2616,6 +2637,15 @@ generation stamps a whole dim-0 slot.</p>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)">torch.Tensor</a></p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.tracks_generations">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tracks_generations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.tracks_generations" title="Link to this definition">#</a></dt>
+<dd><p>bool(x) -&gt; bool</p>
+<p>Returns True when the argument x is true, False otherwise.
+The builtins True and False are the only two instances of the class bool.
+The class bool is a subclass of the class int, and cannot be subclassed.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2743,6 +2773,7 @@ generation stamps a whole dim-0 slot.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.add"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.add()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.extend"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.extend()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.generations_of"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.generations_of()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.tracks_generations"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.tracks_generations</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -2997,7 +3028,7 @@ generation stamps a whole dim-0 slot.</p>
        "headline": "WriterEnsemble",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.WriterEnsemble.html",
-       "articleBody": "WriterEnsemble# class torchrl.data.replay_buffers.WriterEnsemble(*writers)# An ensemble of writers. This class is designed to work with ReplayBufferEnsemble. It contains the writers but blocks writing with any of them. Parameters: writers (sequence of Writer) \u2013 the writers to make the composite writer. Warning This class does not support writing. To extend one of the replay buffers, simply index the parent ReplayBufferEnsemble object. add()[source]# Inserts one piece of data at an appropriate index, and returns that index. extend()[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices. generations_of(index: int | Tensor) \u2192 Tensor# Returns the generation stamp for each physical slot in index. A slot\u2019s stamp advances once per write it receives, so a single extend that wraps the storage advances a reused slot once per write. Comparing a stamp captured at sampling time against the current stamp tells you whether the slot still holds the data you sampled. Writers that do not track slot reuse \u2013 and writers constructed with track_generations=False, which is the default \u2013 report -1 everywhere. Never-written slots also report -1, so -1 means \u201cno usable stamp\u201d rather than \u201cgeneration zero\u201d. Parameters: index (int or torch.Tensor) \u2013 dim-0 slot indices. A 1-D tensor is always read as a batch of slot indices; for a storage with ndim \u003e 1, pass a tuple of per-dimension indices (as extend() returns) to identify a single cell \u2013 only its dim-0 component is used, since a generation stamps a whole dim-0 slot. Returns: int64 stamps shaped like the dim-0 component of index, on index\u2019s device. Return type: torch.Tensor",
+       "articleBody": "WriterEnsemble# class torchrl.data.replay_buffers.WriterEnsemble(*writers)# An ensemble of writers. This class is designed to work with ReplayBufferEnsemble. It contains the member writers used by a replay-buffer ensemble. Parameters: writers (sequence of Writer) \u2013 the writers to make the composite writer. Warning This class does not write directly. A routed ReplayBufferEnsemble dispatches writes to its member writers; otherwise, index the parent ensemble before writing. add()[source]# Inserts one piece of data at an appropriate index, and returns that index. extend()[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices. generations_of(index: TensorDictBase) \u2192 Tensor[source]# Returns the generation stamp for each physical slot in index. A slot\u2019s stamp advances once per write it receives, so a single extend that wraps the storage advances a reused slot once per write. Comparing a stamp captured at sampling time against the current stamp tells you whether the slot still holds the data you sampled. Writers that do not track slot reuse \u2013 and writers constructed with track_generations=False, which is the default \u2013 report -1 everywhere. Never-written slots also report -1, so -1 means \u201cno usable stamp\u201d rather than \u201cgeneration zero\u201d. Parameters: index (int or torch.Tensor) \u2013 dim-0 slot indices. A 1-D tensor is always read as a batch of slot indices; for a storage with ndim \u003e 1, pass a tuple of per-dimension indices (as extend() returns) to identify a single cell \u2013 only its dim-0 component is used, since a generation stamps a whole dim-0 slot. Returns: int64 stamps shaped like the dim-0 component of index, on index\u2019s device. Return type: torch.Tensor property tracks_generations: bool# bool(x) -\u003e bool Returns True when the argument x is true, False otherwise. The builtins True and False are the only two instances of the class bool. The class bool is a subclass of the class int, and cannot be subclassed.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -23,6 +23,10 @@ It must be unique in the project, and if you delete a run you can't reuse the ID
 - **project** (*str**,**optional*) - The name of the project where you're sending
 the new run. If the project is not specified, the run is put in
 an `"Uncategorized"` project.
+- **base_url** (*str**,**optional*) - The W&B server URL used for authentication and
+data synchronization. Construct the logger before other code imports
+or calls W&B, because the W&B client reads `WANDB_BASE_URL` when it
+is initialized.
 - **log_env_packages** (*bool**,**optional*) - if `True`, logs the Python runtime,
 installed package versions, and editable source locations under
 `wandb.config["env"]`. Defaults to `True`.

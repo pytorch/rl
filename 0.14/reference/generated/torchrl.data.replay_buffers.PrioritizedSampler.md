@@ -131,6 +131,10 @@ priorities cannot be recovered from the trees in that regime, so the
 stored (uniform) values are kept - and a warning is emitted -
 until each entry's priority is next updated.
 
+can_sample(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *batch_size: int*) → bool
+
+Returns whether the sampler can draw the requested batch.
+
 update_priority(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *priority: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *storage: [TensorStorage](torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage) | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/samplers/prioritized.html#PrioritizedSampler.update_priority)
 
 Updates the priority of the data pointed by the index.

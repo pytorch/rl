@@ -254,7 +254,7 @@ different transport.
      - ``process``
      - --
      - Gloo or NCCL [1]_
-     - ``process`` or ``shared_memory``
+     - ``process``, ``shared_memory``, or ``process_slot``
    * - :class:`~torchrl.modules.inference_server.InferenceServer`
      - ``ray``
      - ``ray``
@@ -300,6 +300,12 @@ universal ordering.
      - CPU
      - Preallocated slots avoid pickling tensor contents. This is generally a
        better process-local choice for large, stable CPU TensorDict payloads.
+   * - ``process_slot``
+     - Fixed keys, shapes, dtypes, and batch sizes; one slot per client
+     - Tensor leaves only
+     - CPU
+     - Fixed per-worker slots and process-shared signals keep observations and
+       actions off the driver path. Each client has one in-flight request.
    * - ``ray``
      - Dynamic
      - Ray-serializable values, including strings and non-tensor data

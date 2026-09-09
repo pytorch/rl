@@ -1,6 +1,6 @@
 # ProcessInferenceServer
 
-*class*torchrl.modules.inference_server.ProcessInferenceServer(***, *policy_factory: Callable[[], [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*, *mp_context: str | BaseContext | None = None*, *startup_timeout: float = 300.0*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer)
+*class*torchrl.modules.inference_server.ProcessInferenceServer(***, *policy_factory: Callable[[], [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*, *request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *max_batch_size: int | None = None*, *static_batch_size: int | None = None*, *min_batch_size: int | None = None*, *timeout: float | None = None*, *collate_fn: Callable | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *policy_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *output_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *collect_stats: bool | None = None*, *stats_window_size: int | None = None*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*, *mp_context: str | BaseContext | None = None*, *startup_timeout: float = 300.0*)[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer)
 
 Dedicated-process wrapper around [`InferenceServer`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer).
 
@@ -18,7 +18,13 @@ the policy inside the server process.
 
 Keyword Arguments:
 
+- **request_spec** (*TensorDictBase**,**optional*) - representative unbatched
+request used to capture a static CUDA graph before child-process
+readiness.
 - **max_batch_size** (*int**,**optional*) - maximum requests per forward pass.
+- **static_batch_size** (*int**,**optional*) - fixed CUDA-graph batch size forwarded
+to [`InferenceServer`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer). Requires an explicit CUDA
+`policy_device`.
 - **min_batch_size** (*int**,**optional*) - minimum requests to accumulate before
 dispatching a partial batch.
 - **timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - wait timeout in seconds.
@@ -32,8 +38,8 @@ dispatching a partial batch.
 - **weight_sync_model_id** (*str**,**optional*) - model id for weight sync.
 - **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
 configuration. Mutually exclusive with the `max_batch_size`,
-`min_batch_size`, `timeout`, `collect_stats`, and
-`stats_window_size` keyword arguments.
+`static_batch_size`, `min_batch_size`, `timeout`,
+`collect_stats`, and `stats_window_size` keyword arguments.
 - **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device
 placement configuration. Mutually exclusive with `device`,
 `policy_device`, and `output_device`. Same field subset as
@@ -101,6 +107,20 @@ Whether the child process is alive.
 *property*policy_version*: int*
 
 The live behavior-policy version of the child server.
+
+prepare_cudagraph(*request_spec: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *interaction_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | None = None*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.prepare_cudagraph)
+
+Set the representative request used for child-process capture.
+
+Parameters:
+
+**request_spec** (*TensorDictBase*) - representative unbatched request.
+
+Keyword Arguments:
+
+**interaction_type** (*InteractionType**,**optional*) - sampling mode the
+child process captures under, stamped on the stored request.
+See [`InferenceServer.prepare_cudagraph()`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.prepare_cudagraph).
 
 *property*service_backend*: str*
 

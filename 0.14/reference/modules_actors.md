@@ -18,6 +18,8 @@ or stochastically.
 
 | [`ProbabilisticActor`](generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor)(*args, **kwargs) | General class for probabilistic actors in RL. |
 | --- | --- |
+| [`DreamerV3DiscreteActor`](generated/torchrl.modules.tensordict_module.DreamerV3DiscreteActor.html#torchrl.modules.tensordict_module.DreamerV3DiscreteActor)(*args, **kwargs) | DreamerV3 one-hot categorical policy over stochastic state and belief. |
+| [`DreamerV3SeededPolicy`](generated/torchrl.modules.tensordict_module.DreamerV3SeededPolicy.html#torchrl.modules.tensordict_module.DreamerV3SeededPolicy)(*args, **kwargs) | Run a DreamerV3 policy with an independent, checkpointable random stream. |
 | [`SafeProbabilisticModule`](generated/torchrl.modules.tensordict_module.SafeProbabilisticModule.html#torchrl.modules.tensordict_module.SafeProbabilisticModule)(*args, **kwargs) | [`tensordict.nn.ProbabilisticTensorDictModule`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) subclass that accepts a `TensorSpec` as an argument to control the output domain. |
 | [`SafeProbabilisticTensorDictSequential`](generated/torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential.html#torchrl.modules.tensordict_module.SafeProbabilisticTensorDictSequential)(*args, ...) | [`tensordict.nn.ProbabilisticTensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential) subclass that accepts a `TensorSpec` as argument to control the output domain. |
 
