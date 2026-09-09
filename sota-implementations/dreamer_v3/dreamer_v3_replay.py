@@ -40,12 +40,58 @@ def collector_action_budget(
     return (vector_records - reset_records) * num_envs
 
 
+def _last_rows_per_coordinate(coordinates: torch.Tensor) -> torch.Tensor:
+    """Return the last row holding each distinct coordinate, in coordinate order.
+
+    Packs the non-negative integer columns into one key so a single stable sort
+    orders the rows lexicographically with ties in their original order; the
+    last row of every run of equal keys then wins. When the packed key would
+    overflow ``int64``, the columns are sorted one at a time instead.
+    """
+    coordinates = coordinates.long()
+    n_rows, n_columns = coordinates.shape
+    radices = coordinates.amax(0) + 1
+    if bool(radices.double().log2().sum() < 62):
+        strides = torch.ones_like(radices)
+        strides[:-1] = radices[1:].flip(0).cumprod(0).flip(0)
+        key = (coordinates * strides).sum(-1)
+        order = key.argsort(stable=True)
+        ordered = key[order].unsqueeze(-1)
+    else:
+        order = torch.arange(n_rows, device=coordinates.device)
+        for column in range(n_columns - 1, -1, -1):
+            order = order[coordinates[order, column].argsort(stable=True)]
+        ordered = coordinates[order]
+    last = torch.ones(n_rows, dtype=torch.bool, device=coordinates.device)
+    last[:-1] = (ordered[:-1] != ordered[1:]).any(-1)
+    return order[last]
+
+
+def _index_on(index: torch.Tensor, device: torch.device) -> torch.Tensor:
+    """Move a host index to ``device`` without synchronizing the current stream.
+
+    A pageable host-to-device copy waits for every kernel already enqueued,
+    which after a learner step is the whole step; staging through pinned memory
+    keeps the copy asynchronous.
+    """
+    if index.device == device:
+        return index
+    if device.type == "cuda" and index.device.type == "cpu":
+        return index.pin_memory().to(device, non_blocking=True)
+    return index.to(device)
+
+
 def replay_context_update(
     sample: TensorDictBase,
     state: torch.Tensor,
     belief: torch.Tensor,
 ) -> tuple[TensorDictBase, torch.Tensor, Mapping[NestedKey, torch.Tensor]]:
-    """Build a deduplicated update for the context rows after a sampled step."""
+    """Build a deduplicated update for the context rows after a sampled step.
+
+    Nothing here synchronizes with the device holding ``state`` and
+    ``belief``; the returned patch stays on that device and may still be in
+    flight, so pass it to an asynchronous replay update.
+    """
     if sample.ndim != 2:
         raise RuntimeError(
             "Expected a replay sample with shape [batch, time], got "
@@ -69,23 +115,14 @@ def replay_context_update(
 
     # Sampled slices may overlap. Keep the last value for each destination so
     # indexed writes have deterministic semantics on every device.
-    order = torch.arange(coordinates.shape[0], device=coordinates.device)
-    for dimension in range(coordinates.shape[1] - 1, -1, -1):
-        order = order[coordinates[order, dimension].argsort(stable=True)]
-    ordered_coordinates = coordinates[order]
-    keep_ordered = torch.ones(
-        ordered_coordinates.shape[0], dtype=torch.bool, device=coordinates.device
-    )
-    keep_ordered[:-1] = (ordered_coordinates[:-1] != ordered_coordinates[1:]).any(-1)
-    keep = order[keep_ordered]
-
-    state = state.detach().float().reshape(-1, state.shape[-1])
-    belief = belief.detach().float().reshape(-1, belief.shape[-1])
+    keep = _last_rows_per_coordinate(coordinates)
+    state = state.detach().reshape(-1, state.shape[-1])
+    belief = belief.detach().reshape(-1, belief.shape[-1])
     return (
         handles[keep],
         generations[keep],
         {
-            "state": state[keep.to(state.device)],
-            "belief": belief[keep.to(belief.device)],
+            "state": state[_index_on(keep, state.device)].float(),
+            "belief": belief[_index_on(keep, belief.device)].float(),
         },
     )

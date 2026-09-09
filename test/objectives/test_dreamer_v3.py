@@ -2537,6 +2537,115 @@ def test_dreamer_v3_async_replay_sequences_cross_episode_ends(monkeypatch, onlin
         rb.shutdown()
 
 
+def _reference_replay_context_update(sample, state, belief):
+    """Per-column stable sorts, the implementation the packed key replaced."""
+    handles = sample.get("index")[:, 1:].reshape(-1)
+    generations = sample.get("index_generation")[:, 1:].reshape(-1)
+    buffer_ids = handles.get("buffer_ids")
+    local_indices = handles.get("index")
+    coordinates = torch.cat(
+        (buffer_ids.reshape(-1, 1), local_indices.reshape(buffer_ids.numel(), -1)),
+        -1,
+    )
+    order = torch.arange(coordinates.shape[0])
+    for dimension in range(coordinates.shape[1] - 1, -1, -1):
+        order = order[coordinates[order, dimension].argsort(stable=True)]
+    ordered_coordinates = coordinates[order]
+    keep_ordered = torch.ones(ordered_coordinates.shape[0], dtype=torch.bool)
+    keep_ordered[:-1] = (ordered_coordinates[:-1] != ordered_coordinates[1:]).any(-1)
+    keep = order[keep_ordered]
+    state = state.detach().float().reshape(-1, state.shape[-1])
+    belief = belief.detach().float().reshape(-1, belief.shape[-1])
+    return (
+        handles[keep],
+        generations[keep],
+        {"state": state[keep], "belief": belief[keep]},
+    )
+
+
+def _overlapping_replay_sample(batch, time, *, local_ndim, scale=1):
+    """Slice windows that overlap within members, as sampled sequences do."""
+    generator = torch.Generator().manual_seed(0)
+    capacity = 12
+    starts = torch.randint(0, capacity - time + 1, (batch,), generator=generator)
+    local = starts.unsqueeze(1) + torch.arange(time)
+    if local_ndim == 2:
+        lane = torch.randint(0, 3, (batch, 1), generator=generator).expand(batch, time)
+        local = torch.stack((lane, local), -1)
+    buffer_ids = torch.randint(0, 4, (batch, 1), generator=generator).expand(
+        batch, time
+    )
+    # Two identical windows make whole rows collide, not only their tails.
+    buffer_ids = buffer_ids.clone()
+    buffer_ids[1] = buffer_ids[0]
+    local = local.clone()
+    local[1] = local[0]
+    return TensorDict(
+        {
+            "index": TensorDict(
+                {"buffer_ids": buffer_ids * scale, "index": local * scale},
+                [batch, time],
+            ),
+            "index_generation": torch.randint(0, 3, (batch, time), generator=generator),
+        },
+        [batch, time],
+    )
+
+
+@pytest.mark.parametrize("local_ndim", [1, 2])
+@pytest.mark.parametrize(
+    "scale", [1, 2**33], ids=["packed_key", "per_column_fallback"]
+)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="requires CUDA"
+                ),
+            ],
+        ),
+    ],
+)
+def test_dreamer_v3_replay_context_update_matches_reference(
+    monkeypatch, local_ndim, scale, device
+):
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    replay = runpy.run_path(
+        example_dir / "dreamer_v3_replay.py", run_name="dreamer_v3_replay_test"
+    )
+    batch, time = 16, 5
+    sample = _overlapping_replay_sample(batch, time, local_ndim=local_ndim, scale=scale)
+    state = torch.randn(batch, time - 1, 6)
+    belief = torch.randn(batch, time - 1, 7)
+
+    index, generation, patch = replay["replay_context_update"](
+        sample, state.to(device), belief.to(device)
+    )
+    ref_index, ref_generation, ref_patch = _reference_replay_context_update(
+        sample, state, belief
+    )
+
+    coordinates = torch.cat(
+        (index["buffer_ids"].reshape(-1, 1), index["index"].reshape(len(index), -1)),
+        -1,
+    )
+    assert coordinates.shape[0] < batch * (time - 1)
+    assert torch.unique(coordinates, dim=0).shape[0] == coordinates.shape[0]
+    assert torch.equal(index["buffer_ids"], ref_index["buffer_ids"])
+    assert torch.equal(index["index"], ref_index["index"])
+    assert torch.equal(generation, ref_generation)
+    for key in ("state", "belief"):
+        assert patch[key].device.type == device
+        assert torch.equal(patch[key].cpu(), ref_patch[key])
+
+
 @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
 def test_dreamer_v3_replay_capacity_validation(monkeypatch):
     from omegaconf import OmegaConf

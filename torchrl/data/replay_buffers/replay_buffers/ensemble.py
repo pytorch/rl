@@ -441,6 +441,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
             raise ValueError("add() expects a scalar TensorDict record.")
         return self.extend(data.unsqueeze(0))[0]
 
+    def _conditional_update_device(self) -> torch.device | None:
+        devices = {member._conditional_update_device() for member in self._rbs}
+        return devices.pop() if len(devices) == 1 else None
+
     def update_if_present(
         self,
         *,
@@ -451,7 +455,12 @@ class ReplayBufferEnsemble(ReplayBuffer):
         version: int | torch.Tensor | None = None,
         require_newer: bool = False,
     ) -> ConditionalUpdateResult:
-        """Routes a conditional update to the member named by each handle."""
+        """Routes a conditional update to the member named by each handle.
+
+        The patch moves to the members' common storage device once, before the
+        records are grouped by member, so the per-member updates never copy
+        across devices.
+        """
         if not isinstance(index, TensorDictBase):
             raise TypeError(
                 "ReplayBufferEnsemble conditional updates require routed index metadata."
@@ -500,12 +509,15 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 "number of records."
             )
 
+        target_device = self._conditional_update_device()
         if isinstance(patch, TensorDictBase):
             if patch.batch_size != leading_shape:
                 raise ValueError(
                     "The patch batch size must match the routed index metadata."
                 )
             flat_patch = patch.reshape(-1)
+            if target_device is not None:
+                flat_patch = flat_patch.to(target_device)
         else:
             flat_patch = {}
             for key, value in patch.items():
@@ -514,9 +526,10 @@ class ReplayBufferEnsemble(ReplayBuffer):
                         f"Patch entry {key!r} must start with shape "
                         f"{tuple(leading_shape)}, got {tuple(value.shape)}."
                     )
-                flat_patch[key] = value.reshape(
-                    num_records, *value.shape[len(leading_shape) :]
-                )
+                value = value.reshape(num_records, *value.shape[len(leading_shape) :])
+                if target_device is not None:
+                    value = value.to(target_device)
+                flat_patch[key] = value
 
         updated = torch.zeros(
             num_records, dtype=torch.bool, device=flat_buffer_ids.device
@@ -524,16 +537,22 @@ class ReplayBufferEnsemble(ReplayBuffer):
         version_rejected = (
             torch.zeros_like(updated) if version_key is not None else None
         )
+        # One stable sort groups the records by member and keeps their
+        # submission order within each group.
+        order = flat_buffer_ids.argsort(stable=True)
+        counts = torch.bincount(flat_buffer_ids, minlength=len(self._rbs)).tolist()
         with self._replay_lock, self._write_lock:
-            for member_id, member_buffer in enumerate(self._rbs):
-                member_mask = flat_buffer_ids == member_id
-                if not member_mask.any():
+            start = 0
+            for member_buffer, count in zip(self._rbs, counts):
+                if not count:
                     continue
+                rows = order[start : start + count]
+                start += count
                 member_patch = (
-                    flat_patch[member_mask]
+                    flat_patch[rows.to(flat_patch.device or "cpu")]
                     if isinstance(flat_patch, TensorDictBase)
                     else {
-                        key: value[member_mask.to(value.device)]
+                        key: value[rows.to(value.device)]
                         for key, value in flat_patch.items()
                     }
                 )
@@ -541,18 +560,18 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 if isinstance(version, torch.Tensor) and version.numel() > 1:
                     member_version = version.reshape(
                         num_records, *version.shape[len(leading_shape) :]
-                    )[member_mask.to(version.device)]
+                    )[rows.to(version.device)]
                 result = member_buffer.update_if_present(
-                    index=flat_local_index[member_mask.to(flat_local_index.device)],
-                    generation=flat_generation[member_mask.to(flat_generation.device)],
+                    index=flat_local_index[rows.to(flat_local_index.device)],
+                    generation=flat_generation[rows.to(flat_generation.device)],
                     patch=member_patch,
                     version_key=version_key,
                     version=member_version,
                     require_newer=require_newer,
                 )
-                updated[member_mask] = result.updated.to(updated.device)
+                updated[rows] = result.updated.to(updated.device)
                 if version_rejected is not None:
-                    version_rejected[member_mask] = result.version_rejected.to(
+                    version_rejected[rows] = result.version_rejected.to(
                         version_rejected.device
                     )
         return ConditionalUpdateResult(
