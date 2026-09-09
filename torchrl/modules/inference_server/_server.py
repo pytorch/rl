@@ -46,6 +46,7 @@ from torchrl.modules.inference_server._client import (
     _INTERACTION_TYPE_TO_CODE,
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
+    _stamp_interaction_type,
 )
 from torchrl.modules.inference_server._config import (
     _resolve_device_config,
@@ -812,16 +813,36 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         )
 
     @torch.no_grad()
-    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(
+        self,
+        request_spec: TensorDictBase,
+        *,
+        interaction_type: InteractionType | None = None,
+    ) -> None:
         """Capture the configured static CUDA graph before server start.
 
         Args:
             request_spec (TensorDictBase): representative unbatched request.
+
+        Keyword Args:
+            interaction_type (InteractionType, optional): sampling mode the
+                graph is captured under; every request must then carry the
+                same mode (see
+                :class:`~torchrl.modules.inference_server.PolicyClientModule`).
+                Defaults to ``None``: the mode already stamped on
+                ``request_spec`` if any, otherwise the ambient
+                :func:`~tensordict.nn.set_interaction_type` context (or the
+                module default when no context is active). Pass an explicit
+                mode when other threads may change the ambient context.
         """
         if self.static_batch_size is None:
             return
         if self.is_alive:
             raise RuntimeError("The CUDA graph must be prepared before server start.")
+        if interaction_type is not None:
+            request_spec = _stamp_interaction_type(
+                request_spec, InteractionType(interaction_type)
+            )
         self._init_weight_sync()
         self._cudagraph_request_spec = request_spec.clone()
         cudagraph_model = CudaGraphModule(
@@ -918,6 +939,9 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         return result_batch.set(self.policy_version_key, version)
 
     def _interaction_type_context(self, batch: TensorDictBase):
+        # Stamped requests ignore the ambient context; unstamped requests retain
+        # the standalone server's ambient-context behavior. Entering a stamped
+        # context still mutates tensordict's process-wide global during forward.
         code = batch.get(_REMOTE_INTERACTION_TYPE_KEY, default=None)
         if code is None:
             current_interaction_type = interaction_type()
@@ -1393,15 +1417,29 @@ class ProcessInferenceServer:
         # Live mirror of the child's policy version ("q" = signed 64-bit).
         self._policy_version_value = self._ctx.Value("q", int(policy_version))
 
-    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(
+        self,
+        request_spec: TensorDictBase,
+        *,
+        interaction_type: InteractionType | None = None,
+    ) -> None:
         """Set the representative request used for child-process capture.
 
         Args:
             request_spec (TensorDictBase): representative unbatched request.
+
+        Keyword Args:
+            interaction_type (InteractionType, optional): sampling mode the
+                child process captures under, stamped on the stored request.
+                See :meth:`InferenceServer.prepare_cudagraph`.
         """
         if self.is_alive:
             raise RuntimeError(
                 "The process inference server must prepare its CUDA graph before start."
+            )
+        if interaction_type is not None:
+            request_spec = _stamp_interaction_type(
+                request_spec, InteractionType(interaction_type)
             )
         self._server_kwargs["request_spec"] = request_spec.clone()
 
@@ -1962,13 +2000,21 @@ class _RayInferenceServer(InferenceServer):
             raise RuntimeError("The Ray inference server is not alive.")
         return self
 
-    def prepare_cudagraph(self, request_spec: TensorDictBase) -> None:
+    def prepare_cudagraph(
+        self,
+        request_spec: TensorDictBase,
+        *,
+        interaction_type: InteractionType | None = None,
+    ) -> None:
         """Reject post-construction capture for the already-running Ray actor.
 
         Args:
             request_spec (TensorDictBase): unused representative request.
+
+        Keyword Args:
+            interaction_type (InteractionType, optional): unused sampling mode.
         """
-        del request_spec
+        del request_spec, interaction_type
         raise RuntimeError(
             "A Ray inference server captures inside its actor; pass request_spec "
             "when constructing InferenceServer."

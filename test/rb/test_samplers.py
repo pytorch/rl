@@ -1303,6 +1303,62 @@ class TestSamplers:
                     end + 1
                 ].item(), f"slice starting at index {end + 1} missing is_init=True"
 
+    @pytest.mark.parametrize("sampler_cls", [SliceSampler, StreamingSliceSampler])
+    def test_slice_sampler_init_key_none_keeps_stored_flags(self, sampler_cls):
+        """init_key=None returns the stored is_init flags without slice-start markers."""
+        torch.manual_seed(0)
+        traj_lengths = [8, 12]
+        parts = []
+        for t_id, length in enumerate(traj_lengths):
+            init = torch.zeros(length, 1, dtype=torch.bool)
+            init[0] = True
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), t_id, dtype=torch.int),
+                        "is_init": init,
+                        "step": torch.arange(length),
+                    },
+                    batch_size=[length],
+                )
+            )
+        data = torch.cat(parts)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel()),
+            sampler=sampler_cls(slice_len=4, traj_key="traj", init_key=None),
+            batch_size=8,
+        )
+        rb.extend(data)
+        for _ in range(20):
+            sample = rb.sample()
+            stored = data["is_init"][sample["index"].reshape(-1)]
+            torch.testing.assert_close(sample["is_init"], stored)
+            starts = sample["step"].reshape(2, 4)[:, 0]
+            assert (sample["is_init"].reshape(2, 4)[:, 0] == (starts == 0)).all()
+
+    def test_slice_sampler_init_key_custom(self):
+        """A custom init_key receives the slice-start markers."""
+        torch.manual_seed(0)
+        data = TensorDict(
+            {
+                "traj": torch.repeat_interleave(torch.arange(2, dtype=torch.int), 10),
+                ("collector", "init"): torch.zeros(20, 1, dtype=torch.bool),
+            },
+            batch_size=[20],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(
+                slice_len=5, traj_key="traj", init_key=("collector", "init")
+            ),
+            batch_size=10,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        assert "is_init" not in sample.keys(True)
+        assert sample["collector", "init"].reshape(2, 5)[:, 0].all()
+        assert not sample["collector", "init"].reshape(2, 5)[:, 1:].any()
+
     def test_slice_sampler_pad_output_no_is_init_no_marker(self):
         """Without is_init in the storage we don't introduce one out of thin air."""
         torch.manual_seed(0)

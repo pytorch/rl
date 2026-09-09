@@ -325,6 +325,53 @@ class TestEnsemble:
             release.set()
             replay.shutdown()
 
+    @pytest.mark.parametrize("sampler_type", [SliceSampler, StreamingSliceSampler])
+    def test_end_streams_with_per_stream_trajectory_key(self, sampler_type):
+        done_key = ("next", "done")
+
+        def make_member():
+            return TensorDictReplayBuffer(
+                storage=LazyTensorStorage(8),
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+                sampler=sampler_type(
+                    slice_len=2, end_key=done_key, traj_key="env_index"
+                ),
+                batch_size=2,
+            )
+
+        def records(env_index):
+            return TensorDict(
+                {
+                    "env_index": torch.as_tensor(env_index),
+                    "value": torch.arange(len(env_index)),
+                    done_key: torch.zeros(len(env_index), 1, dtype=torch.bool),
+                },
+                [len(env_index)],
+            )
+
+        # One environment per member: the stream is the trajectory and its tail closes.
+        members = [make_member() for _ in range(2)]
+        replay = ReplayBufferEnsemble(*members, routing_key="env_index")
+        try:
+            replay.extend(records([0, 0, 0]))
+            replay.extend(records([1, 1]))
+            replay.end_streams()
+            assert members[0][:][done_key].flatten().tolist() == [False, False, True]
+            assert members[1][:][done_key].flatten().tolist() == [False, True]
+        finally:
+            replay.shutdown()
+
+        # Distinct ids within a member may be reused by restarted producers.
+        mixed = make_member()
+        mixed.extend(records([0, 1]))
+        replay = ReplayBufferEnsemble(mixed)
+        try:
+            with pytest.raises(RuntimeError, match="same trajectory id"):
+                replay.end_streams()
+            assert not mixed[:][done_key].any()
+        finally:
+            replay.shutdown()
+
     def test_routing_dim_preserves_member_order(self):
         members = [self._make_routed_member() for _ in range(2)]
         rb = ReplayBufferEnsemble(*members, routing_dim=1)
