@@ -108,9 +108,22 @@ jobs:
           deb [snapshot=20260907T000000Z] http://security.ubuntu.com/ubuntu/ jammy-security main universe
           APT
             APT_OPTIONS=(-o Dir::Etc::sourcelist=/tmp/benchmark-sources.list -o Dir::Etc::sourceparts=-)
-            apt-get "${APT_OPTIONS[@]}" update
-            apt-get "${APT_OPTIONS[@]}" install -y --no-install-recommends \
-              git gcc g++ make cmake libpython3.10-dev
+            # The snapshot service answers 502/503 intermittently. A failed
+            # install left git missing and failed every later step of the
+            # push-triggered runs, so retry before giving up.
+            for attempt in 1 2 3 4 5 6; do
+              if apt-get "${APT_OPTIONS[@]}" update \
+                && apt-get "${APT_OPTIONS[@]}" install -y --no-install-recommends \
+                  git gcc g++ make cmake libpython3.10-dev; then
+                break
+              fi
+              if [ "$attempt" = 6 ]; then
+                echo "Installing system packages from the snapshot failed after $attempt attempts" >&2
+                exit 1
+              fi
+              sleep 30
+            done
+            command -v git
           else
             apt-get update -y
             apt-get install software-properties-common cmake -y
@@ -177,7 +190,7 @@ jobs:
             python -m pip install -c /tmp/torch-constraints.txt "pybind11[global]"
             python -m pip install -c /tmp/torch-constraints.txt cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
             python -m pip install --no-deps git+https://github.com/pytorch/tensordict
-            python -m pip install -c /tmp/torch-constraints.txt safetensors tqdm pandas numpy matplotlib ray psutil
+            python -m pip install -c /tmp/torch-constraints.txt safetensors tqdm pandas numpy matplotlib ray psutil hydra-core omegaconf
 
             bash .github/unittest/helpers/assert_torch_version.sh nightly
             bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
@@ -221,7 +234,8 @@ jobs:
               python -m pytest -v --rank 0 --timeout=300 --benchmark-only \
                 --benchmark-save-data --benchmark-json "async-${repeat}.json" \
                 test_envs_benchmark.py test_collectors_benchmark.py \
-                -k 'async_env_pool or async_collection_pixels'
+                test_dreamer_v3_benchmark.py \
+                -k 'async_env_pool or async_collection_pixels or dreamer_v3_async'
             done
           else
             python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only \
