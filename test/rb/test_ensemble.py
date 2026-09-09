@@ -451,7 +451,8 @@ class TestEnsemble:
         assert members[0][:]["value"].tolist() == [0, 1]
         assert members[1][:]["value"].tolist() == [10, 11]
 
-    def test_sampleable_routing_groups_member_samples(self):
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_sampleable_routing_groups_member_samples(self, default_device):
         lengths = (1, 4, 8)
         samplers = [SliceSampler(slice_len=2) for _ in lengths]
         members = [
@@ -477,7 +478,8 @@ class TestEnsemble:
             generator=generator,
         )
 
-        index, _ = rb.sampler.sample(rb.storage, 2_000)
+        with torch.device(default_device):
+            index, _ = rb.sampler.sample(rb.storage, 2_000)
         counts = torch.bincount(index["buffer_ids"], minlength=3)
 
         assert counts[0] == 0
