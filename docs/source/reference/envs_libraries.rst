@@ -96,6 +96,8 @@ Available wrappers
     IsaacLabWrapper
     JumanjiEnv
     JumanjiWrapper
+    LBForagingEnv
+    LBForagingWrapper
     LiberoEnv
     LiberoWrapper
     MeltingpotEnv
