@@ -330,8 +330,12 @@ before new transitions arrive, and incomplete episode returns restart at zero.
 Initial reset records are counted again when reset-record reporting is enabled.
 Queued collector results that were not emitted are not checkpointed. The acting
 policy is rebuilt from the restored learner; when using a separate policy RNG,
-its saved module state and counter are then restored. Consequently resumed
-trajectories are not promised to match an uninterrupted run. Without a replay payload,
+its saved module state and counter are then restored. With process inference
+(`collector.inference_backend=auto` where it applies, or `process`), the
+inference process rebuilds the policy on its device and receives the restored
+weights before it serves the first request, but the separate policy RNG counter
+stays in the training process, so the served stream restarts from the seed.
+Consequently resumed trajectories are not promised to match an uninterrupted run. Without a replay payload,
 collection refills native replay before training continues, without accumulating
 a catch-up update burst. Counters and logger identity still continue.
 

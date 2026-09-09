@@ -630,8 +630,9 @@ def _build_collection(
                 "collector.envs_per_worker=1 and a CPU or CUDA policy device."
             )
         if _serves_rebuilt_policy(cfg, device):
-            # The inference process rebuilds the policy from the configuration
-            # and receives the learner's weights through update_policy_weights_.
+            # The inference process rebuilds the policy from the configuration,
+            # directly on its device, and receives the learner's weights through
+            # update_policy_weights_.
             policy_kwargs = {
                 "policy_factory": ft.partial(
                     build_serving_policy,
@@ -640,6 +641,7 @@ def _build_collection(
                     action_dim,
                     pixels_shape,
                     discrete,
+                    torch.device(cfg.collector.policy_device or device),
                 ),
                 "transport": "auto",
             }
@@ -1041,6 +1043,14 @@ def main(cfg: DictConfig):
         pixels_shape=pixels_shape,
         discrete=discrete,
     )
+    if isinstance(collector, AsyncBatchedCollector) and _serves_rebuilt_policy(
+        cfg, device
+    ):
+        # The served policy was rebuilt from the configuration. The collector
+        # applies these weights, restored ones after a resume, when its server
+        # starts and before the first request, so no batch is collected with
+        # the factory's initialization.
+        collector.update_policy_weights_(_behavior_policy_weights(cfg, learner))
 
     history_steps: list[int] = []
     history_eval: list[torch.Tensor] = []
@@ -1151,15 +1161,6 @@ def main(cfg: DictConfig):
         for _ in collector:
             if collection_timer is None:
                 collection_timer = timeit("dreamer_v3/collection", sync=False).start()
-                if isinstance(
-                    collector, AsyncBatchedCollector
-                ) and _serves_rebuilt_policy(cfg, device):
-                    # The served policy was rebuilt from the configuration and
-                    # only starts with the first batch; give it the learner's
-                    # weights before any update.
-                    collector.update_policy_weights_(
-                        _behavior_policy_weights(cfg, learner)
-                    )
             # The collector writes canonical transitions directly into replay.
             if behavior_policy_sync is not None:
                 behavior_policy_sync.apply_after_action()

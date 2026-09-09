@@ -2802,6 +2802,26 @@ def _make_counting_policy():
     return _BatchCountingPolicy()
 
 
+class _ScaledCountingPolicy(TensorDictModule):
+    """Counting policy whose increment is a parameter, so weight pushes are visible."""
+
+    def __init__(self):
+        super().__init__(
+            module=nn.Module(),  # placeholder
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        self.scale = nn.Parameter(torch.ones(()))
+
+    def forward(self, td: TensorDictBase) -> TensorDictBase:
+        obs = td.get("observation")
+        return td.set("action", torch.full_like(obs, int(self.scale.item())))
+
+
+def _make_scaled_counting_policy():
+    return _ScaledCountingPolicy()
+
+
 class _BadProcessPolicy(nn.Module):
     def forward(self, td: TensorDictBase) -> TensorDictBase:
         raise RuntimeError("process model crash")
@@ -4270,6 +4290,28 @@ class TestAsyncBatchedCollector:
                 frames_per_batch=4,
                 env_backend="multiprocessing",
             )
+            collector.shutdown()
+
+    def test_weights_pushed_before_start_reach_the_process_server(self):
+        """A policy rebuilt from a factory acts with pushed weights from its first step."""
+        trained = _ScaledCountingPolicy()
+        with torch.no_grad():
+            trained.scale.fill_(2.0)
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_scaled_counting_policy,
+            transport="auto",
+            frames_per_batch=8,
+            total_frames=8,
+            env_backend="multiprocessing",
+        )
+        try:
+            assert collector.server_backend == "process"
+            # The server process does not exist yet; the update must wait for it.
+            collector.update_policy_weights_(trained)
+            batch = next(iter(collector))
+            assert batch["action"].eq(2).all()
+        finally:
             collector.shutdown()
 
     def test_process_slot_transport_implies_process_server_and_workers(self):

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import functools as ft
+import itertools
 import multiprocessing as mp
 import os
 import queue
@@ -495,9 +496,13 @@ def _auto_process_slot_transport(
     if missing:
         return None, f"the environment does not produce the policy inputs {missing}"
     request = fake.select(*in_keys, strict=True).cpu()
+    reference = None
+    if isinstance(policy, torch.nn.Module):
+        reference = next(itertools.chain(policy.parameters(), policy.buffers()), None)
+    probe_device = reference.device if reference is not None else torch.device("cpu")
     try:
         with torch.no_grad():
-            output = policy(request.clone().unsqueeze(0))
+            output = policy(request.clone().unsqueeze(0).to(probe_device))
     except Exception as err:  # noqa: BLE001
         return None, f"the policy could not run on a sample request ({err!r})"
     output = output.squeeze(0) if output.batch_dims else output
@@ -1152,6 +1157,8 @@ class AsyncBatchedCollector(BaseCollector):
         self._replay_lock = threading.Lock()
         self._replay_thread: threading.Thread | None = None
         self._replay_error: Exception | None = None
+        # Weights received before a process server started; applied at start.
+        self._pending_weights: TensorDictBase | None = None
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -1196,6 +1203,7 @@ class AsyncBatchedCollector(BaseCollector):
                     )
                 if not self._server.is_alive:
                     self._server.start()
+                self._apply_pending_weights()
 
                 create_env_kwargs = self._create_env_kwargs
                 if create_env_kwargs is None:
@@ -1305,6 +1313,7 @@ class AsyncBatchedCollector(BaseCollector):
             # Start inference server
             if not self._server.is_alive:
                 self._server.start()
+            self._apply_pending_weights()
 
             # Start coordinator threads. Shared slots can be drained safely in
             # ready batches, avoiding one Python thread and one clone per env.
@@ -1535,11 +1544,24 @@ class AsyncBatchedCollector(BaseCollector):
         weights = weights.detach().clone()
         update_model_weights = getattr(self._server, "update_model_weights", None)
         if update_model_weights is not None:
+            if not self._server.is_alive:
+                # The server process starts with the first iteration. Keep the
+                # latest weights and apply them right after it starts, before
+                # any request is served, so a policy rebuilt from a factory acts
+                # with the trainer's weights from the first step.
+                self._pending_weights = weights
+                return
             update_model_weights(weights)
         else:
             self._server.update_model(
                 ft.partial(WeightStrategy().apply_weights, weights=weights)
             )
+
+    def _apply_pending_weights(self) -> None:
+        if self._pending_weights is None:
+            return
+        weights, self._pending_weights = self._pending_weights, None
+        self._server.update_model_weights(weights)
 
     # ------------------------------------------------------------------
     # Rollout: drain the result queue
