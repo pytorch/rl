@@ -646,7 +646,7 @@ def _build_collection(
                 "transport": "auto",
             }
         else:
-            policy_kwargs = {"policy": collector_policy, "transport": "thread"}
+            policy_kwargs = {"policy": collector_policy, "transport": "driver"}
         collector = AsyncBatchedCollector(
             create_env_fns,
             env_backend=cfg.collector.async_env_backend,

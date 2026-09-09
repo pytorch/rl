@@ -4306,12 +4306,12 @@ class TestAsyncBatchedCollector:
             "frames_per_batch": 4,
             "env_backend": "multiprocessing",
         }
-        with pytest.warns(FutureWarning, match="transport='auto'"):
+        with pytest.warns(FutureWarning, match="transport='driver'"):
             collector = AsyncBatchedCollector(**kwargs)
         collector.shutdown()
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
-            collector = AsyncBatchedCollector(transport="thread", **kwargs)
+            collector = AsyncBatchedCollector(transport="driver", **kwargs)
             collector.shutdown()
             # Without a policy_factory the default cannot change, so no warning.
             collector = AsyncBatchedCollector(

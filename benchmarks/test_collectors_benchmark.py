@@ -195,9 +195,9 @@ def _benchmark_async_collection_pixels(benchmark, mode, regime, *, num_envs=None
                 # default is "auto".
                 process_options["transition_chunk_size"] = chunk_size
             else:
-                # The fixed thread-server series keep the driver-side server
+                # The fixed thread-server series keep the driver-mediated transport
                 # explicitly, so a change of the collector default cannot move them.
-                process_options["transport"] = "thread"
+                process_options["transport"] = "driver"
             collector = AsyncBatchedCollector(
                 factories,
                 policy_factory=policy_factory,

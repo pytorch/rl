@@ -598,8 +598,11 @@ class AsyncBatchedCollector(BaseCollector):
             environment's ``fake_tensordict()`` and one policy pass. When
             those conditions do not hold, or the layouts cannot be derived,
             the policy is served from a thread of this process and the reason
-            is logged. ``"thread"`` always serves from a thread of this
-            process. ``None`` (default) behaves like ``"thread"`` and emits a
+            is logged. ``"driver"`` always relays requests through the
+            driver's coordinator threads to the transport derived from
+            ``policy_backend`` (a thread server by default, a process server
+            with ``service_backend="process"``). ``None`` (default) behaves like
+            ``"driver"`` and emits a
             :class:`FutureWarning` when ``"auto"`` would pick process slots:
             in v0.15 the default becomes ``"auto"``.
         device (torch.device or str, optional): device for policy inference
@@ -744,6 +747,7 @@ class AsyncBatchedCollector(BaseCollector):
         ...     policy=policy,
         ...     frames_per_batch=200,
         ...     total_frames=1000,
+        ...     env_backend="multiprocessing",
         ... )
         >>> for batch in collector:
         ...     print(batch.shape)
@@ -762,7 +766,7 @@ class AsyncBatchedCollector(BaseCollector):
         max_batch_size: int | None = None,
         min_batch_size: int | None = None,
         server_timeout: float | None = None,
-        transport: InferenceTransport | Literal["auto", "thread"] | None = None,
+        transport: InferenceTransport | Literal["auto", "driver"] | None = None,
         device: torch.device | str | None = None,
         backend: Literal["threading", "multiprocessing", "ray", "monarch"]
         | None = None,
@@ -849,9 +853,9 @@ class AsyncBatchedCollector(BaseCollector):
         # ---- resolve backends -------------------------------------------------
         explicit_transport = isinstance(transport, InferenceTransport)
         if transport is not None and not explicit_transport:
-            if transport not in ("auto", "thread"):
+            if transport not in ("auto", "driver"):
                 raise ValueError(
-                    "transport must be an InferenceTransport, 'auto', 'thread' or "
+                    "transport must be an InferenceTransport, 'auto', 'driver' or "
                     f"None, got {transport!r}."
                 )
         if env_backend is not None:
@@ -998,12 +1002,12 @@ class AsyncBatchedCollector(BaseCollector):
                     "processes and a policy_factory is given, the default will "
                     "become transport='auto', which serves the policy from a "
                     "dedicated process that the environment workers reach "
-                    "directly. Pass transport='thread' to keep the current "
+                    "directly. Pass transport='driver' to keep the current "
                     "behavior, or transport='auto' to adopt the future default now.",
                     FutureWarning,
                     stacklevel=2,
                 )
-        else:  # transport == "thread"
+        else:  # transport == "driver"
             transport = None
 
         uses_process_env_workers = isinstance(transport, ProcessSlotTransport)

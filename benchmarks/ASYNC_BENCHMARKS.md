@@ -53,7 +53,7 @@ transport rejects grouped workers. The same workload and batching limits apply;
 these remain separate series alongside the grouped integrated curve.
 
 The fixed series pin what the collector now resolves on its own: the thread-server
-modes pass `transport="thread"` and the process-slot modes pass an explicit
+modes pass `transport="driver"` and the process-slot modes pass an explicit
 `transition_chunk_size` (`1` except for the chunked series), so a change of the
 collector defaults cannot move them.
 
