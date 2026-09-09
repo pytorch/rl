@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import functools as ft
+import gc
 import importlib.util
 import json
 import os
@@ -20,6 +21,7 @@ import signal
 import subprocess
 import sys
 import time
+import weakref
 from pathlib import Path
 
 import pytest
@@ -2813,8 +2815,21 @@ def test_dreamer_v3_native_replay_collection_smoke(
     elif budget == "reset_records":
         cfg.collector.count_reset_records = True
         cfg.collector.total_frames = 18  # 16 actions under the configured horizon.
+    replay_refs = []
+    build_replay = example["_build_replay"]
+
+    def record_replay(*args, **kwargs):
+        replay = build_replay(*args, **kwargs)
+        replay_refs.append(weakref.ref(replay))
+        return replay
+
+    monkeypatch.setitem(
+        example["main"].__wrapped__.__globals__, "_build_replay", record_replay
+    )
     example["main"].__wrapped__(cfg)
     if custom:
+        gc.collect()
+        assert all(ref() is None for ref in replay_refs)
         records = [
             json.loads(line)
             for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
