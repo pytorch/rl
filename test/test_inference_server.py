@@ -1972,7 +1972,8 @@ class TestProcessSlotTransport:
             assert server.stats()["requests"] == 6
         assert all(result_queue.get(timeout=1.0) is True for _ in processes)
 
-    def test_batched_slot_io(self):
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_batched_slot_io(self, default_device):
         """Slots are gathered and scattered as batches, in the drained order."""
         request_spec = TensorDict({"agent": {"observation": torch.zeros(4)}})
         response_spec = TensorDict(
@@ -1981,7 +1982,8 @@ class TestProcessSlotTransport:
                 "policy_version": torch.zeros((), dtype=torch.long),
             }
         )
-        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
+        with torch.device(default_device):
+            transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
         clients = [transport.client() for _ in range(4)]
         futures = [
             client.submit(
@@ -2000,7 +2002,8 @@ class TestProcessSlotTransport:
         assert requests.get(_REMOTE_INTERACTION_TYPE_KEY).shape == (4,)
         # Rows follow the given order, not the slot numbering, and the tail
         # rows of the staging batch stay untouched.
-        transport.gather_requests([2, 0], out=requests)
+        with torch.device(default_device):
+            transport.gather_requests([2, 0], out=requests)
         assert torch.equal(
             requests["agent", "observation"],
             torch.tensor([2.0, 0.0, 0.0, 0.0]).unsqueeze(-1).expand(4, 4),
@@ -2016,7 +2019,8 @@ class TestProcessSlotTransport:
         with pytest.raises(RuntimeError, match="batch size"):
             transport.resolve_batch([2, 0], responses[:3])
         assert not futures[2].done()
-        transport.resolve_batch([2, 0], responses[:2])
+        with torch.device(default_device):
+            transport.resolve_batch([2, 0], responses[:2])
         assert torch.equal(
             futures[2].result(timeout=1.0)["agent", "action"], torch.full((2,), 20.0)
         )

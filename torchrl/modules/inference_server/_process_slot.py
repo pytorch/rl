@@ -296,6 +296,7 @@ class ProcessSlotTransport(InferenceTransport):
                     request_spec.batch_size,
                     _NO_INTERACTION_TYPE_CODE,
                     dtype=torch.int8,
+                    device="cpu",
                 ),
             )
         self._request_slots = _make_slot_bank(
@@ -453,7 +454,7 @@ class ProcessSlotTransport(InferenceTransport):
                 f"Cannot gather {num_slots} request slots into a batch of "
                 f"{out.batch_size[0]} rows."
             )
-        index = torch.tensor(slots, dtype=torch.long)
+        index = torch.tensor(slots, dtype=torch.long, device="cpu")
         for key, bank in self._request_slots.items(
             include_nested=True, leaves_only=True
         ):
@@ -472,9 +473,9 @@ class ProcessSlotTransport(InferenceTransport):
         """
         if not slots:
             return
-        self._response_slots[torch.tensor(slots, dtype=torch.long)] = results.select(
-            *self._response_keys, strict=True
-        )
+        self._response_slots[
+            torch.tensor(slots, dtype=torch.long, device="cpu")
+        ] = results.select(*self._response_keys, strict=True)
         for slot in slots:
             self._response_status[slot] = 0
             self._response_events[slot].set()
