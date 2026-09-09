@@ -1532,8 +1532,9 @@ class AsyncBatchedCollector(BaseCollector):
         """Concatenate worker chunks into one dense batch."""
         try:
             return torch.cat(chunks, 0)
-        except (KeyError, RuntimeError):
-            # Environments with differing schemas cannot share a dense batch.
+        except (KeyError, RuntimeError, TypeError):
+            # Different schemas or non-tensor metadata representations may
+            # prevent concatenating the chunks into a dense batch.
             return lazy_stack([row for chunk in chunks for row in chunk.unbind(0)])
 
     @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_yield_trajs")

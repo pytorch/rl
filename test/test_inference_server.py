@@ -3763,6 +3763,27 @@ class TestAsyncBatchedCollector:
             obs = stored[stored["env_index"] == env_id]["observation"].flatten()
             torch.testing.assert_close(obs, torch.arange(len(obs), dtype=obs.dtype))
 
+    @pytest.mark.parametrize("capture", [False, True])
+    def test_process_slot_chunks_preserve_non_tensor_metadata(self, capture):
+        with set_capture_non_tensor_stack(capture):
+            rows = [
+                TensorDict(
+                    observation=torch.tensor([index]),
+                    metadata=TensorDict(label=NonTensorData(label)),
+                )
+                for index, label in enumerate(("a", "b", "b", "b"))
+            ]
+            # The first chunk has varying labels; the second has one shared
+            # label and may collapse it to a NonTensorData leaf.
+            chunks = [
+                lazy_stack(rows[:2]).contiguous(),
+                lazy_stack(rows[2:]).contiguous(),
+            ]
+            batch = AsyncBatchedCollector._cat_chunks(chunks)
+        assert batch.batch_size == (4,)
+        assert [batch[i]["metadata", "label"] for i in range(4)] == ["a", "b", "b", "b"]
+        torch.testing.assert_close(batch["observation"], torch.arange(4).unsqueeze(-1))
+
     def test_process_slot_chunks_route_streams_and_sample_windows(self):
         """Chunked writes reach the right stream and sample as contiguous windows."""
         num_envs, slice_len, total_frames = 3, 4, 96
