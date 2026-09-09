@@ -27666,6 +27666,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -28358,6 +28363,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -28914,6 +28924,11 @@ Inputs are retained by reference until the returned future completes.
 Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
+
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
 
 Keyword arguments have the same meaning as in
 `update_if_present()`.
@@ -29812,6 +29827,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -30636,6 +30656,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -30706,6 +30731,10 @@ self
 update_if_present(***, *index: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.update_if_present)
 
 Routes a conditional update to the member named by each handle.
+
+The patch moves to the members' common storage device once, before the
+records are grouped by member, so the per-member updates never copy
+across devices.
 
 write_all(*data: Any*, *end: int | None = None*) → None
 
@@ -32608,6 +32637,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -33458,6 +33492,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -34057,7 +34096,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fc12cfeff10>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f1738286340>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -38834,6 +38873,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -39816,6 +39860,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -40777,6 +40826,11 @@ Inputs are retained by reference until the returned future completes.
 Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
+
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
 
 Keyword arguments have the same meaning as in
 `update_if_present()`.
@@ -41800,6 +41854,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -42805,6 +42864,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -43727,6 +43791,11 @@ Inputs are retained by reference until the returned future completes.
 Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
+
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
 
 Keyword arguments have the same meaning as in
 `update_if_present()`.
@@ -44828,6 +44897,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -45808,6 +45882,11 @@ Inputs are retained by reference until the returned future completes.
 Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
+
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
 
 Keyword arguments have the same meaning as in
 `update_if_present()`.
@@ -46824,6 +46903,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -47329,7 +47413,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fc12fd9c4a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f173ae8c4a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 

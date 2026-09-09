@@ -637,6 +637,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 

@@ -597,6 +597,11 @@ Callers must not mutate `index`, `generation`, `patch` or
 `version` in that interval. In particular, values backed by static
 CUDA-graph output buffers must be cloned before submission.
 
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
 Keyword arguments have the same meaning as in
 `update_if_present()`.
 
@@ -667,6 +672,10 @@ self
 update_if_present(***, *index: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/ensemble.html#ReplayBufferEnsemble.update_if_present)
 
 Routes a conditional update to the member named by each handle.
+
+The patch moves to the members' common storage device once, before the
+records are grouped by member, so the per-member updates never copy
+across devices.
 
 write_all(*data: Any*, *end: int | None = None*) → None
 
