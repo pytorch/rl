@@ -156,6 +156,71 @@ class TestEnsemble:
         assert restored_members[1][:]["value"].tolist() == [110, 111]
         assert restored.stats()["write_count"] == 6
 
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("submit", [False, True])
+    @pytest.mark.parametrize("tensordict_patch", [False, True])
+    def test_conditional_update_groups_records_by_member(
+        self, device, submit, tensordict_patch
+    ):
+        members = [self._make_routed_member(3) for _ in range(4)]
+        rb = ReplayBufferEnsemble(*members, routing_key="env_id")
+        env_id = torch.tensor([2, 0, 3, 1, 1, 3, 0, 2, 0, 1, 2, 3])
+        metadata = rb.extend(
+            TensorDict({"value": torch.zeros(12), "env_id": env_id}, [12])
+        )
+        # Reusing one slot of member 3 makes a handle stale.
+        rb.extend(
+            TensorDict({"value": torch.full((1,), -1.0), "env_id": env_id[2:3]}, [1])
+        )
+        # Records arrive in a shuffled member order; member 0 gets none.
+        rows = torch.tensor([5, 0, 3, 11, 7, 4, 9, 2])
+        handles = metadata.select("buffer_ids", "index")[rows]
+        generation = metadata["index_generation"][rows]
+        patch = {"value": (rows + 100).float().to(device)}
+        if tensordict_patch:
+            handles = handles.to(device)
+            generation = generation.to(device)
+            patch = TensorDict(patch, batch_size=rows.shape)
+        try:
+            if submit:
+                result = rb.submit_update_if_present(
+                    index=handles, generation=generation, patch=patch
+                ).result(timeout=5)
+            else:
+                result = rb.update_if_present(
+                    index=handles, generation=generation, patch=patch
+                )
+        finally:
+            rb.shutdown()
+
+        handles = handles.cpu()
+        stale = handles["buffer_ids"] == 3
+        stale &= handles["index"] == metadata["index"][2]
+        assert stale.sum() == 1
+        assert result.updated.tolist() == (~stale).tolist()
+        expected = torch.zeros(12)
+        expected[rows] = (rows + 100).float()
+        expected[2] = -1.0
+        for member_id, member in enumerate(members):
+            positions = (env_id == member_id).nonzero().reshape(-1)
+            local = metadata["index"][positions]
+            stored = member[:]["value"][local]
+            assert stored.tolist() == expected[positions].tolist(), member_id
+
     @pytest.mark.parametrize("empty_member", [False, True])
     def test_checkpoint_drains_updates_and_restores_prefetch(
         self, monkeypatch, tmp_path, empty_member
