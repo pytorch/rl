@@ -437,17 +437,21 @@ class TestEnsemble:
         finally:
             replay.shutdown()
 
-    def test_routing_dim_preserves_member_order(self):
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_routing_dim_preserves_member_order(self, default_device):
         members = [self._make_routed_member() for _ in range(2)]
         rb = ReplayBufferEnsemble(*members, routing_dim=1)
         data = TensorDict(
             {"value": torch.tensor([[0, 10], [1, 11]])}, batch_size=[2, 2]
         )
 
-        metadata = rb.extend(data)
+        with torch.device(default_device):
+            metadata = rb.extend(data)
 
         assert metadata.batch_size == (4,)
         assert metadata["buffer_ids"].tolist() == [0, 1, 0, 1]
+        assert metadata["index"].tolist() == [0, 0, 1, 1]
+        assert metadata["index_generation"].tolist() == [0, 0, 0, 0]
         assert members[0][:]["value"].tolist() == [0, 1]
         assert members[1][:]["value"].tolist() == [10, 11]
 

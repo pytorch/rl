@@ -189,7 +189,7 @@ class RoundRobinWriter(Writer):
             self._ensure_generation(capacity, int(index) + 1, device)
             self._generation[int(index)] += 1
         else:
-            index = torch.as_tensor(index, dtype=torch.long).reshape(-1)
+            index = torch.as_tensor(index, dtype=torch.long, device=device).reshape(-1)
             if index.numel() == 0:
                 return
             capacity = self._storage._max_size_along_dim0(batched_data=data)
@@ -222,7 +222,9 @@ class RoundRobinWriter(Writer):
             and index.shape[-1] == self._storage.ndim
         ):
             index = index[..., 0]
-        index = torch.as_tensor(index, dtype=torch.long)
+        index = torch.as_tensor(
+            index, dtype=torch.long, device=getattr(index, "device", "cpu")
+        )
         if self._generation is None:
             return torch.full(index.shape, -1, dtype=torch.int64, device=index.device)
         idx = index.to(self._generation.device)
@@ -303,7 +305,7 @@ class RoundRobinWriter(Writer):
             batch_size = len(tree_leaves(data)[0])
         if batch_size == 0:
             raise RuntimeError(f"Expected at least one element in extend. Got {data=}")
-        device = data.device if hasattr(data, "device") else None
+        device = getattr(data, "device", None) or "cpu"
         max_size_along0 = self._storage._max_size_along_dim0(batched_data=data)
         index = (
             torch.arange(
@@ -503,7 +505,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
-        device = data.device if hasattr(data, "device") else None
+        device = getattr(data, "device", None) or "cpu"
         max_size_along_dim0 = self._storage._max_size_along_dim0(batched_data=data)
         index = (
             torch.arange(
@@ -518,9 +520,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         if not is_tensorclass(data):
             data.set(
                 "index",
-                expand_as_right(
-                    torch.as_tensor(index, device=data.device, dtype=torch.long), data
-                ),
+                expand_as_right(index, data),
             )
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
