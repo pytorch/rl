@@ -105,6 +105,10 @@ class _ReplayLearnerStep:
         records_per_stream = sequence_records * cfg.replay_buffer.batch_size
         cfg.replay_buffer.buffer_size = records_per_stream * num_streams
         cfg.replay_buffer.online = False
+        # The workload extends the batched layout of the synchronous collector;
+        # the example's default backend resolves to asynchronous collection on
+        # CPU and CUDA, which routes records by environment index instead.
+        cfg.collector.backend = "sync"
         self.replay_buffer = example["_build_replay"](
             cfg, num_streams, replay_device, device
         )

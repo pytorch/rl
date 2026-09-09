@@ -63,11 +63,20 @@ before uniform fallback; `false` uses regular uniform `SliceSampler` sampling.
 Both modes sample `seq_len + 1` transitions so the learner can train on the
 first `seq_len` and conditionally refresh the following records' latent state.
 
-Set `collector.backend=async` to use `AsyncBatchedCollector`; the default is the
-synchronous `Collector`. `collector.async_env_backend` selects `threading` or
-`multiprocessing` for asynchronous environments. In both cases collection
-post-processing, episode reporting, device normalization, and replay writes
-happen through the collector's standard replay integration.
+`collector.backend=auto` (the default) uses `AsyncBatchedCollector` with
+multiprocessing environment workers on CPU and CUDA training devices, and the
+synchronous `Collector` on other devices: MPS cannot run the acting policy in a
+server thread or share its weights with another process. `sync` and `async`
+force one of the two; an explicit `async` on MPS needs `collector.policy_device=cpu`.
+With the asynchronous collector,
+`collector.inference_backend=auto` (the default) serves the acting policy from a
+dedicated process that the environment workers reach directly whenever
+`collector.async_env_backend=multiprocessing` and `collector.envs_per_worker=1`,
+and from a thread of the training process otherwise; `thread` and `process`
+force one of the two. `collector.transition_chunk_size=auto` sends one
+contiguous run per environment and batch from each worker process. In both
+backends collection post-processing, episode reporting, device normalization,
+and replay writes happen through the collector's standard replay integration.
 
 For a three-seed median and interquartile reproduction run:
 
@@ -220,9 +229,7 @@ env:
   milestone_key: [episode, milestones]
   milestone_names: [started, completed]
 collector:
-  backend: async
   async_env_backend: multiprocessing
-  env_exchange: shm
   envs_per_worker: 4
 ```
 
@@ -246,7 +253,8 @@ episode. Their boolean vector must match `milestone_names`. Both synchronous and
 asynchronous runs log these flags with episode returns. Imagination runs only in
 latent state and does not require real sensor or milestone observations.
 
-Asynchronous collection supports `env_exchange`, `envs_per_worker`, a separate
+Asynchronous collection supports `env_exchange` (`auto` picks shared memory
+whenever the environment schema allows), `envs_per_worker`, a separate
 `policy_device`, and the existing inference batch size/timeout settings. Setting
 `inference_static_batch_size` enables fixed-size CUDA-graph policy batches and
 requires a CUDA policy device. The default maximum inference batch size remains
@@ -322,8 +330,12 @@ before new transitions arrive, and incomplete episode returns restart at zero.
 Initial reset records are counted again when reset-record reporting is enabled.
 Queued collector results that were not emitted are not checkpointed. The acting
 policy is rebuilt from the restored learner; when using a separate policy RNG,
-its saved module state and counter are then restored. Consequently resumed
-trajectories are not promised to match an uninterrupted run. Without a replay payload,
+its saved module state and counter are then restored. With process inference
+(`collector.inference_backend=auto` where it applies, or `process`), the
+inference process rebuilds the policy on its device and receives the restored
+weights before it serves the first request, but the separate policy RNG counter
+stays in the training process, so the served stream restarts from the seed.
+Consequently resumed trajectories are not promised to match an uninterrupted run. Without a replay payload,
 collection refills native replay before training continues, without accumulating
 a catch-up update burst. Counters and logger identity still continue.
 

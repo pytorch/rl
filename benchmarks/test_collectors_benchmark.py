@@ -191,8 +191,13 @@ def _benchmark_async_collection_pixels(benchmark, mode, regime, *, num_envs=None
                     num_slots=num_envs,
                 )
                 config["service_backend"] = "process"
-                if chunk_size > 1:
-                    process_options["transition_chunk_size"] = chunk_size
+                # Fixed series pin one transition per message; the collector
+                # default is "auto".
+                process_options["transition_chunk_size"] = chunk_size
+            else:
+                # The fixed thread-server series keep the driver-mediated transport
+                # explicitly, so a change of the collector default cannot move them.
+                process_options["transport"] = "driver"
             collector = AsyncBatchedCollector(
                 factories,
                 policy_factory=policy_factory,

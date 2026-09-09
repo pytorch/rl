@@ -532,7 +532,28 @@ class TestDreamerV3Components:
                 for name, value in actor.named_parameters()
             )
 
-    def test_policy_rng_and_update_ratio_checkpoint(self, tmp_path):
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="needs MPS"
+                ),
+            ),
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="needs CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_policy_rng_and_update_ratio_checkpoint(self, tmp_path, device):
         policy = DreamerV3SeededPolicy(
             DreamerV3DiscreteActor(
                 6,
@@ -542,11 +563,11 @@ class TestDreamerV3Components:
                 in_keys=[("latent", "state"), ("latent", "belief")],
             ),
             seed=17,
-        )
+        ).to(device)
         data = TensorDict(
             {
-                ("latent", "state"): torch.randn(12, 4),
-                ("latent", "belief"): torch.randn(12, 2),
+                ("latent", "state"): torch.randn(12, 4, device=device),
+                ("latent", "belief"): torch.randn(12, 2, device=device),
             },
             [12],
         )
@@ -556,8 +577,18 @@ class TestDreamerV3Components:
         checkpoint = Checkpoint(policy=policy, schedule=schedule)
         checkpoint.save(tmp_path / "saved")
         caller_rng = torch.random.get_rng_state().clone()
+        accelerator_rngs = [
+            (torch.cuda, index) for index in range(torch.cuda.device_count())
+        ]
+        if torch.backends.mps.is_available():
+            accelerator_rngs.append((torch.mps, "mps"))
+        caller_accelerator_rngs = [
+            backend.get_rng_state(index).clone() for backend, index in accelerator_rngs
+        ]
         expected = [policy(data.clone())["action"] for _ in range(3)]
         assert torch.equal(torch.random.get_rng_state(), caller_rng)
+        for (backend, index), state in zip(accelerator_rngs, caller_accelerator_rngs):
+            assert torch.equal(backend.get_rng_state(index), state)
         updates = [schedule(i) for i in (8, 10, 15)]
         policy.reset_counter()
         checkpoint.load(tmp_path / "saved")
