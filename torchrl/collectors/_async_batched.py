@@ -512,7 +512,8 @@ def _auto_process_slot_transport(
     response = output.select(*out_keys, strict=True).cpu()
     if policy_version_key is not None:
         response.set(
-            policy_version_key, torch.zeros(response.batch_size, dtype=torch.long)
+            policy_version_key,
+            torch.zeros(response.batch_size, dtype=torch.long, device=response.device),
         )
     try:
         transport = ProcessSlotTransport(request, response, num_slots=num_slots)
