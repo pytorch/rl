@@ -265,6 +265,7 @@ collector = AsyncBatchedCollector(
  create_env_fn=[make_env] * 8,
  policy=my_policy,
  frames_per_batch=200,
+ env_backend="multiprocessing",
  server_config=InferenceServerConfig(max_batch_size=8, timeout=0.005),
  device_config=InferenceDeviceConfig(
  policy_device="cuda:0",
@@ -345,6 +346,7 @@ collector = AsyncBatchedCollector(
  frames_per_batch=200,
  total_frames=10_000,
  max_batch_size=8,
+ env_backend="multiprocessing",
 )
 
 for data in collector:

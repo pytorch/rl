@@ -1,6 +1,6 @@
 # AsyncBatchedCollector
 
-*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'queue'*, *envs_per_worker: int = 1*, *transition_chunk_size: int = 1*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.RANDOM*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
+*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'driver'] | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'auto'*, *envs_per_worker: int = 1*, *transition_chunk_size: int | Literal['auto'] = 'auto'*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.RANDOM*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
 
 Asynchronous collector with env slots and a policy server.
 
@@ -34,7 +34,10 @@ stepping while slow ones wait for inference, and the server always
 processes whatever observations have accumulated.
 
 The user simply provides env factories and a policy; the collector
-handles all wiring internally.
+handles all wiring internally. With `transport="auto"`, multiprocessing
+environment workers and a `policy_factory`, it also derives the fixed
+request and response layouts and serves the policy from a dedicated
+process that the workers reach directly.
 
 Parameters:
 
@@ -64,20 +67,34 @@ the first request arrives the server keeps draining for up to
 `1` (default) dispatches immediately.
 - **server_timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - seconds the server waits for work
 before dispatching a partial batch. Defaults to `0.01`.
-- **transport** ([*InferenceTransport*](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*,**optional*) - a pre-built transport
-object. When provided, it takes precedence over `policy_backend`.
-A [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
-together with multiprocessing environment and server backends runs
-the complete acting loop in environment worker processes. When
-`None` (default), a transport is created from the resolved
-`policy_backend`.
+- **transport** ([*InferenceTransport*](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*,**"auto"**or**"thread"**,**optional*) - the
+inference transport. A pre-built transport object takes precedence
+over `policy_backend`; a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+runs the complete acting loop in environment worker processes and
+implies a process inference server and multiprocessing environment
+workers. `"auto"` builds that transport when environment workers
+are processes with one environment each and a `policy_factory`
+is given: the request and response layouts come from one
+environment's `fake_tensordict()` and one policy pass. When
+those conditions do not hold, or the layouts cannot be derived,
+the policy is served from a thread of this process and the reason
+is logged. `"driver"` always relays requests through the
+driver's coordinator threads to the transport derived from
+`policy_backend` (a thread server by default, a process server
+with `service_backend="process"`). `None` (default) behaves like
+`"driver"` and emits a
+`FutureWarning` when `"auto"` would pick process slots:
+in v0.15 the default becomes `"auto"`.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference
 (shorthand for `InferenceDeviceConfig(policy_device=...)`).
 Defaults to `None`.
 - **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
 configuration: execution `backend` (`"thread"` runs the serve
 loop in this process, `"process"` a dedicated server process
-requiring `policy_factory`), batching, optional static
+requiring `policy_factory`; a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+turns `"thread"` into `"process"`), batching, optional static
 CUDA-graph execution, and stats settings.
 Mutually exclusive with the `max_batch_size`,
 `min_batch_size`, and `server_timeout` keyword arguments.
@@ -94,7 +111,11 @@ annotations. Defaults to `"policy_version"`.
 environments and policy inference. Specific overrides
 `env_backend` and `policy_backend` take precedence when set.
 One of `"threading"`, `"multiprocessing"`, `"ray"`, or
-`"monarch"`. Defaults to `"threading"`.
+`"monarch"`. Defaults to `None`: environment workers run in
+threads and inference uses the threading transport. In v0.15 the
+environment-worker default changes to `"multiprocessing"`; a
+`FutureWarning` is emitted until then when neither
+`backend` nor `env_backend` is given.
 - **env_backend** (*str**,**optional*) - backend for the
 [`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) that runs environments. One
 of `"threading"` or `"multiprocessing"`. Falls back to
@@ -103,16 +124,23 @@ Python threads regardless of this setting. Defaults to `None`.
 - **env_exchange** (*str**,**optional*) - data exchange of a multiprocessing
 [`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool), one of `"queue"`, `"shm"`
 or `"auto"`. The shared-memory exchange also enables batched
-coordination from one thread. Defaults to `"queue"`.
+coordination from one thread; `"auto"` selects it whenever the
+environment schema allows. It does not apply when a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+owns the worker exchange. Defaults to `"auto"`.
 - **envs_per_worker** (*int**,**optional*) - Number of environments hosted by each
 multiprocessing worker. Grouped workers share one coordinator that
 drains ready environments without waiting for a complete group.
 Defaults to `1`.
-- **transition_chunk_size** (*int**,**optional*) - number of consecutive
+- **transition_chunk_size** (*int**or**"auto"**,**optional*) - number of consecutive
 transitions each environment worker process accumulates before
 sending them to the driver as one dense message. Requires a
 [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport).
-`1` (default) sends every transition as soon as it completes.
+`"auto"` (default) uses `frames_per_batch // len(create_env_fn)`
+with process workers, so each batch holds one contiguous run per
+environment like the synchronous collectors and a transition waits
+at most one batch; it resolves to `1` otherwise.
+`1` sends every transition as soon as it completes.
 Larger values take the driver off the per-transition path: it
 receives one message per chunk, concatenates whole chunks into
 each batch and writes each batch to `replay_buffer` with a
@@ -122,7 +150,7 @@ reaches the driver only once its chunk is complete, and up to
 `transition_chunk_size - 1` transitions per environment stay in
 the worker while collection is paused or stopped. Batches are then
 dense [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances and `env_index`
-is a tensor. Defaults to `1`.
+is a tensor. Defaults to `"auto"`.
 - **policy_backend** (*str**,**optional*) - backend for the inference transport
 used to communicate with the
 `InferenceServer`. One of
@@ -201,6 +229,7 @@ Examples
 ... policy=policy,
 ... frames_per_batch=200,
 ... total_frames=1000,
+... env_backend="multiprocessing",
 ... )
 >>> for batch in collector:
 ... print(batch.shape)
@@ -532,6 +561,14 @@ Keyword Arguments:
 
 **synchronize_weights** (*bool**,**optional*) - If True, synchronize weights immediately after registering the schemes.
 Defaults to True.
+
+*property*server_backend*: str*
+
+`"thread"`, `"process"` or `"ray"`.
+
+Type:
+
+The resolved inference server backend
 
 server_stats(***, *reset: bool = False*) → dict[str, float | int][[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.server_stats)
 
