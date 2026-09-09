@@ -4843,7 +4843,7 @@ class MultiCategorical(Categorical):
             val = val.unsqueeze(0)
         if not self.dtype.is_floating_point:
             val = torch.round(val)
-        val = val.type(self.dtype)
+        val = val.clamp_min(0).type(self.dtype)
         val[val >= self.nvec] = (self.nvec.expand_as(val)[val >= self.nvec] - 1).type(
             self.dtype
         )
