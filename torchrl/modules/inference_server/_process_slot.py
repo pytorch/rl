@@ -219,6 +219,14 @@ class ProcessSlotTransport(InferenceTransport):
         transports, clients do not need registration with the already-running
         server because every slot and signal is allocated at construction.
 
+    .. note::
+        :class:`~torchrl.modules.inference_server.InferenceServer` serves this
+        transport with one batched pass per sweep: ready slots are gathered
+        straight into a host staging batch (pinned when the policy runs on
+        CUDA), copied to the policy device without blocking, and the responses
+        are copied back and scattered into the response slots with one copy
+        per leaf. One CUDA event per pass replaces device-wide synchronization.
+
     Example:
         >>> import torch
         >>> from tensordict import TensorDict
@@ -248,6 +256,7 @@ class ProcessSlotTransport(InferenceTransport):
     """
 
     _clients_require_registration = False
+    _batched_slot_io = True
 
     def __init__(
         self,
@@ -358,32 +367,117 @@ class ProcessSlotTransport(InferenceTransport):
         self, max_items: int
     ) -> tuple[list[TensorDictBase], list[int], list[float | None]]:
         """Sweep ready slots and return request submission timestamps."""
-        items = []
-        callbacks = []
-        submitted_at = []
+        slots, submitted_at = self.drain_slots(max_items)
+        items = [self._request_slots[slot].copy() for slot in slots]
+        return items, slots, submitted_at
+
+    def drain_slots(self, max_items: int) -> tuple[list[int], list[float]]:
+        """Claim ready slots in round-robin order without copying their payloads.
+
+        The requests stay in the slot bank until :meth:`gather_requests`
+        collates them.
+
+        Args:
+            max_items (int): maximum number of slots to claim.
+
+        Returns:
+            The claimed slot indices and their submission timestamps.
+        """
         # The semaphore is a doorbell, not the payload's memory barrier: a
         # timed drain can run without acquiring a signal. Synchronize with each
         # publisher before looking at flags, including on weakly ordered CPUs.
         with self._request_lock:
-            callbacks = _take_ready_slots(
-                self._request_ready, self._next_slot, max_items
-            )
-            if callbacks:
-                self._next_slot = (callbacks[-1] + 1) % self._num_slots
-        for slot in callbacks:
-            items.append(self._request_slots[slot].copy())
+            slots = _take_ready_slots(self._request_ready, self._next_slot, max_items)
+            if slots:
+                self._next_slot = (slots[-1] + 1) % self._num_slots
+        submitted_at = []
+        for slot in slots:
             submitted_at.append(self._submitted_at[slot])
             self._submitted_at[slot] = 0.0
 
         # Consume doorbells for drained requests, including a signal already
         # consumed by wait_for_work(). Extra wakeups are harmless.
-        signals_to_consume = len(items)
+        signals_to_consume = len(slots)
         acquired = min(signals_to_consume, self._acquired_signals)
         self._acquired_signals -= acquired
         signals_to_consume -= acquired
         for _ in range(signals_to_consume):
             self._work_semaphore.acquire(block=False)
-        return items, callbacks, submitted_at
+        return slots, submitted_at
+
+    def request_batch(self, capacity: int) -> TensorDictBase:
+        """Allocate a private, contiguous CPU batch of ``capacity`` requests.
+
+        The batch has the request slot layout (including the interaction-type
+        key) and is the staging area that :meth:`gather_requests` fills.
+
+        Args:
+            capacity (int): number of rows.
+        """
+        return (
+            self._request_slots[0]
+            .unsqueeze(0)
+            .expand(capacity, *self._request_slots.batch_size[1:])
+            .clone()
+        )
+
+    def response_batch(self, capacity: int) -> TensorDictBase:
+        """Allocate a private, contiguous CPU batch of ``capacity`` responses.
+
+        The batch has the response slot layout and is the staging area that
+        :meth:`resolve_batch` scatters into the slots.
+
+        Args:
+            capacity (int): number of rows.
+        """
+        return (
+            self._response_slots[0]
+            .unsqueeze(0)
+            .expand(capacity, *self._response_slots.batch_size[1:])
+            .clone()
+        )
+
+    def gather_requests(self, slots: list[int], out: TensorDictBase) -> None:
+        """Collate request slots into ``out[:len(slots)]`` with one gather per leaf.
+
+        Args:
+            slots (list of int): slots to collate, typically the ones returned
+                by :meth:`drain_slots`; row ``i`` of ``out`` receives
+                ``slots[i]``.
+            out (TensorDictBase): batch allocated with :meth:`request_batch`
+                (possibly pinned) holding at least ``len(slots)`` rows.
+        """
+        num_slots = len(slots)
+        if num_slots > out.batch_size[0]:
+            raise ValueError(
+                f"Cannot gather {num_slots} request slots into a batch of "
+                f"{out.batch_size[0]} rows."
+            )
+        index = torch.tensor(slots, dtype=torch.long)
+        for key, bank in self._request_slots.items(
+            include_nested=True, leaves_only=True
+        ):
+            torch.index_select(bank, 0, index, out=out.get(key)[:num_slots])
+
+    def resolve_batch(self, slots: list[int], results: TensorDictBase) -> None:
+        """Write a batch of responses into their slots and wake the owning workers.
+
+        Args:
+            slots (list of int): slots served by the pass; row ``i`` of
+                ``results`` is written to ``slots[i]``.
+            results (TensorDictBase): batch of ``len(slots)`` responses whose
+                leaves match the response layout (shapes and dtypes). Undeclared
+                keys are dropped and a missing declared key raises a
+                :class:`KeyError`.
+        """
+        if not slots:
+            return
+        self._response_slots[torch.tensor(slots, dtype=torch.long)] = results.select(
+            *self._response_keys, strict=True
+        )
+        for slot in slots:
+            self._response_status[slot] = 0
+            self._response_events[slot].set()
 
     def resolve(self, callback: int, result: TensorDictBase) -> None:
         """Copy a response into its slot and wake the owning worker."""
