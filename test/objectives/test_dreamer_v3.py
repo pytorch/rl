@@ -2356,6 +2356,8 @@ def test_dreamer_v3_native_stream_replay(monkeypatch, online, count_reset_record
         run_name=f"dreamer_v3_native_replay_{online}",
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
     cfg.collector.num_envs = 2
     cfg.collector.count_reset_records = count_reset_records
     cfg.collector.total_frames = 16
@@ -2432,6 +2434,8 @@ def test_dreamer_v3_replay_samples_keep_episode_starts(monkeypatch, online):
         example_dir / "train.py", run_name=f"dreamer_v3_episode_starts_{online}"
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
     cfg.collector.num_envs = 1
     cfg.replay_buffer.buffer_size = 64
     cfg.replay_buffer.batch_size = 4
@@ -2684,6 +2688,8 @@ def test_dreamer_v3_native_replay_benchmark_step_cpu(monkeypatch):
         run_name="dreamer_v3_replay_benchmark_helpers_test",
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
     cfg.replay_buffer.batch_size = 2
     cfg.replay_buffer.seq_len = 3
 
@@ -2911,6 +2917,9 @@ def test_dreamer_v3_checkpoint_resume_processes(
     cfg.optimization.train_ratio = 1.5
     cfg.optimization.checkpoint_include_replay = include_replay
     cfg.collector.backend = collector_backend
+    # The seeded policy state is checkpointed from the training process; a
+    # process-hosted acting policy keeps its own copy in the inference process.
+    cfg.collector.inference_backend = "thread"
     cfg.collector.num_envs = 2
     cfg.collector.frames_per_batch = 8
     cfg.collector.total_frames = 100_000 if terminate else 16
@@ -3075,6 +3084,66 @@ def test_dreamer_v3_checkpoint_resume_processes(
                     assert not is_init[:, 1:].any()
         finally:
             replay.shutdown()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("separate_policy_rng", [False, True])
+def test_dreamer_v3_process_inference_collection_smoke(
+    monkeypatch, tmp_path, separate_policy_rng
+):
+    """A process-hosted inference server collects, trains and syncs weights."""
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_process_inference"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.optimization.device = "cpu"
+    cfg.optimization.separate_policy_rng = separate_policy_rng
+    cfg.optimization.updates_per_batch = 1
+    cfg.optimization.train_ratio = None
+    cfg.collector.backend = "async"
+    cfg.collector.async_env_backend = "multiprocessing"
+    cfg.collector.inference_backend = "process"
+    cfg.collector.envs_per_worker = 1
+    cfg.collector.num_envs = 2
+    cfg.collector.frames_per_batch = 8
+    cfg.collector.total_frames = 16
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 2
+    cfg.replay_buffer.warmup_factor = 1
+    cfg.env.backend = "custom"
+    cfg.env.factory = f"{__name__}:_DreamerV3TestEnv"
+    cfg.env.factory_kwargs = {"pixels": False, "discrete": False}
+    cfg.env.vector_key = ["sensors", "vector"]
+    cfg.env.pixels_key = None
+    cfg.env.milestone_key = ["episode", "milestones"]
+    cfg.env.milestone_names = ["started", "completed"]
+    cfg.logger.eval_every = 0
+    cfg.logger.train_every = 8
+    cfg.logger.output_plot = None
+    cfg.logger.backend = "csv"
+    cfg.logger.log_dir = str(tmp_path / "logs")
+    cfg.logger.metrics_jsonl = str(tmp_path / "metrics.jsonl")
+    example["main"].__wrapped__(cfg)
+    records = [
+        json.loads(line)
+        for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
+    ]
+    assert records[-1]["total_action_steps"] == 16
+    assert records[-1]["updates"] > 0
+    assert any(record["type"] == "train_episode" for record in records)
+
+    cfg.collector.envs_per_worker = 2
+    with pytest.raises(ValueError, match="envs_per_worker=1"):
+        example["main"].__wrapped__(cfg)
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="requires bash")

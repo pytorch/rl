@@ -40,6 +40,7 @@ from torchrl.modules import (
     DreamerV3ImageDecoder,
     DreamerV3ImageEncoder,
     DreamerV3MLP,
+    DreamerV3SeededPolicy,
     RSSMStateEstimatorV3,
     SymExpTwoHot,
     WorldModelWrapper,
@@ -652,6 +653,39 @@ def build_actor(
         ),
     )
     return actor_model
+
+
+def build_serving_policy(
+    cfg: dict,
+    obs_dim: int,
+    action_dim: int,
+    pixels_shape: tuple[int, int, int] | None,
+    discrete: bool,
+) -> TensorDictModuleBase:
+    """Build the acting policy inside an inference server process.
+
+    A picklable zero-argument factory is made with :func:`functools.partial`
+    over the resolved configuration container; the server moves the policy to
+    its device and receives the learner's weights through the collector's
+    policy-update path.
+    """
+    cfg = OmegaConf.create(cfg)
+    world_model, *_ = build_world_model(
+        cfg=cfg,
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        pixels_shape=pixels_shape,
+        compile_rollout=False,
+    )
+    actor_model = build_actor(cfg=cfg, action_dim=action_dim, discrete=discrete)
+    policy = build_real_world_actor(
+        world_model=world_model,
+        actor_model=actor_model,
+        mixed_precision=cfg.optimization.mixed_precision,
+    )
+    if cfg.optimization.separate_policy_rng:
+        policy = DreamerV3SeededPolicy(policy, cfg.env.seed)
+    return policy
 
 
 def build_real_world_actor(

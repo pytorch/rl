@@ -36,6 +36,7 @@ from dreamer_v3_agent import (
     build_imagination_model,
     build_mb_env,
     build_real_world_actor,
+    build_serving_policy,
     build_value,
     build_world_model,
     DreamerV3BehaviorPolicySync,
@@ -299,8 +300,8 @@ def _validated_action_budget(cfg: DictConfig) -> int:
         raise ValueError(f"collector.num_envs must be positive, got {num_envs}.")
     if cfg.collector.backend not in ("sync", "async"):
         raise ValueError(
-            "collector.backend must be 'sync' or 'async', got "
-            f"{cfg.collector.backend!r}."
+            "collector.backend must be 'sync' or 'async' ('auto' is resolved from "
+            f"the training device before this check), got {cfg.collector.backend!r}."
         )
     if cfg.collector.backend == "sync" and cfg.collector.frames_per_batch % num_envs:
         raise ValueError(
@@ -474,6 +475,56 @@ def _build_learner(
     )
 
 
+def _resolve_collector_backend(cfg: DictConfig, device: torch.device) -> str:
+    """Resolve ``collector.backend``; ``auto`` picks asynchronous collection where it runs.
+
+    The asynchronous collector serves the acting policy from a server thread or
+    process. MPS cannot run the policy outside the main thread and cannot share
+    weights with another process, so it keeps the synchronous collector.
+    """
+    backend = cfg.collector.backend
+    if backend == "auto":
+        return "async" if device.type in ("cpu", "cuda") else "sync"
+    return backend
+
+
+def _process_inference_possible(cfg: DictConfig, device: torch.device) -> bool:
+    """Whether environment workers can reach a dedicated inference process directly.
+
+    The learner's weights cross the process boundary as shared CPU storage or
+    CUDA IPC handles, so other accelerators keep the policy in this process.
+    """
+    policy_device = torch.device(cfg.collector.policy_device or device)
+    return (
+        cfg.collector.async_env_backend == "multiprocessing"
+        and cfg.collector.envs_per_worker == 1
+        and policy_device.type in ("cpu", "cuda")
+        and device.type in ("cpu", "cuda")
+    )
+
+
+def _serves_rebuilt_policy(cfg: DictConfig, device: torch.device) -> bool:
+    """Whether the async collector rebuilds the acting policy from the configuration.
+
+    The rebuilt policy starts from its own initialization and receives the
+    learner's weights through the collector's policy-update path.
+    """
+    inference_backend = cfg.collector.inference_backend
+    return inference_backend == "process" or (
+        inference_backend == "auto" and _process_inference_possible(cfg, device)
+    )
+
+
+def _behavior_policy_weights(
+    cfg: DictConfig, learner: _Learner
+) -> TensorDictBase | TensorDictModuleBase:
+    """The learner's acting weights in the layout of the served policy."""
+    policy_weights = learner.real_world_actor
+    if cfg.optimization.separate_policy_rng:
+        return TensorDict({"module": TensorDict.from_module(policy_weights)}, [])
+    return policy_weights
+
+
 def _build_collection(
     cfg: DictConfig,
     device: torch.device,
@@ -483,6 +534,10 @@ def _build_collection(
     collector_action_frames: int,
     replay_buffer: ReplayBufferEnsemble,
     post_collect_hook: Callable[[TensorDictBase], None],
+    *,
+    obs_dim: int,
+    pixels_shape: tuple[int, int, int] | None,
+    discrete: bool,
 ) -> tuple[Collector | AsyncBatchedCollector, DreamerV3BehaviorPolicySync | None]:
     num_envs = cfg.collector.num_envs
     collector_backend = cfg.collector.backend
@@ -560,12 +615,42 @@ def _build_collection(
         ),
     }
     if collector_backend == "async":
+        inference_backend = cfg.collector.inference_backend
+        if inference_backend not in ("auto", "thread", "process"):
+            raise ValueError(
+                "collector.inference_backend must be 'auto', 'thread' or 'process', "
+                f"got {inference_backend!r}."
+            )
+        if inference_backend == "process" and not _process_inference_possible(
+            cfg, device
+        ):
+            raise ValueError(
+                "collector.inference_backend='process' requires "
+                "collector.async_env_backend=multiprocessing, "
+                "collector.envs_per_worker=1 and a CPU or CUDA policy device."
+            )
+        if _serves_rebuilt_policy(cfg, device):
+            # The inference process rebuilds the policy from the configuration
+            # and receives the learner's weights through update_policy_weights_.
+            policy_kwargs = {
+                "policy_factory": ft.partial(
+                    build_serving_policy,
+                    OmegaConf.to_container(cfg, resolve=True),
+                    obs_dim,
+                    action_dim,
+                    pixels_shape,
+                    discrete,
+                ),
+                "transport": "auto",
+            }
+        else:
+            policy_kwargs = {"policy": collector_policy, "transport": "thread"}
         collector = AsyncBatchedCollector(
             create_env_fns,
-            policy=collector_policy,
             env_backend=cfg.collector.async_env_backend,
             env_exchange=cfg.collector.env_exchange,
             envs_per_worker=cfg.collector.envs_per_worker,
+            transition_chunk_size=cfg.collector.transition_chunk_size,
             server_config=InferenceServerConfig(
                 max_batch_size=cfg.collector.inference_max_batch_size or num_envs,
                 min_batch_size=cfg.collector.inference_min_batch_size,
@@ -579,8 +664,16 @@ def _build_collection(
                 storing_device="cpu",
             ),
             policy_version_key=None,
+            **policy_kwargs,
             **collector_kwargs,
         )
+        if inference_backend == "process" and collector.server_backend != "process":
+            collector.shutdown()
+            raise RuntimeError(
+                "collector.inference_backend='process' could not serve the policy "
+                "from environment worker processes; see the torchrl log for the "
+                "reason."
+            )
     else:
         collector = Collector(
             SerialEnv(num_envs, create_env_fns),
@@ -615,11 +708,12 @@ def _build_replay(
         )
 
     sampler_type = StreamingSliceSampler if cfg.replay_buffer.online else SliceSampler
+    collector_backend = _resolve_collector_backend(cfg, device)
     # Async collection stores one environment per stream: with the stream as
     # the trajectory, sequences may span an episode end (the rollout resets on
     # the stored is_init flags), so terminal transitions and episodes shorter
     # than a sequence reach the learner.
-    traj_key = "env_index" if cfg.collector.backend == "async" else None
+    traj_key = "env_index" if collector_backend == "async" else None
     members = [
         TensorDictReplayBuffer(
             storage=LazyTensorStorage(capacity, device=replay_device),
@@ -644,8 +738,8 @@ def _build_replay(
         *members,
         p="sampleable",
         num_buffer_sampled=cfg.replay_buffer.batch_size,
-        routing_key="env_index" if cfg.collector.backend == "async" else None,
-        routing_dim=0 if cfg.collector.backend == "sync" else None,
+        routing_key="env_index" if collector_backend == "async" else None,
+        routing_dim=0 if collector_backend == "sync" else None,
         batch_size=cfg.replay_buffer.batch_size * sequence_records,
         generator=generator,
         pin_memory=replay_device.type == "cpu" and device.type == "cuda",
@@ -796,6 +890,12 @@ def main(cfg: DictConfig):
     replay_device = (
         torch.device(cfg.replay_buffer.device) if cfg.replay_buffer.device else device
     )
+    collector_backend = _resolve_collector_backend(cfg, device)
+    if collector_backend != cfg.collector.backend:
+        torchrl_logger.info(
+            "collector.backend=auto resolved to %s for %s.", collector_backend, device
+        )
+    cfg.collector.backend = collector_backend
     use_bfloat16 = cfg.optimization.mixed_precision and device.type == "cuda"
     compile_settings = resolve_compile_settings(cfg, device)
     torchrl_logger.info(
@@ -937,6 +1037,9 @@ def main(cfg: DictConfig):
         else -1,
         rb,
         post_collect_hook,
+        obs_dim=obs_dim,
+        pixels_shape=pixels_shape,
+        discrete=discrete,
     )
 
     history_steps: list[int] = []
@@ -1048,6 +1151,15 @@ def main(cfg: DictConfig):
         for _ in collector:
             if collection_timer is None:
                 collection_timer = timeit("dreamer_v3/collection", sync=False).start()
+                if isinstance(
+                    collector, AsyncBatchedCollector
+                ) and _serves_rebuilt_policy(cfg, device):
+                    # The served policy was rebuilt from the configuration and
+                    # only starts with the first batch; give it the learner's
+                    # weights before any update.
+                    collector.update_policy_weights_(
+                        _behavior_policy_weights(cfg, learner)
+                    )
             # The collector writes canonical transitions directly into replay.
             if behavior_policy_sync is not None:
                 behavior_policy_sync.apply_after_action()
@@ -1131,12 +1243,7 @@ def main(cfg: DictConfig):
                 update_step += 1
 
             if isinstance(collector, AsyncBatchedCollector):
-                policy_weights = learner.real_world_actor
-                if cfg.optimization.separate_policy_rng:
-                    policy_weights = TensorDict(
-                        {"module": TensorDict.from_module(policy_weights)}, []
-                    )
-                collector.update_policy_weights_(policy_weights)
+                collector.update_policy_weights_(_behavior_policy_weights(cfg, learner))
 
             if record_loss_history:
                 loss_history.append(batch_losses.cpu())
