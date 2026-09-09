@@ -196,9 +196,17 @@ def _process_env_loop(
     worker_affinity: Sequence[int] | None,
     env_device: torch.device | None,
     storing_device: torch.device | None,
+    chunk_size: int = 1,
 ):
-    """Run environment stepping and remote inference in one worker process."""
+    """Run environment stepping and remote inference in one worker process.
+
+    With ``chunk_size > 1`` the worker accumulates that many consecutive
+    transitions and sends them as one dense result, so the driver handles one
+    message per chunk instead of one per transition. One capacity permit then
+    covers the whole chunk under construction.
+    """
     env = None
+    chunk: list[TensorDictBase] = []
     try:
         if worker_affinity is not None:
             os.sched_setaffinity(0, worker_affinity)
@@ -215,23 +223,38 @@ def _process_env_loop(
                 continue
             # Reserve capacity before inference/stepping. A full result queue
             # must still let the worker observe pause and shutdown requests.
-            if not result_capacity.acquire(timeout=0.01):
-                continue
-            if pause_event.is_set() or shutdown_event.is_set():
-                result_capacity.release()
-                continue
+            if not chunk:
+                if not result_capacity.acquire(timeout=0.01):
+                    continue
+                if pause_event.is_set() or shutdown_event.is_set():
+                    result_capacity.release()
+                    continue
             policy_output = client(observation)
             action_td = observation.update(policy_output)
             if env_device is not None:
                 action_td = action_td.to(env_device)
             transition, observation = env.step_and_maybe_reset(action_td)
-            transition.set(_ENV_IDX_KEY, env_id)
+            if chunk_size == 1:
+                transition.set(_ENV_IDX_KEY, env_id)
+            else:
+                # Chunks are concatenated in the driver; keep the index a tensor
+                # like the batched coordinator does.
+                transition.set(
+                    _ENV_IDX_KEY,
+                    torch.full(transition.batch_size, env_id, dtype=torch.long),
+                )
             # multiprocessing.Queue serializes on a feeder thread after put()
             # returns. Own the transition storage before the environment or
             # inference response slot can be reused.
             transition = transition.clone()
             if storing_device is not None:
                 transition = transition.to(storing_device)
+            if chunk_size > 1:
+                chunk.append(transition)
+                if len(chunk) < chunk_size:
+                    continue
+                transition = maybe_dense_stack(chunk)
+                chunk = []
             if all(
                 value.device.type == "cpu"
                 for value in transition.values(True, True)
@@ -415,8 +438,10 @@ class AsyncBatchedCollector(BaseCollector):
     * With a :class:`~torchrl.modules.inference_server.ProcessSlotTransport`,
       each multiprocessing environment worker talks directly to the dedicated
       inference process; the driver receives completed transitions only.
-      Completed and in-flight transitions are bounded to twice the environment
-      count. Workers and the inference server exit when their owner dies.
+      Completed and in-flight results are bounded to twice the environment
+      count; ``transition_chunk_size`` sets how many consecutive transitions
+      one result holds. Workers and the inference server exit when their
+      owner dies.
     * The :class:`~torchrl.modules.InferenceServer` running in a background
       thread continuously drains observation submissions, batches them, runs
       a single forward pass, and fans actions back out.
@@ -498,6 +523,21 @@ class AsyncBatchedCollector(BaseCollector):
             multiprocessing worker. Grouped workers share one coordinator that
             drains ready environments without waiting for a complete group.
             Defaults to ``1``.
+        transition_chunk_size (int, optional): number of consecutive
+            transitions each environment worker process accumulates before
+            sending them to the driver as one dense message. Requires a
+            :class:`~torchrl.modules.inference_server.ProcessSlotTransport`.
+            ``1`` (default) sends every transition as soon as it completes.
+            Larger values take the driver off the per-transition path: it
+            receives one message per chunk, concatenates whole chunks into
+            each batch and writes each batch to ``replay_buffer`` with a
+            single routed ``extend``, so its per-transition Python work is
+            amortized over the chunk. The cost is latency: a transition
+            reaches the driver only once its chunk is complete, and up to
+            ``transition_chunk_size - 1`` transitions per environment stay in
+            the worker while collection is paused or stopped. Batches are then
+            dense :class:`~tensordict.TensorDict` instances and ``env_index``
+            is a tensor. Defaults to ``1``.
         policy_backend (str, optional): backend for the inference transport
             used to communicate with the
             :class:`~torchrl.modules.InferenceServer`.  One of
@@ -601,6 +641,7 @@ class AsyncBatchedCollector(BaseCollector):
         env_backend: Literal["threading", "multiprocessing"] | None = None,
         env_exchange: Literal["queue", "shm", "auto"] = "queue",
         envs_per_worker: int = 1,
+        transition_chunk_size: int = 1,
         policy_backend: (
             Literal["threading", "multiprocessing", "ray", "monarch"] | None
         ) = None,
@@ -722,6 +763,17 @@ class AsyncBatchedCollector(BaseCollector):
                 "env_backend='multiprocessing'."
             )
         self._envs_per_worker = envs_per_worker
+        if (
+            isinstance(transition_chunk_size, bool)
+            or not isinstance(transition_chunk_size, int)
+            or transition_chunk_size < 1
+        ):
+            raise ValueError(
+                "transition_chunk_size must be a positive integer, got "
+                f"{transition_chunk_size!r}."
+            )
+        self._transition_chunk_size = transition_chunk_size
+        self._uses_chunked_results = transition_chunk_size > 1
         if worker_affinity is None:
             self._worker_affinity = None
         else:
@@ -767,6 +819,11 @@ class AsyncBatchedCollector(BaseCollector):
             )
         self._transport = transport
         self._uses_process_env_workers = isinstance(transport, ProcessSlotTransport)
+        if self._uses_chunked_results and not self._uses_process_env_workers:
+            raise ValueError(
+                "transition_chunk_size > 1 requires a ProcessSlotTransport so "
+                "that environment worker processes assemble the chunks."
+            )
         if self._uses_process_env_workers:
             if envs_per_worker != 1:
                 raise ValueError("ProcessSlotTransport requires envs_per_worker=1.")
@@ -972,6 +1029,7 @@ class AsyncBatchedCollector(BaseCollector):
                                 ),
                                 "env_device": self._env_device,
                                 "storing_device": self._storing_device,
+                                "chunk_size": self._transition_chunk_size,
                             },
                             name=f"AsyncBatchedCollector-env-{env_id}",
                             daemon=True,
@@ -1382,22 +1440,20 @@ class AsyncBatchedCollector(BaseCollector):
 
         while self._transition_carry and collected < frames_to_collect:
             transition = self._transition_carry.popleft()
-            transitions.append(transition)
-            collected += transition.numel()
+            if self._uses_chunked_results:
+                collected = self._append_chunk(
+                    transition, transitions, collected, frames_to_collect
+                )
+            else:
+                transitions.append(transition)
+                collected += transition.numel()
 
         while collected < frames_to_collect:
             # Block for at least one transition
             td = self._next_result()
-            if self._uses_batched_coordinator:
-                for transition in td.unbind(0):
-                    if collected < frames_to_collect:
-                        transitions.append(transition)
-                        collected += transition.numel()
-                    else:
-                        self._transition_carry.append(transition)
-            else:
-                transitions.append(td)
-                collected += td.numel()
+            collected = self._append_result(
+                td, transitions, collected, frames_to_collect
+            )
             # Batch-drain any additional items already in the queue
             while collected < frames_to_collect:
                 try:
@@ -1414,29 +1470,79 @@ class AsyncBatchedCollector(BaseCollector):
                 self._check_worker_result(td)
                 if self._uses_process_env_workers:
                     self._result_capacity.release()
-                if self._uses_batched_coordinator:
-                    for transition in td.unbind(0):
-                        if collected < frames_to_collect:
-                            transitions.append(transition)
-                            collected += transition.numel()
-                        else:
-                            self._transition_carry.append(transition)
-                else:
-                    transitions.append(td)
-                    collected += td.numel()
+                collected = self._append_result(
+                    td, transitions, collected, frames_to_collect
+                )
             if self.verbose:
                 torchrl_logger.debug(
                     f"AsyncBatchedCollector: {collected}/{self.frames_per_batch} frames"
                 )
 
+        if self._uses_chunked_results:
+            return self._cat_chunks(transitions)
         return lazy_stack(transitions)
+
+    def _append_result(
+        self,
+        td: TensorDictBase,
+        transitions: list[TensorDictBase],
+        collected: int,
+        budget: int,
+    ) -> int:
+        """Append one worker result, carrying frames beyond ``budget``."""
+        if self._uses_batched_coordinator:
+            for transition in td.unbind(0):
+                if collected < budget:
+                    transitions.append(transition)
+                    collected += transition.numel()
+                else:
+                    self._transition_carry.append(transition)
+            return collected
+        if self._uses_chunked_results:
+            return self._append_chunk(td, transitions, collected, budget)
+        transitions.append(td)
+        return collected + td.numel()
+
+    def _append_chunk(
+        self,
+        chunk: TensorDictBase,
+        transitions: list[TensorDictBase],
+        collected: int,
+        budget: int,
+    ) -> int:
+        """Append a chunk of consecutive transitions from one environment.
+
+        The chunk stays a dense block; it is only split along its leading
+        dimension where the frame budget ends, and the remainder is carried
+        over to the next batch in order. Like every other result, a single
+        transition is never split, so a budget that is not a multiple of one
+        transition's size is overshot by less than one transition.
+        """
+        steps = chunk.shape[0]
+        step_numel = chunk.numel() // steps
+        room = max(1, (budget - collected) // step_numel)
+        if steps > room:
+            self._transition_carry.append(chunk[room:])
+            chunk = chunk[:room]
+        transitions.append(chunk)
+        return collected + chunk.numel()
+
+    @staticmethod
+    def _cat_chunks(chunks: list[TensorDictBase]) -> TensorDictBase:
+        """Concatenate worker chunks into one dense batch."""
+        try:
+            return torch.cat(chunks, 0)
+        except (KeyError, RuntimeError, TypeError):
+            # Different schemas or non-tensor metadata representations may
+            # prevent concatenating the chunks into a dense batch.
+            return lazy_stack([row for chunk in chunks for row in chunk.unbind(0)])
 
     @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_yield_trajs")
     def _rollout_yield_trajs(self) -> TensorDictBase:
         """Drain transitions until a complete trajectory is available."""
         while not self._trajectory_queue:
             td = self._next_result()
-            if self._uses_batched_coordinator:
+            if self._uses_batched_coordinator or self._uses_chunked_results:
                 for transition in td.unbind(0):
                     self._record_trajectory_transition(transition)
             else:
