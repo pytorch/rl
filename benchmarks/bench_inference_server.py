@@ -9,13 +9,14 @@ Measures requests per second served by a
 :class:`~torchrl.modules.inference_server.ProcessSlotTransport`, the topology
 used by :class:`~torchrl.collectors.AsyncBatchedCollector` with process
 environment workers. ``--num-clients`` workers (one process each by default)
-keep one request in flight at all times, so every server pass sees a full
-batch of ``--num-clients`` requests. The per-pass server overhead (collation,
+keep one request in flight at all times. The server batches whichever requests
+are ready, up to ``--num-clients``; the actual average batch size is reported.
+The per-pass server overhead (collation,
 host-device transfers, synchronization and response scattering) dominates when
 the policy is small, which is what this script isolates.
 
-The default workload is an MLP policy with 64 clients, i.e. a batch of 64 per
-pass. Pass ``--static-batch-size 64`` to serve the policy through a CUDA graph.
+The default workload is an MLP policy with 64 clients and a maximum batch size
+of 64. Pass ``--static-batch-size 64`` to serve the policy through a CUDA graph.
 Pinned staging, non-blocking transfers and CUDA graphs require CUDA; the script
 runs on CPU as a smoke test only.
 

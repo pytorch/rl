@@ -851,9 +851,12 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         batch = self.collate_fn(items).contiguous().to(self.policy_device)
         padding = self.static_batch_size - len(items)
         if padding:
-            batch = torch.cat(
-                [batch, batch[-1:].expand(padding, *batch.batch_size[1:])], dim=0
-            )
+            # Index the final request repeatedly: concatenating an expanded
+            # tail can mix NonTensorStack and NonTensorData metadata leaves.
+            index = torch.arange(
+                self.static_batch_size, device=self.policy_device
+            ).clamp_max_(len(items) - 1)
+            batch = batch[index]
         return batch
 
     def _validate_cudagraph_storage(self) -> None:
