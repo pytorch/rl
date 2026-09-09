@@ -3765,10 +3765,11 @@ class TestAsyncBatchedCollector:
 
     def test_process_slot_chunks_route_streams_and_sample_windows(self):
         """Chunked writes reach the right stream and sample as contiguous windows."""
-        num_envs, slice_len = 3, 4
+        num_envs, slice_len, total_frames = 3, 4, 96
         members = [
             TensorDictReplayBuffer(
-                storage=LazyTensorStorage(64),
+                # A single worker can supply the entire collection budget.
+                storage=LazyTensorStorage(total_frames),
                 sampler=StreamingSliceSampler(
                     slice_len=slice_len, end_key=("next", "done")
                 ),
@@ -3789,7 +3790,7 @@ class TestAsyncBatchedCollector:
             policy_factory=_make_counting_policy,
             transport=_counting_process_transport(num_envs),
             frames_per_batch=12,
-            total_frames=96,
+            total_frames=total_frames,
             transition_chunk_size=slice_len,
             replay_buffer=replay,
             env_backend="multiprocessing",
@@ -3801,7 +3802,7 @@ class TestAsyncBatchedCollector:
             collector.start()
             collector._replay_thread.join(timeout=30)
             assert not collector._replay_thread.is_alive()
-            assert replay.stats()["write_count"] == 96
+            assert replay.stats()["write_count"] == total_frames
             for env_id, member in enumerate(members):
                 if not len(member):
                     continue
