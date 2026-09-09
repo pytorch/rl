@@ -102,8 +102,7 @@ def _benchmark_async_collection_pixels(benchmark, mode, regime, *, num_envs=None
         pytest.skip("Direct process slots are not available on this revision")
     integrated = mode in ("async-shm-integrated", "async-process-slots-integrated")
     has_chunking = (
-        "transition_chunk_size"
-        in inspect.signature(AsyncBatchedCollector).parameters
+        "transition_chunk_size" in inspect.signature(AsyncBatchedCollector).parameters
     )
     if mode == "async-process-slots-chunked" and not has_chunking:
         pytest.skip("Chunked worker results are not available on this revision")

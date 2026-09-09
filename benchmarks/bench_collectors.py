@@ -379,7 +379,7 @@ def bench(
         iterator = iter(collector)
         for _ in range(warmup_batches):
             next(iterator)
-        if hasattr(collector, "server_stats"):
+        if warmup_batches and hasattr(collector, "server_stats"):
             collector.server_stats(reset=True)
         latencies = []
         initial_frames = collector._frames
