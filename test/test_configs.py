@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import enum
 import importlib.util
 import inspect
 import os
@@ -18,6 +19,7 @@ import warnings
 
 import pytest
 import torch
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
@@ -33,6 +35,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -51,7 +54,17 @@ from torchrl.data.replay_buffers.writers import (
 )
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.modules import ConvNet, DreamerV3MLP, MLP, TanhModule, ValueOperator
+from torchrl.modules import (
+    ConvNet,
+    DreamerV3DiscreteActor,
+    DreamerV3MLP,
+    MLP,
+    RSSMPosteriorV3,
+    RSSMPriorV3,
+    RSSMStateEstimatorV3,
+    TanhModule,
+    ValueOperator,
+)
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.record.loggers import (
@@ -147,6 +160,18 @@ _CONFIG_PARITY_UNRESOLVED = {
     "the torch versions TorchRL currently supports.",
 }
 
+_CONFIG_PARITY_SIGNATURE_OVERRIDES = {
+    "MultiAsyncCollectorConfig": "torchrl.collectors.MultiCollector",
+}
+
+_CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
+    {
+        "CollectorConfig",
+        "MultiAsyncCollectorConfig",
+        "MultiSyncCollectorConfig",
+    }
+)
+
 _CONFIG_PARITY_KNOWN_GAPS = frozenset(
     {
         "ActionMaskConfig",
@@ -169,7 +194,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "MeltingpotEnvConfig",
         "ModuleTransformConfig",
         "MultiStepTransformConfig",
-        "MultiSyncCollectorConfig",
         "MultiThreadedEnvConfig",
         "NormConfig",
         "ObservationNormConfig",
@@ -254,6 +278,64 @@ def _config_parity_cases() -> list:
     return cases
 
 
+def _normalize_default(value):
+    """Compare enum members by their string value, case-insensitively."""
+    if isinstance(value, enum.Enum):
+        value = value.value
+    if isinstance(value, str):
+        return value.lower()
+    return value
+
+
+def _resolve_parity_target(config_name: str) -> tuple[dict, type, list]:
+    """Resolve a Config to the class whose ``__init__`` defines its contract.
+
+    Returns the Config's dataclass fields, the wrapped class and its named
+    ``__init__`` parameters; the leading positional parameter is dropped for
+    ``_partial_`` configs, which bind it at call time rather than from the
+    config. Skips the calling test when the target needs a missing optional
+    dependency.
+    """
+    cfg_cls = _discover_leaf_configs()[config_name]
+    fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
+    target_path = fields["_target_"].default
+    signature_target_path = _CONFIG_PARITY_SIGNATURE_OVERRIDES.get(
+        config_name, target_path
+    )
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            wrapped_cls = _resolve_wrapped_class(signature_target_path)
+    except ImportError as err:
+        # Resolving a _target_ may import modules that require optional
+        # dependencies (e.g. the vLLM weight-sync schemes pull in modules
+        # that need `requests`); on a minimal install that is a skip, not
+        # a parity failure.
+        pytest.skip(
+            f"optional dependency missing while resolving "
+            f"{config_name} signature target = {signature_target_path!r}: {err}"
+        )
+    assert wrapped_cls is not None, (
+        f"{config_name} signature target = {signature_target_path!r} could not "
+        "be resolved to "
+        "a class (not a class itself, and not a function with a class "
+        "return annotation)."
+    )
+
+    params = [
+        (pname, param)
+        for pname, param in inspect.signature(wrapped_cls.__init__).parameters.items()
+        if pname != "self"
+    ]
+    if (
+        fields.get("_partial_") is not None
+        and fields["_partial_"].default is True
+        and params
+    ):
+        params = params[1:]
+    return fields, wrapped_cls, params
+
+
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
@@ -273,13 +355,17 @@ class TestConfigClassParity:
 
     Two deliberate limitations, left as follow-ups:
 
-    - Only field-name presence is checked; default-value *equality* between a
-      Config field and the corresponding ``__init__`` kwarg is NOT enforced, so
-      a Config default that drifts from the constructor's default still passes.
+    - Default-value *equality* between a Config field and the corresponding
+      ``__init__`` kwarg is only enforced for the configs listed in
+      ``_CONFIG_PARITY_DEFAULTS_CHECKED``; for every other config a default
+      that drifts from the constructor's default still passes. The list is
+      meant to grow one area at a time, as the allowlist below shrinks.
     - Wrapped ``__init__`` signatures made up purely of ``*args``/``**kwargs``
-      expose no named parameters to diff, so their configs pass vacuously, and
-      a ``**kwargs`` catch-all next to named parameters hides any kwarg that is
-      only reachable through it.
+      expose no named parameters to diff. Known wrappers can point to the class
+      that owns their constructor contract through
+      ``_CONFIG_PARITY_SIGNATURE_OVERRIDES``. An unmapped wrapper still passes
+      vacuously, and a ``**kwargs`` catch-all next to named parameters hides any
+      kwarg that is only reachable through it.
 
     Resolving a ``_target_`` can import optional-dependency modules; when such
     an import fails the case is skipped rather than failed, so the test stays
@@ -296,41 +382,7 @@ class TestConfigClassParity:
 
     @pytest.mark.parametrize("config_name", _config_parity_cases())
     def test_wrapped_class_kwargs_have_config_fields(self, config_name):
-        cfg_cls = _discover_leaf_configs()[config_name]
-        fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
-        target_path = fields["_target_"].default
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                wrapped_cls = _resolve_wrapped_class(target_path)
-        except ImportError as err:
-            # Resolving a _target_ may import modules that require optional
-            # dependencies (e.g. the vLLM weight-sync schemes pull in modules
-            # that need `requests`); on a minimal install that is a skip, not
-            # a parity failure.
-            pytest.skip(
-                f"optional dependency missing while resolving "
-                f"{config_name}._target_ = {target_path!r}: {err}"
-            )
-        assert wrapped_cls is not None, (
-            f"{config_name}._target_ = {target_path!r} could not be resolved to "
-            "a class (not a class itself, and not a function with a class "
-            "return annotation)."
-        )
-
-        params = [
-            (pname, param)
-            for pname, param in inspect.signature(
-                wrapped_cls.__init__
-            ).parameters.items()
-            if pname != "self"
-        ]
-        if (
-            fields.get("_partial_") is not None
-            and fields["_partial_"].default is True
-            and params
-        ):
-            params = params[1:]
+        fields, wrapped_cls, params = _resolve_parity_target(config_name)
 
         missing = [
             pname
@@ -345,6 +397,26 @@ class TestConfigClassParity:
             f"{wrapped_cls.__name__}.__init__ kwarg(s) {missing}: these can be "
             f"set on {wrapped_cls.__name__} directly but are silently "
             f"unreachable through Hydra. See CLAUDE.md section 14."
+        )
+
+    @pytest.mark.parametrize("config_name", sorted(_CONFIG_PARITY_DEFAULTS_CHECKED))
+    def test_wrapped_class_kwarg_defaults_match_config(self, config_name):
+        fields, wrapped_cls, params = _resolve_parity_target(config_name)
+
+        drift = {
+            pname: (fields[pname].default, param.default)
+            for pname, param in params
+            if pname in fields
+            and param.default is not inspect.Parameter.empty
+            and fields[pname].default is not dataclasses.MISSING
+            and _normalize_default(fields[pname].default)
+            != _normalize_default(param.default)
+        }
+        assert not drift, (
+            f"{config_name} default(s) drift from {wrapped_cls.__name__}.__init__ "
+            f"as {{field: (config default, constructor default)}} = {drift}: a "
+            "Hydra user who leaves the field unset gets different behavior from "
+            "a caller of the constructor. See CLAUDE.md section 14."
         )
 
 
@@ -429,6 +501,7 @@ class TestEnvConfigs:
             batched_env_type="async",
             backend="multiprocessing",
             exchange="shm",
+            envs_per_worker=2,
         )
         with warnings.catch_warnings():
             warnings.filterwarnings(
@@ -438,6 +511,7 @@ class TestEnvConfigs:
         try:
             assert isinstance(env, AsyncEnvPool)
             assert env.exchange == "shm"
+            assert env.num_workers == 1
         finally:
             env.close(raise_if_closed=False)
 
@@ -454,6 +528,7 @@ class TestEnvConfigs:
 
         config = OmegaConf.merge(config, {"worker_affinity": [[0, 1], [2, 3]]})
         assert config.worker_affinity == [[0, 1], [2, 3]]
+        assert config.envs_per_worker == 1
 
     @pytest.mark.parametrize(
         ("field", "value"),
@@ -905,6 +980,18 @@ class TestDataConfigs:
         assert isinstance(sampler, SliceSampler)
         assert sampler.num_slices == 10
 
+    def test_streaming_slice_sampler_config(self):
+        """Test StreamingSliceSamplerConfig."""
+        from torchrl.trainers.algorithms.configs.data import StreamingSliceSamplerConfig
+
+        cfg = StreamingSliceSamplerConfig(slice_len=8, traj_key="episode")
+
+        assert cfg._target_ == "torchrl.data.replay_buffers.StreamingSliceSampler"
+        assert cfg.slice_len == 8
+        sampler = StreamingSliceSampler(slice_len=cfg.slice_len, traj_key=cfg.traj_key)
+        assert sampler.slice_len == 8
+        assert sampler.traj_key == "episode"
+
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_prioritized_sampler_config(self):
         """Test PrioritizedSamplerConfig."""
@@ -1190,6 +1277,84 @@ class TestModuleConfigs:
         assert isinstance(module, DreamerV3MLP)
         output = module(torch.randn(3, 2), torch.randn(3, 4))
         assert output.shape == (3, expected_features)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_dreamer_v3_discrete_actor_nested_config(self):
+        options = {
+            "in_features": 12,
+            "out_features": 3,
+            "depth": 2,
+            "num_cells": 16,
+            "norm_eps": 1e-5,
+            "unimix": 0.2,
+            "device": "cpu",
+        }
+        configured = instantiate_config(
+            algorithm_configs.DreamerV3DiscreteActorConfig(
+                **options,
+                in_keys=[["latent", "state"], ["latent", "belief"]],
+                action_key=["policy", "action"],
+                logits_key=["policy", "logits"],
+                log_prob_key=["policy", "log_prob"],
+            )
+        )
+        actor = DreamerV3DiscreteActor(**options)
+        actor.load_state_dict(configured.state_dict())
+        data = TensorDict(
+            {"state": torch.randn(4, 8), "belief": torch.randn(4, 4)}, [4]
+        )
+        expected = actor.get_dist(data.clone())
+        torch.manual_seed(0)
+        actual = configured(TensorDict({"latent": data}, [4]))
+        torch.testing.assert_close(
+            actual["policy", "logits"].softmax(-1), expected.probs
+        )
+        torch.testing.assert_close(
+            actual["policy", "log_prob"], expected.log_prob(actual["policy", "action"])
+        )
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_rssm_state_estimator_nested_config(self):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            action_dim=2,
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+        )
+        posterior = RSSMPosteriorV3(
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            obs_embed_dim=6,
+        )
+        names = ["state", "belief", "previous_action", "encoded_latents", "is_init"]
+        configured = instantiate_config(
+            algorithm_configs.RSSMStateEstimatorV3Config(
+                in_keys=[["input", name] for name in names],
+                out_keys=[["output", "state"], ["output", "belief"]],
+            ),
+            prior=prior,
+            posterior=posterior,
+        )
+        data = TensorDict(
+            {
+                "state": torch.randn(2, 8),
+                "belief": torch.randn(2, 8),
+                "previous_action": torch.randn(2, 2),
+                "encoded_latents": torch.randn(2, 6),
+                "is_init": torch.tensor([True, False]),
+            },
+            [2],
+        )
+        torch.manual_seed(1)
+        expected = RSSMStateEstimatorV3(prior, posterior)(data.clone())
+        torch.manual_seed(1)
+        actual = configured(TensorDict({"input": data}, [2]))
+        torch.testing.assert_close(actual["output", "state"], expected["state"])
+        torch.testing.assert_close(actual["output", "belief"], expected["belief"])
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_dreamer_v3_image_configs(self):
@@ -1562,6 +1727,33 @@ class TestCollectorsConfig:
             assert next(iter(collector)).numel() == 10
         finally:
             collector.shutdown()
+
+    @pytest.mark.parametrize("collector", ["multi_sync", "multi_async"])
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_multi_collector_config_without_policy(self, collector):
+        """Leaving ``policy`` unset falls back to a random policy, as in the constructor."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import (
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg_cls = {
+            "multi_sync": MultiSyncCollectorConfig,
+            "multi_async": MultiAsyncCollectorConfig,
+        }[collector]
+        cfg = cfg_cls(
+            create_env_fn=[GymEnvConfig(env_name="Pendulum-v1")],
+            frames_per_batch=10,
+            total_frames=10,
+        )
+        collector_instance = instantiate(cfg)
+        try:
+            assert next(iter(collector_instance)).numel() == 10
+        finally:
+            collector_instance.shutdown(timeout=10)
 
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])

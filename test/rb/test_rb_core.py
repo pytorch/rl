@@ -1430,6 +1430,105 @@ def test_replay_buffer_shutdown_propagates_update_errors_and_is_idempotent():
         replay_buffer.sample(1)
 
 
+class _RecordingUpdateReplayBuffer(TensorDictReplayBuffer):
+    def __init__(self, **kwargs):
+        self.seen = []
+        super().__init__(**kwargs)
+
+    def update_if_present(self, **kwargs):
+        self.seen.append(kwargs)
+        return super().update_if_present(**kwargs)
+
+
+def test_submit_update_if_present_passes_cpu_inputs_through():
+    replay_buffer = _RecordingUpdateReplayBuffer(
+        storage=LazyTensorStorage(4),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    index = replay_buffer.extend(TensorDict({"obs": torch.zeros(4)}, batch_size=[4]))
+    generation = replay_buffer.writer.generations_of(index)
+    patch = {"obs": torch.arange(4.0)}
+    try:
+        result = replay_buffer.submit_update_if_present(
+            index=index, generation=generation, patch=patch
+        ).result(timeout=5)
+        assert result.updated_count == 4
+        (seen,) = replay_buffer.seen
+        assert seen["index"] is index
+        assert seen["generation"] is generation
+        assert seen["patch"]["obs"] is patch["obs"]
+        assert torch.equal(replay_buffer[:]["obs"], patch["obs"])
+    finally:
+        replay_buffer.shutdown()
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("patch_type", ["dict", "tensordict"])
+def test_submit_update_if_present_stages_cuda_inputs_for_cpu_storage(patch_type):
+    replay_buffer = _RecordingUpdateReplayBuffer(
+        storage=LazyTensorStorage(4),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    index = replay_buffer.extend(
+        TensorDict({"obs": torch.zeros(4), "aux": torch.zeros(4, 2)}, batch_size=[4])
+    )
+    generation = replay_buffer.writer.generations_of(index)
+    obs = torch.arange(4.0, device="cuda")
+    aux = torch.arange(8.0, device="cuda").reshape(4, 2)
+    if patch_type == "dict":
+        patch = {"obs": obs, "aux": aux}
+    else:
+        patch = TensorDict({"obs": obs, "aux": aux}, batch_size=[4])
+    try:
+        # Work enqueued after submission must not be able to change what the
+        # update writes: the staged copies were ordered before it.
+        future = replay_buffer.submit_update_if_present(
+            index=index.cuda(), generation=generation.cuda(), patch=patch
+        )
+        obs.add_(100)
+        aux.add_(100)
+        assert future.result(timeout=5).updated_count == 4
+        (seen,) = replay_buffer.seen
+        staged = [seen["index"], seen["generation"]]
+        staged.extend(
+            seen["patch"].values()
+            if patch_type == "dict"
+            else seen["patch"].values(True, True)
+        )
+        for value in staged:
+            assert value.device.type == "cpu"
+            assert value.is_pinned()
+        assert torch.equal(replay_buffer[:]["obs"], torch.arange(4.0))
+        assert torch.equal(replay_buffer[:]["aux"], torch.arange(8.0).reshape(4, 2))
+    finally:
+        replay_buffer.shutdown()
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_submit_update_if_present_keeps_cuda_inputs_for_cuda_storage():
+    replay_buffer = _RecordingUpdateReplayBuffer(
+        storage=LazyTensorStorage(4, device="cuda"),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+    )
+    index = replay_buffer.extend(
+        TensorDict({"obs": torch.zeros(4, device="cuda")}, batch_size=[4])
+    )
+    generation = replay_buffer.writer.generations_of(index)
+    patch = {"obs": torch.arange(4.0, device="cuda")}
+    try:
+        result = replay_buffer.submit_update_if_present(
+            index=index, generation=generation, patch=patch
+        ).result(timeout=5)
+        assert result.updated_count == 4
+        (seen,) = replay_buffer.seen
+        assert seen["patch"]["obs"] is patch["obs"]
+        assert torch.equal(replay_buffer[:]["obs"], patch["obs"])
+    finally:
+        replay_buffer.shutdown()
+
+
 def _release_prefetch_when_futures_lock_is_held(
     replay_buffer, collate, operation_started, errors
 ):

@@ -5,8 +5,36 @@ env:
   seed: 0
   use_seed: true
   max_episode_steps: 200
+  # Custom factory: package.module:function, called with seed, env_index and num_envs.
+  factory: null
+  factory_kwargs: {}
+  # Strings or lists of nested key components; null disables that observation.
+  vector_key: observation
+  pixels_key: null
+  milestone_key: null
+  milestone_names: []
 
 collector:
+  # auto runs asynchronous collection on CPU and CUDA training devices and the
+  # synchronous collector elsewhere (MPS cannot serve the policy off-thread).
+  backend: auto  # one of: auto, sync, async
+  async_env_backend: multiprocessing  # one of: threading, multiprocessing
+  env_exchange: auto  # one of: auto, queue, shm
+  envs_per_worker: 1
+  # Where the acting policy runs with the async collector. auto serves it from a
+  # dedicated process that the environment workers reach directly when
+  # async_env_backend is multiprocessing with one environment per worker, and
+  # from a thread of this process otherwise; thread and process force one of the
+  # two.
+  inference_backend: auto  # one of: auto, thread, process
+  # Consecutive transitions per environment-worker message with the process
+  # backend; auto sends one contiguous run per environment and batch.
+  transition_chunk_size: auto
+  policy_device: null
+  inference_max_batch_size: null  # null uses num_envs
+  inference_min_batch_size: 1
+  inference_timeout: 0.01
+  inference_static_batch_size: null
   num_envs: 1
   frames_per_batch: 200
   total_frames: 5000
@@ -45,22 +73,45 @@ networks:
   value_layers: 3
   policy_min_std: 0.1
   policy_max_std: 1.0
+  image_depth: 64
+  image_mults: [2, 3, 4, 4]
+  image_kernel_size: 5
+  image_decoder_blocks: 8
 
 optimization:
   device: null       # training device (models, losses, policy). null=auto
   deferred_policy_sync: false
   separate_policy_rng: false
   mixed_precision: false
-  # Compile the RSSM recurrence: null, "step" or "scan". "scan" is faster but
-  # changes the random stream; see the README.
+  # Compile strategy. "auto" takes the fastest supported path for the training
+  # device: on CUDA the complete learner forward/backward is compiled with
+  # TorchInductor around a higher-order scan of the recurrence and captured in
+  # a CUDA graph; elsewhere everything runs eagerly. "off" disables all of it.
+  # The three switches below default to null, which follows this strategy; set
+  # one to override that single decision.
+  compile: auto
+  # Compile the complete learner forward/backward with TorchInductor.
+  compile_train_step: null
+  # torch.compile mode for the complete learner step.
+  compile_train_step_mode: default
+  # RSSM recurrence backend: null, "step" or "scan". Inside a compiled step
+  # "scan" is traced as one higher-order scan; on its own it gets its own
+  # torch.compile. "scan" changes the random stream; see the README.
   compile_rssm: null
   # Number of RSSM steps traced per higher-order scan iteration.
   rssm_scan_unroll: 8
   # Capture the fixed-shape learner forward/backward on CUDA after warmup.
-  cudagraph_train_step: false
-  # Compile learner networks and losses: null, "losses" (numerically identical
-  # to eager) or "all" (also traces the imagination rollout in the actor loss).
-  compile_learner: null
+  cudagraph_train_step: null
+  # Synchronize CUDA around train-update timing. This disables CPU/GPU overlap.
+  sync_timers: false
+  collection_warmup_seconds: 0
+  max_time: null  # wall-clock seconds; null uses the frame budget
+  # Saving is opt-in. Resume only when resume_from is explicitly set.
+  checkpoint_dir: null
+  checkpoint_every: 1000  # completed learner updates; null saves only at exit
+  checkpoint_keep_last: 2
+  checkpoint_include_replay: false
+  resume_from: null  # checkpoint or rotation directory
   lr: 4.0e-5
   optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3
@@ -87,6 +138,15 @@ logger:
   eval_episodes: 3
   output_plot: dreamer_v3_pendulum.png
   metrics_jsonl: null
+  backend: null  # null, csv, tensorboard or wandb
+  log_dir: logs
+  project: torchrl-dreamer-v3
+  entity: null
+  base_url: null
+  exp_name: null
+  group: null
+  tags: []
+  mode: online
 
 hydra:
   job:

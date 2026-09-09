@@ -3,18 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 """Run logging, RNG streams and evaluation of the DreamerV3 example."""
+
 from __future__ import annotations
 
 import importlib.util
 import json
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import torch
 from omegaconf import DictConfig
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -55,6 +56,62 @@ def latent_state_dim(cfg: DictConfig) -> int:
     return cfg.networks.num_categoricals * cfg.networks.num_classes
 
 
+class CompileSettings(NamedTuple):
+    """The resolved compile decisions of one run."""
+
+    strategy: str
+    train_step: bool
+    rssm: str | None
+    scan_unroll: int
+    cudagraph: bool
+    mode: str
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.train_step or self.rssm or self.cudagraph)
+
+
+def resolve_compile_settings(cfg: DictConfig, device: torch.device) -> CompileSettings:
+    """Turn ``optimization.compile`` and its overrides into concrete decisions.
+
+    ``auto`` takes the fastest supported path for ``device``: on CUDA the
+    complete learner step is compiled around a higher-order scan of the
+    recurrence and captured in a CUDA graph, elsewhere everything runs eagerly.
+    ``off`` disables all of it. ``compile_train_step``, ``compile_rssm`` and
+    ``cudagraph_train_step`` default to ``null``, which follows the strategy;
+    an explicit value overrides that single decision.
+    """
+    strategy = cfg.optimization.get("compile", "auto")
+    if strategy not in ("auto", "off"):
+        raise ValueError(
+            f"optimization.compile must be 'auto' or 'off', got {strategy!r}."
+        )
+    fast = strategy == "auto" and device.type == "cuda"
+    train_step = cfg.optimization.compile_train_step
+    train_step = fast if train_step is None else bool(train_step)
+    rssm = cfg.optimization.compile_rssm
+    if rssm is None and fast:
+        rssm = "scan"
+    if rssm not in (None, "step", "scan"):
+        raise ValueError(
+            f"optimization.compile_rssm must be null, 'step' or 'scan', got {rssm!r}."
+        )
+    cudagraph = cfg.optimization.cudagraph_train_step
+    cudagraph = fast if cudagraph is None else bool(cudagraph)
+    if cudagraph and device.type != "cuda":
+        raise ValueError(
+            "optimization.cudagraph_train_step requires a CUDA training device."
+        )
+    return CompileSettings(
+        strategy=strategy,
+        train_step=train_step,
+        rssm=rssm,
+        scan_unroll=cfg.optimization.rssm_scan_unroll,
+        cudagraph=cudagraph,
+        mode=cfg.optimization.compile_train_step_mode,
+    )
+
+
 def training_episode_returns(
     data: TensorDictBase,
     running_return: torch.Tensor,
@@ -62,6 +119,22 @@ def training_episode_returns(
 ) -> list[tuple[int, int, float]]:
     reward = data.get(("next", "reward")).squeeze(-1)
     done = data.get(("next", "done")).squeeze(-1)
+    env_index = data.get("env_index", default=None)
+    if env_index is not None:
+        completed = []
+        for position, (env, step_reward, step_done) in enumerate(
+            zip(
+                env_index.reshape(-1).cpu(),
+                reward.reshape(-1).cpu(),
+                done.reshape(-1).cpu(),
+            )
+        ):
+            env = int(env)
+            running_return[env].add_(step_reward)
+            if step_done:
+                completed.append((position, env, float(running_return[env])))
+                running_return[env] = 0
+        return completed
     if num_envs == 1:
         reward = reward.reshape(1, -1)
         done = done.reshape(1, -1)

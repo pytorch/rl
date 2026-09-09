@@ -36,6 +36,7 @@ from torchrl.data.replay_buffers.samplers import (
     SliceSampler,
     SliceSamplerWithoutReplacement,
     StalenessAwareSampler,
+    StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.scheduler import (
     LinearScheduler,
@@ -1302,6 +1303,62 @@ class TestSamplers:
                     end + 1
                 ].item(), f"slice starting at index {end + 1} missing is_init=True"
 
+    @pytest.mark.parametrize("sampler_cls", [SliceSampler, StreamingSliceSampler])
+    def test_slice_sampler_init_key_none_keeps_stored_flags(self, sampler_cls):
+        """init_key=None returns the stored is_init flags without slice-start markers."""
+        torch.manual_seed(0)
+        traj_lengths = [8, 12]
+        parts = []
+        for t_id, length in enumerate(traj_lengths):
+            init = torch.zeros(length, 1, dtype=torch.bool)
+            init[0] = True
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), t_id, dtype=torch.int),
+                        "is_init": init,
+                        "step": torch.arange(length),
+                    },
+                    batch_size=[length],
+                )
+            )
+        data = torch.cat(parts)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel()),
+            sampler=sampler_cls(slice_len=4, traj_key="traj", init_key=None),
+            batch_size=8,
+        )
+        rb.extend(data)
+        for _ in range(20):
+            sample = rb.sample()
+            stored = data["is_init"][sample["index"].reshape(-1)]
+            torch.testing.assert_close(sample["is_init"], stored)
+            starts = sample["step"].reshape(2, 4)[:, 0]
+            assert (sample["is_init"].reshape(2, 4)[:, 0] == (starts == 0)).all()
+
+    def test_slice_sampler_init_key_custom(self):
+        """A custom init_key receives the slice-start markers."""
+        torch.manual_seed(0)
+        data = TensorDict(
+            {
+                "traj": torch.repeat_interleave(torch.arange(2, dtype=torch.int), 10),
+                ("collector", "init"): torch.zeros(20, 1, dtype=torch.bool),
+            },
+            batch_size=[20],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(
+                slice_len=5, traj_key="traj", init_key=("collector", "init")
+            ),
+            batch_size=10,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        assert "is_init" not in sample.keys(True)
+        assert sample["collector", "init"].reshape(2, 5)[:, 0].all()
+        assert not sample["collector", "init"].reshape(2, 5)[:, 1:].any()
+
     def test_slice_sampler_pad_output_no_is_init_no_marker(self):
         """Without is_init in the storage we don't introduce one out of thin air."""
         torch.manual_seed(0)
@@ -2116,6 +2173,145 @@ class TestSamplers:
         obs = sample["obs"].view(2, 5)
         diffs = obs[:, 1:] - obs[:, :-1]
         assert (diffs == 1).all(), obs
+
+
+class TestStreamingSliceSampler:
+    @staticmethod
+    def _make_buffer(max_size=16, *, generator=None, **sampler_kwargs):
+        return TensorDictReplayBuffer(
+            storage=LazyTensorStorage(max_size),
+            sampler=StreamingSliceSampler(slice_len=3, **sampler_kwargs),
+            batch_size=6,
+            generator=generator,
+        )
+
+    def test_completed_windows_are_queued_once_across_boundaries(self):
+        rb = self._make_buffer()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(2),
+                    ("collector", "traj_ids"): torch.zeros(2, dtype=torch.long),
+                    ("next", "done"): torch.zeros(2, 1, dtype=torch.bool),
+                },
+                [2],
+            )
+        )
+        assert not rb.can_sample()
+        done = torch.zeros(6, 1, dtype=torch.bool)
+        done[2] = True
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(2, 8),
+                    ("collector", "traj_ids"): torch.tensor([0, 0, 0, 1, 1, 1]),
+                    ("next", "done"): done,
+                },
+                [6],
+            )
+        )
+
+        sample = rb.sample()
+
+        assert sample["obs"].reshape(2, 3).tolist() == [[0, 1, 2], [5, 6, 7]]
+        fallback = rb.sample()
+        fallback_obs = fallback["obs"].reshape(2, 3)
+        assert (fallback_obs[:, 1:] == fallback_obs[:, :-1] + 1).all()
+        assert not ((fallback_obs[:, 0] < 5) & (fallback_obs[:, -1] >= 5)).any()
+
+    @pytest.mark.parametrize("num_writes", [1, 20])
+    def test_overwritten_queued_windows_are_discarded(self, num_writes):
+        rb = self._make_buffer(max_size=6)
+        for offset in range(0, 6 + 3 * num_writes, 3):
+            rb.extend(
+                TensorDict(
+                    {
+                        "obs": torch.arange(offset, offset + 3),
+                        ("next", "done"): torch.zeros(3, 1, dtype=torch.bool),
+                    },
+                    [3],
+                )
+            )
+            assert len(rb.sampler._queued_slices) <= 2
+        sample = rb.sample()
+        assert sample["obs"].tolist() == list(range(3 * num_writes, 6 + 3 * num_writes))
+
+    def test_fresh_and_padded_uniform_slices_share_mask(self):
+        rb = self._make_buffer(
+            strict_length=False,
+            pad_output=True,
+            generator=torch.Generator().manual_seed(0),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(5),
+                    ("collector", "traj_ids"): torch.tensor([0, 0, 0, 1, 1]),
+                    ("next", "done"): torch.tensor(
+                        [[False], [False], [True], [False], [True]]
+                    ),
+                },
+                [5],
+            )
+        )
+        sample = rb.sample()
+        assert sample["obs"][:3].tolist() == [0, 1, 2]
+        assert sample["collector", "mask"][:3].all()
+        assert sample["collector", "mask"].shape == (6,)
+
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_state_dict_restores_queue_and_pending_window(self, default_device):
+        with torch.device(default_device):
+            rb = self._make_buffer()
+            rb.extend(
+                TensorDict(
+                    {
+                        "obs": torch.arange(5, device="cpu"),
+                        ("next", "done"): torch.zeros(
+                            5, 1, dtype=torch.bool, device="cpu"
+                        ),
+                    },
+                    [5],
+                    device="cpu",
+                )
+            )
+            restored = self._make_buffer()
+            restored.load_state_dict(rb.state_dict())
+            restored.extend(
+                TensorDict(
+                    {
+                        "obs": torch.arange(5, 6, device="cpu"),
+                        ("next", "done"): torch.zeros(
+                            1, 1, dtype=torch.bool, device="cpu"
+                        ),
+                    },
+                    [1],
+                    device="cpu",
+                )
+            )
+
+            sample = restored.sample()
+
+            assert sample["obs"].reshape(2, 3).tolist() == [[0, 1, 2], [3, 4, 5]]
+
+    def test_seeded_uniform_fallback_is_deterministic(self):
+        buffers = [
+            self._make_buffer(generator=torch.Generator().manual_seed(0))
+            for _ in range(2)
+        ]
+        data = TensorDict(
+            {
+                "obs": torch.arange(12),
+                "episode": torch.zeros(12, dtype=torch.long),
+            },
+            [12],
+        )
+        for rb in buffers:
+            rb.extend(data)
+            rb.sample()
+            rb.sample()
+
+        assert torch.equal(buffers[0].sample()["obs"], buffers[1].sample()["obs"])
 
 
 class TestStalenessAwareSampler:

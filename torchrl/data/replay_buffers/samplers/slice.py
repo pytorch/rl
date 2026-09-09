@@ -118,6 +118,13 @@ class SliceSampler(Sampler):
             This feature only works with :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer`
             instances (otherwise the truncated key is returned in the info dictionary
             returned by the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method).
+        init_key (NestedKey, optional): If not ``None``, the sampler marks the
+            first step of every slice with ``True`` under this key (OR-ed with
+            the flags stored in the buffer, when present) so that recurrent
+            modules restart from the stored hidden state at each slice start.
+            Pass ``None`` to leave the stored flags untouched, as required by
+            models that reset their state wherever ``is_init`` is set, such as
+            the DreamerV3 RSSM rollout. Defaults to ``"is_init"``.
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
             allowed to appear in the batch. If ``True``, trajectories shorted
@@ -384,6 +391,7 @@ class SliceSampler(Sampler):
         trajectories: torch.Tensor | None = None,
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
+        init_key: NestedKey | None = "is_init",
         strict_length: bool = True,
         pad_output: bool = False,
         compile: bool | dict = False,
@@ -436,6 +444,7 @@ class SliceSampler(Sampler):
         )
         self.traj_key = traj_key
         self.truncated_key = truncated_key
+        self.init_key = init_key
         self.cache_values = cache_values
         self._fetch_traj = True
         self.strict_length = strict_length
@@ -557,6 +566,12 @@ class SliceSampler(Sampler):
         # Delegate cooperatively so classes mixing SliceSampler with e.g.
         # PrioritizedSampler keep their write hook.
         super().mark_update(index, storage=storage)
+
+    def _end_stream(self, index: torch.Tensor, *, storage: Storage) -> None:
+        # A boundary patch changes no slot identity and must not look like a write.
+        self._cache.clear()
+        if self.fragmented and self._fragmented_index is not None:
+            self._fragmented_index.mark_update(index, storage=storage)
 
     def __repr__(self):
         return (
@@ -834,6 +849,40 @@ class SliceSampler(Sampler):
             seq_length = self.slice_len
             num_slices = batch_size // self.slice_len
         return seq_length, num_slices
+
+    def _sampleable_count(
+        self, storage: Storage, batch_size: int
+    ) -> int | torch.Tensor:
+        if len(storage) == 0:
+            return 0
+        seq_length, _ = self._adjusted_batch_size(batch_size)
+        if self.fragmented:
+            if getattr(self, "_traj_key_auto", False):
+                self._resolve_traj_key(storage)
+            if not self._fetch_traj or self.traj_key is None:
+                return 0
+            indexer = self._fragmented_index
+            if (
+                indexer is None
+                or indexer.trajectory_key != self.traj_key
+                or indexer.step_key != self.step_key
+            ):
+                indexer = self._fragmented_index = _FragmentedTrajectoryIndex(
+                    self.traj_key, self.step_key
+                )
+            indexer.refresh(storage)
+            _, _, lengths = indexer.runs()
+        else:
+            try:
+                _, _, lengths = self._get_stop_and_length(storage)
+            except (KeyError, RuntimeError):
+                return 0
+        windows = lengths - seq_length + 1
+        if self.strict_length:
+            windows = windows.clamp_min(0)
+        else:
+            windows = torch.where(lengths > 0, windows.clamp_min(1), 0)
+        return windows.sum()
 
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         if self._batch_size_multiplier is not None:
@@ -1265,10 +1314,15 @@ class SliceSampler(Sampler):
         We OR our markers with the storage's existing ``is_init`` so episode
         resets that fall *inside* a slice are preserved. If the storage
         doesn't carry an ``is_init`` field (no :class:`InitTracker`), we don't
-        introduce one — we'd be lying about real resets we can't see.
+        introduce one — we'd be lying about real resets we can't see. With
+        ``init_key=None`` the stored flags are returned untouched.
         """
+        if self.init_key is None:
+            return
         existing_is_init = (
-            st_index.get("is_init", default=None) if hasattr(st_index, "get") else None
+            st_index.get(self.init_key, default=None)
+            if hasattr(st_index, "get")
+            else None
         )
         if existing_is_init is None:
             return
@@ -1292,7 +1346,7 @@ class SliceSampler(Sampler):
             slice_starts = torch.zeros(num_slices, device=device, dtype=torch.long)
             slice_starts[1:] = seq_length.to(device).cumsum(0)[:-1].to(torch.long)
         init_marker[slice_starts] = True
-        info["is_init"] = init_marker | existing_is_init
+        info[self.init_key] = init_marker | existing_is_init
 
     @property
     def _used_traj_key(self):

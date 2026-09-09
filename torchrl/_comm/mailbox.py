@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import multiprocessing as mp
+import os
 import queue
 import threading
 import time
@@ -13,6 +15,16 @@ from typing import Any
 
 _MISSING = object()
 _PEER_CHECK_INTERVAL = 0.1
+
+
+def _exit_on_parent_exit() -> None:
+    """Watch the owner from a child daemon thread, including during blocked work."""
+    parent = mp.parent_process()
+    if parent is not None:
+        _wait_for_connection([parent.sentinel])
+        # No owner remains to consume results or release blocked IPC. Normal
+        # interpreter teardown can itself wait forever for queue feeder threads.
+        os._exit(0)
 
 
 class MailboxTransportError(RuntimeError):

@@ -75,6 +75,13 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             This feature only works with :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer`
             instances (otherwise the truncated key is returned in the info dictionary
             returned by the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method).
+        init_key (NestedKey, optional): If not ``None``, the sampler marks the
+            first step of every slice with ``True`` under this key (OR-ed with
+            the flags stored in the buffer, when present) so that recurrent
+            modules restart from the stored hidden state at each slice start.
+            Pass ``None`` to leave the stored flags untouched, as required by
+            models that reset their state wherever ``is_init`` is set, such as
+            the DreamerV3 RSSM rollout. Defaults to ``"is_init"``.
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
             allowed to appear in the batch. If ``True``, trajectories shorted
@@ -217,6 +224,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
         truncated_key: NestedKey | None = ("next", "truncated"),
+        init_key: NestedKey | None = "is_init",
         strict_length: bool = True,
         shuffle: bool = True,
         compile: bool | dict = False,
@@ -231,6 +239,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             traj_key=traj_key,
             cache_values=True,
             truncated_key=truncated_key,
+            init_key=init_key,
             strict_length=strict_length,
             ends=ends,
             trajectories=trajectories,

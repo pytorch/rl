@@ -156,3 +156,14 @@ Documentation Sections
    data_samplers
    data_datasets
    data_specs
+
+
+Ending replay streams on restart
+--------------------------------
+
+:meth:`~torchrl.data.ReplayBufferEnsemble.end_streams` closes each member's current
+trajectory before restarted environments append new data. It drains pending
+replay work, preserves row generations and terminal flags, and resets incomplete
+fresh windows and cached uniform boundaries. Call it with collection paused and
+before resuming producers. See its API documentation for supported member storage,
+writer and sampler combinations and configurable nested boundary keys.

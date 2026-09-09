@@ -1,0 +1,135 @@
+# Fixed workload for test_dreamer_v3_benchmark.py.
+# Keep independent of the example defaults so their changes cannot move the baseline.
+# Changing this workload requires a new benchmark series.
+env:
+  backend: custom
+  name: fake-pixels
+  task: null
+  seed: 0
+  use_seed: true
+  max_episode_steps: 1000  # Keep above the staggered episode lengths.
+  factory: bench_dreamer_v3_env:FakePixelEnv
+  factory_kwargs:
+    episode_length: 200
+    num_actions: 6
+    step_latency_s: 0.001
+  vector_key: vector
+  pixels_key: pixels
+  milestone_key: obtained
+  milestone_names: [quarter, half, three_quarters]
+
+collector:
+  backend: async
+  async_env_backend: multiprocessing
+  env_exchange: shm
+  envs_per_worker: 1
+  policy_device: null
+  # Single-request inference avoids mixed exploration contexts in the current
+  # thread backend. Keep fixed after that bug is resolved; the collection-only
+  # series covers batched inference.
+  inference_max_batch_size: 1
+  # The harness sets inference_backend per series; chunking follows the
+  # collector default so the process series measures the shipped configuration.
+  transition_chunk_size: auto
+  inference_min_batch_size: 1
+  inference_timeout: 0.01
+  inference_static_batch_size: null
+  num_envs: 8
+  frames_per_batch: 256
+  total_frames: -1
+  count_reset_records: false
+  exploration: random
+
+replay_buffer:
+  device: cpu
+  buffer_size: 16384
+  batch_size: 16
+  seq_len: 32
+  online: true
+  warmup_factor: 1
+
+networks:
+  rnn_hidden_dim: 256
+  num_categoricals: 8
+  num_classes: 8
+  unimix: 0.01
+  recurrent_model: block_gru
+  num_blocks: 8
+  dynamics_layers: 1
+  prior_layers: 2
+  posterior_layers: 1
+  norm_eps: 0.0001
+  decoder_event_dims: null
+  num_reward_bins: 255
+  num_value_bins: 255
+  hidden_dim: 128
+  encoder_layers: 1
+  decoder_layers: 1
+  reward_layers: 1
+  actor_layers: 2
+  value_layers: 2
+  policy_min_std: 0.1
+  policy_max_std: 1.0
+  image_depth: 16
+  image_mults: [2, 3, 4, 4]
+  image_kernel_size: 5
+  image_decoder_blocks: 8
+
+optimization:
+  device: cuda:0
+  deferred_policy_sync: false
+  separate_policy_rng: false
+  mixed_precision: false
+  compile: 'off'  # Exclude compilation time and its variance.
+  compile_train_step: null
+  compile_train_step_mode: default
+  compile_rssm: null
+  rssm_scan_unroll: 8
+  cudagraph_train_step: null
+  sync_timers: false
+  collection_warmup_seconds: 0
+  max_time: 600.0  # Safety ceiling; the harness stops after its measured rounds.
+  checkpoint_dir: null
+  checkpoint_every: 1000
+  checkpoint_keep_last: 2
+  checkpoint_include_replay: false
+  resume_from: null
+  lr: 4.0e-05
+  optimizer_eps: 1.0e-20
+  adaptive_grad_clip: 0.3
+  warmup_steps: 1000
+  updates_per_batch: 8
+  train_ratio: 2
+  imagination_horizon: 15
+  continuation_horizon: 333
+  use_reinforce: true
+  return_normalization_rate: 0.01
+  return_normalization_min_scale: 1.0
+  slow_critic_regularization: 1.0
+  slow_critic_tau: 0.02
+  replay_value_loss_weight: 0.3
+  free_bits: 1.0
+  dynamic_loss_weight: 1.0
+  representation_loss_weight: 0.1
+  gamma: 1.0
+  lmbda: 0.95
+
+logger:
+  train_every: 256
+  eval_every: 0
+  eval_episodes: 3
+  output_plot: null
+  metrics_jsonl: metrics.jsonl
+  backend: null
+  log_dir: logs
+  project: torchrl-dreamer-v3
+  entity: null
+  base_url: null
+  exp_name: null
+  group: null
+  tags: []
+  mode: online
+
+hydra:
+  job:
+    chdir: false

@@ -21,4 +21,5 @@ dependencies:
     - pyyaml
     - autorom[accept-rom-license]
     - pettingzoo[all]==1.24.3
+    - lbforaging==2.0.0
     - gymnasium<1.0.0

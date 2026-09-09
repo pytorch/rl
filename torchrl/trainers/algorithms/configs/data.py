@@ -141,6 +141,7 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
     trajectories: Any = None
     cache_values: bool = False
     truncated_key: Any = ("next", "truncated")
+    init_key: Any = "is_init"
     strict_length: bool = True
     compile: Any = False
     span: Any = False
@@ -167,6 +168,7 @@ class SliceSamplerWithoutReplacementConfig(SamplerConfig):
     trajectories: Any = None
     cache_values: bool = False
     truncated_key: Any = ("next", "truncated")
+    init_key: Any = "is_init"
     strict_length: bool = True
     compile: Any = False
     span: Any = False
@@ -189,7 +191,27 @@ class SliceSamplerConfig(SamplerConfig):
     trajectories: Any = None
     cache_values: bool = False
     truncated_key: Any = ("next", "truncated")
+    init_key: Any = "is_init"
     strict_length: bool = True
+    compile: Any = False
+    span: Any = False
+    use_gpu: Any = False
+
+
+@dataclass
+class StreamingSliceSamplerConfig(SamplerConfig):
+    """Hydra configuration for :class:`~torchrl.data.StreamingSliceSampler`."""
+
+    _target_: str = "torchrl.data.replay_buffers.StreamingSliceSampler"
+    slice_len: int = MISSING
+    end_key: Any = None
+    end_keys: Any = None
+    traj_key: Any = None
+    cache_values: bool = False
+    truncated_key: Any = ("next", "truncated")
+    init_key: Any = "is_init"
+    strict_length: bool = True
+    pad_output: bool = False
     compile: Any = False
     span: Any = False
     use_gpu: Any = False

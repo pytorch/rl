@@ -114,6 +114,14 @@ def _run_after_futures(futures: tuple[Future, ...], operation: Callable[[], T]) 
     return operation()
 
 
+def _run_after_events(
+    events: tuple[torch.cuda.Event, ...], operation: Callable[[], T]
+) -> T:
+    for event in events:
+        event.synchronize()
+    return operation()
+
+
 class ConditionalUpdateResult(TensorClass["nocast"]):
     """Result of :meth:`ReplayBuffer.update_if_present`.
 
@@ -1086,6 +1094,87 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         return stats
 
     @_maybe_delay_init
+    def can_sample(self, batch_size: int | None = None) -> bool:
+        """Returns whether the replay buffer can serve a sample batch.
+
+        Args:
+            batch_size (int, optional): requested batch size. Defaults to the
+                batch size configured on the replay buffer.
+        """
+        if batch_size is None:
+            batch_size = self._batch_size
+        if batch_size is None:
+            raise RuntimeError(
+                "batch_size not specified. Configure it on the replay buffer "
+                "or pass it to can_sample()."
+            )
+        return self._sampler.can_sample(self._storage, batch_size)
+
+    def _conditional_update_device(self) -> torch.device | None:
+        """Returns the device conditional patches are written to, when known."""
+        device = getattr(self._storage, "device", None)
+        return device if isinstance(device, torch.device) else None
+
+    def _stage_conditional_update(
+        self,
+        index: torch.Tensor | TensorDictBase,
+        generation: torch.Tensor,
+        patch: Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+        version: int | torch.Tensor | None,
+    ) -> tuple[
+        torch.Tensor | TensorDictBase,
+        torch.Tensor,
+        Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+        int | torch.Tensor | None,
+        tuple[torch.cuda.Event, ...],
+    ]:
+        """Copies CUDA inputs of a submitted update to a CPU storage without blocking.
+
+        :meth:`update_if_present` moves values to the storage device with a
+        blocking copy. Issued from the update thread, that copy waits for every
+        kernel enqueued on the stream since submission, typically the next
+        learner step, and every sample waiting on the update inherits the
+        delay. Enqueuing the copies on the caller's stream at submission time
+        orders them right after the work that produced the values; the update
+        thread then only waits for the returned events.
+        """
+        target = self._conditional_update_device()
+        if target is None or target.type != "cpu":
+            return index, generation, patch, version, ()
+        streams: dict[torch.device, torch.cuda.Stream] = {}
+
+        def stage(value):
+            if isinstance(value, TensorDictBase):
+                devices = {
+                    leaf.device
+                    for leaf in value.values(include_nested=True, leaves_only=True)
+                    if leaf.device.type == "cuda"
+                }
+            elif isinstance(value, torch.Tensor) and value.device.type == "cuda":
+                devices = {value.device}
+            else:
+                return value
+            if not devices:
+                return value
+            for device in devices:
+                streams.setdefault(device, torch.cuda.current_stream(device))
+            return value.to(target, non_blocking=True)
+
+        index = stage(index)
+        generation = stage(generation)
+        if isinstance(patch, TensorDictBase):
+            patch = stage(patch)
+        else:
+            patch = {key: stage(value) for key, value in patch.items()}
+        version = stage(version)
+        events = []
+        for stream in streams.values():
+            event = torch.cuda.Event()
+            event.record(stream)
+            events.append(event)
+        return index, generation, patch, version, tuple(events)
+
+    @_maybe_delay_init
     def submit_update_if_present(
         self,
         *,
@@ -1107,6 +1196,11 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         Callers must not mutate ``index``, ``generation``, ``patch`` or
         ``version`` in that interval. In particular, values backed by static
         CUDA-graph output buffers must be cloned before submission.
+
+        CUDA inputs destined for a CPU storage are copied to pinned host memory
+        on their current stream when this method is called, and the background
+        update waits for those copies. Work enqueued on the stream afterwards
+        therefore does not delay the update or the samples that depend on it.
 
         Keyword arguments have the same meaning as in
         :meth:`update_if_present`.
@@ -1145,6 +1239,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             raise NotImplementedError(
                 "submit_update_if_present is only supported by direct replay buffers."
             )
+        index, generation, patch, version, events = self._stage_conditional_update(
+            index, generation, patch, version
+        )
         operation = ft.partial(
             self.update_if_present,
             index=index,
@@ -1154,6 +1251,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             version=version,
             require_newer=require_newer,
         )
+        if events:
+            operation = ft.partial(_run_after_events, events, operation)
         with self._futures_lock:
             if self._service_shutdown:
                 raise RuntimeError("A shut down replay buffer cannot accept updates.")

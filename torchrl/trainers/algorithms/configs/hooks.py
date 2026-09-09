@@ -174,3 +174,52 @@ class BatchSubSamplerConfig(HookConfig):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+
+
+@dataclass
+class DreamerV3OptimizationStepperConfig(HookConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DreamerV3OptimizationStepper`.
+
+    Examples:
+        With the learner and optimizer from the public stepper example:
+
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3OptimizationStepperConfig
+        >>> configured_stepper = instantiate(
+        ...     DreamerV3OptimizationStepperConfig(),
+        ...     loss_module=loss_module, optimizer=optimizer,
+        ...     target_updater=target_updater,
+        ... )
+        >>> metrics = configured_stepper.step(None, sample)
+        >>> assert not sample["replay_context", "state"].requires_grad
+    """
+
+    loss_module: Any = None
+    optimizer: Any = None
+    target_updater: Any = None
+    compile_train_step: bool | None = None
+    compile_mode: str = "default"
+    cudagraph: bool | None = None
+    rssm_scan_unroll: int | None = 8
+    warmup_steps: int = 5
+    mixed_precision: bool = False
+    _target_: str = "torchrl.trainers.algorithms.DreamerV3OptimizationStepper"
+
+
+@dataclass
+class DreamerV3UpdateRatioConfig(ConfigBase):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DreamerV3UpdateRatio`.
+
+    Examples:
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import DreamerV3UpdateRatioConfig
+        >>> schedule = instantiate(DreamerV3UpdateRatioConfig(ratio=0.25))
+        >>> schedule(4), schedule(8)
+        (1, 1)
+    """
+
+    ratio: float = MISSING
+    _target_: str = "torchrl.trainers.algorithms.DreamerV3UpdateRatio"
+
+    def __post_init__(self) -> None:
+        """Initialize the update-ratio configuration."""

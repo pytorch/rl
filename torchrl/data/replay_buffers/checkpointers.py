@@ -634,18 +634,33 @@ class StorageEnsembleCheckpointer(StorageCheckpointerBase):
     @staticmethod
     def dumps(storage, path: Path):
         path = Path(path).absolute()
-        storages = storage._storages
-        for i, storage in enumerate(storages):
-            storage.dumps(path / str(i))
+        path.mkdir(parents=True, exist_ok=True)
+        empty = [i for i, member in enumerate(storage._storages) if not len(member)]
+        with open(path / "metadata.json", "w") as file:
+            json.dump({"empty_members": empty}, file)
+        for i, member in enumerate(storage._storages):
+            if i not in empty:
+                member.dumps(path / str(i))
         if storage._transforms is not None:
             for i, transform in enumerate(storage._transforms):
-                torch.save(transform.state_dict(), path / f"{i}_transform.pt")
+                if transform is not None:
+                    torch.save(transform.state_dict(), path / f"{i}_transform.pt")
 
     @staticmethod
     def loads(storage, path: Path):
         path = Path(path).absolute()
-        for i, _storage in enumerate(storage._storages):
-            _storage.loads(path / str(i))
+        metadata_path = path / "metadata.json"
+        if metadata_path.exists():
+            with open(metadata_path) as file:
+                empty = set(json.load(file)["empty_members"])
+        else:
+            empty = set()
+        for i, member in enumerate(storage._storages):
+            if i in empty:
+                member._empty()
+            else:
+                member.loads(path / str(i))
         if storage._transforms is not None:
             for i, transform in enumerate(storage._transforms):
-                transform.load_state_dict(torch.load(path / f"{i}_transform.pt"))
+                if transform is not None:
+                    transform.load_state_dict(torch.load(path / f"{i}_transform.pt"))

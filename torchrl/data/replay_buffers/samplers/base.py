@@ -68,6 +68,18 @@ class Sampler(ABC, metaclass=_SamplerMeta):
     def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
         ...
 
+    def _sampleable_count(
+        self, storage: Storage, batch_size: int
+    ) -> int | torch.Tensor:
+        return len(storage)
+
+    def can_sample(self, storage: Storage, batch_size: int) -> bool:
+        """Returns whether the sampler can draw the requested batch."""
+        count = self._sampleable_count(storage, batch_size)
+        if isinstance(count, torch.Tensor):
+            return bool(count.gt(0).item())
+        return count > 0
+
     def add(self, index: int) -> None:
         return
 

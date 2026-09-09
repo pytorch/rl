@@ -17,6 +17,7 @@ from typing import Literal
 
 import torch
 from packaging import version
+from tensordict import TensorDictBase
 from tensordict.nn import (
     NormalParamExtractor,
     TensorDictModule,
@@ -2027,6 +2028,98 @@ class RSSMPosteriorV3(nn.Module):
         )
 
 
+class RSSMStateEstimatorV3(TensorDictModuleBase):
+    """Update the DreamerV3 acting state from an encoded observation.
+
+    The estimator shares the trained prior and posterior modules. It advances
+    the recurrent belief and samples the observation-conditioned posterior,
+    without evaluating or sampling the unused prior distribution. Reset entries
+    discard the preceding state, belief and action independently in each stream.
+    Compose this module between an observation encoder and a probabilistic actor
+    with :class:`~tensordict.nn.TensorDictSequential`.
+
+    Reference: Hafner et al., "Mastering Diverse Domains through World Models"
+    (2023), https://arxiv.org/abs/2301.04104.
+
+    Args:
+        prior (RSSMPriorV3): Trained recurrent prior, shared with the world model.
+        posterior (RSSMPosteriorV3): Trained observation-conditioned posterior.
+
+    Keyword Args:
+        in_keys (list of NestedKey, optional): Five keys, in order: previous
+            stochastic state, previous belief, previous action, encoded current
+            observation and reset flag. Defaults to ``["state", "belief",
+            "previous_action", "encoded_latents", "is_init"]``. Features have
+            one trailing dimension; reset flags may omit their singleton feature
+            dimension. Keys are fixed at construction.
+        out_keys (list of NestedKey, optional): Two keys receiving the posterior
+            state and updated belief, in that order. Defaults to ``["state",
+            "belief"]``, replacing the input entries. Outputs are float32 for
+            recurrent collection, including under autocast.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import RSSMPriorV3, RSSMPosteriorV3, RSSMStateEstimatorV3
+        >>> prior = RSSMPriorV3(
+        ...     action_shape=(2,), action_dim=2, hidden_dim=8,
+        ...     rnn_hidden_dim=8, num_categoricals=2, num_classes=4,
+        ... )
+        >>> posterior = RSSMPosteriorV3(
+        ...     hidden_dim=8, rnn_hidden_dim=8, obs_embed_dim=6,
+        ...     num_categoricals=2, num_classes=4,
+        ... )
+        >>> estimator = RSSMStateEstimatorV3(prior, posterior)
+        >>> data = TensorDict({
+        ...     "state": torch.randn(2, 8), "belief": torch.randn(2, 8),
+        ...     "previous_action": torch.randn(2, 2),
+        ...     "encoded_latents": torch.randn(2, 6),
+        ...     "is_init": torch.tensor([True, False]),
+        ... }, [2])
+        >>> with torch.no_grad():
+        ...     result = estimator(data)
+        >>> assert result["state"].shape == (2, 8)
+        >>> assert torch.allclose(result["state"].reshape(2, 2, 4).sum(-1), torch.ones(2, 2))
+
+    See also :class:`~torchrl.trainers.algorithms.configs.RSSMStateEstimatorV3Config`.
+    """
+
+    def __init__(
+        self,
+        prior: RSSMPriorV3,
+        posterior: RSSMPosteriorV3,
+        *,
+        in_keys: list[NestedKey] | None = None,
+        out_keys: list[NestedKey] | None = None,
+    ):
+        super().__init__()
+        self.prior = prior
+        self.posterior = posterior
+        self.in_keys = (
+            ["state", "belief", "previous_action", "encoded_latents", "is_init"]
+            if in_keys is None
+            else in_keys
+        )
+        self.out_keys = ["state", "belief"] if out_keys is None else out_keys
+        if len(self.in_keys) != 5 or len(self.out_keys) != 2:
+            raise ValueError("Expected five input keys and two output keys.")
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Write the current posterior state and belief into the input TensorDict."""
+        state, belief, action, embedding, reset = (
+            tensordict.get(key) for key in self.in_keys
+        )
+        reset = reset.reshape(*tensordict.batch_size, 1)
+        state = torch.where(reset, 0, state)
+        belief = torch.where(reset, 0, belief)
+        action = torch.where(reset, 0, action)
+        belief = self.prior._update_belief(state, belief, action)
+        _, state = self.posterior(belief, embedding)
+        tensordict.set(self.out_keys[0], state.float())
+        tensordict.set(self.out_keys[1], belief.float())
+        return tensordict
+
+
 class RSSMRolloutV3(TensorDictModuleBase):
     """Roll out the DreamerV3 RSSM over a sequence.
 
@@ -2349,6 +2442,10 @@ class RSSMRolloutV3(TensorDictModuleBase):
         """
         if not isinstance(unroll, int) or isinstance(unroll, bool) or unroll < 1:
             raise ValueError(f"unroll must be a positive integer, got {unroll!r}.")
+        if not action.is_floating_point():
+            # A one-hot action spec yields bool actions; the explicit loop casts
+            # them in the prior, the scan body must receive floats.
+            action = action.to(belief.dtype)
         prior_net = self.rssm_prior.module
         posterior_net = self.rssm_posterior.module
         length = action.shape[-2]
@@ -2469,6 +2566,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
         scope: Literal["step", "scan"] = "step",
         *,
         unroll: int = 1,
+        compile: bool = True,
         **compile_kwargs,
     ) -> None:
         """Compile the recurrence with :func:`torch.compile`.
@@ -2487,8 +2585,15 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 higher-order scan iteration. Larger values can improve runtime
                 at the cost of compilation time and graph size. Only applies
                 to ``scope="scan"``. Defaults to ``1``.
+            compile (bool, optional): If ``False``, select the backend without
+                wrapping it in :func:`torch.compile`, for a rollout that runs
+                inside an enclosing compiled region such as a compiled learner
+                step. The enclosing compile then traces one higher-order scan
+                of ``unroll`` steps instead of unrolling the explicit loop over
+                the whole sequence. Defaults to ``True``.
             **compile_kwargs: Keyword arguments for :func:`torch.compile`.
-                ``dynamic`` defaults to ``False``.
+                ``dynamic`` defaults to ``False``. Ignored when ``compile`` is
+                ``False``.
         """
         if not self._fast_path:
             raise RuntimeError(
@@ -2504,14 +2609,17 @@ class RSSMRolloutV3(TensorDictModuleBase):
         compile_kwargs.setdefault("dynamic", False)
         self._step_fn = self._scan_fn = None
         if scope == "step":
-            self._step_fn = torch.compile(self._step, **compile_kwargs)
+            self._step_fn = (
+                torch.compile(self._step, **compile_kwargs) if compile else self._step
+            )
         else:
             devices = {value.device for value in self.parameters()}
             devices.update(value.device for value in self.buffers())
             for device in devices:
                 _maybe_warm_scan_backward(device)
-            self._scan_fn = torch.compile(
-                ft.partial(self._scan, unroll=unroll), **compile_kwargs
+            scan_fn = ft.partial(self._scan, unroll=unroll)
+            self._scan_fn = (
+                torch.compile(scan_fn, **compile_kwargs) if compile else scan_fn
             )
 
     def __getstate__(self) -> dict:

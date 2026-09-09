@@ -21,6 +21,14 @@ class InferenceTransport(abc.ABC):
     and :meth:`resolve`.
     """
 
+    # Fixed-slot transports allocate every client channel before server startup.
+    _clients_require_registration: bool = True
+    # Transports with fixed request/response slot banks that the server gathers
+    # from and scatters into directly (drain_slots, request_batch,
+    # response_batch, gather_requests, resolve_batch), bypassing per-request
+    # collation and resolution.
+    _batched_slot_io: bool = False
+
     @abc.abstractmethod
     def submit(self, td: TensorDictBase) -> Future[TensorDictBase]:
         """Submit a single inference request.

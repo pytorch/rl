@@ -1841,6 +1841,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                         self.post_collect_hook(tensordict_out)
                     yield tensordict_out
                 elif self.replay_buffer is not None and not self._ignore_rb:
+                    if self.post_collect_hook is not None:
+                        self.post_collect_hook(tensordict_out)
                     tensordict_out = _maybe_normalize_replay_buffer_tensordict_device(
                         tensordict_out, self.replay_buffer
                     )

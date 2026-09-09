@@ -16,10 +16,17 @@ import torch
 from packaging import version
 from pyvers import implement_for
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
+from tensordict.nn import CudaGraphModule, TensorDictModule
 from torch.nn import functional as F
+from torchrl.checkpoint import Checkpoint
 from torchrl.data.tensor_specs import Bounded
-from torchrl.modules import SafeModule
+from torchrl.envs import ExplorationType, set_exploration_type
+from torchrl.modules import (
+    DreamerV3DiscreteActor,
+    DreamerV3SeededPolicy,
+    RSSMStateEstimatorV3,
+    SafeModule,
+)
 from torchrl.modules.models._dreamer_v3_block_gru_triton import (
     _has_triton as _has_dreamer_v3_triton,
 )
@@ -43,6 +50,7 @@ from torchrl.modules.models.model_based import (
     RSSMRolloutV3,
 )
 from torchrl.testing import get_default_devices
+from torchrl.trainers.algorithms import DreamerV3UpdateRatio
 
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
@@ -285,6 +293,87 @@ class TestDreamerComponents:
 
 
 class TestDreamerV3Components:
+    @pytest.mark.parametrize(
+        "execution",
+        [
+            "eager",
+            "compile",
+            pytest.param(
+                "cudagraph",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_state_estimator_resets_and_posterior_rng(self, execution):
+        device = torch.device("cuda" if execution == "cudagraph" else "cpu")
+        rollout = self._make_rollout(device)
+        prior, posterior = rollout.rssm_prior.module, rollout.rssm_posterior.module
+        keys = [
+            ("context", key)
+            for key in ("state", "belief", "action", "embedding", "reset")
+        ]
+        outputs = [("current", "state"), ("current", "belief")]
+        estimator = RSSMStateEstimatorV3(
+            prior, posterior, in_keys=keys, out_keys=outputs
+        )
+        state, belief = torch.randn(2, 3, 8, device=device), torch.randn(
+            2, 3, 8, device=device
+        )
+        action = torch.randint(2, (2, 3, 2), device=device).bool()
+        embedding = torch.randn(2, 3, 6, device=device)
+        reset = torch.tensor(
+            [[True, False, False], [False, True, False]], device=device
+        )
+        sample = TensorDict(
+            dict(zip(keys, (state, belief, action, embedding, reset))),
+            [2, 3],
+            device=device,
+        )
+        call = estimator
+        if execution == "compile":
+            call = torch.compile(estimator, backend="eager", fullgraph=True)
+        elif execution == "cudagraph":
+            call = CudaGraphModule(estimator, warmup=3, device=device)
+        with torch.no_grad(), torch.autocast(
+            device.type, dtype=torch.bfloat16, enabled=execution == "cudagraph"
+        ):
+            for _ in range(3):
+                call(sample.clone())
+            # A supplied uniform avoids a discarded prior draw. Only the
+            # posterior may advance the acting random stream.
+            _, _, expected_belief = prior(
+                state.masked_fill(reset.unsqueeze(-1), 0),
+                belief.masked_fill(reset.unsqueeze(-1), 0),
+                action.masked_fill(reset.unsqueeze(-1), 0),
+                _uniform=torch.zeros(2, 3, 2, device=device),
+            )
+            torch.manual_seed(17)
+            _, expected_state = posterior(expected_belief, embedding)
+            expected_rng = torch.rand(4, device=device)
+            torch.manual_seed(17)
+            result = call(sample.clone())
+            torch.testing.assert_close(result[outputs[0]], expected_state)
+            torch.testing.assert_close(result[outputs[1]], expected_belief.float())
+            torch.testing.assert_close(torch.rand(4, device=device), expected_rng)
+            # Refresh shared parameters in place, then exercise a different
+            # reset mask without replacing captured parameter storage.
+            for parameter in prior.parameters():
+                parameter.add_(0.1)
+            changed = sample.clone()
+            changed[keys[-1]] = ~reset
+            torch.manual_seed(23)
+            expected = estimator(changed.clone())
+            torch.manual_seed(23)
+            actual = call(changed.clone())
+            torch.testing.assert_close(actual[outputs[0]], expected[outputs[0]])
+            torch.testing.assert_close(actual[outputs[1]], expected[outputs[1]])
+            assert not torch.allclose(actual[outputs[1]], expected_belief.float())
+
     def test_reference_normalization_and_block_fan_in(self):
         norm = _DreamerV3RMSNorm(8)
         assert set(dict(norm.named_parameters())) == {"weight"}
@@ -357,6 +446,157 @@ class TestDreamerV3Components:
             },
             [2, 4],
         )
+
+    @pytest.mark.parametrize(
+        ("device", "execution"),
+        [
+            ("cpu", "eager"),
+            ("cpu", "compile"),
+            ("cpu", "autocast"),
+            pytest.param(
+                "cuda",
+                "autocast",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_discrete_actor(self, device, execution):
+        actor = DreamerV3DiscreteActor(
+            12,
+            5,
+            depth=2,
+            num_cells=16,
+            unimix=0.2,
+            device=device,
+            in_keys=[("latent", "state"), ("latent", "belief")],
+            action_key=("policy", "action"),
+            logits_key=("policy", "logits"),
+            log_prob_key=("policy", "log_prob"),
+        )
+        unmixed = DreamerV3DiscreteActor(
+            12, 5, depth=2, num_cells=16, unimix=0, device=device
+        )
+        unmixed.load_state_dict(actor.state_dict())
+        data = TensorDict(
+            {
+                "state": torch.randn(2, 3, 8, device=device),
+                "belief": torch.randn(2, 3, 4, device=device),
+            },
+            [2, 3],
+        )
+        nested = TensorDict({"latent": data}, [2, 3])
+        get_dist = (
+            torch.compile(actor.get_dist, backend="eager", fullgraph=True)
+            if execution == "compile"
+            else actor.get_dist
+        )
+        with torch.autocast(
+            device, dtype=torch.bfloat16, enabled=execution == "autocast"
+        ):
+            expected = 0.8 * unmixed.get_dist(data.clone()).probs + 0.2 / 5
+            distribution = get_dist(nested.clone())
+            torch.testing.assert_close(
+                distribution.probs, expected, rtol=1e-6, atol=1e-7
+            )
+            assert distribution.logits.dtype == torch.float32
+            with set_exploration_type(ExplorationType.DETERMINISTIC):
+                result = actor(nested.clone())
+            torch.testing.assert_close(
+                result["policy", "action"],
+                F.one_hot(expected.argmax(-1), 5).to(result["policy", "action"]),
+            )
+            with set_exploration_type(ExplorationType.RANDOM):
+                result = actor(nested.clone())
+            action = result["policy", "action"]
+            assert ((action == 0) | (action == 1)).all() and (action.sum(-1) == 1).all()
+            torch.testing.assert_close(
+                result["policy", "log_prob"], distribution.log_prob(action)
+            )
+            before = {
+                name: value.detach().clone() for name, value in actor.named_parameters()
+            }
+            optimizer = torch.optim.SGD(actor.parameters(), lr=0.1)
+            sampled = distribution.rsample()
+            torch.testing.assert_close(
+                sampled.detach().sum(-1), torch.ones(2, 3, device=device)
+            )
+            (sampled * torch.arange(5, device=device)).sum().backward()
+            optimizer.step()
+            assert any(
+                not torch.equal(before[name], value)
+                for name, value in actor.named_parameters()
+            )
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "mps",
+                marks=pytest.mark.skipif(
+                    not torch.backends.mps.is_available(), reason="needs MPS"
+                ),
+            ),
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="needs CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_policy_rng_and_update_ratio_checkpoint(self, tmp_path, device):
+        policy = DreamerV3SeededPolicy(
+            DreamerV3DiscreteActor(
+                6,
+                5,
+                depth=1,
+                num_cells=8,
+                in_keys=[("latent", "state"), ("latent", "belief")],
+            ),
+            seed=17,
+        ).to(device)
+        data = TensorDict(
+            {
+                ("latent", "state"): torch.randn(12, 4, device=device),
+                ("latent", "belief"): torch.randn(12, 2, device=device),
+            },
+            [12],
+        )
+        schedule = DreamerV3UpdateRatio(0.25)
+        assert schedule(4) == 1 and schedule(6) == 0
+        policy(data.clone())
+        checkpoint = Checkpoint(policy=policy, schedule=schedule)
+        checkpoint.save(tmp_path / "saved")
+        caller_rng = torch.random.get_rng_state().clone()
+        accelerator_rngs = [
+            (torch.cuda, index) for index in range(torch.cuda.device_count())
+        ]
+        if torch.backends.mps.is_available():
+            accelerator_rngs.append((torch.mps, "mps"))
+        caller_accelerator_rngs = [
+            backend.get_rng_state(index).clone() for backend, index in accelerator_rngs
+        ]
+        expected = [policy(data.clone())["action"] for _ in range(3)]
+        assert torch.equal(torch.random.get_rng_state(), caller_rng)
+        for (backend, index), state in zip(accelerator_rngs, caller_accelerator_rngs):
+            assert torch.equal(backend.get_rng_state(index), state)
+        updates = [schedule(i) for i in (8, 10, 15)]
+        policy.reset_counter()
+        checkpoint.load(tmp_path / "saved")
+        for action in expected:
+            torch.testing.assert_close(policy(data.clone())["action"], action)
+        assert [schedule(i) for i in (8, 10, 15)] == updates == [1, 0, 1]
+        schedule.reset(100)
+        assert schedule(102) == 0 and schedule(104) == 1
 
     def test_mlp_output_scale_and_multiple_inputs(self):
         module = DreamerV3MLP(
@@ -933,6 +1173,26 @@ class TestDreamerV3Components:
             + output["next", "prior_logits"].square().mean()
         ).backward()
         assert all(parameter.grad is not None for parameter in rollout.parameters())
+
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.6.0"),
+        reason="the higher-order scan backend requires Torch >= 2.6.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_rssm_rollout_scan_backend_inside_outer_compile(self):
+        """``compile=False`` selects the scan for an enclosing compiled region."""
+        rollout = self._make_rollout(torch.device("cpu"))
+        rollout.compile_rollout("scan", unroll=2, compile=False)
+        assert isinstance(rollout._scan_fn, ft.partial)
+        assert rollout._scan_fn.keywords == {"unroll": 2}
+
+        data = self._make_rollout_data(torch.device("cpu"))
+        compiled = torch.compile(rollout, backend=_compile_backend)
+        output = compiled(data)
+        (
+            output["next", "posterior_logits"].square().mean()
+            + output["next", "prior_logits"].square().mean()
+        ).backward()
 
     @pytest.mark.skipif(
         version.parse(torch.__version__) < version.parse("2.7.0"),

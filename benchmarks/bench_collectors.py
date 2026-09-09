@@ -8,6 +8,13 @@ CUDA hosts, ``--mujoco-gl egl``.
 Examples:
     python benchmarks/bench_collectors.py --total-frames 2000
     python benchmarks/bench_collectors.py --num-envs 1,2,4,8 --policy-delay-ms 20
+    python benchmarks/bench_collectors.py --backends async-env-mp --replay-mode iterator
+    python benchmarks/bench_collectors.py --backends async-env-mp --replay-mode background
+    # Replay throughput of direct process slots, per-transition vs chunked results
+    python benchmarks/bench_collectors.py --num-envs 8 --backends async-process-slot \
+        --replay-mode background --total-frames 4096 --transition-chunk-size 1
+    python benchmarks/bench_collectors.py --num-envs 8 --backends async-process-slot \
+        --replay-mode background --total-frames 4096 --transition-chunk-size 64
     python benchmarks/bench_collectors.py --num-envs 64 \
         --backends async-env-mp --env-exchange shm \
         --env-step-latency-ms 50 --policy-hidden-features 9216 \
@@ -20,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import functools as ft
 import importlib.util
 import json
 import os
@@ -27,13 +35,21 @@ import time as time_module
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import psutil
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import AsyncBatchedCollector, Collector
-from torchrl.data import Bounded, Categorical, Composite, Unbounded
+from torchrl.data import (
+    Bounded,
+    Categorical,
+    Composite,
+    LazyTensorStorage,
+    ReplayBuffer,
+    Unbounded,
+)
 from torchrl.envs import (
     EnvBase,
     GymEnv,
@@ -47,6 +63,7 @@ from torchrl.modules import ConvNet, MLP
 from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServerConfig,
+    ProcessSlotTransport,
 )
 
 OBS_SHAPE = (3, 84, 84)
@@ -68,10 +85,21 @@ class BenchmarkResult:
     env_step_latency_ms: float
     policy_delay_ms: float
     status: str
+    envs_per_worker: int = 1
+    warmup_batches: int = 0
+    p50_batch_ms: float | None = 0.0
+    p95_batch_ms: float | None = 0.0
+    host_rss_mib: float = 0.0
+    cuda_used_mib: float = 0.0
     frames: int = 0
     elapsed_s: float = 0.0
     frames_per_s: float = 0.0
     decisions_per_s: float = 0.0
+    # CPU time (user + system) of the driver process per collected frame over
+    # the measured window. With process-backed environments and inference this
+    # is the driver's own transition-path cost; thread backends include the
+    # coordinator and inference-server threads.
+    driver_cpu_ms_per_frame: float = 0.0
     failure: str = ""
     policy_stats: dict[str, float | int] = field(default_factory=dict)
 
@@ -228,6 +256,7 @@ class PolicyFactory:
     hidden_layers: int = 1
 
     def __call__(self) -> TensorDictModule:
+        torch.manual_seed(0)
         if not self.from_pixels:
             mlp = MLP(
                 activation_class=nn.ReLU,
@@ -258,6 +287,26 @@ class PolicyFactory:
             in_keys=["pixels"],
             out_keys=["action"],
         )
+
+
+def _make_process_slot_transport(
+    env_factory: EnvFactory, num_envs: int
+) -> ProcessSlotTransport:
+    env = env_factory()
+    try:
+        input_key = "pixels" if env_factory.from_pixels else "observation"
+        request_spec = env.fake_tensordict().select(input_key, strict=True)
+        response_spec = env.rand_action().set(
+            "policy_version",
+            torch.zeros(env.batch_size, dtype=torch.long),
+        )
+    finally:
+        env.close()
+    return ProcessSlotTransport(
+        request_spec=request_spec,
+        response_spec=response_spec,
+        num_slots=num_envs,
+    )
 
 
 def _parse_int_list(value: str) -> list[int]:
@@ -312,6 +361,8 @@ def bench(
     env_step_latency_ms: float,
     policy_delay_ms: float,
     warmup_batches: int,
+    envs_per_worker: int = 1,
+    replay_mode: str = "none",
 ) -> BenchmarkResult:
     collector = None
     total = 0
@@ -319,18 +370,67 @@ def bench(
     policy_stats: dict[str, float | int] = {}
     try:
         collector = factory()
+        if replay_mode != "none":
+            # Both modes store the same number of transitions in the same storage.
+            collector.total_frames = total_frames + warmup_batches * frames_per_batch
+            collector.replay_buffer = ReplayBuffer(
+                storage=LazyTensorStorage(collector.total_frames)
+            )
         iterator = iter(collector)
         for _ in range(warmup_batches):
             next(iterator)
-        t0 = time_module.perf_counter()
-        for batch in iterator:
-            n = batch.numel()
-            total += n
-            if total >= total_frames:
-                break
-        if collector is not None and hasattr(collector, "server_stats"):
+        if warmup_batches and hasattr(collector, "server_stats"):
+            collector.server_stats(reset=True)
+        latencies = []
+        initial_frames = collector._frames
+        process = psutil.Process()
+        cpu_start = process.cpu_times()
+        t0 = previous = time_module.perf_counter()
+        if replay_mode == "background":
+            iterator.close()
+            collector.start()
+            collector._replay_thread.join(timeout=300)
+            if collector._replay_thread.is_alive():
+                raise TimeoutError("Background replay benchmark exceeded 300 seconds.")
+            total = collector.replay_buffer.write_count - initial_frames
+            if collector._replay_error is not None:
+                raise RuntimeError(
+                    "Background replay benchmark failed."
+                ) from collector._replay_error
+        else:
+            for batch in iterator:
+                now = time_module.perf_counter()
+                latencies.append((now - previous) * 1000)
+                previous = now
+                if batch is None:
+                    total = collector.replay_buffer.write_count - initial_frames
+                else:
+                    total += batch.numel()
+                if total >= total_frames:
+                    break
+        elapsed = time_module.perf_counter() - t0
+        cpu_end = process.cpu_times()
+        driver_cpu_s = (cpu_end.user - cpu_start.user) + (
+            cpu_end.system - cpu_start.system
+        )
+        if hasattr(collector, "server_stats"):
             policy_stats = collector.server_stats()
-        elapsed = time_module.perf_counter() - t0 if t0 is not None else 0.0
+        host_rss = process.memory_info().rss
+        for child in process.children(recursive=True):
+            try:
+                host_rss += child.memory_info().rss
+            except psutil.NoSuchProcess:
+                pass
+        cuda_used = 0
+        if torch.device(policy_device).type == "cuda":
+            free, capacity = torch.cuda.mem_get_info(policy_device)
+            cuda_used = capacity - free
+        # Background collection has no consumer-side batch latency to report.
+        percentiles = (
+            torch.tensor(latencies).quantile(torch.tensor([0.5, 0.95]))
+            if latencies
+            else None
+        )
         fps = total / elapsed if elapsed > 0 else 0.0
         return BenchmarkResult(
             collector=name,
@@ -345,10 +445,17 @@ def bench(
             env_step_latency_ms=env_step_latency_ms,
             policy_delay_ms=policy_delay_ms,
             status="ok",
+            envs_per_worker=envs_per_worker,
+            warmup_batches=warmup_batches,
+            p50_batch_ms=percentiles[0].item() if percentiles is not None else None,
+            p95_batch_ms=percentiles[1].item() if percentiles is not None else None,
+            host_rss_mib=host_rss / 2**20,
+            cuda_used_mib=cuda_used / 2**20,
             frames=total,
             elapsed_s=elapsed,
             frames_per_s=fps,
             decisions_per_s=fps,
+            driver_cpu_ms_per_frame=driver_cpu_s * 1000 / total if total else 0.0,
             policy_stats=policy_stats,
         )
     except Exception as err:
@@ -412,7 +519,7 @@ def _print_summary(results: list[BenchmarkResult]) -> None:
     print("=" * 132)
     print(
         f"{'collector':<28} {'backend':<16} {'batch rule':<18} "
-        f"{'envs':>5} {'status':<8} {'fps':>10} {'avg_bs':>8} "
+        f"{'envs':>5} {'status':<8} {'fps':>10} {'drv_ms/f':>9} {'avg_bs':>8} "
         f"{'p95_q_ms':>10} {'p95_fwd_ms':>11} failure"
     )
     print("-" * 132)
@@ -422,6 +529,7 @@ def _print_summary(results: list[BenchmarkResult]) -> None:
             f"{result.collector:<28} {result.backend:<16} "
             f"{result.batch_rule:<18} {result.num_envs:>5} "
             f"{result.status:<8} {result.frames_per_s:>10.1f} "
+            f"{result.driver_cpu_ms_per_frame:>9.3f} "
             f"{float(stats.get('avg_batch_size', 0.0)):>8.2f} "
             f"{float(stats.get('p95_queue_ms', 0.0)):>10.2f} "
             f"{float(stats.get('p95_forward_ms', 0.0)):>11.2f} "
@@ -464,10 +572,14 @@ def main() -> None:
         help="Set MUJOCO_GL/PYOPENGL_PLATFORM, e.g. egl",
     )
     parser.add_argument("--num-envs", default="1,2,4")
+    parser.add_argument("--envs-per-worker", type=int, default=1)
     parser.add_argument(
         "--backends",
-        default="parallel,async-thread,async-env-mp,async-process",
-        help="Comma-separated: parallel, async-thread, async-env-mp, async-process",
+        default=("parallel,async-thread,async-env-mp,async-process,async-process-slot"),
+        help=(
+            "Comma-separated: parallel, async-thread, async-env-mp, "
+            "async-process, async-process-slot"
+        ),
     )
     parser.add_argument(
         "--batching-rules",
@@ -499,6 +611,24 @@ def main() -> None:
         default="queue",
         choices=["queue", "shm", "auto"],
         help="AsyncEnvPool exchange used by multiprocessing env backends.",
+    )
+    parser.add_argument(
+        "--replay-mode",
+        choices=["none", "iterator", "background"],
+        default="none",
+        help=(
+            "Replay write mode for async-env-mp and async-process-slot; iterator "
+            "and background use identical storage."
+        ),
+    )
+    parser.add_argument(
+        "--transition-chunk-size",
+        type=int,
+        default=1,
+        help=(
+            "Transitions each environment process accumulates per message with "
+            "async-process-slot; 1 sends every transition on its own."
+        ),
     )
     parser.add_argument("--policy-device", default="auto")
     parser.add_argument("--output-device", default="cpu")
@@ -641,8 +771,9 @@ def main() -> None:
                     ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
-                            name=f"AsyncBatched mp env ({args.env_exchange})",
-                            backend=f"{backend}-{args.env_exchange}",
+                            name=f"AsyncBatched mp env ({args.env_exchange}, replay={args.replay_mode})",
+                            backend=f"{backend}-{args.env_exchange}-replay-{args.replay_mode}",
+                            replay_mode=args.replay_mode,
                             batch_rule=label,
                             factory=lambda num_envs=num_envs, max_batch_size=max_batch_size, min_batch_size=min_batch_size, timeout=timeout: AsyncBatchedCollector(
                                 create_env_fn=[env_factory] * num_envs,
@@ -651,6 +782,7 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="multiprocessing",
                                 env_exchange=args.env_exchange,
+                                envs_per_worker=args.envs_per_worker,
                                 server_config=InferenceServerConfig(
                                     service_backend="thread",
                                     max_batch_size=max_batch_size,
@@ -671,6 +803,7 @@ def main() -> None:
                             env_step_latency_ms=args.env_step_latency_ms,
                             policy_delay_ms=args.policy_delay_ms,
                             warmup_batches=args.warmup_batches,
+                            envs_per_worker=args.envs_per_worker,
                         )
                     )
             elif backend == "async-process":
@@ -695,6 +828,62 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="multiprocessing",
                                 env_exchange=args.env_exchange,
+                                # Driver-mediated process server; process slots are
+                                # the separate backend below.
+                                transport="driver",
+                                server_config=InferenceServerConfig(
+                                    service_backend="process",
+                                    max_batch_size=max_batch_size,
+                                    min_batch_size=min_batch_size,
+                                    timeout=timeout,
+                                ),
+                                device_config=InferenceDeviceConfig(
+                                    policy_device=policy_device,
+                                    output_device=output_device,
+                                ),
+                            ),
+                            env_name=args.env,
+                            num_envs=num_envs,
+                            frames_per_batch=args.frames_per_batch,
+                            total_frames=args.total_frames,
+                            policy_device=policy_device,
+                            output_device=output_device,
+                            env_step_latency_ms=args.env_step_latency_ms,
+                            policy_delay_ms=args.policy_delay_ms,
+                            warmup_batches=args.warmup_batches,
+                        )
+                    )
+            elif backend == "async-process-slot":
+                for rule in batching_rules:
+                    (
+                        max_batch_size,
+                        min_batch_size,
+                        timeout,
+                        label,
+                    ) = _resolve_batching_rule(rule, num_envs)
+                    results.append(
+                        bench(
+                            name=(
+                                "AsyncBatched direct process slots (chunk="
+                                f"{args.transition_chunk_size}, replay={args.replay_mode})"
+                            ),
+                            backend=(
+                                f"{backend}-chunk-{args.transition_chunk_size}"
+                                f"-replay-{args.replay_mode}"
+                            ),
+                            replay_mode=args.replay_mode,
+                            batch_rule=label,
+                            factory=ft.partial(
+                                AsyncBatchedCollector,
+                                create_env_fn=[env_factory] * num_envs,
+                                policy_factory=policy_factory,
+                                transport=_make_process_slot_transport(
+                                    env_factory, num_envs
+                                ),
+                                frames_per_batch=args.frames_per_batch,
+                                total_frames=-1,
+                                env_backend="multiprocessing",
+                                transition_chunk_size=args.transition_chunk_size,
                                 server_config=InferenceServerConfig(
                                     service_backend="process",
                                     max_batch_size=max_batch_size,

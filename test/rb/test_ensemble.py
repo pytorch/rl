@@ -7,6 +7,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -21,6 +24,7 @@ from tensordict import (
 )
 from torch.utils._pytree import tree_flatten
 
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -42,6 +46,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
@@ -85,6 +90,416 @@ class TestEnsemble:
                 batch_size=[90],
             )
         raise NotImplementedError
+
+    @staticmethod
+    def _make_routed_member(max_size=8, *, sampler=None):
+        if sampler is None:
+            sampler = RandomSampler()
+        return TensorDictReplayBuffer(
+            storage=LazyTensorStorage(max_size),
+            sampler=sampler,
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+        )
+
+    def test_routed_write_and_conditional_update(self):
+        members = [self._make_routed_member(2) for _ in range(2)]
+        rb = ReplayBufferEnsemble(*members, routing_key=("collector", "env_id"))
+        data = TensorDict(
+            {
+                "value": torch.tensor([0, 10, 1, 11]),
+                ("collector", "env_id"): torch.tensor([0, 1, 0, 1]),
+            },
+            [4],
+        )
+
+        metadata = rb.extend(data)
+
+        assert metadata["buffer_ids"].tolist() == [0, 1, 0, 1]
+        assert metadata["index"].tolist() == [0, 0, 1, 1]
+        assert metadata["index_generation"].tolist() == [0, 0, 0, 0]
+        assert members[0][:]["value"].tolist() == [0, 1]
+        assert members[1][:]["value"].tolist() == [10, 11]
+
+        rb.extend(
+            TensorDict(
+                {
+                    "value": torch.tensor([2, 3]),
+                    ("collector", "env_id"): torch.zeros(2, dtype=torch.long),
+                },
+                [2],
+            )
+        )
+        result = rb.update_if_present(
+            index=metadata.select("buffer_ids", "index"),
+            generation=metadata["index_generation"],
+            patch={"value": data["value"] + 100},
+        )
+
+        assert result.updated.tolist() == [False, True, False, True]
+        assert members[0][:]["value"].tolist() == [2, 3]
+        assert members[1][:]["value"].tolist() == [110, 111]
+        assert rb.stats() == {
+            "size": 4,
+            "write_count": 6,
+            "prefetch_queue_size": 0,
+            "initialized": True,
+            "capacity": 4,
+            "utilization": 1.0,
+            "num_buffers": 2,
+        }
+        restored_members = [self._make_routed_member(2) for _ in range(2)]
+        restored = ReplayBufferEnsemble(
+            *restored_members, routing_key=("collector", "env_id")
+        )
+        restored.load_state_dict(rb.state_dict())
+        assert restored_members[0][:]["value"].tolist() == [2, 3]
+        assert restored_members[1][:]["value"].tolist() == [110, 111]
+        assert restored.stats()["write_count"] == 6
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="requires CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("submit", [False, True])
+    @pytest.mark.parametrize("tensordict_patch", [False, True])
+    def test_conditional_update_groups_records_by_member(
+        self, device, submit, tensordict_patch
+    ):
+        members = [self._make_routed_member(3) for _ in range(4)]
+        rb = ReplayBufferEnsemble(*members, routing_key="env_id")
+        env_id = torch.tensor([2, 0, 3, 1, 1, 3, 0, 2, 0, 1, 2, 3])
+        metadata = rb.extend(
+            TensorDict({"value": torch.zeros(12), "env_id": env_id}, [12])
+        )
+        # Reusing one slot of member 3 makes a handle stale.
+        rb.extend(
+            TensorDict({"value": torch.full((1,), -1.0), "env_id": env_id[2:3]}, [1])
+        )
+        # Records arrive in a shuffled member order; member 0 gets none.
+        rows = torch.tensor([5, 0, 3, 11, 7, 4, 9, 2])
+        handles = metadata.select("buffer_ids", "index")[rows]
+        generation = metadata["index_generation"][rows]
+        patch = {"value": (rows + 100).float().to(device)}
+        if tensordict_patch:
+            handles = handles.to(device)
+            generation = generation.to(device)
+            patch = TensorDict(patch, batch_size=rows.shape)
+        try:
+            if submit:
+                result = rb.submit_update_if_present(
+                    index=handles, generation=generation, patch=patch
+                ).result(timeout=5)
+            else:
+                result = rb.update_if_present(
+                    index=handles, generation=generation, patch=patch
+                )
+        finally:
+            rb.shutdown()
+
+        handles = handles.cpu()
+        stale = handles["buffer_ids"] == 3
+        stale &= handles["index"] == metadata["index"][2]
+        assert stale.sum() == 1
+        assert result.updated.tolist() == (~stale).tolist()
+        expected = torch.zeros(12)
+        expected[rows] = (rows + 100).float()
+        expected[2] = -1.0
+        for member_id, member in enumerate(members):
+            positions = (env_id == member_id).nonzero().reshape(-1)
+            local = metadata["index"][positions]
+            stored = member[:]["value"][local]
+            assert stored.tolist() == expected[positions].tolist(), member_id
+
+    @pytest.mark.parametrize("empty_member", [False, True])
+    def test_checkpoint_drains_updates_and_restores_prefetch(
+        self, monkeypatch, tmp_path, empty_member
+    ):
+        buffers = [
+            ReplayBufferEnsemble(
+                *[self._make_routed_member(8) for _ in range(2)],
+                routing_key=("collector", "env_id"),
+                p="sampleable",
+                batch_size=4,
+                prefetch=1,
+                generator=torch.Generator().manual_seed(0),
+            )
+            for _ in range(2)
+        ]
+        replay, restored = buffers
+        entered = threading.Event()
+        release = threading.Event()
+        original_update = replay.update_if_present
+
+        def delayed_update(**kwargs):
+            entered.set()
+            if not release.wait(10):
+                raise TimeoutError("Checkpoint test did not release the replay update.")
+            return original_update(**kwargs)
+
+        try:
+            metadata = replay.extend(
+                TensorDict(
+                    {
+                        "value": torch.arange(8),
+                        ("collector", "env_id"): torch.zeros(8, dtype=torch.long)
+                        if empty_member
+                        else torch.arange(8) % 2,
+                    },
+                    [8],
+                )
+            )
+            replay.sample()
+            monkeypatch.setattr(replay, "update_if_present", delayed_update)
+            update = replay.submit_update_if_present(
+                index=metadata.select("buffer_ids", "index"),
+                generation=metadata["index_generation"],
+                patch={"value": torch.full((8,), 42)},
+            )
+            assert entered.wait(5)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                saved = executor.submit(
+                    Checkpoint(replay=replay).save, tmp_path / "saved"
+                )
+                with pytest.raises(FuturesTimeoutError):
+                    saved.result(timeout=0.05)
+                release.set()
+                saved.result(timeout=10)
+            assert update.result().updated.all()
+            Checkpoint(replay=restored).load(tmp_path / "saved")
+            assert restored.stats()["write_count"] == 8
+            assert len(restored[1]) == (0 if empty_member else 4)
+            assert (restored[0][:]["value"] == 42).all()
+            for _ in range(3):
+                assert_allclose_td(replay.sample(), restored.sample())
+            # Loading replay must not retain writable views into the checkpoint.
+            restored[0].extend(
+                TensorDict(
+                    {
+                        "value": torch.zeros(8, dtype=torch.long),
+                        ("collector", "env_id"): torch.zeros(8, dtype=torch.long),
+                    },
+                    [8],
+                )
+            )
+            Checkpoint(replay=restored).load(tmp_path / "saved")
+            assert (restored[0][:]["value"] == 42).all()
+        finally:
+            release.set()
+            for buffer in buffers:
+                buffer.shutdown()
+
+    @pytest.mark.parametrize("sampler_type", [SliceSampler, StreamingSliceSampler])
+    def test_end_streams_orders_updates_and_resets_windows(
+        self, sampler_type, monkeypatch
+    ):
+        done_key, terminal_key, cut_key = (
+            ("flags", "end"),
+            ("flags", "terminal"),
+            ("flags", "cut"),
+        )
+        members = [
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(9),
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+                sampler=sampler_type(slice_len=3, end_key=done_key, cache_values=True),
+                batch_size=3,
+            )
+            for _ in range(3)
+        ]
+        replay = ReplayBufferEnsemble(*members, routing_key="stream")
+        data = TensorDict(
+            {
+                "stream": torch.zeros(11, dtype=torch.long),
+                "value": torch.arange(11),
+                done_key: torch.zeros(11, 1, dtype=torch.bool),
+                terminal_key: torch.zeros(11, 1, dtype=torch.bool),
+                cut_key: torch.zeros(11, 1, dtype=torch.bool),
+            },
+            [11],
+        )
+        replay.extend(data)
+        terminal = data[:3].clone()
+        terminal["stream"] = torch.ones(3, dtype=torch.long)
+        terminal[done_key][-1] = True
+        terminal[terminal_key][-1] = True
+        replay.extend(terminal)
+        # Populate the uniform boundary cache; keep an unfinished fresh window.
+        members[0].sample()
+        generation = members[0].writer.generations_of(torch.arange(9)).clone()
+        writes = replay.stats()["write_count"]
+        entered, release = threading.Event(), threading.Event()
+        original_update = replay.update_if_present
+
+        def delayed_update(**kwargs):
+            entered.set()
+            if not release.wait(10):
+                raise TimeoutError("Stream-finalization update was not released.")
+            return original_update(**kwargs)
+
+        monkeypatch.setattr(replay, "update_if_present", delayed_update)
+        update = replay.submit_update_if_present(
+            index=TensorDict(
+                {"buffer_ids": torch.tensor([0]), "index": torch.tensor([1])}, [1]
+            ),
+            generation=generation[1:2],
+            patch={done_key: torch.zeros(1, 1, dtype=torch.bool)},
+        )
+        try:
+            assert entered.wait(5)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                ended = executor.submit(
+                    replay.end_streams,
+                    end_key=done_key,
+                    terminated_key=terminal_key,
+                    truncated_key=cut_key,
+                )
+                with pytest.raises(FuturesTimeoutError):
+                    ended.result(timeout=0.05)
+                release.set()
+                ended.result(timeout=10)
+            assert update.result().updated.all()
+            assert replay.stats()["write_count"] == writes
+            torch.testing.assert_close(
+                members[0].writer.generations_of(torch.arange(9)), generation
+            )
+            assert members[0][1][done_key].all() and members[0][1][cut_key].all()
+            assert not members[0][1][terminal_key].any()
+            assert (
+                members[1][2][terminal_key].all() and not members[1][2][cut_key].any()
+            )
+            assert len(members[2]) == 0
+            new = data[:3].clone()
+            new["value"] = torch.arange(100, 103)
+            replay.extend(new)
+            for _ in range(12):
+                values = members[0].sample()["value"]
+                assert (values < 100).all() or (values >= 100).all()
+                assert (values.diff() == 1).all()
+        finally:
+            release.set()
+            replay.shutdown()
+
+    @pytest.mark.parametrize("sampler_type", [SliceSampler, StreamingSliceSampler])
+    def test_end_streams_with_per_stream_trajectory_key(self, sampler_type):
+        done_key = ("next", "done")
+
+        def make_member():
+            return TensorDictReplayBuffer(
+                storage=LazyTensorStorage(8),
+                writer=TensorDictRoundRobinWriter(track_generations=True),
+                sampler=sampler_type(
+                    slice_len=2, end_key=done_key, traj_key="env_index"
+                ),
+                batch_size=2,
+            )
+
+        def records(env_index):
+            return TensorDict(
+                {
+                    "env_index": torch.as_tensor(env_index),
+                    "value": torch.arange(len(env_index)),
+                    done_key: torch.zeros(len(env_index), 1, dtype=torch.bool),
+                },
+                [len(env_index)],
+            )
+
+        # One environment per member: the stream is the trajectory and its tail closes.
+        members = [make_member() for _ in range(2)]
+        replay = ReplayBufferEnsemble(*members, routing_key="env_index")
+        try:
+            replay.extend(records([0, 0, 0]))
+            replay.extend(records([1, 1]))
+            replay.end_streams()
+            assert members[0][:][done_key].flatten().tolist() == [False, False, True]
+            assert members[1][:][done_key].flatten().tolist() == [False, True]
+        finally:
+            replay.shutdown()
+
+        # Distinct ids within a member may be reused by restarted producers.
+        mixed = make_member()
+        mixed.extend(records([0, 1]))
+        replay = ReplayBufferEnsemble(mixed)
+        try:
+            with pytest.raises(RuntimeError, match="same trajectory id"):
+                replay.end_streams()
+            assert not mixed[:][done_key].any()
+        finally:
+            replay.shutdown()
+
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_routing_dim_preserves_member_order(self, default_device):
+        members = [self._make_routed_member() for _ in range(2)]
+        rb = ReplayBufferEnsemble(*members, routing_dim=1)
+        data = TensorDict(
+            {"value": torch.tensor([[0, 10], [1, 11]])}, batch_size=[2, 2]
+        )
+
+        with torch.device(default_device):
+            metadata = rb.extend(data)
+
+        assert metadata.batch_size == (4,)
+        assert metadata["buffer_ids"].tolist() == [0, 1, 0, 1]
+        assert metadata["index"].tolist() == [0, 0, 1, 1]
+        assert metadata["index_generation"].tolist() == [0, 0, 0, 0]
+        assert members[0][:]["value"].tolist() == [0, 1]
+        assert members[1][:]["value"].tolist() == [10, 11]
+
+    @pytest.mark.parametrize("default_device", ["cpu", "meta"])
+    def test_sampleable_routing_groups_member_samples(self, default_device):
+        lengths = (1, 4, 8)
+        samplers = [SliceSampler(slice_len=2) for _ in lengths]
+        members = [
+            self._make_routed_member(16, sampler=sampler) for sampler in samplers
+        ]
+        for member_id, (member, length) in enumerate(zip(members, lengths)):
+            member.extend(
+                TensorDict(
+                    {
+                        "value": torch.arange(length),
+                        "episode": torch.full((length,), member_id),
+                    },
+                    [length],
+                )
+            )
+            sampler = samplers[member_id]
+            sampler.sample = mock.MagicMock(wraps=sampler.sample)
+        generator = torch.Generator().manual_seed(0)
+        rb = ReplayBufferEnsemble(
+            *members,
+            p="sampleable",
+            num_buffer_sampled=1_000,
+            generator=generator,
+        )
+
+        with torch.device(default_device):
+            index, _ = rb.sampler.sample(rb.storage, 2_000)
+        counts = torch.bincount(index["buffer_ids"], minlength=3)
+
+        assert counts[0] == 0
+        assert 0.25 < counts[1] / (counts[1] + counts[2]) < 0.35
+        assert samplers[0].sample.call_count == 0
+        assert samplers[1].sample.call_count == 1
+        assert samplers[2].sample.call_count == 1
+        assert rb.can_sample(2_000)
+
+    def test_routed_write_configuration_validation(self):
+        members = [self._make_routed_member() for _ in range(2)]
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            ReplayBufferEnsemble(*members, routing_key="member", routing_dim=0)
+        rb = ReplayBufferEnsemble(*members)
+        with pytest.raises(RuntimeError, match="writes are disabled"):
+            rb.extend(TensorDict({"value": torch.arange(2)}, [2]))
 
     def _make_sampler(self, sampler_type):
         if sampler_type is SamplerWithoutReplacement:

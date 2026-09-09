@@ -321,6 +321,23 @@ class TestRanges:
             projection[..., 0] = -1
         assert not ts.is_in(projection)
 
+    @pytest.mark.parametrize(
+        "dtype", [torch.float32, torch.int64, torch.uint8, torch.bool]
+    )
+    @pytest.mark.parametrize(
+        "nvec, value, expected",
+        [
+            (3, -2, 0),
+            ([3, 2, 4], [[-1, 1, 6], [2, -3, -4]], [[0, 1, 3], [2, 0, 0]]),
+            ([[2, 4], [3, 2]], [[-1, 8], [5, -2]], [[0, 3], [2, 0]]),
+        ],
+    )
+    def test_multi_discrete_project_out_of_bounds(self, dtype, nvec, value, expected):
+        spec = MultiCategorical(nvec, dtype=dtype)
+        projected = spec.project(torch.tensor(value))
+        torch.testing.assert_close(projected, torch.tensor(expected, dtype=dtype))
+        assert spec.is_in(projected)
+
     @pytest.mark.parametrize("n", [1, 4, 7, 99])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("shape", [None, [], [1], [1, 2]])

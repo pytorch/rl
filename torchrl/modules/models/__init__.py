@@ -38,6 +38,7 @@ from .model_based import (
     RSSMPriorV3,
     RSSMRollout,
     RSSMRolloutV3,
+    RSSMStateEstimatorV3,
     SymExpTwoHot,
 )
 from .models import (
@@ -114,6 +115,7 @@ __all__ = [
     "RSSMPriorV3",
     "RSSMRollout",
     "RSSMRolloutV3",
+    "RSSMStateEstimatorV3",
     "Squeeze2dLayer",
     "SqueezeLayer",
     "SymExpTwoHot",

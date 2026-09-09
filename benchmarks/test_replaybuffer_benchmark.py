@@ -16,8 +16,10 @@ from torchrl.data import (
     LazyTensorStorage,
     ListStorage,
     ReplayBuffer,
+    ReplayBufferEnsemble,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
+    TensorDictRoundRobinWriter,
 )
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
@@ -27,6 +29,7 @@ from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     Sequence,
     SliceSampler,
+    StreamingSliceSampler,
 )
 from torchrl.data.replay_buffers.utils import _boundary_distances_1d
 from torchrl.envs.transforms import ActionChunkTransform, CatFrames
@@ -78,6 +81,49 @@ def populate(rb, td):
 
 def sample(rb):
     rb.sample()
+
+
+@pytest.mark.parametrize("operation", ["write", "sample"])
+def test_routed_streaming_replay_buffer(benchmark, operation):
+    num_streams = 8
+    time = 32
+    slice_len = 4
+    members = [
+        TensorDictReplayBuffer(
+            storage=LazyTensorStorage(1_024),
+            sampler=StreamingSliceSampler(slice_len=slice_len),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+        )
+        for _ in range(num_streams)
+    ]
+    rb = ReplayBufferEnsemble(
+        *members,
+        routing_dim=1,
+        p="sampleable",
+        num_buffer_sampled=64,
+        batch_size=64 * slice_len,
+    )
+    data = TensorDict(
+        {
+            "observation": torch.randn(time, num_streams, 32),
+            ("next", "done"): torch.zeros(time, num_streams, 1, dtype=torch.bool),
+        },
+        [time, num_streams],
+    )
+
+    def prepare_write():
+        rb.empty()
+        return (data,), {}
+
+    def prepare_sample():
+        rb.empty()
+        rb.extend(data)
+        return (rb,), {}
+
+    if operation == "write":
+        benchmark.pedantic(rb.extend, setup=prepare_write, rounds=50)
+    else:
+        benchmark.pedantic(sample, setup=prepare_sample, rounds=50)
 
 
 def _replay_boundary_device():

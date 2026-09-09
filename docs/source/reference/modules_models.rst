@@ -33,6 +33,7 @@ For an overview of how the DreamerV3 components fit together, see
     RSSMPriorV3
     RSSMRollout
     RSSMRolloutV3
+    RSSMStateEstimatorV3
     SymExpTwoHot
     DreamerV3BlockGRUCell
     DreamerV3BlockGRU

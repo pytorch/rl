@@ -349,6 +349,7 @@ commands = {
   replay_buffer.seq_len=4 \
   replay_buffer.warmup_factor=1 \
   optimization.updates_per_batch=1 \
+  optimization.compile=off \
   logger.eval_every=200 \
   logger.eval_episodes=1 \
   logger.output_plot= \

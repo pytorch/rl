@@ -6,15 +6,22 @@
 
 Reference: https://arxiv.org/abs/2301.04104
 """
+
 from __future__ import annotations
 
 import copy
+import functools as ft
+import gc
 import importlib.util
 import json
 import os
 import runpy
 import shutil
+import signal
 import subprocess
+import sys
+import time
+import weakref
 from pathlib import Path
 
 import pytest
@@ -28,9 +35,19 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
+from tensordict.utils import assert_close
 from torch import nn
-
-from torchrl.data import Unbounded
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
+from torchrl.data import (
+    Bounded,
+    Categorical,
+    Composite,
+    OneHot,
+    SliceSampler,
+    StreamingSliceSampler,
+    Unbounded,
+)
+from torchrl.envs import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
@@ -59,9 +76,10 @@ from torchrl.objectives.dreamer_v3 import (
     two_hot_decode,
     two_hot_encode,
 )
-from torchrl.objectives.utils import SoftUpdate, ValueEstimators
-from torchrl.testing import get_default_devices
+from torchrl.objectives.utils import HardUpdate, SoftUpdate, ValueEstimators
+from torchrl.testing import get_default_devices, PENDULUM_VERSIONED
 from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
+from torchrl.trainers import Trainer
 from torchrl.trainers.algorithms import DreamerV3Optimizer
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
@@ -74,6 +92,59 @@ _has_gym = (
 _compile_backend = "eager" if os.name == "nt" else "inductor"
 
 
+class _DreamerV3TestEnv(EnvBase):
+    def __init__(self, *, seed, env_index, num_envs, pixels=False, discrete=False):
+        super().__init__()
+        assert seed is not None and 0 <= env_index < num_envs
+        self.index = env_index
+        self.steps = 0
+        self.pixels = pixels
+        self.observation_spec = Composite(
+            {
+                ("sensors", "vector"): Unbounded((3,)),
+                ("episode", "milestones"): Categorical(2, shape=(2,), dtype=torch.bool),
+            }
+        )
+        if pixels:
+            self.observation_spec["sensors", "image"] = Bounded(
+                0, 255, (1, 8, 8), dtype=torch.uint8
+            )
+        self.action_spec = OneHot(3) if discrete else Bounded(-1, 1, (1,))
+        self.reward_spec = Unbounded((1,))
+        self.done_spec = Categorical(2, shape=(1,), dtype=torch.bool)
+
+    def _observation(self):
+        data = TensorDict(
+            {
+                ("sensors", "vector"): torch.tensor([self.index, self.steps, 1.0]),
+                ("episode", "milestones"): torch.tensor(
+                    [self.steps >= 1, self.steps >= 3]
+                ),
+            },
+            [],
+        )
+        if self.pixels:
+            data["sensors", "image"] = torch.full(
+                (1, 8, 8), self.steps * 20, dtype=torch.uint8
+            )
+        return data
+
+    def _reset(self, tensordict=None, **kwargs):
+        self.steps = 0
+        return self._observation()
+
+    def _step(self, tensordict):
+        self.steps += 1
+        data = self._observation()
+        data["reward"] = torch.ones(1)
+        data["done"] = torch.tensor([self.steps >= 3])
+        data["terminated"] = data["done"].clone()
+        return data
+
+    def _set_seed(self, seed):
+        return seed
+
+
 @pytest.mark.parametrize("device", get_default_devices())
 class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     img_size = (64, 64)
@@ -84,6 +155,42 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     rnn_hidden_dim = 8
     action_dim = 3
     num_reward_bins = 16  # small for tests; paper uses 255
+
+    def _small_sota_config(
+        self,
+        example_dir: Path,
+        *,
+        compile_train_step: bool,
+        cudagraph_train_step: bool,
+        mixed_precision: bool = False,
+    ):
+        from omegaconf import OmegaConf
+
+        cfg = OmegaConf.load(example_dir / "config.yaml")
+        cfg.env.name = PENDULUM_VERSIONED()
+        cfg.networks.rnn_hidden_dim = 8
+        cfg.networks.num_categoricals = 2
+        cfg.networks.num_classes = 2
+        cfg.networks.num_blocks = 2
+        cfg.networks.hidden_dim = 8
+        cfg.networks.num_reward_bins = 16
+        cfg.networks.num_value_bins = 16
+        cfg.networks.encoder_layers = 1
+        cfg.networks.decoder_layers = 1
+        cfg.networks.reward_layers = 1
+        cfg.networks.actor_layers = 1
+        cfg.networks.value_layers = 1
+        cfg.replay_buffer.batch_size = 2
+        cfg.replay_buffer.seq_len = 3
+        cfg.optimization.imagination_horizon = 3
+        cfg.optimization.continuation_horizon = 3
+        cfg.optimization.warmup_steps = 0
+        cfg.optimization.mixed_precision = mixed_precision
+        cfg.optimization.compile_rssm = "scan"
+        cfg.optimization.rssm_scan_unroll = 1
+        cfg.optimization.compile_train_step = compile_train_step
+        cfg.optimization.cudagraph_train_step = cudagraph_train_step
+        return cfg
 
     def _create_world_model_data(self):
         B, T = 2, 3
@@ -471,6 +578,19 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             if p.grad is not None:
                 assert not torch.isnan(p.grad).any(), f"NaN grad in {name}"
                 assert not torch.isinf(p.grad).any(), f"Inf grad in {name}"
+
+    def test_dreamer_v3_model_loss_compile_preserves_input(self, device):
+        tensordict = self._create_world_model_data().to(device)
+        reward = tensordict["next", "reward"].clone()
+        loss_module = DreamerV3ModelLoss(
+            self._create_world_model(reward_two_hot=True).to(device),
+            num_reward_bins=self.num_reward_bins,
+        )
+        compiled_loss = torch.compile(loss_module, backend="eager")
+
+        for _ in range(2):
+            compiled_loss(tensordict)
+            torch.testing.assert_close(tensordict["next", "reward"], reward)
 
     def test_dreamer_v3_model_loss_sums_only_event_dims(self, device):
         batch_size, event_size = (2, 3), 4
@@ -1178,11 +1298,15 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         not (_has_hydra and _has_omegaconf and _has_gym),
         reason="requires hydra, omegaconf, and gym",
     )
-    def test_dreamer_v3_full_learner_cuda_graph_matches_eager(
-        self, device, monkeypatch
+    # This compares two independently compiled forward/backward paths and
+    # CUDA capture. Even the previous loop backend took ~266s on CI runners.
+    @pytest.mark.parametrize(
+        "compile_train_step",
+        [False, pytest.param(True, marks=pytest.mark.timeout(600))],
+    )
+    def test_dreamer_v3_full_learner_cuda_graph_matches_uncaptured(
+        self, device, monkeypatch, compile_train_step
     ):
-        from omegaconf import OmegaConf
-
         device = torch.device(device)
         if device.type != "cuda":
             pytest.skip("CUDA graph test only runs for the CUDA parametrization")
@@ -1194,31 +1318,6 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             example_dir / "train.py",
             run_name="dreamer_v3_learner_cuda_graph_test",
         )
-
-        def make_config(cudagraph: bool):
-            cfg = OmegaConf.load(example_dir / "config.yaml")
-            cfg.networks.rnn_hidden_dim = 8
-            cfg.networks.num_categoricals = 2
-            cfg.networks.num_classes = 2
-            cfg.networks.num_blocks = 2
-            cfg.networks.hidden_dim = 8
-            cfg.networks.num_reward_bins = 16
-            cfg.networks.num_value_bins = 16
-            cfg.networks.encoder_layers = 1
-            cfg.networks.decoder_layers = 1
-            cfg.networks.reward_layers = 1
-            cfg.networks.actor_layers = 1
-            cfg.networks.value_layers = 1
-            cfg.replay_buffer.batch_size = 2
-            cfg.replay_buffer.seq_len = 3
-            cfg.optimization.imagination_horizon = 3
-            cfg.optimization.continuation_horizon = 3
-            cfg.optimization.warmup_steps = 0
-            cfg.optimization.mixed_precision = True
-            cfg.optimization.compile_rssm = "scan"
-            cfg.optimization.rssm_scan_unroll = 1
-            cfg.optimization.cudagraph_train_step = cudagraph
-            return cfg
 
         state_dim = 4
         torch.manual_seed(1)
@@ -1243,7 +1342,12 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         modules = []
         learners = []
         for cudagraph in (False, True):
-            cfg = make_config(cudagraph)
+            cfg = self._small_sota_config(
+                example_dir,
+                compile_train_step=compile_train_step,
+                cudagraph_train_step=cudagraph,
+                mixed_precision=True,
+            )
             torch.manual_seed(0)
             learner = example["_build_learner"](cfg, device, 3, 1)
             learners.append(learner)
@@ -1253,7 +1357,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                 )
             )
             updates.append(
-                example["_LearnerUpdate"](
+                example["_make_learner_update"](
                     cfg,
                     device,
                     learner,
@@ -1268,20 +1372,35 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         torch.testing.assert_close(modules[1].state_dict(), initial_state)
 
         # Compile both paths and finish graph capture without applying updates.
-        for update, sample in zip(updates, (data.clone(), data.clone())):
-            for _ in range(5):
-                update.train_step(sample)
+        for update in updates:
+            update.warmup(data)
         for module in modules:
             module.load_state_dict(initial_state)
 
+        # Actual replay batches have squeezed boolean feature axes.
+        for key in ("is_init", ("next", "done"), ("next", "terminated")):
+            data.set(key, data.get(key).squeeze(-1))
         eager_data = data.clone()
         graph_data = data.clone()
+        retained = []
         for seed in (10, 11):
             torch.manual_seed(seed)
-            expected = updates[0](eager_data)
+            expected = updates[0].step(None, eager_data)
             torch.manual_seed(seed)
-            actual = updates[1](graph_data)
-            torch.testing.assert_close(actual, expected, atol=2e-3, rtol=2e-3)
+            actual = updates[1].step(None, graph_data)
+            assert_close(actual, expected, atol=2e-3, rtol=2e-3)
+            assert_close(
+                graph_data["replay_context"],
+                eager_data["replay_context"],
+                atol=2e-3,
+                rtol=2e-3,
+            )
+            for previous, snapshot in retained:
+                assert_close(previous, snapshot)
+            retained.append((actual, actual.clone()))
+            retained.append(
+                (graph_data["replay_context"], graph_data["replay_context"].clone())
+            )
 
         torch.testing.assert_close(
             modules[1].state_dict(),
@@ -1295,6 +1414,11 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             atol=2e-3,
             rtol=2e-3,
         )
+        for module in modules:
+            assert any(
+                not torch.equal(parameter, initial_state[name])
+                for name, parameter in module.named_parameters()
+            )
         assert learners[0].optimizer.state
         assert learners[1].optimizer.state
         assert learners[0].optimizer.param_groups[0]["step"] == 2
@@ -1304,6 +1428,152 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             not torch.equal(value, initial_state[key])
             for key, value in modules[0].state_dict().items()
             if key.startswith(target_prefix)
+        )
+
+        benchmark = runpy.run_path(
+            repo_root / "benchmarks/ad_hoc/bench_dreamer_v3_learner.py",
+            run_name="dreamer_v3_native_replay_cuda_graph_test",
+        )
+        cfg = self._small_sota_config(
+            example_dir,
+            compile_train_step=compile_train_step,
+            cudagraph_train_step=True,
+            mixed_precision=True,
+        )
+        torch.manual_seed(0)
+        replay_learner = example["_build_learner"](cfg, device, 3, 1)
+        replay_update = example["_make_learner_update"](
+            cfg,
+            device,
+            replay_learner,
+            cudagraph_warmup=5,
+        )
+        example["_warm_up_learner"](cfg, device, replay_update, 3, 1)
+        replay_step = benchmark["_ReplayLearnerStep"](
+            example,
+            cfg,
+            replay_update,
+            device=device,
+            replay_device=torch.device("cpu"),
+            obs_dim=3,
+            action_dim=1,
+        )
+        try:
+            for _ in range(6):
+                replay_step()
+            replay_step.synchronize()
+        finally:
+            replay_step.close()
+
+    @pytest.mark.skipif(
+        not (_has_hydra and _has_omegaconf and _has_gym),
+        reason="requires hydra, omegaconf, and gym",
+    )
+    def test_dreamer_v3_full_learner_compile_avoids_nested_rssm(
+        self, device, monkeypatch
+    ):
+        device = torch.device(device)
+        if device.type != "cpu":
+            pytest.skip("CPU compile regression")
+
+        repo_root = Path(__file__).parents[2]
+        example_dir = repo_root / "sota-implementations/dreamer_v3"
+        monkeypatch.syspath_prepend(str(example_dir))
+        example = runpy.run_path(
+            example_dir / "train.py",
+            run_name="dreamer_v3_learner_compile_test",
+        )
+        cfg = self._small_sota_config(
+            example_dir,
+            compile_train_step=True,
+            cudagraph_train_step=False,
+        )
+        monkeypatch.setattr(
+            torch, "compile", ft.partial(torch.compile, backend="eager")
+        )
+
+        learner = example["_build_learner"](cfg, device, 3, 1)
+        if not getattr(torch._dynamo.config, "inline_inbuilt_nn_modules", False):
+            with pytest.raises(RuntimeError, match="inline_inbuilt_nn_modules"):
+                example["_make_learner_update"](cfg, device, learner)
+            return
+        update = example["_make_learner_update"](cfg, device, learner)
+        sample = example["_fake_learner_sample"](cfg, device, 3, 1)
+        reward = sample.get(("next", "reward")).clone()
+        for key in ("is_init", ("next", "done"), ("next", "terminated")):
+            sample.set(key, sample.get(key).squeeze(-1))
+        update.loss_module.set_keys(replay_context=("learner", "refresh"))
+        rng_before = torch.get_rng_state().clone()
+        state_before = copy.deepcopy(update.loss_module.state_dict())
+        with pytest.raises(RuntimeError, match="Call warmup"):
+            update.step(None, sample)
+        example["_warm_up_learner"](cfg, device, update, 3, 1)
+        torch.testing.assert_close(torch.get_rng_state(), rng_before)
+        torch.testing.assert_close(update.loss_module.state_dict(), state_before)
+        parameters = list(learner.optimizer.param_groups[0]["params"])
+        gradient_addresses = [
+            parameter.grad.data_ptr() if parameter.grad is not None else None
+            for parameter in parameters
+        ]
+        before = [parameter.detach().clone() for parameter in parameters]
+        losses = update.step(None, sample)
+        metrics = example["_learner_metrics"](losses)
+        assert not sample["learner", "refresh", "state"].requires_grad
+        assert gradient_addresses == [
+            parameter.grad.data_ptr() if parameter.grad is not None else None
+            for parameter in parameters
+        ]
+
+        assert any(
+            not torch.equal(parameter, previous)
+            for parameter, previous in zip(parameters, before)
+        )
+        assert torch.isfinite(metrics).all()
+        logged = []
+
+        def log_metrics(steps, metrics):
+            logged.append((steps, metrics))
+
+        trainer = Trainer(
+            collector=[sample],
+            total_frames=sample.numel(),
+            frame_skip=1,
+            optim_steps_per_batch=2,
+            loss_module=update.loss_module,
+            optimization_stepper=update,
+            progress_bar=False,
+        )
+        trainer.register_op("post_optim_complete_log", log_metrics)
+        trainer.optim_steps(sample)
+        assert len(logged) == 1 and logged[0][0] == 2
+        assert all(value.numel() == 1 for value in logged[0][1].values(True, True))
+        update.target_updater = HardUpdate(
+            learner.value_loss, value_network_update_interval=5
+        )
+        saved_stepper = copy.deepcopy(update.state_dict())
+        update.step(None, sample)
+        assert update.target_updater.counter == 1
+        update.load_state_dict(saved_stepper)
+        assert update.target_updater.counter == 0
+        assert gradient_addresses == [
+            parameter.grad.data_ptr() if parameter.grad is not None else None
+            for parameter in parameters
+        ]
+        learner.optimizer.zero_grad(set_to_none=True)
+        with pytest.raises(RuntimeError, match="no parameter gradients"):
+            learner.optimizer.step()
+        torch.testing.assert_close(sample.get(("next", "reward")), reward)
+        update.loss_module.replay_value_loss_weight = 0.0
+        update.loss_module.model_loss.detach_output = True
+        short_sample = sample[:, :1]
+        for key in ("is_init", ("next", "done"), ("next", "terminated")):
+            short_sample.set(key, short_sample.get(key).unsqueeze(-1))
+        losses = update.loss_module(short_sample)
+        assert losses["loss_replay_value"] == 0
+        assert all(
+            torch.isfinite(value).all()
+            for key, value in losses.items()
+            if key.startswith("loss_")
         )
 
     @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
@@ -1376,8 +1646,11 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         ):
             loss_module.value_model(online_td)
         target_td = tensordict.select(*value_model.in_keys, strict=False)
-        with torch.no_grad(), loss_module.target_value_model_params.to_module(
-            loss_module.value_model, preserve_module_state=False
+        with (
+            torch.no_grad(),
+            loss_module.target_value_model_params.to_module(
+                loss_module.value_model, preserve_module_state=False
+            ),
         ):
             loss_module.value_model(target_td)
         expected_slow_loss = two_hot_cross_entropy(
@@ -1609,6 +1882,67 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         loss_td, _ = loss_module(tensordict)
         assert "loss_model_reco" in loss_td.keys()
         loss_td["loss_model_reco"].backward()
+
+    @pytest.mark.parametrize("heads", ["vector", "image", "both"])
+    @pytest.mark.parametrize("compile_loss", [False, True])
+    def test_dreamer_v3_reconstruction_heads(self, device, heads, compile_loss):
+        class WorldModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.vector = nn.Parameter(torch.ones(2, device=device))
+                self.image = nn.Parameter(torch.tensor([0.25, 0.5], device=device))
+
+            def forward(self, td):
+                td["next", "decoded", "vector"] = self.vector.expand(2, 3, 2)
+                td["next", "decoded", "image"] = self.image.expand(2, 3, 2)
+                td["next", "reward"] = torch.zeros(2, 3, 1, device=device)
+                return td
+
+        model = WorldModel()
+        sample = TensorDict(
+            {
+                ("next", "sensors", "vector"): torch.tensor(
+                    [0.0, 3.0], device=device
+                ).expand(2, 3, 2),
+                ("next", "sensors", "image"): torch.tensor(
+                    [0, 255], dtype=torch.uint8, device=device
+                ).expand(2, 3, 2),
+                ("next", "reward"): torch.zeros(2, 3, 1, device=device),
+                ("next", "prior_logits"): torch.zeros(2, 3, 2, 2, device=device),
+                ("next", "posterior_logits"): torch.zeros(2, 3, 2, 2, device=device),
+            },
+            [2, 3],
+        )
+        names = ["vector", "image"] if heads == "both" else [heads]
+        symlog_flags = [name == "vector" for name in names]
+        objective = DreamerV3ModelLoss(
+            model,
+            reward_two_hot=False,
+            reco_symlog=symlog_flags if heads == "both" else symlog_flags[0],
+        )
+        objective.set_keys(
+            pixels=[("sensors", name) for name in names],
+            reco_pixels=[("decoded", name) for name in names],
+        )
+        call = torch.compile(objective, backend="eager") if compile_loss else objective
+        losses, _ = call(sample)
+        log_two = torch.tensor(2.0, device=device).log()
+        expected = (2 * log_two.square() if "vector" in names else 0) + (
+            0.3125 if "image" in names else 0
+        )
+        torch.testing.assert_close(
+            losses["loss_model_reco"],
+            torch.as_tensor(expected, device=device).reshape(1),
+        )
+        losses["loss_model_reco"].sum().backward()
+        if "vector" in names:
+            torch.testing.assert_close(
+                model.vector.grad, torch.stack([log_two, -log_two])
+            )
+        if "image" in names:
+            torch.testing.assert_close(
+                model.image.grad, model.image.new_tensor([0.5, -1])
+            )
 
     def test_dreamer_v3_model_loss_no_continue_default(self, device):
         """With ``lambda_continue=0`` (default), no ``loss_model_continue`` key is emitted."""
@@ -2024,6 +2358,874 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert B == 2 and T == 3
 
 
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("online", [False, True])
+@pytest.mark.parametrize("count_reset_records", [False, True])
+def test_dreamer_v3_native_stream_replay(monkeypatch, online, count_reset_records):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py",
+        run_name=f"dreamer_v3_native_replay_{online}",
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
+    cfg.collector.num_envs = 2
+    cfg.collector.count_reset_records = count_reset_records
+    cfg.collector.total_frames = 16
+    cfg.collector.frames_per_batch = 4
+    cfg.env.max_episode_steps = 3
+    expected_action_budget = 12 if count_reset_records else 16
+    assert example["_validated_action_budget"](cfg) == expected_action_budget
+    cfg.replay_buffer.buffer_size = 15
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 2
+    cfg.replay_buffer.online = online
+    rb = example["_build_replay"](cfg, 2, torch.device("cpu"), torch.device("cpu"))
+    sampler_type = StreamingSliceSampler if online else SliceSampler
+    assert [rb[index].storage.max_size for index in range(2)] == [8, 7]
+    assert all(isinstance(rb[index].sampler, sampler_type) for index in range(2))
+
+    data = TensorDict(
+        {
+            "action": torch.arange(12).reshape(2, 6, 1).float(),
+            "is_init": torch.zeros(2, 6, 1, dtype=torch.bool),
+            "state": torch.zeros(2, 6, 4),
+            "belief": torch.zeros(2, 6, 5),
+            "next": {
+                "observation": torch.randn(2, 6, 3),
+                "reward": torch.randn(2, 6, 1),
+                "done": torch.zeros(2, 6, 1, dtype=torch.bool),
+                "terminated": torch.zeros(2, 6, 1, dtype=torch.bool),
+                "truncated": torch.zeros(2, 6, 1, dtype=torch.bool),
+            },
+        },
+        [2, 6],
+    )
+    data["is_init"][:, 0] = True
+    try:
+        rb.extend(data)
+        assert rb.stats()["write_count"] == 12
+        assert rb.can_sample()
+        sample = rb.sample().reshape(2, 3)
+        assert ("collector", "context_valid") not in sample.keys(True, True)
+        assert sample["is_init"].sum() <= 2
+        sample_info = sample.select("index", "index_generation")
+        index, generation, patch = example["replay_context_update"](
+            sample_info,
+            torch.ones(2, 2, 4),
+            torch.ones(2, 2, 5),
+        )
+        result = rb.submit_update_if_present(
+            index=index, generation=generation, patch=patch
+        ).result()
+        assert result.updated_count == index.numel()
+        assert any(rb[index][:]["state"].any() for index in range(2))
+        assert all(rb[index][:]["is_init"][0].all() for index in range(2))
+    finally:
+        rb.shutdown()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("online", [False, True])
+def test_dreamer_v3_replay_samples_keep_episode_starts(monkeypatch, online):
+    """Sampled is_init flags are the collector's episode starts, not slice starts.
+
+    The RSSM rollout zeroes state, belief and action wherever is_init is set;
+    a marker at every slice start would train each sequence from a zero state.
+    """
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name=f"dreamer_v3_episode_starts_{online}"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
+    cfg.collector.num_envs = 1
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 4
+    cfg.replay_buffer.seq_len = 7
+    cfg.replay_buffer.online = online
+    rb = example["_build_replay"](cfg, 1, torch.device("cpu"), torch.device("cpu"))
+    steps = 48
+    data = TensorDict(
+        {
+            "action": torch.zeros(1, steps, 2),
+            "is_init": torch.zeros(1, steps, 1, dtype=torch.bool),
+            "step": torch.arange(steps).reshape(1, steps),
+            "state": torch.zeros(1, steps, 3),
+            "belief": torch.zeros(1, steps, 3),
+            "next": {
+                "observation": torch.randn(1, steps, 3),
+                "reward": torch.zeros(1, steps, 1),
+                "done": torch.zeros(1, steps, 1, dtype=torch.bool),
+                "terminated": torch.zeros(1, steps, 1, dtype=torch.bool),
+                "truncated": torch.zeros(1, steps, 1, dtype=torch.bool),
+            },
+        },
+        [1, steps],
+    )
+    data["is_init"][:, 0] = True
+    try:
+        rb.extend(data)
+        seen_mid_slice_start = False
+        for _ in range(16):
+            sample = rb.sample().reshape(4, 8)
+            starts = sample["step"][:, 0]
+            expected = (starts == 0).reshape(4, 1, 1)
+            assert (sample["is_init"][:, :1] == expected).all()
+            assert not sample["is_init"][:, 1:].any()
+            seen_mid_slice_start |= bool((starts != 0).any())
+        assert seen_mid_slice_start
+    finally:
+        rb.shutdown()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("online", [False, True])
+def test_dreamer_v3_async_replay_sequences_cross_episode_ends(monkeypatch, online):
+    """Async streams sample sequences across episode ends.
+
+    Slices that stop at every done flag never hand the learner a terminal
+    transition (the extra record is dropped), nor any episode shorter than
+    a sequence. With the stream as the trajectory, both reach the learner
+    and the rollout resets on the stored is_init flags.
+    """
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name=f"dreamer_v3_cross_episode_{online}"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.collector.backend = "async"
+    cfg.collector.num_envs = 1
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 4
+    cfg.replay_buffer.seq_len = 7
+    cfg.replay_buffer.online = online
+    rb = example["_build_replay"](cfg, 1, torch.device("cpu"), torch.device("cpu"))
+    steps = 48
+    episode_len = 12
+    step = torch.arange(steps)
+    terminal = (step % episode_len) == episode_len - 1
+    data = TensorDict(
+        {
+            "action": torch.zeros(steps, 2),
+            "env_index": torch.zeros(steps, dtype=torch.long),
+            "is_init": ((step % episode_len) == 0).reshape(steps, 1),
+            "step": step,
+            "state": torch.zeros(steps, 3),
+            "belief": torch.zeros(steps, 3),
+            "next": {
+                "observation": torch.randn(steps, 3),
+                "reward": torch.zeros(steps, 1),
+                "done": terminal.reshape(steps, 1),
+                "terminated": terminal.reshape(steps, 1),
+                "truncated": torch.zeros(steps, 1, dtype=torch.bool),
+            },
+        },
+        [steps],
+    )
+    try:
+        rb.extend(data)
+        terminal_in_sequence = reset_in_sequence = False
+        for _ in range(16):
+            sample = rb.sample().reshape(4, 8)[:, :-1]
+            assert (sample["step"][:, 1:] - sample["step"][:, :-1] == 1).all()
+            terminal_in_sequence |= bool(sample["next", "terminated"].any())
+            reset_in_sequence |= bool(sample["is_init"][:, 1:].any())
+            expected_init = (sample["step"] % episode_len == 0).reshape(4, 7, 1)
+            assert (sample["is_init"] == expected_init).all()
+        assert terminal_in_sequence
+        assert reset_in_sequence
+    finally:
+        rb.shutdown()
+
+
+def _reference_replay_context_update(sample, state, belief):
+    """Per-column stable sorts, the implementation the packed key replaced."""
+    handles = sample.get("index")[:, 1:].reshape(-1)
+    generations = sample.get("index_generation")[:, 1:].reshape(-1)
+    buffer_ids = handles.get("buffer_ids")
+    local_indices = handles.get("index")
+    coordinates = torch.cat(
+        (buffer_ids.reshape(-1, 1), local_indices.reshape(buffer_ids.numel(), -1)),
+        -1,
+    )
+    order = torch.arange(coordinates.shape[0])
+    for dimension in range(coordinates.shape[1] - 1, -1, -1):
+        order = order[coordinates[order, dimension].argsort(stable=True)]
+    ordered_coordinates = coordinates[order]
+    keep_ordered = torch.ones(ordered_coordinates.shape[0], dtype=torch.bool)
+    keep_ordered[:-1] = (ordered_coordinates[:-1] != ordered_coordinates[1:]).any(-1)
+    keep = order[keep_ordered]
+    state = state.detach().float().reshape(-1, state.shape[-1])
+    belief = belief.detach().float().reshape(-1, belief.shape[-1])
+    return (
+        handles[keep],
+        generations[keep],
+        {"state": state[keep], "belief": belief[keep]},
+    )
+
+
+def _overlapping_replay_sample(batch, time, *, local_ndim, scale=1):
+    """Slice windows that overlap within members, as sampled sequences do."""
+    generator = torch.Generator().manual_seed(0)
+    capacity = 12
+    starts = torch.randint(0, capacity - time + 1, (batch,), generator=generator)
+    local = starts.unsqueeze(1) + torch.arange(time)
+    if local_ndim == 2:
+        lane = torch.randint(0, 3, (batch, 1), generator=generator).expand(batch, time)
+        local = torch.stack((lane, local), -1)
+    buffer_ids = torch.randint(0, 4, (batch, 1), generator=generator).expand(
+        batch, time
+    )
+    # Two identical windows make whole rows collide, not only their tails.
+    buffer_ids = buffer_ids.clone()
+    buffer_ids[1] = buffer_ids[0]
+    local = local.clone()
+    local[1] = local[0]
+    return TensorDict(
+        {
+            "index": TensorDict(
+                {"buffer_ids": buffer_ids * scale, "index": local * scale},
+                [batch, time],
+            ),
+            "index_generation": torch.randint(0, 3, (batch, time), generator=generator),
+        },
+        [batch, time],
+    )
+
+
+@pytest.mark.parametrize("local_ndim", [1, 2])
+@pytest.mark.parametrize(
+    "scale", [1, 2**33], ids=["packed_key", "per_column_fallback"]
+)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="requires CUDA"
+                ),
+            ],
+        ),
+    ],
+)
+def test_dreamer_v3_replay_context_update_matches_reference(
+    monkeypatch, local_ndim, scale, device
+):
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    replay = runpy.run_path(
+        example_dir / "dreamer_v3_replay.py", run_name="dreamer_v3_replay_test"
+    )
+    batch, time = 16, 5
+    sample = _overlapping_replay_sample(batch, time, local_ndim=local_ndim, scale=scale)
+    state = torch.randn(batch, time - 1, 6)
+    belief = torch.randn(batch, time - 1, 7)
+
+    index, generation, patch = replay["replay_context_update"](
+        sample, state.to(device), belief.to(device)
+    )
+    ref_index, ref_generation, ref_patch = _reference_replay_context_update(
+        sample, state, belief
+    )
+
+    coordinates = torch.cat(
+        (index["buffer_ids"].reshape(-1, 1), index["index"].reshape(len(index), -1)),
+        -1,
+    )
+    assert coordinates.shape[0] < batch * (time - 1)
+    assert torch.unique(coordinates, dim=0).shape[0] == coordinates.shape[0]
+    assert torch.equal(index["buffer_ids"], ref_index["buffer_ids"])
+    assert torch.equal(index["index"], ref_index["index"])
+    assert torch.equal(generation, ref_generation)
+    for key in ("state", "belief"):
+        assert patch[key].device.type == device
+        assert torch.equal(patch[key].cpu(), ref_patch[key])
+
+
+@pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
+def test_dreamer_v3_replay_capacity_validation(monkeypatch):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_replay_capacity_test"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.collector.num_envs = 2
+    cfg.replay_buffer.buffer_size = 7
+    cfg.replay_buffer.seq_len = 3
+    with pytest.raises(ValueError, match="cannot hold one 4-record sequence"):
+        example["_build_replay"](cfg, 2, torch.device("cpu"), torch.device("cpu"))
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+def test_dreamer_v3_native_replay_benchmark_step_cpu(monkeypatch):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_replay_benchmark_cpu_test"
+    )
+    benchmark = runpy.run_path(
+        repo_root / "benchmarks/ad_hoc/bench_dreamer_v3_learner.py",
+        run_name="dreamer_v3_replay_benchmark_helpers_test",
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    # These checks build the batched layout of the synchronous collector.
+    cfg.collector.backend = "sync"
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 3
+
+    class LearnerUpdate:
+        def __init__(self):
+            self.calls = 0
+
+        def step(self, trainer, sample):
+            self.calls += 1
+            assert sample.shape == (2, 3)
+            sample.set(
+                "replay_context",
+                TensorDict(
+                    state=sample["state"] + self.calls,
+                    belief=sample["belief"] + self.calls,
+                    batch_size=sample.batch_size,
+                ),
+            )
+            return TensorDict({}, [])
+
+    learner_update = LearnerUpdate()
+    step = benchmark["_ReplayLearnerStep"](
+        example,
+        cfg,
+        learner_update,
+        device=torch.device("cpu"),
+        replay_device=torch.device("cpu"),
+        obs_dim=3,
+        action_dim=1,
+    )
+    try:
+        step()
+        step()
+        step.synchronize()
+        assert learner_update.calls == 2
+        assert any(step.replay_buffer[index][:]["state"].any() for index in range(4))
+    finally:
+        step.close()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize(
+    ("collector_backend", "custom", "pixels", "discrete", "budget"),
+    [
+        ("sync", False, False, False, "frames"),
+        ("async", False, False, False, "frames"),
+        ("sync", True, False, False, "frames"),
+        ("async", True, True, False, "frames"),
+        ("async", True, True, True, "frames"),
+        ("sync", True, True, True, "frames"),
+        ("async", True, False, False, "time"),
+        ("async", True, False, False, "warmup"),
+        ("sync", True, False, False, "reset_records"),
+    ],
+)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="requires CUDA"
+                ),
+            ],
+        ),
+    ],
+)
+def test_dreamer_v3_native_replay_collection_smoke(
+    monkeypatch, tmp_path, collector_backend, custom, pixels, discrete, budget, device
+):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py",
+        run_name=f"dreamer_v3_native_replay_collection_{collector_backend}",
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.env.name = PENDULUM_VERSIONED()
+    cfg.optimization.separate_policy_rng = collector_backend == "async" and not custom
+    cfg.optimization.device = device
+    # This test covers collection and replay; keep the learner eager apart
+    # from the explicit capture below.
+    cfg.optimization.compile = "off"
+    cfg.optimization.cudagraph_train_step = device == "cuda"
+    cfg.optimization.updates_per_batch = 1
+    cfg.optimization.train_ratio = None
+    cfg.collector.backend = collector_backend
+    cfg.collector.num_envs = 2
+    cfg.collector.frames_per_batch = 8
+    cfg.collector.total_frames = 16
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 2
+    cfg.replay_buffer.warmup_factor = 1
+    cfg.logger.eval_every = 0
+    cfg.logger.train_every = 0
+    cfg.logger.output_plot = None
+    cfg.logger.metrics_jsonl = None
+    if custom:
+        cfg.env.backend = "custom"
+        cfg.env.factory = f"{__name__}:_DreamerV3TestEnv"
+        cfg.env.factory_kwargs = {"pixels": pixels, "discrete": discrete}
+        cfg.env.vector_key = None if discrete else ["sensors", "vector"]
+        cfg.env.pixels_key = ["sensors", "image"] if pixels else None
+        cfg.env.milestone_key = ["episode", "milestones"]
+        cfg.env.milestone_names = ["started", "completed"]
+        cfg.networks.image_depth = 2
+        cfg.networks.image_mults = [1, 1]
+        cfg.networks.image_kernel_size = 3
+        cfg.networks.image_decoder_blocks = 2
+        cfg.logger.backend = "csv"
+        cfg.logger.log_dir = str(tmp_path / "logs")
+        cfg.logger.metrics_jsonl = str(tmp_path / "metrics.jsonl")
+        cfg.logger.train_every = 8
+    if budget == "time":
+        cfg.collector.total_frames = -1
+        cfg.optimization.max_time = 0.2
+    elif budget == "warmup":
+        cfg.optimization.collection_warmup_seconds = 60
+    elif budget == "reset_records":
+        cfg.collector.count_reset_records = True
+        cfg.collector.total_frames = 18  # 16 actions under the configured horizon.
+    replay_refs = []
+    build_replay = example["_build_replay"]
+
+    def record_replay(*args, **kwargs):
+        replay = build_replay(*args, **kwargs)
+        replay_refs.append(weakref.ref(replay))
+        return replay
+
+    monkeypatch.setitem(
+        example["main"].__wrapped__.__globals__, "_build_replay", record_replay
+    )
+    example["main"].__wrapped__(cfg)
+    if custom:
+        gc.collect()
+        assert all(ref() is None for ref in replay_refs)
+        records = [
+            json.loads(line)
+            for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
+        ]
+        if budget == "time":
+            # The budget is checked after each batch, so an expired budget stops
+            # the run at the first batch. Wall time is not asserted: starting
+            # the inference and environment processes on a loaded CI runner
+            # can take longer than the budget itself.
+            assert records[-1]["total_action_steps"] == cfg.collector.frames_per_batch
+        else:
+            assert records[-1]["total_action_steps"] == 16
+            assert (records[-1]["updates"] > 0) == (budget != "warmup")
+        episodes = [record for record in records if record["type"] == "train_episode"]
+        assert episodes and all(
+            record["milestones"] == [True, True] for record in episodes
+        )
+        assert list((tmp_path / "logs").rglob("*.csv"))
+        if budget == "reset_records":
+            # The custom environment terminates before the configured time limit.
+            assert records[-1]["total_environment_steps"] == 22
+            assert [episode["environment_steps"] for episode in episodes] == [
+                7,
+                8,
+                15,
+                16,
+            ]
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize(
+    ("collector_backend", "include_replay", "terminate"),
+    [
+        ("sync", False, False),
+        ("async", False, False),
+        ("sync", True, False),
+        ("async", True, False),
+        ("async", False, True),
+        ("async", True, True),
+    ],
+)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="requires CUDA"
+                ),
+            ],
+        ),
+    ],
+)
+def test_dreamer_v3_checkpoint_resume_processes(
+    monkeypatch, tmp_path, collector_backend, include_replay, terminate, device
+):
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_resume_test"
+    )
+    cfg = TestDreamerV3()._small_sota_config(
+        example_dir, compile_train_step=False, cudagraph_train_step=device == "cuda"
+    )
+    cfg.optimization.device = device
+    cfg.optimization.compile = "off"
+    cfg.optimization.compile_rssm = None
+    cfg.optimization.updates_per_batch = 1
+    cfg.optimization.separate_policy_rng = True
+    cfg.optimization.checkpoint_dir = str(tmp_path / "checkpoints")
+    cfg.optimization.checkpoint_every = 1
+    cfg.optimization.checkpoint_keep_last = 20
+    cfg.optimization.train_ratio = 1.5
+    cfg.optimization.checkpoint_include_replay = include_replay
+    cfg.collector.backend = collector_backend
+    # The seeded policy state is checkpointed from the training process; a
+    # process-hosted acting policy keeps its own copy in the inference process.
+    cfg.collector.inference_backend = "thread"
+    cfg.collector.num_envs = 2
+    cfg.collector.frames_per_batch = 8
+    cfg.collector.total_frames = 100_000 if terminate else 16
+    cfg.replay_buffer.online = collector_backend == "async"
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.warmup_factor = 1
+    cfg.logger.backend = "csv"
+    cfg.logger.log_dir = str(tmp_path / "logs")
+    cfg.logger.metrics_jsonl = str(tmp_path / "metrics.jsonl")
+    cfg.logger.train_every = 8
+    cfg.logger.eval_every = 0
+    cfg.logger.output_plot = None
+    config_path = tmp_path / "resume_test.yaml"
+    process_env = {**os.environ, "PYTHONPATH": str(repo_root), "OMP_NUM_THREADS": "1"}
+    # Exercise training in fresh processes without depending on Hydra's CLI
+    # parser, whose lazy help strings are incompatible with Python 3.14.
+    runner = tmp_path / "resume_process.py"
+    runner.write_text(
+        "from __future__ import annotations\n"
+        "import runpy\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from omegaconf import OmegaConf\n"
+        "if __name__ == '__main__':\n"
+        "    sys.path.insert(0, str(Path(sys.argv[1]).parent))\n"
+        "    example = runpy.run_path(sys.argv[1])\n"
+        "    example['main'].__wrapped__(OmegaConf.load(sys.argv[2]))\n"
+    )
+    command = [
+        sys.executable,
+        str(runner),
+        str(example_dir / "train.py"),
+        str(config_path),
+    ]
+    OmegaConf.save(cfg, config_path)
+    rotation = CheckpointRotation(cfg.optimization.checkpoint_dir, keep_last=20)
+    if terminate:
+        with open(tmp_path / "first.log", "w+") as log:
+            process = subprocess.Popen(command, env=process_env, stdout=log, stderr=log)
+            try:
+                deadline = time.monotonic() + 60
+                while rotation.latest() is None and process.poll() is None:
+                    assert (
+                        time.monotonic() < deadline
+                    ), "No checkpoint before termination."
+                    time.sleep(0.05)
+                process.send_signal(signal.SIGTERM)
+                process.wait(timeout=60)
+                log.seek(0)
+                assert process.returncode == 0, log.read()
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=10)
+    else:
+        first = subprocess.run(
+            command, env=process_env, capture_output=True, text=True, timeout=120
+        )
+        assert first.returncode == 0, first.stdout + first.stderr
+    first_path = rotation.latest()
+    first_state = {}
+    Checkpoint(run_state=first_state).load(first_path)
+    first_steps = first_state["action_steps"]
+    assert first_steps >= 8 if terminate else first_steps == 16
+    assert first_state["updates"] > 0
+    assert ("replay" in Checkpoint.manifest(first_path)["components"]) == include_replay
+    # Inspect CUDA checkpoints on CPU with an eager execution configuration.
+    inspect_cfg = copy.deepcopy(cfg)
+    inspect_cfg.optimization.cudagraph_train_step = False
+    first_learner = example["_build_learner"](inspect_cfg, torch.device("cpu"), 3, 1)
+    stepper = example["_make_learner_update"](
+        inspect_cfg, torch.device("cpu"), first_learner
+    )
+    modules = stepper.loss_module
+    policy = example["DreamerV3SeededPolicy"](first_learner.real_world_actor, seed=0)
+    schedule = example["DreamerV3UpdateRatio"](0.0)
+    Checkpoint(policy=policy, update_ratio=schedule).load(first_path)
+    first_policy_counter = policy.get_extra_state()["counter"]
+    Checkpoint(learner=modules).load(first_path)
+    before = [parameter.detach().clone() for parameter in modules.parameters()]
+    tails = []
+    if include_replay:
+        replay = example["_build_replay"](
+            cfg, 2, torch.device("cpu"), torch.device("cpu")
+        )
+        try:
+            Checkpoint(replay=replay).load(first_path)
+            tails = [
+                (replay[i].writer.state_dict()["_cursor"] - 1) % len(replay[i])
+                for i in range(2)
+            ]
+        finally:
+            replay.shutdown()
+
+    cfg.optimization.resume_from = str(first_path)
+    cfg.collector.total_frames = first_steps + 16
+    OmegaConf.save(cfg, config_path)
+    second = subprocess.run(
+        command, env=process_env, capture_output=True, text=True, timeout=90
+    )
+    assert second.returncode == 0, second.stdout + second.stderr
+    second_path = rotation.latest()
+    second_state = {}
+    Checkpoint(run_state=second_state, learner=modules).load(second_path)
+    assert second_state["action_steps"] == first_steps + 16
+    assert second_state["updates"] > first_state["updates"]
+    assert second_state["elapsed_seconds"] > first_state["elapsed_seconds"]
+    Checkpoint(policy=policy, update_ratio=schedule).load(second_path)
+    assert policy.get_extra_state()["counter"] > first_policy_counter
+    for key in ("exp_name", "log_dir"):
+        assert second_state["logger"][key] == first_state["logger"][key]
+    previous_logs = first_state["logger"]["local"]["scalars"]["train/updates"]
+    assert (
+        second_state["logger"]["local"]["scalars"]["train/updates"][
+            : len(previous_logs)
+        ]
+        == previous_logs
+    )
+    assert any(
+        not torch.equal(old, new) for old, new in zip(before, modules.parameters())
+    )
+    records = [
+        json.loads(line)
+        for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
+    ]
+    assert [
+        record["total_action_steps"]
+        for record in records
+        if record["type"] == "summary"
+    ] == [first_steps, first_steps + 16]
+    train_steps = [
+        record["environment_steps"] for record in records if record["type"] == "train"
+    ]
+    assert train_steps == sorted(set(train_steps))
+    csv_steps = [
+        int(line.split(",")[0])
+        for line in next((tmp_path / "logs").rglob("train/updates.csv"))
+        .read_text()
+        .splitlines()
+    ]
+    assert csv_steps == train_steps
+    if include_replay:
+        replay = example["_build_replay"](
+            cfg, 2, torch.device("cpu"), torch.device("cpu")
+        )
+        try:
+            Checkpoint(replay=replay).load(second_path)
+            assert replay.stats()["size"] == min(first_steps + 16, 64)
+            # A process restart closes the old stream without inventing a terminal.
+            for stream in range(2) if not terminate else ():
+                assert replay[stream][tails[stream]]["next", "done"].all()
+                assert not replay[stream][tails[stream]]["next", "terminated"].any()
+            for _ in range(20):
+                sample = replay.sample().reshape(2, 4)
+                is_init = sample["is_init"].reshape(2, 4)
+                if collector_backend == "async":
+                    # Async streams cross episode ends: a reset follows every closed
+                    # record (the tail closed by the restart included), nothing else.
+                    done = sample["next", "done"].reshape(2, 4)
+                    assert torch.equal(is_init[:, 1:], done[:, :-1])
+                else:
+                    assert not is_init[:, 1:].any()
+        finally:
+            replay.shutdown()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("separate_policy_rng", [False, True])
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda:0",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA"),
+            ],
+        ),
+    ],
+)
+def test_dreamer_v3_process_inference_collection_smoke(
+    monkeypatch, tmp_path, separate_policy_rng, device
+):
+    """A process-hosted inference server collects, trains and syncs weights."""
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_process_inference"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.optimization.device = device
+    cfg.optimization.compile = "off"
+    cfg.optimization.separate_policy_rng = separate_policy_rng
+    cfg.optimization.updates_per_batch = 1
+    cfg.optimization.train_ratio = None
+    cfg.collector.backend = "async"
+    cfg.collector.async_env_backend = "multiprocessing"
+    cfg.collector.inference_backend = "process"
+    cfg.collector.envs_per_worker = 1
+    cfg.collector.num_envs = 2
+    cfg.collector.frames_per_batch = 8
+    cfg.collector.total_frames = 16
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 2
+    cfg.replay_buffer.seq_len = 2
+    cfg.replay_buffer.warmup_factor = 1
+    cfg.env.backend = "custom"
+    cfg.env.factory = f"{__name__}:_DreamerV3TestEnv"
+    cfg.env.factory_kwargs = {"pixels": False, "discrete": False}
+    cfg.env.vector_key = ["sensors", "vector"]
+    cfg.env.pixels_key = None
+    cfg.env.milestone_key = ["episode", "milestones"]
+    cfg.env.milestone_names = ["started", "completed"]
+    cfg.logger.eval_every = 0
+    cfg.logger.train_every = 8
+    cfg.logger.output_plot = None
+    cfg.logger.backend = "csv"
+    cfg.logger.log_dir = str(tmp_path / "logs")
+    cfg.logger.metrics_jsonl = str(tmp_path / "metrics.jsonl")
+    example["main"].__wrapped__(cfg)
+    records = [
+        json.loads(line)
+        for line in Path(cfg.logger.metrics_jsonl).read_text().splitlines()
+    ]
+    assert records[-1]["total_action_steps"] == 16
+    assert records[-1]["updates"] > 0
+    assert any(record["type"] == "train_episode" for record in records)
+
+    cfg.collector.envs_per_worker = 2
+    with pytest.raises(ValueError, match="envs_per_worker=1"):
+        example["main"].__wrapped__(cfg)
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("separate_policy_rng", [False, True])
+def test_dreamer_v3_behavior_policy_weights_match_served_policy(
+    monkeypatch, separate_policy_rng
+):
+    """The weights pushed to the inference process fit the rebuilt policy exactly.
+
+    A mismatch would surface as a key or shape error inside the server
+    process, not in the driver, so the layout is checked here directly.
+    """
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name="dreamer_v3_serving_layout"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.optimization.device = "cpu"
+    cfg.optimization.compile = "off"
+    cfg.optimization.separate_policy_rng = separate_policy_rng
+    obs_dim, action_dim = 3, 1
+    learner = example["_build_learner"](cfg, torch.device("cpu"), obs_dim, action_dim)
+    served = example["build_serving_policy"](
+        OmegaConf.to_container(cfg, resolve=True),
+        obs_dim,
+        action_dim,
+        None,
+        False,
+        torch.device("cpu"),
+    )
+    weights = example["_behavior_policy_weights"](cfg, learner)
+    if isinstance(weights, torch.nn.Module):
+        weights = TensorDict.from_module(weights)
+    served_weights = TensorDict.from_module(served)
+    assert set(weights.keys(True, True)) == set(served_weights.keys(True, True))
+    for key, value in weights.items(True, True):
+        assert value.shape == served_weights[key].shape, key
+
+
 @pytest.mark.skipif(shutil.which("bash") is None, reason="requires bash")
 def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
     repo_root = Path(__file__).parents[2]
@@ -2054,7 +3256,6 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
         "optimization.compile_rssm=scan",
         "optimization.rssm_scan_unroll=8",
         "optimization.cudagraph_train_step=true",
-        "optimization.compile_learner=losses",
         "benchmark.seeds=[0]",
     ]
 
@@ -2067,7 +3268,7 @@ def test_dreamer_v3_dmc_reproduction_modes(tmp_path):
     ).stdout.splitlines()
     assert smoke[:3] == [expected_benchmark, "--output-dir", "dmc_walker_smoke"]
     assert "replay_buffer.buffer_size=400" in smoke
-    assert "optimization.compile_rssm=null" in smoke
+    assert "optimization.compile=off" in smoke
     assert "optimization.updates_per_batch=1" in smoke
     assert "optimization.train_ratio=null" in smoke
 
@@ -2112,6 +3313,124 @@ def test_dreamer_v3_optimizer_updates_and_resume(device):
         current.step()
     torch.testing.assert_close(restored_parameter, parameter)
     assert not torch.equal(parameter, expected)
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+class TestDreamerV3CompileStrategy:
+    """`optimization.compile` resolves to concrete decisions, and the stepper follows them."""
+
+    @staticmethod
+    def _load(monkeypatch, run_name):
+        example_dir = Path(__file__).parents[2] / "sota-implementations/dreamer_v3"
+        monkeypatch.syspath_prepend(str(example_dir))
+        return example_dir, runpy.run_path(example_dir / "train.py", run_name=run_name)
+
+    def test_resolve_compile_settings(self, monkeypatch):
+        from omegaconf import OmegaConf
+
+        example_dir, example = self._load(monkeypatch, "dreamer_v3_compile_settings")
+        resolve = example["resolve_compile_settings"]
+        cpu, cuda = torch.device("cpu"), torch.device("cuda")
+        cfg = OmegaConf.load(example_dir / "config.yaml")
+
+        # auto: the whole fast path on CUDA, eager elsewhere.
+        fast = resolve(cfg, cuda)
+        assert (fast.train_step, fast.rssm, fast.cudagraph) == (True, "scan", True)
+        assert fast.scan_unroll == cfg.optimization.rssm_scan_unroll
+        assert fast.enabled
+        eager = resolve(cfg, cpu)
+        assert (eager.train_step, eager.rssm, eager.cudagraph) == (False, None, False)
+        assert not eager.enabled
+
+        # off: nothing, unless a switch is set explicitly.
+        cfg.optimization.compile = "off"
+        assert not resolve(cfg, cuda).enabled
+        cfg.optimization.compile_rssm = "scan"
+        explicit = resolve(cfg, cuda)
+        assert (explicit.train_step, explicit.rssm, explicit.cudagraph) == (
+            False,
+            "scan",
+            False,
+        )
+
+        # an explicit switch overrides one decision of auto.
+        cfg.optimization.compile = "auto"
+        cfg.optimization.compile_rssm = None
+        cfg.optimization.compile_train_step = False
+        partial = resolve(cfg, cuda)
+        assert (partial.train_step, partial.rssm, partial.cudagraph) == (
+            False,
+            "scan",
+            True,
+        )
+
+        cfg.optimization.compile = "sometimes"
+        with pytest.raises(ValueError, match="'auto' or 'off'"):
+            resolve(cfg, cuda)
+        cfg.optimization.compile = "auto"
+        cfg.optimization.cudagraph_train_step = True
+        with pytest.raises(ValueError, match="requires a CUDA training device"):
+            resolve(cfg, cpu)
+
+    def test_stepper_defaults_follow_the_device(self, monkeypatch):
+        from torchrl.trainers.algorithms import DreamerV3OptimizationStepper
+
+        example_dir, example = self._load(monkeypatch, "dreamer_v3_stepper_defaults")
+        cfg = TestDreamerV3()._small_sota_config(
+            example_dir, compile_train_step=False, cudagraph_train_step=False
+        )
+        cfg.optimization.compile_rssm = None
+        device = torch.device("cpu")
+        learner = example["_build_learner"](cfg, device, 3, 1)
+        loss_module = example["_make_learner_update"](cfg, device, learner).loss_module
+        stepper = DreamerV3OptimizationStepper(
+            loss_module, learner.optimizer, learner.value_target_updater
+        )
+        assert stepper.resolve(torch.device("cuda")) == (True, True)
+        assert stepper.resolve(device) == (False, False)
+        # On CPU the defaults run eagerly without a warm-up.
+        sample = example["_fake_learner_sample"](cfg, device, 3, 1)
+        before = [parameter.detach().clone() for parameter in loss_module.parameters()]
+        stepper.step(None, sample)
+        assert any(
+            not torch.equal(parameter, previous)
+            for parameter, previous in zip(loss_module.parameters(), before)
+        )
+
+    def test_compiled_step_selects_the_scan_for_untouched_rollouts(self, monkeypatch):
+        example_dir, example = self._load(monkeypatch, "dreamer_v3_stepper_scan")
+        cfg = TestDreamerV3()._small_sota_config(
+            example_dir, compile_train_step=True, cudagraph_train_step=False
+        )
+        device = torch.device("cpu")
+        learner = example["_build_learner"](cfg, device, 3, 1)
+        update = example["_make_learner_update"](cfg, device, learner)
+        rollouts = [
+            module
+            for module in update.loss_module.modules()
+            if isinstance(module, RSSMRolloutV3)
+        ]
+        assert rollouts
+        # The builder left the rollouts eager for the compiled step.
+        assert all(
+            rollout._scan_fn is None and rollout._step_fn is None
+            for rollout in rollouts
+        )
+        selected = update._select_scan_backends()
+        assert selected == rollouts
+        assert all(
+            isinstance(rollout._scan_fn, ft.partial)
+            and rollout._scan_fn.keywords
+            == {"unroll": cfg.optimization.rssm_scan_unroll}
+            for rollout in rollouts
+        )
+        # A rollout with a backend keeps it, and the selection is idempotent.
+        assert update._select_scan_backends() == []
+        update.rssm_scan_unroll = None
+        assert update._select_scan_backends() == []
 
 
 if __name__ == "__main__":

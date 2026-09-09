@@ -348,6 +348,8 @@ Model and Network Configurations
     NetworkConfig
     MLPConfig
     DreamerV3MLPConfig
+    DreamerV3DiscreteActorConfig
+    DreamerV3SeededPolicyConfig
     DreamerV3ImageEncoderConfig
     DreamerV3ImageDecoderConfig
     ConvNetConfig
@@ -464,6 +466,7 @@ Replay Buffer and Storage Configurations
     PrioritizedSamplerConfig
     SliceSamplerConfig
     SliceSamplerWithoutReplacementConfig
+    StreamingSliceSamplerConfig
     ListStorageConfig
     TensorStorageConfig
     LazyTensorStorageConfig

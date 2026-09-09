@@ -61,7 +61,7 @@ if [ "$smoke" -eq 1 ]; then
     replay_buffer.buffer_size=400
     replay_buffer.seq_len=4
     replay_buffer.warmup_factor=1
-    optimization.compile_rssm=null
+    optimization.compile=off
     optimization.updates_per_batch=1
     optimization.train_ratio=null
     optimization.mixed_precision=false
@@ -84,7 +84,6 @@ elif [ "$fast" -eq 1 ]; then
     optimization.compile_rssm=scan
     optimization.rssm_scan_unroll=8
     optimization.cudagraph_train_step=true
-    optimization.compile_learner=losses
   )
 fi
 

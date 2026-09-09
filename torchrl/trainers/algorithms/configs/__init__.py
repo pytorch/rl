@@ -47,6 +47,7 @@ from torchrl.trainers.algorithms.configs.data import (
     SliceSamplerWithoutReplacementConfig,
     StorageEnsembleConfig,
     StorageEnsembleWriterConfig,
+    StreamingSliceSamplerConfig,
     TensorDictReplayBufferConfig,
     TensorStorageConfig,
     TransitionConfig,
@@ -81,6 +82,8 @@ from torchrl.trainers.algorithms.configs.hooks import (
     BatchSubSamplerConfig,
     ClearCudaCacheConfig,
     CountFramesLogConfig,
+    DreamerV3OptimizationStepperConfig,
+    DreamerV3UpdateRatioConfig,
     EarlyStoppingConfig,
     HookConfig,
     LogScalarConfig,
@@ -98,13 +101,16 @@ from torchrl.trainers.algorithms.configs.logging import (
 from torchrl.trainers.algorithms.configs.modules import (
     AdditiveGaussianModuleConfig,
     ConvNetConfig,
+    DreamerV3DiscreteActorConfig,
     DreamerV3ImageDecoderConfig,
     DreamerV3ImageEncoderConfig,
     DreamerV3MLPConfig,
+    DreamerV3SeededPolicyConfig,
     MLPConfig,
     ModelConfig,
     QMixerNetworkConfig,
     QValueModelConfig,
+    RSSMStateEstimatorV3Config,
     TanhModuleConfig,
     TanhNormalModelConfig,
     TensorDictModuleConfig,
@@ -117,6 +123,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     CQLLossConfig,
     DDPGLossConfig,
     DQNLossConfig,
+    DreamerV3LossConfig,
     GAEConfig,
     HardUpdateConfig,
     IQLLossConfig,
@@ -307,6 +314,9 @@ __all__ = [
     "DreamerV3ImageDecoderConfig",
     "DreamerV3ImageEncoderConfig",
     "DreamerV3MLPConfig",
+    "DreamerV3DiscreteActorConfig",
+    "DreamerV3SeededPolicyConfig",
+    "RSSMStateEstimatorV3Config",
     "MLPConfig",
     "ModelConfig",
     "TanhModuleConfig",
@@ -407,11 +417,13 @@ __all__ = [
     "SamplerWithoutReplacementConfig",
     "SliceSamplerConfig",
     "SliceSamplerWithoutReplacementConfig",
+    "StreamingSliceSamplerConfig",
     # Losses
     "A2CLossConfig",
     "CQLLossConfig",
     "DDPGLossConfig",
     "DQNLossConfig",
+    "DreamerV3LossConfig",
     "IQLLossConfig",
     "LossConfig",
     "PPOLossConfig",
@@ -442,6 +454,8 @@ __all__ = [
     "ClearCudaCacheConfig",
     "CountFramesLogConfig",
     "EarlyStoppingConfig",
+    "DreamerV3OptimizationStepperConfig",
+    "DreamerV3UpdateRatioConfig",
     "LogScalarConfig",
     "LogTimingConfig",
     "RewardNormalizerConfig",
@@ -521,6 +535,19 @@ def _register_configs():
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
     cs.store(group="network", name="dreamer_v3_mlp", node=DreamerV3MLPConfig)
+    cs.store(
+        group="network",
+        name="dreamer_v3_seeded_policy",
+        node=DreamerV3SeededPolicyConfig,
+    )
+    cs.store(
+        group="network",
+        name="dreamer_v3_discrete_actor",
+        node=DreamerV3DiscreteActorConfig,
+    )
+    cs.store(
+        group="network", name="rssm_state_estimator_v3", node=RSSMStateEstimatorV3Config
+    )
     cs.store(
         group="network",
         name="dreamer_v3_image_encoder",
@@ -654,6 +681,7 @@ def _register_configs():
     cs.store(group="loss", name="cql", node=CQLLossConfig)
     cs.store(group="loss", name="ddpg", node=DDPGLossConfig)
     cs.store(group="loss", name="dqn", node=DQNLossConfig)
+    cs.store(group="loss", name="dreamer_v3", node=DreamerV3LossConfig)
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="mixer", node=QMixerLossConfig)
@@ -696,6 +724,11 @@ def _register_configs():
         group="sampler",
         name="slice_without_replacement",
         node=SliceSamplerWithoutReplacementConfig,
+    )
+    cs.store(
+        group="sampler",
+        name="streaming_slice",
+        node=StreamingSliceSamplerConfig,
     )
     cs.store(group="storage", name="lazy_stack", node=LazyStackStorageConfig)
     cs.store(group="storage", name="list", node=ListStorageConfig)
@@ -743,6 +776,11 @@ def _register_configs():
     cs.store(group="hook", name="batch_subsampler", node=BatchSubSamplerConfig)
     cs.store(group="hook", name="clear_cuda_cache", node=ClearCudaCacheConfig)
     cs.store(group="hook", name="count_frames_log", node=CountFramesLogConfig)
+    cs.store(
+        group="hook",
+        name="dreamer_v3_optimization",
+        node=DreamerV3OptimizationStepperConfig,
+    )
     cs.store(group="hook", name="early_stopping", node=EarlyStoppingConfig)
     cs.store(group="hook", name="log_scalar", node=LogScalarConfig)
     cs.store(group="hook", name="log_timing", node=LogTimingConfig)

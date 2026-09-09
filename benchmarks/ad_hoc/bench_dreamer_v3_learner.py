@@ -6,17 +6,20 @@
 
 The workload uses the maintained DMC Walker configuration and includes all
 model, actor, value, and replay-value losses, backward, the optimizer step,
-and the slow-value-target update. Replay sampling and environment collection
-are intentionally outside the learner timing.
+and the slow-value-target update. The optional replay workload uses the same
+native replay construction, prefetch, and conditional writeback as training.
 
 Example::
 
     python benchmarks/ad_hoc/bench_dreamer_v3_learner.py
+    python benchmarks/ad_hoc/bench_dreamer_v3_learner.py --device cpu --variants eager --replay-device cpu
 """
 
 from __future__ import annotations
 
 import argparse
+import functools as ft
+import gc
 import json
 import runpy
 import statistics
@@ -71,6 +74,9 @@ def _make_data(
                 "terminated": torch.zeros(
                     batch, steps, 1, dtype=torch.bool, device=device
                 ),
+                "truncated": torch.zeros(
+                    batch, steps, 1, dtype=torch.bool, device=device
+                ),
             },
         },
         [batch, steps],
@@ -78,24 +84,117 @@ def _make_data(
     )
 
 
-def _measure(
-    learner_update,
-    data: TensorDict,
-    *,
-    device: torch.device,
-    warmup: int,
-    iterations: int,
-) -> list[float]:
+class _ReplayLearnerStep:
+    def __init__(
+        self,
+        example: dict,
+        cfg,
+        learner_update,
+        *,
+        device: torch.device,
+        replay_device: torch.device,
+        obs_dim: int,
+        action_dim: int,
+    ):
+        self.cfg = cfg
+        self.device = device
+        self.learner_update = learner_update
+        self.replay_context_update = example["replay_context_update"]
+        sequence_records = cfg.replay_buffer.seq_len + 1
+        num_streams = 4
+        records_per_stream = sequence_records * cfg.replay_buffer.batch_size
+        cfg.replay_buffer.buffer_size = records_per_stream * num_streams
+        cfg.replay_buffer.online = False
+        # The workload extends the batched layout of the synchronous collector;
+        # the example's default backend resolves to asynchronous collection on
+        # CPU and CUDA, which routes records by environment index instead.
+        cfg.collector.backend = "sync"
+        self.replay_buffer = example["_build_replay"](
+            cfg, num_streams, replay_device, device
+        )
+        replay_data = _make_data(
+            cfg,
+            replay_device,
+            batch=num_streams,
+            steps=records_per_stream,
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+        )
+        replay_data["is_init"][:, 0] = True
+        self.replay_buffer.extend(replay_data)
+
+    def __call__(self) -> None:
+        sequence_records = self.cfg.replay_buffer.seq_len + 1
+        replay_sample = self.replay_buffer.sample().reshape(
+            self.cfg.replay_buffer.batch_size, sequence_records
+        )
+        sample_info = replay_sample.select("index", "index_generation")
+        sample = replay_sample.exclude("index", "index_generation")
+        sample = sample.to(self.device, non_blocking=True)[:, :-1]
+        self.learner_update.step(None, sample)
+        state = sample["replay_context", "state"]
+        belief = sample["replay_context", "belief"]
+        index, generation, patch = self.replay_context_update(
+            sample_info, state, belief
+        )
+        self.replay_buffer.submit_update_if_present(
+            index=index, generation=generation, patch=patch
+        )
+
+    def synchronize(self) -> None:
+        self.replay_buffer.synchronize()
+        if self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+
+    def close(self) -> None:
+        self.replay_buffer.shutdown()
+
+
+def _measure(step, synchronize, *, warmup: int, iterations: int):
     for _ in range(warmup):
-        learner_update(data)
-    torch.cuda.synchronize(device)
-    samples = []
+        step()
+    synchronize()
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+    host_latencies = []
+    started = time.perf_counter()
     for _ in range(iterations):
-        started = time.perf_counter()
-        learner_update(data)
-        torch.cuda.synchronize(device)
-        samples.append((time.perf_counter() - started) * 1000)
-    return samples
+        before_update = time.perf_counter()
+        step()
+        host_latencies.append((time.perf_counter() - before_update) * 1000)
+    synchronize()
+    return (time.perf_counter() - started) * 1000 / iterations, host_latencies
+
+
+def _profile_update(step, synchronize, device: torch.device) -> dict:
+    activities = [torch.profiler.ProfilerActivity.CPU]
+    if device.type == "cuda":
+        activities.append(torch.profiler.ProfilerActivity.CUDA)
+    with torch.profiler.profile(activities=activities) as profile:
+        step()
+        synchronize()
+
+    events = profile.events()
+    kernel_events = [
+        event
+        for event in events
+        if event.device_type == torch.autograd.DeviceType.CUDA
+        and not event.name.startswith(("Memcpy", "Memset"))
+    ]
+    launch_events = [
+        event
+        for event in events
+        if event.name.startswith("cudaLaunchKernel") or event.name == "cudaGraphLaunch"
+    ]
+    return {
+        "profile_kernel_count": len(kernel_events),
+        "profile_gpu_time_ms": sum(event.device_time_total for event in kernel_events)
+        / 1000,
+        "profile_cpu_launch_time_ms": sum(
+            event.self_cpu_time_total for event in launch_events
+        )
+        / 1000,
+    }
 
 
 def main() -> None:
@@ -106,19 +205,48 @@ def main() -> None:
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--iterations", type=int, default=50)
     parser.add_argument(
+        "--device",
+        choices=("cpu", "cuda"),
+        default="cuda",
+        help="Learner device. CPU runs support the eager and compiled variants "
+        "without CUDA graphs.",
+    )
+    parser.add_argument(
+        "--replay-device",
+        choices=("cpu", "cuda"),
+        help="Include native replay sampling and writeback on this device.",
+    )
+    parser.add_argument(
         "--variants",
         nargs="+",
-        choices=("compiled_scan", "cuda_graph"),
-        default=("compiled_scan", "cuda_graph"),
+        choices=(
+            "eager",
+            "compiled_scan",
+            "cuda_graph",
+            "compiled_train_step",
+            "compiled_train_step_cuda_graph",
+        ),
+        default=None,
     )
     args = parser.parse_args()
-    if not torch.cuda.is_available():
-        raise RuntimeError("This benchmark requires CUDA.")
+    if args.variants is None:
+        args.variants = (
+            ("cuda_graph", "compiled_train_step_cuda_graph")
+            if args.device == "cuda"
+            else ("eager",)
+        )
+    if args.device == "cuda" or args.replay_device == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA devices were requested but CUDA is unavailable.")
+    if args.device != "cuda" and any(
+        "cuda_graph" in variant for variant in args.variants
+    ):
+        raise RuntimeError("CUDA graph variants require --device cuda.")
 
     repo_root = Path(__file__).parents[2]
     example = _load_example(repo_root)
     template_cfg = _load_config(repo_root)
-    device = torch.device("cuda:0")
+    device = torch.device("cuda:0" if args.device == "cuda" else "cpu")
     torch.set_float32_matmul_precision("high")
 
     real_env = example["make_env"](template_cfg, template_cfg.env.seed)
@@ -139,9 +267,18 @@ def main() -> None:
         cfg = _load_config(repo_root)
         cfg.replay_buffer.batch_size = args.batch
         cfg.replay_buffer.seq_len = args.steps
-        cfg.optimization.compile_rssm = "scan"
+        # Each variant sets the three switches itself.
+        cfg.optimization.compile = "off"
+        cfg.optimization.compile_rssm = "scan" if variant != "eager" else None
         cfg.optimization.rssm_scan_unroll = args.unroll
-        cfg.optimization.cudagraph_train_step = variant == "cuda_graph"
+        cfg.optimization.compile_train_step = variant in (
+            "compiled_train_step",
+            "compiled_train_step_cuda_graph",
+        )
+        cfg.optimization.cudagraph_train_step = variant in (
+            "cuda_graph",
+            "compiled_train_step_cuda_graph",
+        )
         torch.manual_seed(0)
         learner = example["_build_learner"](
             cfg,
@@ -149,7 +286,7 @@ def main() -> None:
             obs_dim,
             action_dim,
         )
-        learner_update = example["_LearnerUpdate"](
+        learner_update = example["_make_learner_update"](
             cfg,
             device,
             learner,
@@ -163,18 +300,52 @@ def main() -> None:
                     example["LEARNER_RNG_STREAM"],
                 )
             )
-        samples = _measure(
-            learner_update,
-            data.clone(),
-            device=device,
-            warmup=args.warmup,
-            iterations=args.iterations,
-        )
-        median_ms = statistics.median(samples)
+        example["_warm_up_learner"](cfg, device, learner_update, obs_dim, action_dim)
+        replay_step = None
+        if args.replay_device is None:
+            step = ft.partial(learner_update.step, None, data.clone())
+            synchronize = (
+                ft.partial(torch.cuda.synchronize, device)
+                if device.type == "cuda"
+                else lambda: None
+            )
+            workload = "complete_learner_update"
+        else:
+            replay_step = _ReplayLearnerStep(
+                example,
+                cfg,
+                learner_update,
+                device=device,
+                replay_device=torch.device(args.replay_device),
+                obs_dim=obs_dim,
+                action_dim=action_dim,
+            )
+            step = replay_step
+            synchronize = replay_step.synchronize
+            workload = "complete_learner_update_with_replay"
+        try:
+            mean_ms, host_latencies = _measure(
+                step,
+                synchronize,
+                warmup=args.warmup,
+                iterations=args.iterations,
+            )
+            peak_memory = (
+                torch.cuda.max_memory_allocated(device) / 2**20
+                if device.type == "cuda"
+                else None
+            )
+            profile_metrics = _profile_update(step, synchronize, device)
+        finally:
+            if replay_step is not None:
+                replay_step.close()
         result = {
             "variant": variant,
-            "workload": "complete_learner_update",
-            "device": torch.cuda.get_device_name(device),
+            "workload": workload,
+            "device": (
+                torch.cuda.get_device_name(device) if device.type == "cuda" else "cpu"
+            ),
+            "replay_device": args.replay_device,
             "torch_version": torch.__version__,
             "cuda_version": torch.version.cuda,
             "batch": args.batch,
@@ -183,12 +354,25 @@ def main() -> None:
             "warmup": args.warmup,
             "iterations": args.iterations,
             "mixed_precision": cfg.optimization.mixed_precision,
-            "median_ms": median_ms,
-            "transitions_per_second": args.batch * args.steps * 1000 / median_ms,
-            "min_ms": min(samples),
-            "max_ms": max(samples),
+            "warmup_updates": args.warmup,
+            "measured_updates": args.iterations,
+            "mean_update_ms": mean_ms,
+            "updates_per_second": 1000 / mean_ms,
+            "transitions_per_second": args.batch * args.steps * 1000 / mean_ms,
+            "p50_host_update_ms": statistics.median(host_latencies),
+            "p95_host_update_ms": statistics.quantiles(
+                host_latencies, n=20, method="inclusive"
+            )[18],
+            "peak_cuda_allocated_mib": peak_memory,
+            **profile_metrics,
         }
         print(json.dumps(result, sort_keys=True), flush=True)
+        # Bound learner/capture callables form cycles. Release the previous
+        # variant before measuring the next one's live and peak allocations.
+        del step, synchronize, learner_update, learner, replay_step
+        gc.collect()
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
