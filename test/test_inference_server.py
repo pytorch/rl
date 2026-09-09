@@ -14,6 +14,7 @@ import pickle
 import queue
 import threading
 import time
+import warnings
 
 import psutil
 import pytest
@@ -4322,6 +4323,25 @@ class TestAsyncBatchedCollector:
     def test_invalid_server_backend_raises(self):
         with pytest.raises(ValueError, match="backend"):
             InferenceServerConfig(service_backend="not-a-backend")
+
+    def test_default_env_backend_warns_before_the_multiprocessing_default(self):
+        with pytest.warns(FutureWarning, match="env_backend='multiprocessing'"):
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=4,
+            )
+        assert collector._env_backend == "threading"
+        collector.shutdown()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            collector = AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=4,
+                env_backend="threading",
+            )
+            collector.shutdown()
 
     def test_server_death_raises_instead_of_hanging(self):
         """Killing the server process surfaces an error in the iterator."""

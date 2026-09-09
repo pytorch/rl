@@ -11,6 +11,7 @@ import os
 import queue
 import threading
 import time
+import warnings
 from collections import deque, OrderedDict
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Literal
@@ -509,7 +510,11 @@ class AsyncBatchedCollector(BaseCollector):
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
             One of ``"threading"``, ``"multiprocessing"``, ``"ray"``, or
-            ``"monarch"``.  Defaults to ``"threading"``.
+            ``"monarch"``.  Defaults to ``None``: environment workers run in
+            threads and inference uses the threading transport. In v0.15 the
+            environment-worker default changes to ``"multiprocessing"``; a
+            :class:`FutureWarning` is emitted until then when neither
+            ``backend`` nor ``env_backend`` is given.
         env_backend (str, optional): backend for the
             :class:`~torchrl.envs.AsyncEnvPool` that runs environments.  One
             of ``"threading"`` or ``"multiprocessing"``.  Falls back to
@@ -635,9 +640,8 @@ class AsyncBatchedCollector(BaseCollector):
         server_timeout: float | None = None,
         transport: InferenceTransport | None = None,
         device: torch.device | str | None = None,
-        backend: Literal[
-            "threading", "multiprocessing", "ray", "monarch"
-        ] = "threading",
+        backend: Literal["threading", "multiprocessing", "ray", "monarch"]
+        | None = None,
         env_backend: Literal["threading", "multiprocessing"] | None = None,
         env_exchange: Literal["queue", "shm", "auto"] = "queue",
         envs_per_worker: int = 1,
@@ -723,10 +727,25 @@ class AsyncBatchedCollector(BaseCollector):
         self._create_env_kwargs = create_env_kwargs
 
         # ---- resolve backends -------------------------------------------------
-        effective_env_backend = env_backend if env_backend is not None else backend
-        effective_policy_backend = (
-            policy_backend if policy_backend is not None else backend
-        )
+        if env_backend is not None:
+            effective_env_backend = env_backend
+        elif backend is not None:
+            effective_env_backend = backend
+        else:
+            warnings.warn(
+                "AsyncBatchedCollector runs environment workers in threads when "
+                "neither backend nor env_backend is given. In v0.15 this default "
+                "will change to env_backend='multiprocessing'. Pass "
+                "env_backend='threading' to keep the current behavior, or "
+                "env_backend='multiprocessing' to adopt the future default now.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            effective_env_backend = "threading"
+        if policy_backend is not None:
+            effective_policy_backend = policy_backend
+        else:
+            effective_policy_backend = backend if backend is not None else "threading"
         if effective_env_backend not in _ENV_BACKENDS:
             raise ValueError(
                 f"env_backend={effective_env_backend!r} is not supported. "
