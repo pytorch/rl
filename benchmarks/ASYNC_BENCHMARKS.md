@@ -52,6 +52,11 @@ becomes public in #4272. They keep one environment per worker because that
 transport rejects grouped workers. The same workload and batching limits apply;
 these remain separate series alongside the grouped integrated curve.
 
+The fixed series pin what the collector now resolves on its own: the thread-server
+modes pass `transport="thread"` and the process-slot modes pass an explicit
+`transition_chunk_size` (`1` except for the chunked series), so a change of the
+collector defaults cannot move them.
+
 `async-process-slots-integrated` is the cumulative curve of the direct-transport
 pipeline, the counterpart of `async-shm-integrated`. It keeps one environment per
 worker (the transport rejects grouped workers), enables static inference batches

@@ -28,6 +28,9 @@ collector:
   # thread backend. Keep fixed after that bug is resolved; the collection-only
   # series covers batched inference.
   inference_max_batch_size: 1
+  # The harness sets inference_backend per series; chunking follows the
+  # collector default so the process series measures the shipped configuration.
+  transition_chunk_size: auto
   inference_min_batch_size: 1
   inference_timeout: 0.01
   inference_static_batch_size: null
