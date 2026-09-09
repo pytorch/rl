@@ -8,3 +8,5 @@ pandas
 numpy
 matplotlib
 psutil
+hydra-core
+omegaconf
