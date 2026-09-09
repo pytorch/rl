@@ -2410,6 +2410,133 @@ def test_dreamer_v3_native_stream_replay(monkeypatch, online, count_reset_record
         rb.shutdown()
 
 
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("online", [False, True])
+def test_dreamer_v3_replay_samples_keep_episode_starts(monkeypatch, online):
+    """Sampled is_init flags are the collector's episode starts, not slice starts.
+
+    The RSSM rollout zeroes state, belief and action wherever is_init is set;
+    a marker at every slice start would train each sequence from a zero state.
+    """
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name=f"dreamer_v3_episode_starts_{online}"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.collector.num_envs = 1
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 4
+    cfg.replay_buffer.seq_len = 7
+    cfg.replay_buffer.online = online
+    rb = example["_build_replay"](cfg, 1, torch.device("cpu"), torch.device("cpu"))
+    steps = 48
+    data = TensorDict(
+        {
+            "action": torch.zeros(1, steps, 2),
+            "is_init": torch.zeros(1, steps, 1, dtype=torch.bool),
+            "step": torch.arange(steps).reshape(1, steps),
+            "state": torch.zeros(1, steps, 3),
+            "belief": torch.zeros(1, steps, 3),
+            "next": {
+                "observation": torch.randn(1, steps, 3),
+                "reward": torch.zeros(1, steps, 1),
+                "done": torch.zeros(1, steps, 1, dtype=torch.bool),
+                "terminated": torch.zeros(1, steps, 1, dtype=torch.bool),
+                "truncated": torch.zeros(1, steps, 1, dtype=torch.bool),
+            },
+        },
+        [1, steps],
+    )
+    data["is_init"][:, 0] = True
+    try:
+        rb.extend(data)
+        seen_mid_slice_start = False
+        for _ in range(16):
+            sample = rb.sample().reshape(4, 8)
+            starts = sample["step"][:, 0]
+            expected = (starts == 0).reshape(4, 1, 1)
+            assert (sample["is_init"][:, :1] == expected).all()
+            assert not sample["is_init"][:, 1:].any()
+            seen_mid_slice_start |= bool((starts != 0).any())
+        assert seen_mid_slice_start
+    finally:
+        rb.shutdown()
+
+
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf and _has_gym),
+    reason="requires hydra, omegaconf, and gym",
+)
+@pytest.mark.parametrize("online", [False, True])
+def test_dreamer_v3_async_replay_sequences_cross_episode_ends(monkeypatch, online):
+    """Async streams sample sequences across episode ends.
+
+    Slices that stop at every done flag never hand the learner a terminal
+    transition (the extra record is dropped), nor any episode shorter than
+    a sequence. With the stream as the trajectory, both reach the learner
+    and the rollout resets on the stored is_init flags.
+    """
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[2]
+    example_dir = repo_root / "sota-implementations/dreamer_v3"
+    monkeypatch.syspath_prepend(str(example_dir))
+    example = runpy.run_path(
+        example_dir / "train.py", run_name=f"dreamer_v3_cross_episode_{online}"
+    )
+    cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.collector.backend = "async"
+    cfg.collector.num_envs = 1
+    cfg.replay_buffer.buffer_size = 64
+    cfg.replay_buffer.batch_size = 4
+    cfg.replay_buffer.seq_len = 7
+    cfg.replay_buffer.online = online
+    rb = example["_build_replay"](cfg, 1, torch.device("cpu"), torch.device("cpu"))
+    steps = 48
+    episode_len = 12
+    step = torch.arange(steps)
+    terminal = (step % episode_len) == episode_len - 1
+    data = TensorDict(
+        {
+            "action": torch.zeros(steps, 2),
+            "env_index": torch.zeros(steps, dtype=torch.long),
+            "is_init": ((step % episode_len) == 0).reshape(steps, 1),
+            "step": step,
+            "state": torch.zeros(steps, 3),
+            "belief": torch.zeros(steps, 3),
+            "next": {
+                "observation": torch.randn(steps, 3),
+                "reward": torch.zeros(steps, 1),
+                "done": terminal.reshape(steps, 1),
+                "terminated": terminal.reshape(steps, 1),
+                "truncated": torch.zeros(steps, 1, dtype=torch.bool),
+            },
+        },
+        [steps],
+    )
+    try:
+        rb.extend(data)
+        terminal_in_sequence = reset_in_sequence = False
+        for _ in range(16):
+            sample = rb.sample().reshape(4, 8)[:, :-1]
+            assert (sample["step"][:, 1:] - sample["step"][:, :-1] == 1).all()
+            terminal_in_sequence |= bool(sample["next", "terminated"].any())
+            reset_in_sequence |= bool(sample["is_init"][:, 1:].any())
+            expected_init = (sample["step"] % episode_len == 0).reshape(4, 7, 1)
+            assert (sample["is_init"] == expected_init).all()
+        assert terminal_in_sequence
+        assert reset_in_sequence
+    finally:
+        rb.shutdown()
+
+
 @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
 def test_dreamer_v3_replay_capacity_validation(monkeypatch):
     from omegaconf import OmegaConf
@@ -2814,7 +2941,14 @@ def test_dreamer_v3_checkpoint_resume_processes(
                 assert not replay[stream][tails[stream]]["next", "terminated"].any()
             for _ in range(20):
                 sample = replay.sample().reshape(2, 4)
-                assert not sample["is_init"][:, 1:].any()
+                is_init = sample["is_init"].reshape(2, 4)
+                if collector_backend == "async":
+                    # Async streams cross episode ends: a reset follows every closed
+                    # record (the tail closed by the restart included), nothing else.
+                    done = sample["next", "done"].reshape(2, 4)
+                    assert torch.equal(is_init[:, 1:], done[:, :-1])
+                else:
+                    assert not is_init[:, 1:].any()
         finally:
             replay.shutdown()
 

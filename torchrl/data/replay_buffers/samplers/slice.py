@@ -118,6 +118,13 @@ class SliceSampler(Sampler):
             This feature only works with :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer`
             instances (otherwise the truncated key is returned in the info dictionary
             returned by the :meth:`~torchrl.data.replay_buffers.ReplayBuffer.sample` method).
+        init_key (NestedKey, optional): If not ``None``, the sampler marks the
+            first step of every slice with ``True`` under this key (OR-ed with
+            the flags stored in the buffer, when present) so that recurrent
+            modules restart from the stored hidden state at each slice start.
+            Pass ``None`` to leave the stored flags untouched, as required by
+            models that reset their state wherever ``is_init`` is set, such as
+            the DreamerV3 RSSM rollout. Defaults to ``"is_init"``.
         strict_length (bool, optional): if ``False``, trajectories of length
             shorter than `slice_len` (or `batch_size // num_slices`) will be
             allowed to appear in the batch. If ``True``, trajectories shorted
@@ -384,6 +391,7 @@ class SliceSampler(Sampler):
         trajectories: torch.Tensor | None = None,
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
+        init_key: NestedKey | None = "is_init",
         strict_length: bool = True,
         pad_output: bool = False,
         compile: bool | dict = False,
@@ -436,6 +444,7 @@ class SliceSampler(Sampler):
         )
         self.traj_key = traj_key
         self.truncated_key = truncated_key
+        self.init_key = init_key
         self.cache_values = cache_values
         self._fetch_traj = True
         self.strict_length = strict_length
@@ -1305,10 +1314,15 @@ class SliceSampler(Sampler):
         We OR our markers with the storage's existing ``is_init`` so episode
         resets that fall *inside* a slice are preserved. If the storage
         doesn't carry an ``is_init`` field (no :class:`InitTracker`), we don't
-        introduce one — we'd be lying about real resets we can't see.
+        introduce one — we'd be lying about real resets we can't see. With
+        ``init_key=None`` the stored flags are returned untouched.
         """
+        if self.init_key is None:
+            return
         existing_is_init = (
-            st_index.get("is_init", default=None) if hasattr(st_index, "get") else None
+            st_index.get(self.init_key, default=None)
+            if hasattr(st_index, "get")
+            else None
         )
         if existing_is_init is None:
             return
@@ -1332,7 +1346,7 @@ class SliceSampler(Sampler):
             slice_starts = torch.zeros(num_slices, device=device, dtype=torch.long)
             slice_starts[1:] = seq_length.to(device).cumsum(0)[:-1].to(torch.long)
         init_marker[slice_starts] = True
-        info["is_init"] = init_marker | existing_is_init
+        info[self.init_key] = init_marker | existing_is_init
 
     @property
     def _used_traj_key(self):
