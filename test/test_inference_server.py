@@ -72,6 +72,7 @@ from torchrl.modules.inference_server import (
 from torchrl.modules.inference_server._client import (
     _INTERACTION_TYPE_TO_CODE,
     _NO_INTERACTION_TYPE_CODE,
+    _REMOTE_INTERACTION_TYPE_KEY,
 )
 from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._monarch import MonarchTransport
@@ -1968,6 +1969,274 @@ class TestProcessSlotTransport:
                 assert process.exitcode == 0
             assert server.stats()["requests"] == 6
         assert all(result_queue.get(timeout=1.0) is True for _ in processes)
+
+    def test_batched_slot_io(self):
+        """Slots are gathered and scattered as batches, in the drained order."""
+        request_spec = TensorDict({"agent": {"observation": torch.zeros(4)}})
+        response_spec = TensorDict(
+            {
+                "agent": {"action": torch.zeros(2)},
+                "policy_version": torch.zeros((), dtype=torch.long),
+            }
+        )
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
+        clients = [transport.client() for _ in range(4)]
+        futures = [
+            client.submit(
+                TensorDict({"agent": {"observation": torch.full((4,), float(slot))}})
+            )
+            for slot, client in enumerate(clients)
+        ]
+        transport.wait_for_work(timeout=1.0)
+        slots, submitted_at = transport.drain_slots(3)
+        assert slots == [0, 1, 2]
+        assert all(isinstance(value, float) and value > 0 for value in submitted_at)
+
+        requests = transport.request_batch(4)
+        assert requests.batch_size == (4,)
+        assert not requests.is_locked
+        assert requests.get(_REMOTE_INTERACTION_TYPE_KEY).shape == (4,)
+        # Rows follow the given order, not the slot numbering, and the tail
+        # rows of the staging batch stay untouched.
+        transport.gather_requests([2, 0], out=requests)
+        assert torch.equal(
+            requests["agent", "observation"],
+            torch.tensor([2.0, 0.0, 0.0, 0.0]).unsqueeze(-1).expand(4, 4),
+        )
+        with pytest.raises(ValueError, match="Cannot gather 5"):
+            transport.gather_requests([0, 1, 2, 3, 0], out=requests)
+
+        responses = transport.response_batch(4)
+        responses["agent", "action"][:2] = torch.tensor([[20.0, 20.0], [0.0, 0.0]])
+        responses["policy_version"][:2] = 7
+        # A row count that does not match the slots is rejected before any
+        # slot is written or woken.
+        with pytest.raises(RuntimeError, match="batch size"):
+            transport.resolve_batch([2, 0], responses[:3])
+        assert not futures[2].done()
+        transport.resolve_batch([2, 0], responses[:2])
+        assert torch.equal(
+            futures[2].result(timeout=1.0)["agent", "action"], torch.full((2,), 20.0)
+        )
+        result_0 = futures[0].result(timeout=1.0)
+        assert torch.equal(result_0["agent", "action"], torch.zeros(2))
+        assert result_0["policy_version"] == 7
+        assert not futures[1].done()
+        # The per-request path still serves the remaining slots.
+        transport.resolve(
+            1, TensorDict({"agent": {"action": torch.ones(2)}, "policy_version": 1})
+        )
+        assert torch.equal(
+            futures[1].result(timeout=1.0)["agent", "action"], torch.ones(2)
+        )
+        items, callbacks = transport.drain(4)
+        assert callbacks == [3]
+        assert torch.equal(items[0]["agent", "observation"], torch.full((4,), 3.0))
+
+    def test_server_batched_pass_matches_inputs(self):
+        """Concurrent clients get their own results across many batched passes."""
+        request_spec = TensorDict({"agent": {"observation": torch.zeros(4)}})
+        response_spec = TensorDict(
+            {
+                "agent": {"action": torch.zeros(4)},
+                "policy_version": torch.zeros((), dtype=torch.long),
+            }
+        )
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=4)
+        clients = [transport.client() for _ in range(4)]
+        model = TensorDictModule(
+            _Doubler(),
+            in_keys=[("agent", "observation")],
+            out_keys=[("agent", "action")],
+        )
+        errors = []
+
+        def run(idx):
+            try:
+                for i in range(10):
+                    obs = torch.full((4,), float(idx * 100 + i))
+                    result = clients[idx](TensorDict({"agent": {"observation": obs}}))
+                    assert torch.equal(result["agent", "action"], obs * 2.0)
+                    assert result["policy_version"] == 3
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        with InferenceServer(
+            model, transport, max_batch_size=4, policy_version=3
+        ) as server:
+            assert server._slot_batches is not None
+            threads = [threading.Thread(target=run, args=(i,)) for i in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30.0)
+            stats = server.stats()
+        assert not errors
+        assert stats["requests"] == 40
+
+    def test_server_batched_pass_accumulates_min_batch(self):
+        """min_batch_size accumulation also applies to the batched slot pass."""
+        request_spec, response_spec = _make_shm_specs(
+            obs_size=1, act_size=1, with_version=False
+        )
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=2)
+        clients = [transport.client() for _ in range(2)]
+        policy = TensorDictModule(
+            _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
+        )
+        results = {}
+
+        def run(idx):
+            results[idx] = clients[idx](TensorDict({"observation": torch.zeros(1)}))
+
+        with InferenceServer(
+            policy, transport, max_batch_size=2, min_batch_size=2, timeout=1.0
+        ):
+            threads = [threading.Thread(target=run, args=(i,)) for i in range(2)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30.0)
+        # Both requests were served by one pass of two.
+        assert torch.equal(results[0]["action"], torch.tensor([2.0]))
+        assert torch.equal(results[1]["action"], torch.tensor([2.0]))
+
+    def test_server_batched_pass_propagates_interaction_type(self):
+        """The interaction code is read from the host staging batch."""
+
+        class _InteractionPolicy(nn.Module):
+            def forward(self, td: TensorDictBase) -> TensorDictBase:
+                value = 1 if interaction_type() is InteractionType.RANDOM else 0
+                return TensorDict(
+                    {"action": torch.full(td.batch_size, value)},
+                    batch_size=td.batch_size,
+                )
+
+        request_spec = TensorDict({"observation": torch.zeros(1)})
+        response_spec = TensorDict({"action": torch.zeros((), dtype=torch.long)})
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=1)
+        with InferenceServer(_InteractionPolicy(), transport, max_batch_size=1):
+            client = PolicyClientModule(transport.client(), out_keys=["action"])
+            with set_interaction_type(InteractionType.RANDOM):
+                result = client(TensorDict({"observation": torch.zeros(1)}))
+            assert result["action"].item() == 1
+            result = client(TensorDict({"observation": torch.zeros(1)}))
+            assert result["action"].item() == 0
+
+    def test_server_batched_pass_requires_declared_response_keys(self):
+        """A response key the model does not produce fails the request."""
+        request_spec, response_spec = _make_shm_specs(with_version=False)
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=1)
+        client = transport.client()
+
+        def no_action(td):
+            return td.set("something_else", td["observation"])
+
+        with InferenceServer(no_action, transport, max_batch_size=1):
+            with pytest.raises(KeyError, match="action"):
+                client(TensorDict({"observation": torch.zeros(4)}))
+
+    def test_custom_collate_keeps_per_request_path(self):
+        """A transforming collate_fn is not bypassed by the batched pass."""
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=1)
+        client = transport.client()
+
+        def offset_collate(items):
+            batch = lazy_stack(items).contiguous()
+            batch["observation"] += 1.0
+            return batch
+
+        with InferenceServer(
+            _make_doubling_policy(),
+            transport,
+            max_batch_size=1,
+            collate_fn=offset_collate,
+        ) as server:
+            assert server._slot_batches is None
+            result = client(TensorDict({"observation": torch.ones(4)}))
+        assert torch.equal(result["action"], torch.full((4,), 4.0))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.parametrize("static", [False, True])
+    def test_server_batched_pass_on_cuda(self, static):
+        """Pinned staging and one event per pass keep CUDA results exact.
+
+        Varying partial batches (padded for the graph), fresh random draws on
+        every replay and in-place weight updates all behave as on the
+        per-request path.
+        """
+
+        class _ScaleAndNoise(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.scale = nn.Parameter(torch.ones(()))
+
+            def forward(self, observation):
+                return observation * self.scale, torch.rand_like(observation)
+
+        policy = TensorDictModule(
+            _ScaleAndNoise(), in_keys=["observation"], out_keys=["action", "noise"]
+        )
+        request_spec = TensorDict({"observation": torch.zeros(2)})
+        response_spec = TensorDict(
+            {
+                "action": torch.zeros(2),
+                "noise": torch.zeros(2),
+                "policy_version": torch.zeros((), dtype=torch.long),
+            }
+        )
+        transport = ProcessSlotTransport(request_spec, response_spec, num_slots=3)
+        clients = [transport.client() for _ in range(3)]
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=4,
+            static_batch_size=4 if static else None,
+            request_spec=request_spec if static else None,
+            policy_device="cuda:0",
+        ) as server:
+            graph = server._cudagraph_model
+            assert (graph is not None) is static
+            assert server._slot_batches.host_request["observation"].is_pinned()
+            for round_index in range(3):
+                futures = [
+                    client.submit(
+                        TensorDict(
+                            {
+                                "observation": torch.tensor(
+                                    [float(10 * round_index + slot), -1.0]
+                                )
+                            }
+                        )
+                    )
+                    for slot, client in enumerate(clients)
+                ]
+                results = [future.result(timeout=10.0) for future in futures]
+                for slot, result in enumerate(results):
+                    assert result["action"].device.type == "cpu"
+                    assert torch.equal(
+                        result["action"],
+                        torch.tensor([float(10 * round_index + slot), -1.0]),
+                    )
+                    assert result["policy_version"] == 0
+                noises = torch.stack([result["noise"] for result in results])
+                assert (noises >= 0).all() and (noises < 1).all()
+                assert noises.unique().numel() == noises.numel()
+            first_noise = results[0]["noise"]
+            second = clients[0](TensorDict({"observation": torch.ones(2)}))
+            assert not torch.equal(second["noise"], first_noise)
+
+            def scale_weight(model):
+                with torch.no_grad():
+                    model.module.scale.fill_(3.0)
+
+            server.update_model(scale_weight)
+            assert server._cudagraph_model is graph
+            result = clients[1](TensorDict({"observation": torch.tensor([1.0, 2.0])}))
+            assert torch.equal(result["action"], torch.tensor([3.0, 6.0]))
+            assert result["policy_version"] == 1
 
 
 # =============================================================================

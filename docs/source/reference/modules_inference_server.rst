@@ -241,6 +241,17 @@ The driver continues to receive completed transitions from the workers. The
 transport requires fixed-shape CPU tensor request and response specs; policy
 execution and device transfers remain owned by the inference process.
 
+Because every slot has a fixed layout, the server serves this transport with
+one batched pass per sweep instead of collating and resolving requests one by
+one: the ready slots are gathered into a host staging batch (pinned when the
+policy runs on CUDA), copied to a persistent policy-device batch with
+non-blocking transfers, and the declared response keys are copied back and
+scattered into the response slots with one copy per leaf. A single CUDA event
+per pass waits for the response copy instead of a device-wide synchronize.
+The batched pass applies to stacking collate functions (the default,
+:func:`~tensordict.lazy_stack`, :func:`~tensordict.maybe_dense_stack` and
+:func:`torch.stack`); a custom ``collate_fn`` keeps the per-request path.
+
 Structured Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
