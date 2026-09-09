@@ -976,7 +976,9 @@ def main(cfg: DictConfig):
             checkpoint.load(resume_path, components={"replay"})
             rb.end_streams()
             replay_restored = True
-        replay_rng.set_state(torch.tensor(run_state["replay_rng"], dtype=torch.uint8))
+        replay_rng.set_state(
+            torch.tensor(run_state["replay_rng"], dtype=torch.uint8, device="cpu")
+        )
         rb.set_rng(replay_rng)
     action_offset = int(run_state.get("action_steps", 0))
     action_step = action_offset
