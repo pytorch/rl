@@ -152,6 +152,12 @@ class _BatchSizeModule(nn.Module):
         return value + value.shape[0]
 
 
+class _RecurrentEcho(nn.Module):
+    def forward(self, observation, state):
+        state = torch.tanh(state + observation)
+        return state.sum(-1, keepdim=True), state
+
+
 class _RandomModule(nn.Module):
     def forward(self, value):
         return torch.rand_like(value)
@@ -494,6 +500,43 @@ class TestInferenceServerCore:
                 request_spec=TensorDict({"observation": torch.zeros(1)}),
                 policy_device="cpu",
             )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_static_batch_serves_policy_rewriting_its_inputs(self):
+        """Recurrent policies write their new state under the key they read it from.
+
+        Served through a captured CUDA graph, every request must still be
+        computed from its own inputs rather than from the batch the graph was
+        captured on.
+        """
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            _RecurrentEcho(),
+            in_keys=["observation", "state"],
+            out_keys=["action", "state"],
+        )
+        request_spec = TensorDict(
+            {"observation": torch.zeros(3), "state": torch.zeros(3)}
+        )
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=4,
+            static_batch_size=4,
+            request_spec=request_spec,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ):
+            client = transport.client()
+            for value in (1.0, -1.0, 0.5):
+                request = TensorDict(
+                    {"observation": torch.ones(3), "state": torch.full((3,), value)}
+                )
+                expected = policy(request.clone())
+                served = client(request.clone())
+                torch.testing.assert_close(served["action"], expected["action"])
+                torch.testing.assert_close(served["state"], expected["state"])
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
