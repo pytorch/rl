@@ -4224,7 +4224,8 @@ class TestAsyncBatchedCollector:
         try:
             assert collector._uses_process_env_workers
             assert collector.server_backend == "process"
-            assert collector._transition_chunk_size == 12 // num_envs
+            # At least 64 per message, capped at one batch.
+            assert collector._transition_chunk_size == 12
             frames = 0
             for batch in collector:
                 frames += batch.numel()
@@ -4348,6 +4349,33 @@ class TestAsyncBatchedCollector:
         finally:
             collector.shutdown()
 
+    @pytest.mark.parametrize(
+        "num_envs, frames_per_batch, expected",
+        [
+            # frames_per_batch // num_envs is 32: the floor of 64 applies.
+            (8, 256, 64),
+            # One run per environment and batch is longer than the floor.
+            (2, 256, 128),
+            # A batch shorter than the floor caps the message at one batch.
+            (2, 12, 12),
+        ],
+    )
+    def test_auto_transition_chunk_size_floor_and_cap(
+        self, num_envs, frames_per_batch, expected
+    ):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * num_envs,
+            policy_factory=_make_counting_policy,
+            transport="auto",
+            frames_per_batch=frames_per_batch,
+            env_backend="multiprocessing",
+        )
+        try:
+            assert collector._uses_process_env_workers
+            assert collector._transition_chunk_size == expected
+        finally:
+            collector.shutdown()
+
     def test_process_slot_transport_implies_process_server_and_workers(self):
         """An explicit ProcessSlotTransport needs no server or env backend settings."""
         collector = AsyncBatchedCollector(
@@ -4360,7 +4388,7 @@ class TestAsyncBatchedCollector:
         try:
             assert collector.server_backend == "process"
             assert collector._env_backend == "multiprocessing"
-            assert collector._transition_chunk_size == 2
+            assert collector._transition_chunk_size == 4
             assert sum(batch.numel() for batch in collector) == 8
         finally:
             collector.shutdown()

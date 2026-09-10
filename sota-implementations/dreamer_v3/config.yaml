@@ -28,7 +28,8 @@ collector:
   # two.
   inference_backend: auto  # one of: auto, thread, process
   # Consecutive transitions per environment-worker message with the process
-  # backend; auto sends one contiguous run per environment and batch.
+  # backend; auto sends at least 64 (fewer messages keep the driver off the
+  # learner's way) and never more than a batch.
   transition_chunk_size: auto
   policy_device: null
   inference_max_batch_size: null  # null uses num_envs
