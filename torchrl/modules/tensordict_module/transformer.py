@@ -584,7 +584,7 @@ class TransformerModule(ModuleBase):
 
     def __getstate__(self):
         """Pickle and copy the module without its cache: copies start empty."""
-        state = self.__dict__.copy()
+        state = dict(super().__getstate__())
         state["_kv_cache"] = None
         state["_positions"] = None
         state["_weights_version"] = None
