@@ -136,10 +136,14 @@ Defaults to `1`.
 transitions each environment worker process accumulates before
 sending them to the driver as one dense message. Requires a
 [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport).
-`"auto"` (default) uses `frames_per_batch // len(create_env_fn)`
-with process workers, so each batch holds one contiguous run per
-environment like the synchronous collectors and a transition waits
-at most one batch; it resolves to `1` otherwise.
+`"auto"` (default) uses at least 64 consecutive transitions per
+message with process workers, `frames_per_batch //
+len(create_env_fn)` when that is larger, and never more than
+`frames_per_batch`: the driver's work per message competes with
+training, and smaller messages measurably slow collection down. A
+transition reaches the driver once its message is complete, about
+64 environment steps later; pass `1` for step-level delivery.
+It resolves to `1` without process workers.
 `1` sends every transition as soon as it completes.
 Larger values take the driver off the per-transition path: it
 receives one message per chunk, concatenates whole chunks into
@@ -236,6 +240,91 @@ Examples
 ... break
 >>> collector.shutdown()
 ```
+
+The fast configuration for many process-backed environments serves the
+policy from a dedicated inference process that the environment workers
+reach directly, while the driver only receives dense chunks of
+transitions. The policy is rebuilt inside that process from a picklable,
+module-level factory and created directly on its device; the learner's
+weights pushed before the first iteration are applied when the server
+starts, before any request is served:
+
+```
+>>> import functools
+>>> import torch
+>>> from torchrl.modules.inference_server import (
+... InferenceDeviceConfig,
+... InferenceServerConfig,
+... )
+>>> def make_policy(device):
+... with torch.device(device):
+... module = nn.Linear(4, 2)
+... return TensorDictModule(
+... module, in_keys=["observation"], out_keys=["action"]
+... )
+>>> num_envs = 64
+>>> collector = AsyncBatchedCollector(
+... create_env_fn=[lambda: GymEnv("CartPole-v1")] * num_envs,
+... policy_factory=functools.partial(make_policy, "cuda:0"),
+... frames_per_batch=1024,
+... # One environment per worker process; the shared-memory exchange
+... # is not involved once the workers reach the server directly.
+... env_backend="multiprocessing",
+... # Derive the request and response slot layouts from one
+... # environment and one policy pass, then serve from a process.
+... transport="auto",
+... # Dense 64-step messages keep the driver off the per-transition
+... # path; "auto" gives at least 64 as well.
+... transition_chunk_size=64,
+... server_config=InferenceServerConfig(
+... max_batch_size=num_envs, min_batch_size=1, timeout=0.001
+... ),
+... device_config=InferenceDeviceConfig(
+... policy_device="cuda:0", output_device="cpu", storing_device="cpu"
+... ),
+... )
+>>> collector.server_backend
+'process'
+>>> learner_policy = make_policy("cuda:0") # the copy being trained
+>>> collector.update_policy_weights_(learner_policy)
+>>> for batch in collector:
+... print(batch.shape) # dense: whole 64-step chunks, env_index is a tensor
+... break
+torch.Size([1024])
+>>> collector.shutdown()
+```
+
+The slot layouts can also be built by hand, for instance when the
+served keys differ from what one policy pass returns. A
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) implies
+the process inference server and multiprocessing workers:
+
+```
+>>> from torchrl.modules.inference_server import ProcessSlotTransport
+>>> env = GymEnv("CartPole-v1")
+>>> request_spec = env.fake_tensordict().select("observation")
+>>> response_spec = make_policy("cpu")(request_spec.clone()).select("action")
+>>> response_spec["policy_version"] = torch.zeros((), dtype=torch.long)
+>>> env.close()
+>>> collector = AsyncBatchedCollector(
+... create_env_fn=[lambda: GymEnv("CartPole-v1")] * num_envs,
+... policy_factory=functools.partial(make_policy, "cuda:0"),
+... frames_per_batch=1024,
+... transport=ProcessSlotTransport(
+... request_spec, response_spec, num_slots=num_envs
+... ),
+... transition_chunk_size=64,
+... device_config=InferenceDeviceConfig(
+... policy_device="cuda:0", output_device="cpu", storing_device="cpu"
+... ),
+... )
+>>> collector.shutdown()
+```
+
+Pass `replay_buffer=` to let a background thread write each batch to
+replay with one routed `extend`; the DreamerV3 example under
+`sota-implementations/dreamer_v3` uses this path with a
+[`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble) routed by `env_index`.
 
 async_shutdown(*timeout: float | None = None*, *close_env: bool = True*) → None
 
