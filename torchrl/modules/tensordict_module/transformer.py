@@ -232,7 +232,11 @@ class CausalTransformer(nn.Module):
         self.norm = nn.LayerNorm(hidden_size, device=device)
 
     def new_kv_cache(
-        self, batch_size: int, *, device: torch.device | None = None
+        self,
+        batch_size: int,
+        *,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Allocate an empty key/value cache for ``batch_size`` streams.
 
@@ -242,11 +246,15 @@ class CausalTransformer(nn.Module):
         Keyword Args:
             device (torch.device, optional): where to allocate the cache.
                 Defaults to the device of the projection weights.
+            dtype (torch.dtype, optional): dtype of the cache. Pass the
+                compute dtype under autocast so cached keys and values are
+                stored as the projections produce them, without a conversion
+                on every step. Defaults to the dtype of the projection
+                weights.
 
         Returns:
             A ``(k, v)`` tuple of zero tensors of shape ``[batch_size,
-            num_layers, num_heads, max_seq_len, head_dim]`` in the dtype of
-            the projection weights.
+            num_layers, num_heads, max_seq_len, head_dim]``.
         """
         weight = self.blocks[0].qkv.weight
         shape = (
@@ -257,9 +265,10 @@ class CausalTransformer(nn.Module):
             self.head_dim,
         )
         device = weight.device if device is None else device
+        dtype = weight.dtype if dtype is None else dtype
         return (
-            torch.zeros(shape, dtype=weight.dtype, device=device),
-            torch.zeros(shape, dtype=weight.dtype, device=device),
+            torch.zeros(shape, dtype=dtype, device=device),
+            torch.zeros(shape, dtype=dtype, device=device),
         )
 
     @staticmethod
@@ -356,6 +365,26 @@ _BACKBONE_ATTRIBUTES = ("num_layers", "num_heads", "head_dim", "max_seq_len")
 _BACKBONE_METHODS = ("new_kv_cache", "reset_kv_cache")
 
 
+def _autocast_dtype(device: torch.device) -> torch.dtype | None:
+    """Return the active autocast dtype for ``device``, or ``None`` when disabled."""
+    device_type = device.type
+    try:
+        enabled = torch.is_autocast_enabled(device_type)
+        return torch.get_autocast_dtype(device_type) if enabled else None
+    except TypeError:
+        if device_type == "cuda":
+            return (
+                torch.get_autocast_gpu_dtype() if torch.is_autocast_enabled() else None
+            )
+        if device_type == "cpu":
+            return (
+                torch.get_autocast_cpu_dtype()
+                if torch.is_autocast_cpu_enabled()
+                else None
+            )
+        return None
+
+
 class TransformerModule(ModuleBase):
     """A TensorDict wrapper turning a causal transformer into a temporal policy module.
 
@@ -411,6 +440,22 @@ class TransformerModule(ModuleBase):
         default_recurrent_mode (bool, optional): the recurrent mode when not
             overridden by the :class:`~torchrl.modules.set_recurrent_mode`
             context manager. Defaults to ``False``.
+        validate_windows (bool, optional): whether the window path checks that
+            every row starts with ``is_init=True`` and raises otherwise. The
+            check is data-dependent: under :func:`torch.compile` it costs one
+            graph break, and ``fullgraph=True`` rejects it at compile time.
+            Pass ``False`` to compile the window path as one graph, in which
+            case the caller is responsible for episode-aligned windows.
+            Defaults to ``True``.
+
+    .. note::
+        The cache is discarded whenever the parameters change. Parameter
+        edits in place or swapped parameter tensors are detected on the next
+        eager step; TorchRL's weight-synchronization paths (collectors and
+        the inference server) call :meth:`mark_weight_update` explicitly,
+        which also covers compiled modules and updates that write through
+        ``.data``. Call :meth:`mark_weight_update` (or :meth:`reset_cache`)
+        yourself after updating the parameters by any other means.
 
     .. note::
         The batch position is the stream identity of the cached-step path:
@@ -482,6 +527,7 @@ class TransformerModule(ModuleBase):
         out_keys=None,
         device=None,
         default_recurrent_mode: bool | None = None,
+        validate_windows: bool = True,
     ):
         super().__init__()
         if transformer is not None:
@@ -553,8 +599,10 @@ class TransformerModule(ModuleBase):
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._recurrent_mode = default_recurrent_mode
+        self.validate_windows = validate_windows
         self._kv_cache: Any = None
         self._positions: torch.Tensor | None = None
+        self._cache_dtype: torch.dtype | None = None
         self._weights_version: tuple[tuple[int, int], ...] | None = None
 
     @property
@@ -580,13 +628,26 @@ class TransformerModule(ModuleBase):
         """
         self._kv_cache = None
         self._positions = None
+        self._cache_dtype = None
         self._weights_version = None
+
+    def mark_weight_update(self) -> None:
+        """Discard the cache after a weight update.
+
+        TorchRL's weight-synchronization paths (collectors and the inference
+        server) call this through :func:`torchrl._utils.mark_weight_update`
+        once new weights are applied, so every stream restarts instead of
+        attending to keys and values computed with the previous weights. Call
+        it yourself after updating the parameters by other means.
+        """
+        self.reset_cache()
 
     def __getstate__(self):
         """Pickle and copy the module without its cache: copies start empty."""
         state = dict(super().__getstate__())
         state["_kv_cache"] = None
         state["_positions"] = None
+        state["_cache_dtype"] = None
         state["_weights_version"] = None
         return state
 
@@ -607,21 +668,24 @@ class TransformerModule(ModuleBase):
         """
         batch_size = value.shape[0]
         positions = self._positions
+        cache_dtype = _autocast_dtype(value.device)
         stale = (
             positions is None
             or positions.shape[0] != batch_size
             or positions.device != value.device
+            or cache_dtype != self._cache_dtype
         )
         if not stale and not is_compiling():
             version = self._current_weights_version()
             stale = version != self._weights_version
         if stale:
             self._kv_cache = self.transformer.new_kv_cache(
-                batch_size, device=value.device
+                batch_size, device=value.device, dtype=cache_dtype
             )
             self._positions = torch.zeros(
                 batch_size, dtype=torch.long, device=value.device
             )
+            self._cache_dtype = cache_dtype
             if not is_compiling():
                 self._weights_version = self._current_weights_version()
             return torch.ones(batch_size, dtype=torch.bool, device=value.device)
@@ -660,7 +724,7 @@ class TransformerModule(ModuleBase):
         value = tensordict_shaped.get(self.in_keys[0])
 
         if self.recurrent_mode:
-            if not is_compiling() and not is_init[..., 0].all():
+            if self.validate_windows and not is_init[..., 0].all():
                 raise ValueError(
                     "TransformerModule(recurrent_mode=True) expects "
                     "episode-aligned windows: every row must start with "

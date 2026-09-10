@@ -28,6 +28,7 @@ from torchrl._utils import (
     _maybe_record_function_decorator,
     _replace_last,
     accept_remote_rref_udf_invocation,
+    mark_weight_update,
     prod,
     RL_WARNINGS,
 )
@@ -1731,6 +1732,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             and self._policy_w_state_dict is not None
         ):
             TensorDict.from_module(self._policy_w_state_dict).data.update_(weights.data)
+            mark_weight_update(self._policy_w_state_dict)
             return
         raise RuntimeError("Collector has no mutable local policy weight target.")
 

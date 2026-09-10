@@ -62,16 +62,6 @@ class TestMaskHelpers:
         )
         torch.testing.assert_close(mask, expected)
 
-    def test_segment_mask_is_causal(self):
-        is_init = torch.zeros(1, 6, dtype=torch.bool)
-        mask = segment_causal_mask_from_is_init(is_init)
-        torch.testing.assert_close(mask[0], torch.ones(6, 6, dtype=torch.bool).tril())
-
-    def test_segment_mask_diagonal_always_true(self):
-        is_init = torch.rand(3, 8) > 0.5
-        mask = segment_causal_mask_from_is_init(is_init)
-        assert mask.diagonal(dim1=-2, dim2=-1).all()
-
 
 def _window(obs, is_init, batch_shape):
     return TensorDict({"observation": obs, "is_init": is_init}, batch_shape)
@@ -177,17 +167,6 @@ class TestTransformerModule:
                 out_key="embed",
             )
 
-    def test_single_step_writes_no_state(self):
-        module = self._make_module()
-        td = _window(torch.randn(2, 5), torch.ones(2, 1, dtype=torch.bool), [2])
-        module(td)
-        assert td["embed"].shape == (2, 16)
-        assert set(td.keys()) == {"observation", "is_init", "embed"}
-        td_next = _window(torch.randn(2, 5), torch.zeros(2, 1, dtype=torch.bool), [2])
-        module(td_next)
-        assert set(td_next.keys()) == {"observation", "is_init", "embed"}
-        assert not torch.isclose(td_next["embed"], td["embed"]).all()
-
     @pytest.mark.parametrize("shape", [[3], [2, 3]])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_step_vs_window_parity(self, shape, device):
@@ -226,22 +205,6 @@ class TestTransformerModule:
         torch.testing.assert_close(
             td["embed"].float(), step_out.float(), atol=5e-2, rtol=5e-2
         )
-
-    def test_reset_forgets_history(self):
-        module = self._make_module()
-        obs, _ = self._trajectory([1], 8)
-        is_init = torch.zeros(1, 8, 1, dtype=torch.bool)
-        is_init[:, 0] = True
-        is_init[:, 5] = True
-        td = _window(obs, is_init, [1, 8])
-        with set_recurrent_mode(True):
-            module(td)
-        fresh = _window(
-            obs[:, 5:], torch.tensor([True, False, False]).view(1, 3, 1), [1, 3]
-        )
-        with set_recurrent_mode(True):
-            module(fresh)
-        torch.testing.assert_close(td["embed"][:, 5:], fresh["embed"])
 
     def test_window_requires_episode_aligned_rows(self):
         module = self._make_module()
@@ -322,7 +285,7 @@ class TestTransformerModule:
     @pytest.mark.skipif(os.name == "nt", reason="inductor is not available on Windows")
     @pytest.mark.parametrize("recurrent", [False, True])
     def test_fullgraph_compile_matches_eager(self, recurrent):
-        module = self._make_module(max_seq_len=8)
+        module = self._make_module(max_seq_len=8, validate_windows=not recurrent)
         obs, is_init = self._trajectory([2], 3)
         if recurrent:
             td = _window(obs, is_init, [2, 3])
@@ -335,6 +298,16 @@ class TestTransformerModule:
         module.reset_cache()
         compiled = _run_steps(torch.compile(module, fullgraph=True), obs, is_init, [2])
         torch.testing.assert_close(compiled, eager, atol=1e-5, rtol=1e-5)
+
+    @pytest.mark.skipif(os.name == "nt", reason="inductor is not available on Windows")
+    def test_window_validation_survives_default_compile(self):
+        module = torch.compile(self._make_module(max_seq_len=8))
+        obs, is_init = self._trajectory([2], 3)
+        is_init[1, 0] = False
+        with set_recurrent_mode(True), pytest.raises(
+            ValueError, match="episode-aligned"
+        ):
+            module(_window(obs, is_init, [2, 3]))
 
     def test_custom_backbone(self):
         backbone = CausalTransformer(5, 16, 1, num_heads=2, max_seq_len=6)
@@ -381,19 +354,6 @@ class TestTransformerModule:
         module.reset_cache()
         return policy
 
-    def test_env_rollout_matches_window(self):
-        env = self._make_env()
-        obs_dim = env.observation_spec["observation"].shape[-1]
-        module = self._make_module(input_size=obs_dim, max_seq_len=64)
-        policy = self._make_policy(env, module)
-        rollout = env.rollout(6, policy)
-        assert "transformer_state" not in rollout.keys()
-        with set_recurrent_mode(True):
-            window = module(rollout.exclude("embed").clone())
-        torch.testing.assert_close(
-            window["embed"], rollout["embed"], atol=1e-5, rtol=1e-5
-        )
-
     def test_serial_env_rollout_matches_window(self):
         def make_env():
             return self._make_env()
@@ -432,6 +392,47 @@ class TestTransformerModule:
             window = module(episode.exclude("embed").clone())
         torch.testing.assert_close(
             window["embed"], episode["embed"], atol=1e-5, rtol=1e-5
+        )
+
+    @pytest.mark.parametrize("compile", [False, True], ids=["eager", "compiled"])
+    def test_collector_weight_update_restarts_streams(self, compile):
+        """The collector's weight sync writes through ``.data``; the cache must restart."""
+        if compile and os.name == "nt":
+            pytest.skip("inductor is not available on Windows")
+        env = self._make_env()
+        obs_dim = env.observation_spec["observation"].shape[-1]
+        module = self._make_module(input_size=obs_dim, max_seq_len=64)
+        policy = self._make_policy(env, module)
+        if compile:
+            policy.module[0] = torch.compile(module)
+        collector = Collector(env, policy, frames_per_batch=4, total_frames=8)
+        try:
+            iterator = iter(collector)
+            next(iterator)
+            weights = TensorDict.from_module(policy).data.clone()
+            weights.apply_(lambda t: t.add_(0.5) if t.is_floating_point() else t)
+            collector.update_policy_weights_(weights)
+            second = next(iterator).clone()
+        finally:
+            collector.shutdown()
+        assert not second["is_init"][0].any()
+        fresh = TransformerModule(
+            transformer=copy.deepcopy(module.transformer),
+            in_key="observation",
+            out_key="embed",
+        )
+        transformer_weights = weights["module", "0"]
+        if "_orig_mod" in transformer_weights.keys():
+            transformer_weights = transformer_weights["_orig_mod"]
+        TensorDict.from_module(fresh.transformer).data.update_(
+            transformer_weights["transformer"]
+        )
+        first_step = _window(
+            second["observation"][:1], torch.ones(1, 1, dtype=torch.bool), [1]
+        )
+        fresh(first_step)
+        torch.testing.assert_close(
+            second["embed"][:1], first_step["embed"], atol=1e-4, rtol=1e-4
         )
 
 

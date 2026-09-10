@@ -224,16 +224,24 @@ Unlike the RNN modules, no state travels in the TensorDict. The key/value
 cache is inference state owned by the module instance: the backbone allocates
 it on the first cached step in the dtype of its projections, one stream per
 batch position, and the module clears the streams flagged by ``is_init``,
-restarts every stream when the parameters change (in place or swapped), and
-releases the cache on :meth:`~torchrl.modules.TransformerModule.reset_cache`;
-copies and pickled instances start with an empty cache. Rollouts and replay
-buffers therefore never carry a cache, whatever the context length.
-Use one module instance per collector (or per collector worker); batches
-whose composition changes between calls are not supported yet.
+restarts every stream when the parameters change, and releases the cache on
+:meth:`~torchrl.modules.TransformerModule.reset_cache`; copies and pickled
+instances start with an empty cache. TorchRL's weight-synchronization paths
+(collectors and the inference server) notify the module through
+:meth:`~torchrl.modules.TransformerModule.mark_weight_update` once new
+weights are applied; call it yourself after updating parameters by other
+means. Under autocast the cache is allocated in the compute dtype, so no
+conversion happens on the hot path. Rollouts and replay buffers never carry
+a cache, whatever the context length. Use one module instance per collector
+(or per collector worker); batches whose composition changes between calls
+are not supported yet.
 
 Training windows must be episode-aligned: every row must start with
 ``is_init=True``, which complete-trajectory sampling provides, and a window
-that starts mid-episode raises an error. Episode boundaries inside a window
+that starts mid-episode raises an error. The check is data-dependent, so it
+costs one graph break under :func:`torch.compile`; pass
+``validate_windows=False`` to compile the window path as a single graph and
+take responsibility for alignment. Episode boundaries inside a window
 are recovered from ``is_init`` through :func:`positions_from_is_init` and
 :func:`segment_causal_mask_from_is_init`. Any backbone honoring the
 :class:`CausalTransformer` contract (``forward``, ``new_kv_cache`` and

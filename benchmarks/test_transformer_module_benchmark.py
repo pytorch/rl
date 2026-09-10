@@ -38,14 +38,26 @@ def _make_module(input_size: int, max_seq_len: int) -> TransformerModule:
     )
 
 
-def _run_cached_steps(module: TransformerModule, obs: torch.Tensor) -> None:
+def _synchronize() -> None:
+    """Wait for queued kernels so the timer measures execution, not enqueueing."""
+    if _DEVICE.type == "cuda":
+        torch.cuda.synchronize(_DEVICE)
+
+
+def _run_cached_steps(
+    module: TransformerModule, obs: torch.Tensor, autocast: bool = False
+) -> None:
     """Step ``_STEPS_PER_CALL`` times from an episode start on every stream."""
     num_envs = obs.shape[0]
     is_init = torch.ones(num_envs, 1, dtype=torch.bool, device=obs.device)
-    for step in range(_STEPS_PER_CALL):
-        td = TensorDict({"observation": obs[:, step], "is_init": is_init}, [num_envs])
-        module(td)
-        is_init = torch.zeros_like(is_init)
+    with torch.autocast(_DEVICE.type, dtype=torch.bfloat16, enabled=autocast):
+        for step in range(_STEPS_PER_CALL):
+            td = TensorDict(
+                {"observation": obs[:, step], "is_init": is_init}, [num_envs]
+            )
+            module(td)
+            is_init = torch.zeros_like(is_init)
+    _synchronize()
 
 
 def _tensordict_bytes(td: TensorDict) -> int:
@@ -54,12 +66,15 @@ def _tensordict_bytes(td: TensorDict) -> int:
 
 @pytest.mark.parametrize("num_envs", [8, 32])
 @pytest.mark.parametrize("context", [64, 256])
-def test_transformer_cached_step(benchmark, num_envs: int, context: int) -> None:
+@pytest.mark.parametrize("autocast", [False, True], ids=["fp32", "autocast_bf16"])
+def test_transformer_cached_step(
+    benchmark, num_envs: int, context: int, autocast: bool
+) -> None:
     module = _make_module(16, context)
     obs = torch.randn(num_envs, _STEPS_PER_CALL, 16, device=_DEVICE)
     with torch.no_grad():
-        _run_cached_steps(module, obs)
-        benchmark(_run_cached_steps, module, obs)
+        _run_cached_steps(module, obs, autocast)
+        benchmark(_run_cached_steps, module, obs, autocast)
 
 
 @pytest.mark.parametrize("batch_size", [8, 32])
@@ -80,6 +95,7 @@ def test_transformer_window(benchmark, batch_size: int, window: int) -> None:
     def run():
         with set_recurrent_mode(True):
             module(td.clone())
+        _synchronize()
 
     run()
     benchmark(run)
@@ -99,10 +115,16 @@ def test_transformer_rollout_storage_is_cache_free(benchmark, context: int) -> N
             out_keys=["action"],
         ),
     )
+
+    def rollout_32():
+        module.reset_cache()
+        out = env.rollout(32, policy)
+        _synchronize()
+        return out
+
     with torch.no_grad():
         short = env.rollout(16, policy)
-        module.reset_cache()
-        rollout = benchmark(env.rollout, 32, policy)
+        rollout = benchmark(rollout_32)
     assert "transformer_state" not in rollout.keys()
     short_bytes = _tensordict_bytes(short)
     long_bytes = _tensordict_bytes(rollout)
