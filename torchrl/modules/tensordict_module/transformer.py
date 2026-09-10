@@ -371,8 +371,9 @@ class TransformerModule(ModuleBase):
     allocated by the backbone on the first cached step, indexed by batch
     position (one stream per environment of the batch), cleared wherever
     ``is_init`` is set (sourced from :class:`~torchrl.envs.InitTracker`),
-    invalidated when the parameters change in place, and released by
-    :meth:`reset_cache`. Rollouts and replay buffers therefore hold
+    invalidated when the parameters change (in place or swapped for other
+    tensors), and released by :meth:`reset_cache`. Copies and pickled
+    instances start with an empty cache. Rollouts and replay buffers hold
     observations and features only, never a cache; the training path reads
     ``is_init`` to rebuild positions and a block-diagonal causal mask over the
     window.
@@ -554,7 +555,7 @@ class TransformerModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
         self._kv_cache: Any = None
         self._positions: torch.Tensor | None = None
-        self._weights_version: int | None = None
+        self._weights_version: tuple[tuple[int, int], ...] | None = None
 
     @property
     def recurrent_mode(self):
@@ -581,16 +582,28 @@ class TransformerModule(ModuleBase):
         self._positions = None
         self._weights_version = None
 
-    def _current_weights_version(self) -> int:
-        return sum(int(p._version) for p in self.transformer.parameters())
+    def __getstate__(self):
+        """Pickle and copy the module without its cache: copies start empty."""
+        state = self.__dict__.copy()
+        state["_kv_cache"] = None
+        state["_positions"] = None
+        state["_weights_version"] = None
+        return state
+
+    def _current_weights_version(self) -> tuple[tuple[int, int], ...]:
+        """Identify the parameter tensors and their in-place modification counters."""
+        return tuple(
+            (p.data_ptr(), int(p._version)) for p in self.transformer.parameters()
+        )
 
     def _restart_mask(self, value: torch.Tensor) -> torch.Tensor:
         """Return the mask of streams whose cache must restart for this batch.
 
         A fresh cache is allocated when none exists, when the batch size or
-        device changed, or when the parameters were modified in place: cached
-        keys and values computed with previous weights would otherwise be
-        mixed with the current projections.
+        device changed, or when the parameters changed, in place or by being
+        swapped for other tensors: cached keys and values computed with
+        previous weights would otherwise be mixed with the current
+        projections.
         """
         batch_size = value.shape[0]
         positions = self._positions

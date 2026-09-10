@@ -224,9 +224,10 @@ Unlike the RNN modules, no state travels in the TensorDict. The key/value
 cache is inference state owned by the module instance: the backbone allocates
 it on the first cached step in the dtype of its projections, one stream per
 batch position, and the module clears the streams flagged by ``is_init``,
-restarts every stream when the parameters change in place, and releases the
-cache on :meth:`~torchrl.modules.TransformerModule.reset_cache`. Rollouts and
-replay buffers therefore never carry a cache, whatever the context length.
+restarts every stream when the parameters change (in place or swapped), and
+releases the cache on :meth:`~torchrl.modules.TransformerModule.reset_cache`;
+copies and pickled instances start with an empty cache. Rollouts and replay
+buffers therefore never carry a cache, whatever the context length.
 Use one module instance per collector (or per collector worker); batches
 whose composition changes between calls are not supported yet.
 

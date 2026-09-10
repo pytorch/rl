@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import pickle
 
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import from_module, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
@@ -249,13 +251,20 @@ class TestTransformerModule:
         ):
             module(_window(obs, is_init, [2, 8]))
 
-    def test_weight_update_restarts_streams(self):
+    @pytest.mark.parametrize("update", ["in_place", "swap"])
+    def test_weight_update_restarts_streams(self, update):
         module = self._make_module()
         obs, _ = self._trajectory([2], 3)
         is_init = torch.tensor([[[True], [False]], [[True], [False]]])
         _run_steps(module, obs[:, :2], is_init, [2])
-        with torch.no_grad():
-            module.transformer.in_proj.weight.add_(0.5)
+        if update == "in_place":
+            with torch.no_grad():
+                module.transformer.in_proj.weight.add_(0.5)
+        else:
+            params = from_module(module).clone()
+            with torch.no_grad():
+                params.apply_(lambda t: t.add_(0.5) if t.is_floating_point() else t)
+            params.to_module(module)
         continued = _window(obs[:, 2], torch.zeros(2, 1, dtype=torch.bool), [2])
         module(continued)
         module.reset_cache()
@@ -274,6 +283,24 @@ class TestTransformerModule:
         wider_init = torch.cat([is_init, is_init[:1]], 0)
         wider = _run_steps(module, wider_obs, wider_init, [3])
         torch.testing.assert_close(wider[:2], first)
+
+    @pytest.mark.parametrize("transfer", ["pickle", "deepcopy"])
+    def test_copies_start_with_an_empty_cache(self, transfer):
+        module = self._make_module()
+        obs, is_init = self._trajectory([2], 3)
+        empty_size = len(pickle.dumps(module))
+        _run_steps(module, obs[:, :2], is_init[:, :2], [2])
+        assert len(pickle.dumps(module)) == empty_size
+        if transfer == "pickle":
+            copied = pickle.loads(pickle.dumps(module))
+        else:
+            copied = copy.deepcopy(module)
+        continued = _window(obs[:, 2], torch.zeros(2, 1, dtype=torch.bool), [2])
+        copied(continued)
+        fresh = _window(obs[:, 2], torch.ones(2, 1, dtype=torch.bool), [2])
+        module.reset_cache()
+        module(fresh)
+        torch.testing.assert_close(continued["embed"], fresh["embed"])
 
     def test_max_seq_len_exceeded_raises(self):
         module = self._make_module(max_seq_len=4)
