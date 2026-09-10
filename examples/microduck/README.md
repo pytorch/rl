@@ -15,6 +15,7 @@ raises an error listing the options.
 | [`ppo_mujoco.py`](ppo_mujoco.py) | Recurrent PPO on `torchrl.envs.MicroDuckEnv`, configured by Hydra from [`config.yaml`](config.yaml); native MuJoCo, MJX or `mujoco-torch` | `mujoco`, the `utils` extra (+ `mujoco-mjx`/`jax` or `mujoco-torch`) |
 | [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
+| [`football_mappo.py`](football_mappo.py) | Multi-agent PPO for 5-a-side football on `torchrl.envs.MicroDuckFootballEnv`, with the trained walker as the ducks' controller, configured by Hydra from [`football.yaml`](football.yaml) | `mujoco`, the `utils` extra |
 
 Start with [MicroDuck: tasks, rewards and simulation](../../tutorials/sphinx-tutorials/microduck.py)
 to explore task libraries, sampling, custom rewards, diagnostics and the supplied
@@ -468,6 +469,82 @@ The generated notebook exposes a `live_env_kwargs` cell, so a different
 command (for instance `[-0.2]`) can be rolled out in the kernel without
 regenerating it. For an mp4 instead of a notebook, replace the `--format`,
 `--out` and notebook flags with `--render-backend env --format mp4 --out clip.mp4`.
+
+## Football
+
+`football_mappo.py` trains two teams of ducks to play football against each
+other on `torchrl.envs.MicroDuckFootballEnv`. The scene is built in Python
+with `mujoco.MjSpec` by `torchrl.envs.build_football_scene`: one copy of the
+walking robot per player, named `blue<i>/` or `red<i>/`, on a 3 x 2 m pitch
+with walls, two goals, a 70 mm ball and two cameras (`broadcast` and
+`topdown`). Nothing new is vendored: the meshes still come from the pinned
+`microduck_rl` checkout, the MJCF is cached as text under
+`~/.cache/torchrl/microduck/football` and `MicroDuckFootballEnv.write_scene`
+exports it for inspection or sharing.
+
+The env is multi-agent: `("agents", "action")` holds the 14 joint offsets of
+every duck, `("agents", "observation")` its 56 MicroDuck proprioceptive
+values followed by match features (position on the pitch, heading, ball,
+goals, teammates and opponents, all in the duck's own frame and in its team's
+frame), `("agents", "reward")` its reward. A goal ends the match with `+10`
+for the scoring team and `-10` for the other; the ball's velocity toward the
+goal and the duck's velocity toward the ball are dense shaping terms, a fall
+costs `1` and puts the duck back on its kickoff slot. Because every quantity
+is team relative, one set of parameters plays both sides: the example is
+plain self-play with a shared policy and a centralized critic
+(`MultiAgentMLP`).
+
+The ducks do not learn to walk again. `policy.walker_checkpoint` names a
+`ppo_mujoco.py` checkpoint (by default the run 9 walker, downloaded from the
+`assets/microduck-run9` branch and checked against `policy.walker_sha256`)
+and the training env becomes a `torchrl.envs.MicroDuckSkillEnv`: the football
+policy picks one of the walker's tasks per duck every `policy.decision_period`
+control steps (stand, walk forward or backward, sidestep left or right, the
+library indices in `policy.skills`), and the frozen walker drives the joints
+at 50 Hz in between, fed the task's command and gait clock in its
+observation. `policy.walker_checkpoint=null` trains joint-level actions end
+to end at 50 Hz instead, the comparison the skill-based run should beat.
+
+```bash
+WANDB_BASE_URL=https://api.wandb.ai \
+uv run --extra utils --with mujoco --with wandb --with moviepy python examples/microduck/football_mappo.py \
+  env.microduck_root="$MICRODUCK_RL_ROOT" \
+  logger.entity=YOUR_ENTITY evaluation.video.interval=2
+```
+
+[`football.yaml`](football.yaml) holds every setting. `env.players_per_team`
+sets the team size (start with `1` or `2`: matches are shorter and the
+credit assignment easier), `env.pitch` passes geometry arguments to
+`build_football_scene` (for instance `'env.pitch={pitch_length:2.0}'`),
+`env.reward_weights` retunes the reward (`'env.reward_weights={approach_ball:0.0}'`
+once the ducks find the ball on their own). Evaluation plays
+`evaluation.num_matches` deterministic matches and logs goals per team, the
+fraction of decided matches, match length, falls per duck and the ball's
+progress; `evaluation.video.interval=2` films one match from the broadcast
+camera at every second evaluation (10 frames per second with a decision
+period of 5, 50 without a walker). `smoke=true` runs a pipeline check with a
+short clip written by a CSV logger.
+
+Native MuJoCo steps a 5-a-side scene at about 500 control steps per second
+per worker process on an Apple-silicon CPU, so 16 workers give a few
+thousand duck-steps per second; the default batch is one 30 s match per
+worker. `env.backend=mujoco-torch` is not an option for this scene at the
+time of writing (its dense solver path fails under `vmap` for models with
+this many degrees of freedom); `env.backend=mjx` on a GPU host is the way to
+scale the number of matches.
+
+Checkpoints are unified TorchRL checkpoints. To render one:
+
+```bash
+uv run --extra utils --extra rendering --with mujoco rlrender \
+  --ckpt microduck_football_best.ckpt \
+  --policy examples/microduck/football_mappo.py:make_render_policy \
+  --env examples/microduck/football_mappo.py:make_env \
+  --deterministic \
+  --env-kwargs "{\"microduck_root\":\"$MICRODUCK_RL_ROOT\",\"num_envs\":1,\"parallel\":false}" \
+  --render-backend env --max-steps 300 --fps 10 \
+  --format mp4 --out football.mp4 --overwrite
+```
 
 ## MJLab
 

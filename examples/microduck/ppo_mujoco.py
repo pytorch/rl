@@ -65,7 +65,12 @@ from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictSequ
 from torch import nn
 from torchrl import timeit, torchrl_logger
 from torchrl.collectors import Collector, Evaluator
-from torchrl.data import LazyTensorStorage, SliceSampler, TensorDictReplayBuffer
+from torchrl.data import (
+    Bounded,
+    LazyTensorStorage,
+    SliceSampler,
+    TensorDictReplayBuffer,
+)
 from torchrl.envs import (
     Compose,
     EnvBase,
@@ -418,16 +423,48 @@ def make_models(
     head) expected by :class:`~torchrl.objectives.value.GAE` and
     :class:`~torchrl.objectives.ClipPPOLoss`.
     """
+    actor, critic = make_actor_critic(
+        env.observation_spec["observation"].shape[-1],
+        env.observation_spec["task_id"].n,
+        device=device,
+        hidden_size=hidden_size,
+        policy_head=policy_head,
+        gait=gait,
+        residual_scale=residual_scale,
+        initial_policy_scale=initial_policy_scale,
+    )
+    env.append_transform(get_primers_from_module(actor))
+    return actor, critic
+
+
+def make_actor_critic(
+    observation_dim: int,
+    num_tasks: int,
+    *,
+    device: torch.device | str = "cpu",
+    hidden_size: int = 128,
+    policy_head: PolicyHead = "gaussian",
+    gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
+    residual_scale: float = 0.2,
+    initial_policy_scale: float = 0.05,
+) -> tuple[ProbabilisticActor, TensorDictSequential]:
+    """Create the actor and critic of :func:`make_models` from their sizes alone.
+
+    ``observation_dim`` is the size of the env observation and ``num_tasks``
+    the size of the task library the ``task_id`` embedding indexes. Use it to
+    rebuild a trained actor without an env, for instance to run a checkpoint
+    as a controller inside another env; the recurrent-state primer is then up
+    to the caller.
+    """
     if not math.isfinite(initial_policy_scale) or initial_policy_scale <= 0:
         raise ValueError("initial_policy_scale must be finite and positive.")
     if not math.isfinite(residual_scale) or residual_scale <= 0:
         raise ValueError("residual_scale must be finite and positive.")
     device = torch.device(device)
-    observation_dim = env.observation_spec["observation"].shape[-1]
     embed = TensorDictModule(
         TaskConditionedEncoder(
             observation_dim,
-            env.observation_spec["task_id"].n,
+            num_tasks,
             hidden_size,
             device=device,
         ),
@@ -467,7 +504,7 @@ def make_models(
         raise ValueError(f"Unknown policy_head {policy_head!r}.")
     actor = ProbabilisticActor(
         module=TensorDictSequential(backbone, actor_head),
-        spec=env.action_spec_unbatched,
+        spec=Bounded(-1.0, 1.0, shape=(MicroDuckEnv.NUM_JOINTS,), device=device),
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={"low": -1.0, "high": 1.0},
@@ -481,9 +518,7 @@ def make_models(
         ),
         in_keys=["features"],
     )
-    critic = TensorDictSequential(backbone, value_head)
-    env.append_transform(get_primers_from_module(actor))
-    return actor, critic
+    return actor, TensorDictSequential(backbone, value_head)
 
 
 def make_render_policy(

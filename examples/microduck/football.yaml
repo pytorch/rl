@@ -1,0 +1,69 @@
+# Hydra configuration of examples/microduck/football_mappo.py.
+# Every field is an override, e.g. `python football_mappo.py env.download=true smoke=true`.
+
+env:
+  microduck_root: null      # microduck_rl checkout; MICRODUCK_RL_ROOT or `download` otherwise
+  root: null                # cache directory for downloads, built scenes and walker checkpoints (~/.cache/torchrl/microduck)
+  download: false
+  backend: mujoco           # native MuJoCo, one worker process per match; mjx vectorizes on an accelerator
+  num_envs: 16              # matches simulated in parallel
+  parallel: true            # mujoco only: ParallelEnv (false: SerialEnv)
+  device: cpu               # MuJoCo state is float64, which MPS does not support: CPU or CUDA
+  seed: 0
+  players_per_team: 5
+  pitch: {}                 # build_football_scene arguments, e.g. {pitch_length: 2.0, goal_width: 0.5}
+  max_episode_steps: 1500   # match length in control steps at 50 Hz (30 s)
+  action_scale: 1.0         # radians of actuator target per unit action; the walker checkpoint was trained with 1.0
+  reward_weights: {}        # overrides of MicroDuckFootballEnv.REWARD_WEIGHTS, e.g. {approach_ball: 0.0}
+  respawn: true             # put fallen ducks back on their kickoff slot
+  camera_id: 0              # rendering: 0 broadcast, 1 top-down
+  render_width: 640
+  render_height: 360
+
+policy:
+  # Trained MicroDuck locomotion policy (path or URL) that drives the joints while the
+  # football policy picks one of its tasks per duck every `decision_period` steps.
+  # null trains joint-level actions end to end at 50 Hz instead.
+  walker_checkpoint: https://github.com/vmoens/rl/raw/assets/microduck-run9/microduck_run9_t27953538_walker.ckpt
+  walker_sha256: 09311c3cb5c7b63ca6403903e798e82c9b09e416d59bc65065ed59970ef961bd  # null skips the check
+  skills: [0, 1, 2, 3, 4]   # library indices of the walker's tasks: stand, forward, backward, sidestep left, sidestep right
+  decision_period: 5        # walker steps per skill decision (10 Hz)
+  hidden_size: 256
+  depth: 2
+  initial_policy_scale: 1.0 # exploration std of the joint-level Gaussian policy (end-to-end mode)
+  init_from: null           # checkpoint whose actor and critic parameters initialize the models
+
+ppo:
+  total_frames: 5_000_000   # env steps summed over matches (skill decisions, or control steps end to end)
+  frames_per_batch: 4800    # env steps per iteration; a multiple of env.num_envs (16 matches x 300 decisions = 30 s each)
+  epochs: 4
+  minibatch_size: 1200      # env steps per minibatch, every duck of a step included
+  learning_rate: 3e-4
+  target_kl: 0.02           # null disables the KL-adaptive learning rate
+  clip_epsilon: 0.2
+  entropy_coeff: 0.01
+  critic_coeff: 0.5
+  gamma: 0.99
+  gae_lambda: 0.95
+  max_grad_norm: 1.0
+
+evaluation:
+  interval: 10              # iterations between deterministic evaluations; null disables them
+  num_matches: 4            # complete matches per evaluation, one env at a time
+  steps: 300                # decisions per match (300 x 5 walker steps = 30 s)
+  best_checkpoint_path: microduck_football_best.ckpt
+  latest_checkpoint_path: null
+  video:                    # one match filmed by the broadcast camera, logged with the evaluation metrics
+    interval: null          # log at every N-th evaluation; null disables it (video storage is not free)
+    steps: 300
+    width: 640
+    height: 360
+
+logger:
+  backend: wandb            # wandb | csv | tensorboard | null
+  project: torchrl-microduck-football
+  entity: null              # required for wandb so runs never land in a default workspace
+  exp_name: null
+  mode: online              # wandb mode: online | offline | disabled
+
+smoke: false                # tiny pipeline check, with a short video written by a CSV logger
