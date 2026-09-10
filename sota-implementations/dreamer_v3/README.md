@@ -73,8 +73,8 @@ With the asynchronous collector,
 dedicated process that the environment workers reach directly whenever
 `collector.async_env_backend=multiprocessing` and `collector.envs_per_worker=1`,
 and from a thread of the training process otherwise; `thread` and `process`
-force one of the two. `collector.transition_chunk_size=auto` sends one
-contiguous run per environment and batch from each worker process. In both
+force one of the two. `collector.transition_chunk_size=auto` sends at
+least 64 consecutive transitions per worker-process message. In both
 backends collection post-processing, episode reporting, device normalization,
 and replay writes happen through the collector's standard replay integration.
 
