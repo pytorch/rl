@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib
+import warnings
 
 import torch
 from tensordict import tensorclass
@@ -28,6 +29,12 @@ class RewardData:
 @tensorclass
 class PairwiseDataset:
     """Represents a dataset in a pairwise manner (chosen vs rejected).
+
+    .. deprecated:: 0.14
+        ``PairwiseDataset`` is deprecated and will be removed in v0.16. Build
+        pairwise preference data directly for
+        :class:`~torchrl.objectives.llm.RewardModelLoss` instead (see the
+        ``sota-implementations/reward_model_training`` recipe).
 
     Attributes:
         chosen_data: data to be chosen.
@@ -74,6 +81,9 @@ class PairwiseDataset:
     ):
         """Returns a :class:`PairwiseDataset` from a dataset name.
 
+        .. deprecated:: 0.14
+            See the class-level deprecation note.
+
         Args:
             split (str): ``"train"`` or ``"valid"`` depending on the data split needed.
             dataset_name (str, optional): name of the dataset to be processed. Defaults to
@@ -118,6 +128,14 @@ class PairwiseDataset:
             >>> sub_data = data[:3]
 
         """
+        warnings.warn(
+            "PairwiseDataset is deprecated and will be removed in v0.16. Build "
+            "pairwise preference data directly for "
+            "torchrl.objectives.llm.RewardModelLoss instead (see the "
+            "sota-implementations/reward_model_training recipe).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if dataset_name is None:
             dataset_name = DEFAULT_DATASET
         loader = TokenizedDatasetLoader(
