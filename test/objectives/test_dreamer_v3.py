@@ -510,6 +510,34 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         compiled = torch.compile(restored, backend=_compile_backend, fullgraph=True)
         torch.testing.assert_close(compiled(logits), expected, rtol=1e-5, atol=1e-5)
 
+    def test_dreamer_v3_two_hot_decode_exact_zero_under_reordered_reduction(
+        self, device
+    ):
+        two_hot = SymExpTwoHot(255).to(device)
+        uniform_logits = torch.zeros(4, 255, device=device)
+        assert two_hot(uniform_logits).abs().max().item() == 0.0
+
+        compiled = torch.compile(two_hot, backend=_compile_backend, fullgraph=True)
+        assert compiled(uniform_logits).abs().max().item() == 0.0
+
+        torch._dynamo.reset()
+        with torch._inductor.config.patch(
+            {"cpp.enable_floating_point_contract_flag": "fast"}
+        ):
+            contracted = torch.compile(
+                two_hot, backend=_compile_backend, fullgraph=True
+            )
+            assert contracted(uniform_logits).abs().max().item() == 0.0
+
+        torch.manual_seed(0)
+        logits = torch.randn(16, 255, device=device) * 3
+        reference = (
+            torch.softmax(logits.double(), dim=-1) * two_hot.bins.double()
+        ).sum(-1)
+        torch.testing.assert_close(
+            two_hot(logits).squeeze(-1).double(), reference, rtol=1e-4, atol=1e-3
+        )
+
     # ------------------------------------------------------------------ #
     # World model loss tests
     # ------------------------------------------------------------------ #
