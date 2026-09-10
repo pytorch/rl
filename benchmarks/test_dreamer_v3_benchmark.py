@@ -60,6 +60,8 @@ def _benchmark_config(
     cfg = OmegaConf.load(BENCHMARK_DIR / "dreamer_v3.yaml")
     if has_backend:
         cfg.collector.inference_backend = inference_backend
+    if inference_backend == "process":
+        cfg.collector.env_exchange = "auto"
     cfg.optimization.device = device
     cfg.optimization.train_ratio = train_ratio
     cfg.logger.metrics_jsonl = str(metrics)
