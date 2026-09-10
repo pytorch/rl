@@ -34,10 +34,10 @@ on:
         required: true
         type: string
       pytorch_release:
-        description: 'PyTorch release branch (e.g., release/2.8)'
+        description: 'PyTorch release branch that defines the supported build matrix'
         required: false
         type: string
-        default: 'main'
+        default: 'release/2.14'
       skip_sanity_checks:
         description: 'Skip sanity checks'
         required: false
@@ -86,8 +86,8 @@ permissions:
 env:
   # Release tag from manual input
   RELEASE_TAG: ${{ inputs.tag }}
-  # Determine the test-infra ref: from manual input or default to main
-  TEST_INFRA_REF: ${{ inputs.pytorch_release || 'main' }}
+  # Keep the binary matrix aligned with the supported PyTorch release.
+  TEST_INFRA_REF: ${{ inputs.pytorch_release || 'release/2.14' }}
   # Dry run mode from input
   DRY_RUN: ${{ inputs.dry_run }}
   # TensorDict source: stable (PyPI), git, or auto (branch-based detection)
@@ -263,7 +263,7 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-ref: ${{ inputs.pytorch_release || 'release/2.14' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -278,7 +278,7 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-ref: ${{ inputs.pytorch_release || 'release/2.14' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -292,7 +292,7 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-ref: ${{ inputs.pytorch_release || 'release/2.14' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -305,7 +305,7 @@ jobs:
     if: always() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped')
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
-      test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-ref: ${{ inputs.pytorch_release || 'release/2.14' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
