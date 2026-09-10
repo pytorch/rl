@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
 import pickle
 
 import pytest
@@ -317,6 +318,23 @@ class TestTransformerModule:
             module(_window(torch.randn(2, 5), torch.zeros(2, 1, dtype=torch.bool), [2]))
         with pytest.raises(RuntimeError, match="max_seq_len"):
             module(_window(torch.randn(2, 5), torch.zeros(2, 1, dtype=torch.bool), [2]))
+
+    @pytest.mark.skipif(os.name == "nt", reason="inductor is not available on Windows")
+    @pytest.mark.parametrize("recurrent", [False, True])
+    def test_fullgraph_compile_matches_eager(self, recurrent):
+        module = self._make_module(max_seq_len=8)
+        obs, is_init = self._trajectory([2], 3)
+        if recurrent:
+            td = _window(obs, is_init, [2, 3])
+            with set_recurrent_mode(True):
+                eager = module(td.clone())["embed"]
+                compiled = torch.compile(module, fullgraph=True)(td.clone())["embed"]
+            torch.testing.assert_close(compiled, eager, atol=1e-5, rtol=1e-5)
+            return
+        eager = _run_steps(module, obs, is_init, [2])
+        module.reset_cache()
+        compiled = _run_steps(torch.compile(module, fullgraph=True), obs, is_init, [2])
+        torch.testing.assert_close(compiled, eager, atol=1e-5, rtol=1e-5)
 
     def test_custom_backbone(self):
         backbone = CausalTransformer(5, 16, 1, num_heads=2, max_seq_len=6)

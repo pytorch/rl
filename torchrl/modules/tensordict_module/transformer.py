@@ -632,10 +632,11 @@ class TransformerModule(ModuleBase):
         """Run the transformer, honouring ``is_init`` for state resets.
 
         With ``recurrent_mode=False``, one step is processed against the
-        module's cache, whose rows are cleared where ``is_init`` is set. With
+        module's cache, whose rows are cleared where ``is_init`` is set; this
+        path is inference only and runs under :func:`torch.no_grad`. With
         ``recurrent_mode=True``, a full ``(B, T)`` window is processed under a
         block-diagonal causal mask built from ``is_init``; the cache is
-        neither read nor written.
+        neither read nor written, and gradients flow through the window.
         """
         shape = tensordict.shape
         if self.recurrent_mode:
@@ -671,12 +672,13 @@ class TransformerModule(ModuleBase):
             mask = segment_causal_mask_from_is_init(is_init)
             out, _ = self.transformer(value, positions, mask=mask)
         else:
-            init = is_init.reshape(-1) | self._restart_mask(value)
-            kv_cache = self.transformer.reset_kv_cache(self._kv_cache, init)
-            positions = self._positions.masked_fill(init, 0)
-            out, kv_cache = self.transformer(
-                value, positions.unsqueeze(-1), kv_cache=kv_cache
-            )
+            with torch.no_grad():
+                init = is_init.reshape(-1) | self._restart_mask(value)
+                kv_cache = self.transformer.reset_kv_cache(self._kv_cache, init)
+                positions = self._positions.masked_fill(init, 0)
+                out, kv_cache = self.transformer(
+                    value, positions.unsqueeze(-1), kv_cache=kv_cache
+                )
             self._kv_cache = kv_cache
             self._positions = positions + 1
         tensordict_shaped.set(self.out_keys[0], out)
