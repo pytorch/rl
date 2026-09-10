@@ -520,6 +520,15 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         compiled = torch.compile(two_hot, backend=_compile_backend, fullgraph=True)
         assert compiled(uniform_logits).abs().max().item() == 0.0
 
+        torch._dynamo.reset()
+        with torch._inductor.config.patch(
+            {"cpp.enable_floating_point_contract_flag": "fast"}
+        ):
+            contracted = torch.compile(
+                two_hot, backend=_compile_backend, fullgraph=True
+            )
+            assert contracted(uniform_logits).abs().max().item() == 0.0
+
         torch.manual_seed(0)
         logits = torch.randn(16, 255, device=device) * 3
         reference = (

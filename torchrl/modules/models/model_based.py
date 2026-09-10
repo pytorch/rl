@@ -1511,7 +1511,8 @@ def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
         paired through their probability difference before the products are
         summed, so an antisymmetric support such as the default symexp grid
         decodes uniform probabilities to exactly zero under any reduction
-        order, including the fused kernels that :func:`torch.compile` emits.
+        order or fused multiply-add contraction, including the kernels that
+        :func:`torch.compile` emits.
 
     Examples:
         >>> import torch
