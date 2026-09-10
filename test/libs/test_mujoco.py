@@ -22,8 +22,11 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
 from torchrl.data import Categorical, Composite, Unbounded
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
+from torch import nn
 from torchrl.envs import (
     AntEnv,
+    build_football_scene,
     Compose,
     CubeBowlEnv,
     EnvBase,
@@ -35,6 +38,8 @@ from torchrl.envs import (
     MacroPrimitiveTransform,
     microduck_skill_env,
     MicroDuckEnv,
+    MicroDuckFootballEnv,
+    MicroDuckSkillEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
     ParallelEnv,
@@ -67,7 +72,12 @@ from torchrl.envs.custom.mujoco.microduck import (
     _body_frame_linear_velocity,
     _low_cost_collision_scene,
 )
+from torchrl.envs.custom.mujoco.microduck_football import (
+    FOOTBALL_NUMERIC,
+    kickoff_positions,
+)
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules import GRUModule
 from torchrl.render import load_checkpoint
 
 if _has_mujoco:
@@ -82,6 +92,9 @@ if _has_mujoco:
     _AVAILABLE_BACKENDS.append("mujoco")
 
 _VMAP_BACKENDS = [b for b in _AVAILABLE_BACKENDS if b in ("mujoco-torch", "mjx")]
+# A football scene has too many degrees of freedom for mujoco-torch's dense
+# solver path under vmap (index_put_ on the mass matrix).
+_FOOTBALL_BACKENDS = [b for b in _AVAILABLE_BACKENDS if b != "mujoco-torch"]
 _LOCOMOTION_ENVS = [HumanoidEnv, AntEnv, Walker2dEnv, HopperEnv]
 
 
@@ -816,6 +829,374 @@ class TestMujoco:
         assert (
             env._reward_components(drifting, action)["diagnostic_reward_drift"] == 0
         ).all()
+        env.close()
+
+    # ------------------------------------------------------------------
+    # MicroDuck football
+    # ------------------------------------------------------------------
+
+    def _football_env(self, tmp_path: Path, **kwargs):
+        """A football env over the MicroDuck fixture with every reset noise off."""
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        scene = self._write_microduck_fixture(tmp_path)
+        settings = {
+            "players_per_team": 1,
+            "backend": "mujoco",
+            "seed": 0,
+            "spawn_noise": 0.0,
+            "yaw_noise": 0.0,
+            "joint_reset_noise_scale": 0.0,
+            "ball_noise": 0.0,
+        }
+        settings.update(kwargs)
+        return MicroDuckFootballEnv(
+            microduck_root=scene, root=tmp_path / "cache", **settings
+        )
+
+    @staticmethod
+    def _football_action(env, value: torch.Tensor | float = 0.0) -> TensorDict:
+        action = torch.as_tensor(value, dtype=torch.float32).expand(
+            1, env.num_agents, MicroDuckEnv.NUM_JOINTS
+        )
+        return TensorDict({("agents", "action"): action.clone()}, batch_size=[1])
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_scene_builder(self, tmp_path):
+        scene = self._write_microduck_fixture(tmp_path)
+        geometry = {"pitch_length": 2.0, "pitch_width": 1.4, "goal_width": 0.5}
+        xml = build_football_scene(scene, players_per_team=2, **geometry)
+        model = mujoco.MjModel.from_xml_string(xml)
+        assert (model.nq, model.nv, model.nu) == (4 * 21 + 7, 4 * 20 + 6, 4 * 14)
+        cameras = [
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_CAMERA, index)
+            for index in range(2)
+        ]
+        assert cameras == list(MicroDuckFootballEnv.CAMERAS)
+        actuator = mujoco.mjtObj.mjOBJ_ACTUATOR
+        assert mujoco.mj_id2name(model, actuator, 0) == "blue0/actuator0"
+        assert mujoco.mj_id2name(model, actuator, model.nu - 1) == "red1/actuator13"
+        # The ball's joint comes last, so its state trails the ducks' blocks.
+        assert (
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, model.njnt - 1)
+            == "ball_free"
+        )
+        for name in ("blue0/left_foot_collision", "red1/right_foot_collision"):
+            assert mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name) >= 0
+        for name in ("blue1/left_foot", "red0/right_foot", "blue_goal", "red_goal"):
+            assert mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, name) >= 0
+        numeric = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_NUMERIC, FOOTBALL_NUMERIC
+        )
+        start = model.numeric_adr[numeric]
+        assert model.numeric_data[start : start + 7].tolist() == pytest.approx(
+            [2.0, 1.4, 0.5, 0.25, 0.25, 0.035, 2.0]
+        )
+        # The STAND keyframe puts every duck on its kickoff slot, red mirrored
+        # through the center and facing -x, and the ball on the spot.
+        assert model.nkey == 1
+        key = model.key_qpos[0]
+        slots = kickoff_positions(2, 2.0, 1.4)
+        assert key[:2].tolist() == pytest.approx(list(slots[0]))
+        red = 2 * 21
+        assert key[red : red + 2].tolist() == pytest.approx(
+            [-slots[0][0], -slots[0][1]]
+        )
+        assert key[red + 3 : red + 7].tolist() == pytest.approx(
+            [0.0, 0.0, 0.0, 1.0], abs=1e-6
+        )
+        assert key[-7:].tolist() == pytest.approx([0.0, 0.0, 0.035, 1.0, 0.0, 0.0, 0.0])
+        # The cache is content addressed.
+        cache = tmp_path / "cache"
+        first = MicroDuckFootballEnv.write_scene(
+            scene, root=cache, players_per_team=2, **geometry
+        )
+        second = MicroDuckFootballEnv.write_scene(
+            scene, root=cache, players_per_team=2, **geometry
+        )
+        assert first == second
+        assert first.read_text() == xml
+        assert first != MicroDuckFootballEnv.write_scene(
+            scene, root=cache, players_per_team=1
+        )
+        with pytest.raises(ValueError, match="players_per_team"):
+            build_football_scene(scene, players_per_team=0)
+        with pytest.raises(ValueError, match="goal_width"):
+            build_football_scene(scene, goal_width=3.0, pitch_width=2.0)
+        no_key = tmp_path / "no_key.xml"
+        no_key.write_text(scene.read_text().replace('name="STAND"', 'name="OTHER"'))
+        with pytest.raises(ValueError, match="STAND"):
+            build_football_scene(no_key)
+
+    @pytest.mark.parametrize("backend", _FOOTBALL_BACKENDS)
+    def test_football_env_specs_and_rollout(self, tmp_path, backend):
+        num_envs = 1 if backend == "mujoco" else 2
+        env = self._football_env(
+            tmp_path,
+            players_per_team=2,
+            backend=backend,
+            num_envs=num_envs,
+            pitch={"pitch_length": 2.0, "pitch_width": 1.4},
+        )
+        assert env.num_agents == 4
+        assert env.observation_dim == MicroDuckEnv.OBSERVATION_DIM + 26
+        assert (env.pitch_length, env.pitch_width) == (2.0, 1.4)
+        assert env.action_key == ("agents", "action")
+        assert env.reward_key == ("agents", "reward")
+        check_env_specs(env)
+        observation = env.reset()["agents", "observation"]
+        features = observation[..., MicroDuckEnv.OBSERVATION_DIM :]
+        # At kickoff every duck faces the goal it attacks from its own half.
+        torch.testing.assert_close(
+            features[..., 2:4],
+            torch.tensor([1.0, 0.0]).expand_as(features[..., 2:4]),
+            atol=1e-5,
+            rtol=0,
+        )
+        assert (features[..., 0] < 0).all()
+        rollout = env.rollout(4, break_when_any_done=False)
+        assert rollout["agents", "observation"].shape == (
+            num_envs,
+            4,
+            4,
+            env.observation_dim,
+        )
+        assert rollout["next", "agents", "reward"].shape == (num_envs, 4, 4, 1)
+        assert rollout["next", "goal"].shape == (num_envs, 4, 1)
+        assert torch.isfinite(rollout["next", "agents", "reward"]).all()
+        assert (rollout["next", "goal"] == 0).all()
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.parametrize("scorer", [1, -1])
+    def test_football_goal_terminates_and_pays_both_teams(self, tmp_path, scorer):
+        env = self._football_env(tmp_path)
+        env.reset()
+        state = env.get_state()
+        qpos, qvel = state["qpos"].clone(), state["qvel"].clone()
+        # Roll the ball toward the goal at +x (blue scores) or at -x (red does).
+        qpos[0, -7] = scorer * (env.pitch_length / 2 - 0.05)
+        qpos[0, -6] = 0.0
+        qvel[0, -6] = scorer * 1.0
+        env.reset(TensorDict(qpos=qpos, qvel=qvel, batch_size=[1]), set_state=True)
+        first = env.step(self._football_action(env))["next"]
+        assert first["goal"].item() == 0
+        blue, red = first["agents", "reward"][0, :, 0]
+        # The ball's progress pays one team and charges the other.
+        assert torch.sign(blue).item() == scorer
+        torch.testing.assert_close(blue, -red)
+        for _ in range(20):
+            step = env.step(self._football_action(env))["next"]
+            if step["goal"].item() != 0:
+                break
+        else:
+            pytest.fail("the ball never crossed the goal line")
+        assert step["goal"].item() == scorer
+        assert step["terminated"].item() and step["done"].item()
+        blue, red = step["agents", "reward"][0, :, 0]
+        weight = MicroDuckFootballEnv.REWARD_WEIGHTS["goal"]
+        assert abs(blue.item() - scorer * weight) < 0.5
+        assert abs(red.item() + scorer * weight) < 0.5
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.parametrize("respawn", [True, False])
+    def test_football_fallen_duck_is_charged_once_and_respawns(self, tmp_path, respawn):
+        env = self._football_env(tmp_path, respawn=respawn)
+        env.reset()
+        state = env.get_state()
+        qpos = state["qpos"].clone()
+        # Blue's duck lies on its side on the floor.
+        qpos[0, 2] = 0.02
+        qpos[0, 3:7] = torch.tensor(
+            [math.cos(math.pi / 4), math.sin(math.pi / 4), 0.0, 0.0]
+        )
+        env.reset(
+            TensorDict(qpos=qpos, qvel=state["qvel"], batch_size=[1]), set_state=True
+        )
+        first = env.step(self._football_action(env))["next"]
+        assert first["agents", "fallen"][0, :, 0].tolist() == [True, False]
+        fall = MicroDuckFootballEnv.REWARD_WEIGHTS["fall"]
+        assert abs(first["agents", "reward"][0, 0, 0].item() - fall) < 0.05
+        assert not first["done"].item()
+        duck = env.get_state()["qpos"][0, : MicroDuckFootballEnv.DUCK_NQ]
+        second = env.step(self._football_action(env))["next"]
+        if respawn:
+            slot = kickoff_positions(1, env.pitch_length, env.pitch_width)[0]
+            assert duck[:2].tolist() == pytest.approx(list(slot), abs=1e-5)
+            assert duck[2].item() == pytest.approx(0.12, abs=1e-5)
+            assert not second["agents", "fallen"].any()
+        else:
+            assert duck[2].item() < 0.05
+            assert second["agents", "fallen"][0, 0, 0]
+            # Down for a second step: no second fall penalty.
+            assert second["agents", "reward"][0, 0, 0].item() > fall / 2
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_observation_is_team_symmetric(self, tmp_path):
+        env = self._football_env(tmp_path, players_per_team=2)
+        env.reset()
+        players = env.players_per_team
+
+        def duck(x: float, y: float, yaw: float, vx: float, vy: float):
+            qpos = [x, y, 0.12, math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)]
+            qpos += [0.0] * MicroDuckEnv.NUM_JOINTS
+            qvel = [vx, vy, 0.0, 0.0, 0.0, 0.0] + [0.0] * MicroDuckEnv.NUM_JOINTS
+            return qpos, qvel
+
+        # Red mirrors blue through the pitch center, the ball sits on the spot.
+        qpos, qvel = [], []
+        for index in range(players):
+            blue_q, blue_v = duck(-0.5 - 0.2 * index, 0.2 + 0.1 * index, 0.3, 0.1, 0.05)
+            qpos += blue_q
+            qvel += blue_v
+        for index in range(players):
+            red_q, red_v = duck(
+                0.5 + 0.2 * index, -0.2 - 0.1 * index, 0.3 + math.pi, -0.1, -0.05
+            )
+            qpos += red_q
+            qvel += red_v
+        qpos += [0.0, 0.0, env.ball_radius, 1.0, 0.0, 0.0, 0.0]
+        qvel += [0.0] * 6
+        td = env.reset(
+            TensorDict(
+                qpos=torch.tensor([qpos]), qvel=torch.tensor([qvel]), batch_size=[1]
+            ),
+            set_state=True,
+        )
+        observation = td["agents", "observation"][0]
+        torch.testing.assert_close(
+            observation[:players], observation[players:], atol=1e-5, rtol=0
+        )
+        # Blue's first duck sees the ball ahead and to its right.
+        features = observation[0, MicroDuckEnv.OBSERVATION_DIM :]
+        assert features[4] > 0 and features[5] < 0
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_skill_env_executes_skills_with_the_walker(self, tmp_path):
+        tasks = [
+            MicroDuckEnv.standing_task(),
+            MicroDuckEnv.speed_range_task(0.2, 0.2),
+            MicroDuckEnv.sidestep_task(0.15),
+        ]
+        joint_action = torch.linspace(-0.5, 0.5, MicroDuckEnv.NUM_JOINTS)
+
+        class Walker(TensorDictModuleBase):
+            in_keys = ["observation", "task_id", "is_init"]
+            out_keys = ["action"]
+
+            def __init__(self):
+                super().__init__()
+                self.calls = []
+
+            def forward(self, tensordict):
+                self.calls.append(tensordict.clone())
+                tensordict["action"] = joint_action.expand(
+                    tensordict.shape[0], -1
+                ).clone()
+                return tensordict
+
+        walker = Walker()
+        base = self._football_env(tmp_path, max_episode_steps=7)
+        env = MicroDuckSkillEnv(base, walker, tasks, skills=[1, 2], decision_period=3)
+        assert env.action_spec["agents", "action"].space.n == 2
+        check_env_specs(env)
+        walker.calls.clear()
+        td = env.reset()
+        assert td["agents", "observation"].shape == (1, 2, base.observation_dim + 2)
+        assert (td["agents", "observation"][..., -2:] == torch.tensor([1.0, 0.0])).all()
+        skills = TensorDict(
+            {("agents", "action"): torch.tensor([[0, 1]])}, batch_size=[1]
+        )
+        out = env.step(skills.clone())["next"]
+        assert base._step_count.item() == 3
+        assert len(walker.calls) == 3
+        first, second = walker.calls[:2]
+        # Each duck's walker gets its skill's library index, command and clock.
+        assert first["task_id"].squeeze(-1).tolist() == [1, 2]
+        assert first["is_init"].all() and not second["is_init"].any()
+        command = MicroDuckEnv.COMMAND_START
+        torch.testing.assert_close(
+            first["observation"][:, command : command + 2],
+            torch.tensor([[0.2, 0.0], [0.0, 0.15]]),
+        )
+        clock = MicroDuckEnv.GAIT_PHASE_START
+        frequency = torch.tensor([2.0, MicroDuckEnv.GAIT_FREQUENCY_HZ])
+        phase = MicroDuckEnv.GAIT_PHASE_OFFSET + 2 * math.pi * frequency * 0.02
+        torch.testing.assert_close(
+            second["observation"][:, clock], phase.sin(), atol=1e-5, rtol=0
+        )
+        torch.testing.assert_close(
+            second["observation"][:, clock + 1], phase.cos(), atol=1e-5, rtol=0
+        )
+        assert second["observation"][:, clock + 2].tolist() == pytest.approx(
+            [0.02 / MicroDuckEnv.GAIT_RAMP_DURATION_S] * 2
+        )
+        assert (
+            out["agents", "observation"][..., -2:]
+            == torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+        ).all()
+        # Rewards are summed over the window; the observation is the last one.
+        twin = self._football_env(tmp_path / "twin", max_episode_steps=7)
+        twin.reset()
+        total = None
+        for _ in range(3):
+            step = twin.step(self._football_action(twin, joint_action))["next"]
+            reward = step["agents", "reward"]
+            total = reward if total is None else total + reward
+        torch.testing.assert_close(out["agents", "reward"], total)
+        torch.testing.assert_close(
+            out["agents", "observation"][..., : base.observation_dim],
+            step["agents", "observation"],
+        )
+        assert not out["done"].any()
+        # A truncation inside the window ends it early and is latched.
+        env.step(skills.clone())
+        assert base._step_count.item() == 6
+        out = env.step(skills.clone())["next"]
+        assert out["truncated"].item() and out["done"].item()
+        assert base._step_count.item() == 7
+        env.close()
+        twin.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_skill_env_carries_the_walker_state(self, tmp_path):
+        walker = TensorDictSequential(
+            TensorDictModule(
+                nn.Linear(MicroDuckEnv.OBSERVATION_DIM, 8),
+                in_keys=["observation"],
+                out_keys=["embed"],
+            ),
+            GRUModule(
+                input_size=8,
+                hidden_size=8,
+                in_keys=["embed", "recurrent_state", "is_init"],
+                out_keys=["features", ("next", "recurrent_state")],
+            ),
+            TensorDictModule(
+                nn.Linear(8, MicroDuckEnv.NUM_JOINTS),
+                in_keys=["features"],
+                out_keys=["action"],
+            ),
+        )
+        base = self._football_env(tmp_path)
+        env = MicroDuckSkillEnv(
+            base, walker, [MicroDuckEnv.standing_task()], decision_period=2
+        )
+        env.reset()
+        assert (env._walker_state["recurrent_state"] == 0).all()
+        env.step(
+            TensorDict(
+                {("agents", "action"): torch.zeros(1, 2, dtype=torch.long)},
+                batch_size=[1],
+            )
+        )
+        state = env._walker_state["recurrent_state"]
+        assert state.shape == (2, 1, 8)
+        assert (state != 0).any()
+        env.reset()
+        assert (env._walker_state["recurrent_state"] == 0).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
