@@ -190,19 +190,20 @@ Transformer temporal policies
 :class:`TransformerModule` extends the same contract to causal transformers:
 observations are read from the TensorDict, features written back, and the
 ``is_init`` key drives state resets. Collection runs one step at a time
-against a fixed-shape key/value cache carried in the TensorDict (declared to
-the environment with
-:meth:`~torchrl.modules.TransformerModule.make_tensordict_primer`), while
-training processes ``[B, T]`` windows under a block-diagonal causal mask so
-attention never crosses an episode boundary. The two paths share parameters
-and produce matching outputs.
+against a key/value cache, while training processes ``[B, T]`` windows under
+a block-diagonal causal mask so attention never crosses an episode boundary.
+The two paths share parameters and produce matching outputs.
 
 .. code-block:: python
 
+    from tensordict.nn import TensorDictModule, TensorDictSequential
+    from torch import nn
+    from torchrl.envs import GymEnv, InitTracker, TransformedEnv
     from torchrl.modules import TransformerModule, set_recurrent_mode
 
+    env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
     transformer = TransformerModule(
-        input_size=4,
+        input_size=3,
         hidden_size=64,
         num_layers=2,
         num_heads=4,
@@ -210,18 +211,35 @@ and produce matching outputs.
         in_key="observation",
         out_key="features",
     )
+    policy = TensorDictSequential(
+        transformer,
+        TensorDictModule(nn.Linear(64, 1), in_keys=["features"], out_keys=["action"]),
+    )
 
+    rollout = env.rollout(100, policy)  # cached steps, no state in the rollout
     with set_recurrent_mode(True):
-        batch = transformer(batch)
+        window = transformer(rollout.exclude("features"))  # same features
 
-Unlike the RNN modules, no state is written in recurrent (window) mode: the
-key/value cache is inference state, not experience, and stays out of replay
-buffers. Episode boundaries inside a training window are recovered from
-``is_init`` through :func:`positions_from_is_init` and
+Unlike the RNN modules, no state travels in the TensorDict. The key/value
+cache is inference state owned by the module instance: the backbone allocates
+it on the first cached step in the dtype of its projections, one stream per
+batch position, and the module clears the streams flagged by ``is_init``,
+restarts every stream when the parameters change in place, and releases the
+cache on :meth:`~torchrl.modules.TransformerModule.reset_cache`. Rollouts and
+replay buffers therefore never carry a cache, whatever the context length.
+Use one module instance per collector (or per collector worker); batches
+whose composition changes between calls are not supported yet.
+
+Training windows must be episode-aligned: every row must start with
+``is_init=True``, which complete-trajectory sampling provides, and a window
+that starts mid-episode raises an error. Episode boundaries inside a window
+are recovered from ``is_init`` through :func:`positions_from_is_init` and
 :func:`segment_causal_mask_from_is_init`. Any backbone honoring the
-:class:`CausalTransformer` contract (its ``forward`` signature plus
-``num_layers``, ``num_heads``, ``head_dim`` and ``max_seq_len`` attributes)
-can be passed via the ``transformer`` argument.
+:class:`CausalTransformer` contract (``forward``, ``new_kv_cache`` and
+``reset_kv_cache`` plus the ``num_layers``, ``num_heads``, ``head_dim`` and
+``max_seq_len`` attributes) can be passed via the ``transformer`` argument;
+the cache object is opaque to the module, so an adapter over an inference
+engine can keep it in the engine's own representation.
 
 Choosing a layout and backend
 -----------------------------

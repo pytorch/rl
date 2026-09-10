@@ -4,17 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 import torch.nn.functional as F
 
 from tensordict import TensorDictBase, unravel_key_list
-from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
-from tensordict.utils import expand_as_right
 from torch import nn
 
 from torchrl._utils import is_compiling
-from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.tensordict_module.rnn import recurrent_mode
 
 
@@ -22,8 +21,9 @@ def positions_from_is_init(is_init: torch.Tensor) -> torch.Tensor:
     """Compute per-token positions within each episode segment of a window.
 
     Positions restart at ``0`` on every ``is_init`` flag. The first step of
-    the window is always treated as position ``0``: like the recurrent
-    modules, a window is assumed to start at the beginning of a trajectory.
+    the window is always treated as position ``0``, so callers must pass
+    episode-aligned windows: :class:`TransformerModule` validates that every
+    row of a training window starts with ``is_init=True``.
 
     Args:
         is_init (torch.Tensor): a boolean tensor of shape ``[*batch, T]``
@@ -34,7 +34,7 @@ def positions_from_is_init(is_init: torch.Tensor) -> torch.Tensor:
         of each step within its episode segment.
 
     Examples:
-        >>> is_init = torch.tensor([[False, False, True, False]])
+        >>> is_init = torch.tensor([[True, False, True, False]])
         >>> positions_from_is_init(is_init)
         tensor([[0, 1, 0, 1]])
     """
@@ -85,7 +85,7 @@ class _TransformerBlock(nn.Module):
         dim_feedforward: int,
         dropout: float,
         device=None,
-    ) -> None:
+    ):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
@@ -121,9 +121,9 @@ class _TransformerBlock(nn.Module):
         if cache_kv is not None:
             cache_k, cache_v = cache_kv
             batch = torch.arange(h.shape[0], device=h.device)
-            cache_k[batch, :, positions] = k.squeeze(2)
-            cache_v[batch, :, positions] = v.squeeze(2)
-            k, v = cache_k, cache_v
+            cache_k[batch, :, positions] = k.squeeze(2).detach().to(cache_k.dtype)
+            cache_v[batch, :, positions] = v.squeeze(2).detach().to(cache_v.dtype)
+            k, v = cache_k.to(q.dtype), cache_v.to(q.dtype)
         attn = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         h = h + self.out_proj(attn.transpose(1, 2).flatten(-2))
         return h + self.mlp(self.norm2(h))
@@ -135,17 +135,30 @@ class CausalTransformer(nn.Module):
     This is the reference implementation of the temporal-transformer backbone
     contract consumed by :class:`~torchrl.modules.TransformerModule`:
 
-        ``forward(features, positions, mask=None, kv_cache=None) -> (out, kv_cache)``
+    - ``forward(features, positions, mask=None, kv_cache=None) -> (out, kv_cache)``
+    - ``new_kv_cache(batch_size, device=None) -> kv_cache``
+    - ``reset_kv_cache(kv_cache, mask) -> kv_cache``
 
-    Any module honoring that signature and exposing ``num_layers``,
-    ``num_heads``, ``head_dim`` and ``max_seq_len`` attributes can be used in
-    its place.
+    together with ``num_layers``, ``num_heads``, ``head_dim`` and
+    ``max_seq_len`` attributes. The cache object is opaque to the module: the
+    backbone decides its layout, dtype and device and how a reset clears the
+    rows selected by a boolean mask over the batch. Any module honoring that
+    contract can be used in its place, including adapters over an inference
+    engine that keeps the cache in its own representation.
 
     Two execution paths share the same parameters and produce the same
     outputs: a window path processing ``[B, T]`` at once under a causal mask
     (training), and a cached-step path attending against a fixed-shape
     key/value cache (collection). Positions are always explicit inputs, which
     is what keeps the two paths consistent across episode resets.
+
+    The reference cache is a ``(k, v)`` pair of shape ``[B, num_layers,
+    num_heads, max_seq_len, head_dim]`` allocated in the dtype of the
+    projection weights, so a module converted to ``bfloat16`` or ``float64``
+    gets a matching cache. Under autocast the projected keys and values are
+    cast to the cache dtype on write and the cache to the query dtype on
+    read. Cached entries are detached: the cached-step path is inference
+    only.
 
     Args:
         input_size (int): number of input features.
@@ -174,6 +187,10 @@ class CausalTransformer(nn.Module):
         >>> out, _ = net(features, positions)
         >>> out.shape
         torch.Size([2, 5, 16])
+        >>> cache = net.new_kv_cache(2)
+        >>> step, cache = net(features[:, :1], positions[:, :1], kv_cache=cache)
+        >>> torch.allclose(step, out[:, :1], atol=1e-6)
+        True
     """
 
     def __init__(
@@ -187,7 +204,7 @@ class CausalTransformer(nn.Module):
         dim_feedforward: int | None = None,
         dropout: float = 0.0,
         device=None,
-    ) -> None:
+    ):
         super().__init__()
         if hidden_size % num_heads:
             raise ValueError(
@@ -213,6 +230,56 @@ class CausalTransformer(nn.Module):
             ]
         )
         self.norm = nn.LayerNorm(hidden_size, device=device)
+
+    def new_kv_cache(
+        self, batch_size: int, *, device: torch.device | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Allocate an empty key/value cache for ``batch_size`` streams.
+
+        Args:
+            batch_size (int): number of concurrent streams (environments).
+
+        Keyword Args:
+            device (torch.device, optional): where to allocate the cache.
+                Defaults to the device of the projection weights.
+
+        Returns:
+            A ``(k, v)`` tuple of zero tensors of shape ``[batch_size,
+            num_layers, num_heads, max_seq_len, head_dim]`` in the dtype of
+            the projection weights.
+        """
+        weight = self.blocks[0].qkv.weight
+        shape = (
+            batch_size,
+            self.num_layers,
+            self.num_heads,
+            self.max_seq_len,
+            self.head_dim,
+        )
+        device = weight.device if device is None else device
+        return (
+            torch.zeros(shape, dtype=weight.dtype, device=device),
+            torch.zeros(shape, dtype=weight.dtype, device=device),
+        )
+
+    @staticmethod
+    def reset_kv_cache(
+        kv_cache: tuple[torch.Tensor, torch.Tensor], mask: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Clear the cache rows of the streams selected by ``mask``.
+
+        Args:
+            kv_cache (tuple of torch.Tensor): a cache from :meth:`new_kv_cache`.
+            mask (torch.Tensor): a boolean tensor of shape ``[batch_size]``;
+                ``True`` rows are zeroed in place.
+
+        Returns:
+            The same ``(k, v)`` tuple.
+        """
+        mask = mask.view(-1, 1, 1, 1, 1)
+        for cache in kv_cache:
+            cache.masked_fill_(mask, 0)
+        return kv_cache
 
     def _check_positions(self, positions: torch.Tensor) -> None:
         if not is_compiling() and positions.max() >= self.max_seq_len:
@@ -240,15 +307,14 @@ class CausalTransformer(nn.Module):
                 (``True`` = attend) for the window path; defaults to a plain
                 causal mask. Ignored on the cached-step path, where validity
                 is derived from ``positions``.
-            kv_cache (tuple of torch.Tensor, optional): ``(k, v)`` caches of
-                shape ``[B, num_layers, num_heads, max_seq_len, head_dim]``.
-                Providing them selects the cached-step path. The caches passed
-                in are not modified; updated copies are returned.
+            kv_cache (tuple of torch.Tensor, optional): a cache from
+                :meth:`new_kv_cache`. Providing it selects the cached-step
+                path; the cache is updated in place at ``positions``.
 
         Returns:
             A tuple ``(out, kv_cache)`` with ``out`` of shape
-            ``[B, T, hidden_size]`` and ``kv_cache`` the updated ``(k, v)``
-            tuple on the cached-step path (``None`` on the window path).
+            ``[B, T, hidden_size]`` and ``kv_cache`` the updated cache on the
+            cached-step path (``None`` on the window path).
         """
         self._check_positions(positions)
         h = self.in_proj(features) + self.pos_emb(positions)
@@ -270,7 +336,7 @@ class CausalTransformer(nn.Module):
                 f"T={features.shape[1]}. Pass kv_cache=None to process a "
                 "window."
             )
-        cache_k, cache_v = (c.clone() for c in kv_cache)
+        cache_k, cache_v = kv_cache
         positions = positions.squeeze(-1)
         valid = torch.arange(
             self.max_seq_len, device=features.device
@@ -286,23 +352,30 @@ class CausalTransformer(nn.Module):
         return self.norm(h), (cache_k, cache_v)
 
 
+_BACKBONE_ATTRIBUTES = ("num_layers", "num_heads", "head_dim", "max_seq_len")
+_BACKBONE_METHODS = ("new_kv_cache", "reset_kv_cache")
+
+
 class TransformerModule(ModuleBase):
     """A TensorDict wrapper turning a causal transformer into a temporal policy module.
 
     The transformer analogue of :class:`~torchrl.modules.LSTMModule`: the same
     network runs either over a full ``[B, T]`` window (training) or one step
-    at a time against a fixed-shape key/value cache carried in the tensordict
-    (collection), with matching outputs. The execution path is selected by the
+    at a time against a key/value cache (collection), with matching outputs.
+    The execution path is selected by the
     :class:`~torchrl.modules.set_recurrent_mode` context manager, exactly as
     for the recurrent modules.
 
-    State transport follows the recurrent-module pattern: the cache and
-    position entries under ``"transformer_state"`` travel in the tensordict,
-    are declared to the environment through :meth:`make_tensordict_primer`,
-    and are zeroed wherever ``is_init`` is set (sourced from
-    :class:`~torchrl.envs.InitTracker`). In recurrent (window) mode, episode
-    boundaries are handled with a block-diagonal causal mask and restarting
-    positions instead, so no cache is read or written.
+    Unlike the recurrent modules, no state travels in the tensordict. The
+    key/value cache is inference state owned by the module instance: it is
+    allocated by the backbone on the first cached step, indexed by batch
+    position (one stream per environment of the batch), cleared wherever
+    ``is_init`` is set (sourced from :class:`~torchrl.envs.InitTracker`),
+    invalidated when the parameters change in place, and released by
+    :meth:`reset_cache`. Rollouts and replay buffers therefore hold
+    observations and features only, never a cache; the training path reads
+    ``is_init`` to rebuild positions and a block-diagonal causal mask over the
+    window.
 
     Args:
         input_size (int, optional): number of input features. Unused if
@@ -322,31 +395,37 @@ class TransformerModule(ModuleBase):
         dropout (float, optional): dropout probability. Defaults to ``0.0``.
         transformer (nn.Module, optional): a pre-built backbone honoring the
             contract described in :class:`~torchrl.modules.CausalTransformer`
-            (the ``forward`` signature plus ``num_layers``, ``num_heads``,
-            ``head_dim`` and ``max_seq_len`` attributes). Exclusive with the
-            size arguments.
+            (``forward``, ``new_kv_cache`` and ``reset_kv_cache`` plus the
+            ``num_layers``, ``num_heads``, ``head_dim`` and ``max_seq_len``
+            attributes). Exclusive with the size arguments.
         in_key (NestedKey, optional): the input value key. Exclusive with
             ``in_keys``.
-        in_keys (list of NestedKey, optional): the input value key followed by
-            the three state keys (k, v, pos). Defaults to
-            ``[in_key, ("transformer_state", "k"), ("transformer_state", "v"),
-            ("transformer_state", "pos")]``.
+        in_keys (list of NestedKey, optional): the input value key, optionally
+            followed by ``"is_init"``. Defaults to ``[in_key, "is_init"]``.
         out_key (NestedKey, optional): the output value key. Exclusive with
             ``out_keys``.
-        out_keys (list of NestedKey, optional): the output value key followed
-            by the three next-state keys. Defaults to
-            ``[out_key, ("next", "transformer_state", "k"), ("next",
-            "transformer_state", "v"), ("next", "transformer_state", "pos")]``.
+        out_keys (list of NestedKey, optional): a one-element list with the
+            output value key. Defaults to ``[out_key]``.
         device (torch.device, optional): device to build the parameters on.
         default_recurrent_mode (bool, optional): the recurrent mode when not
             overridden by the :class:`~torchrl.modules.set_recurrent_mode`
             context manager. Defaults to ``False``.
 
     .. note::
-        Unlike :class:`~torchrl.modules.LSTMModule`, only the single-step path
-        writes the ``("next", ...)`` state entries: the cache is inference
-        state, per-step copies of it would be prohibitively large, and
-        training consumes stored windows, not caches.
+        The batch position is the stream identity of the cached-step path:
+        a module instance must see the same environments in the same order
+        on every call, which is what a collector over a batched environment
+        provides. Use one instance per collector (or per collector worker)
+        and call :meth:`reset_cache` before reusing an instance with another
+        environment. Batches whose composition changes between calls, such as
+        the partial batches of an asynchronous collector, need a stream-keyed
+        cache and are not supported by this module yet.
+
+    .. note::
+        Training windows must be episode-aligned: every row must start with
+        ``is_init=True``, which is what complete-trajectory sampling
+        provides. A window that starts mid-episode raises a ``ValueError``
+        rather than silently recomputing the prefix from position ``0``.
 
     .. note::
         Episodes longer than ``max_seq_len`` raise an error; sliding-window
@@ -354,9 +433,10 @@ class TransformerModule(ModuleBase):
 
     Examples:
         >>> import torch
-        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+        >>> from torch import nn
         >>> from torchrl.envs import GymEnv, InitTracker, TransformedEnv
-        >>> from torchrl.modules import TransformerModule
+        >>> from torchrl.modules import TransformerModule, set_recurrent_mode
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
         >>> module = TransformerModule(
         ...     input_size=env.observation_spec["observation"].shape[-1],
@@ -367,23 +447,22 @@ class TransformerModule(ModuleBase):
         ...     in_key="observation",
         ...     out_key="embed",
         ... )
-        >>> env = env.append_transform(module.make_tensordict_primer())
-        >>> td = env.reset()
-        >>> td = module(td)
-        >>> td["embed"].shape
-        torch.Size([16])
+        >>> policy = TensorDictSequential(
+        ...     module,
+        ...     TensorDictModule(nn.Linear(16, 1), in_keys=["embed"], out_keys=["action"]),
+        ... )
+        >>> rollout = env.rollout(10, policy)
+        >>> rollout["embed"].shape
+        torch.Size([10, 16])
+        >>> "transformer_state" in rollout.keys()
+        False
+        >>> with set_recurrent_mode(True):
+        ...     window = module(rollout.exclude("embed").clone())
+        >>> torch.allclose(window["embed"], rollout["embed"], atol=1e-5)
+        True
     """
 
-    DEFAULT_IN_KEYS = [
-        ("transformer_state", "k"),
-        ("transformer_state", "v"),
-        ("transformer_state", "pos"),
-    ]
-    DEFAULT_OUT_KEYS = [
-        ("next", "transformer_state", "k"),
-        ("next", "transformer_state", "v"),
-        ("next", "transformer_state", "pos"),
-    ]
+    DEFAULT_IN_KEYS = ["is_init"]
 
     def __init__(
         self,
@@ -402,7 +481,7 @@ class TransformerModule(ModuleBase):
         out_keys=None,
         device=None,
         default_recurrent_mode: bool | None = None,
-    ) -> None:
+    ):
         super().__init__()
         if transformer is not None:
             if input_size is not None or hidden_size is not None:
@@ -410,12 +489,19 @@ class TransformerModule(ModuleBase):
                     "A transformer instance cannot be passed along with size "
                     "arguments."
                 )
-            for attr in ("num_layers", "num_heads", "head_dim", "max_seq_len"):
+            for attr in _BACKBONE_ATTRIBUTES:
                 if not hasattr(transformer, attr):
                     raise ValueError(
                         "The transformer backbone must expose a "
                         f"{attr!r} attribute; see CausalTransformer for the "
                         "backbone contract."
+                    )
+            for method in _BACKBONE_METHODS:
+                if not callable(getattr(transformer, method, None)):
+                    raise ValueError(
+                        "The transformer backbone must implement "
+                        f"{method!r}; see CausalTransformer for the backbone "
+                        "contract."
                     )
         else:
             if input_size is None or hidden_size is None:
@@ -445,22 +531,20 @@ class TransformerModule(ModuleBase):
                 f"or none. Got {out_keys} and {out_key} respectively."
             )
         elif out_key:
-            out_keys = [out_key, *self.DEFAULT_OUT_KEYS]
+            out_keys = [out_key]
         in_keys = unravel_key_list(in_keys)
         out_keys = unravel_key_list(out_keys)
         if not isinstance(in_keys, (tuple, list)) or (
-            len(in_keys) != 4 and not (len(in_keys) == 5 and in_keys[-1] == "is_init")
+            len(in_keys) != 1 and not (len(in_keys) == 2 and in_keys[-1] == "is_init")
         ):
             raise ValueError(
-                "TransformerModule expects 4 inputs: a value, the k and v "
-                "caches and a position counter (and potentially an 'is_init' "
-                f"marker). Got in_keys {in_keys} instead."
+                "TransformerModule expects 1 input: a value (and potentially "
+                f"an 'is_init' marker). Got in_keys {in_keys} instead."
             )
-        if not isinstance(out_keys, (tuple, list)) or len(out_keys) != 4:
+        if not isinstance(out_keys, (tuple, list)) or len(out_keys) != 1:
             raise ValueError(
-                "TransformerModule expects 4 outputs: a value, the k and v "
-                f"caches and a position counter. Got out_keys {out_keys} "
-                "instead."
+                "TransformerModule expects 1 output: a value. Got out_keys "
+                f"{out_keys} instead."
             )
         self.transformer = transformer
         if "is_init" not in in_keys:
@@ -468,6 +552,9 @@ class TransformerModule(ModuleBase):
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._recurrent_mode = default_recurrent_mode
+        self._kv_cache: Any = None
+        self._positions: torch.Tensor | None = None
+        self._weights_version: int | None = None
 
     @property
     def recurrent_mode(self):
@@ -483,78 +570,60 @@ class TransformerModule(ModuleBase):
             "set_recurrent_mode context manager."
         )
 
-    def make_tensordict_primer(self):
-        """Makes a tensordict primer for the environment.
+    def reset_cache(self) -> None:
+        """Release the key/value cache and the position counters.
 
-        A :class:`~torchrl.envs.TensorDictPrimer` object ensures that the
-        cache and position entries are registered in the environment specs,
-        so batched and parallel environments carry them between steps. See
-        :meth:`torchrl.modules.LSTMModule.make_tensordict_primer` for the
-        rationale; the mechanics are identical.
-
-        Examples:
-            >>> from torchrl.envs import GymEnv, InitTracker, TransformedEnv
-            >>> from torchrl.modules import TransformerModule
-            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> module = TransformerModule(
-            ...     input_size=3, hidden_size=16, num_heads=4, max_seq_len=200,
-            ...     in_key="observation", out_key="embed")
-            >>> env = env.append_transform(module.make_tensordict_primer())
+        The next cached step allocates a fresh cache for the batch it sees.
+        Call this before reusing the module with a different environment or
+        collector.
         """
-        from torchrl.envs.transforms.transforms import TensorDictPrimer
+        self._kv_cache = None
+        self._positions = None
+        self._weights_version = None
 
-        def make_tuple(key):
-            if isinstance(key, tuple):
-                return key
-            return (key,)
+    def _current_weights_version(self) -> int:
+        return sum(int(p._version) for p in self.transformer.parameters())
 
-        for in_key, out_key in zip(self.in_keys[1:4], self.out_keys[1:4]):
-            if make_tuple(out_key) != ("next", *make_tuple(in_key)):
-                raise RuntimeError(
-                    "make_tensordict_primer is supposed to work with "
-                    "in_keys/out_keys that have compatible names, ie. the "
-                    "out_keys should be named after ('next', <in_key>). Got "
-                    f"in_keys={self.in_keys} and out_keys={self.out_keys} "
-                    "instead."
-                )
-        transformer = self.transformer
-        cache_shape = (
-            transformer.num_layers,
-            transformer.num_heads,
-            transformer.max_seq_len,
-            transformer.head_dim,
-        )
-        return TensorDictPrimer(
-            {
-                self.in_keys[1]: Unbounded(shape=cache_shape),
-                self.in_keys[2]: Unbounded(shape=cache_shape),
-                self.in_keys[3]: Unbounded(shape=(1,), dtype=torch.long),
-            },
-            expand_specs=True,
-        )
+    def _restart_mask(self, value: torch.Tensor) -> torch.Tensor:
+        """Return the mask of streams whose cache must restart for this batch.
 
-    def _init_cache(self, value: torch.Tensor) -> torch.Tensor:
-        transformer = self.transformer
-        return value.new_zeros(
-            value.shape[0],
-            transformer.num_layers,
-            transformer.num_heads,
-            transformer.max_seq_len,
-            transformer.head_dim,
+        A fresh cache is allocated when none exists, when the batch size or
+        device changed, or when the parameters were modified in place: cached
+        keys and values computed with previous weights would otherwise be
+        mixed with the current projections.
+        """
+        batch_size = value.shape[0]
+        positions = self._positions
+        stale = (
+            positions is None
+            or positions.shape[0] != batch_size
+            or positions.device != value.device
         )
+        if not stale and not is_compiling():
+            version = self._current_weights_version()
+            stale = version != self._weights_version
+        if stale:
+            self._kv_cache = self.transformer.new_kv_cache(
+                batch_size, device=value.device
+            )
+            self._positions = torch.zeros(
+                batch_size, dtype=torch.long, device=value.device
+            )
+            if not is_compiling():
+                self._weights_version = self._current_weights_version()
+            return torch.ones(batch_size, dtype=torch.bool, device=value.device)
+        return torch.zeros(batch_size, dtype=torch.bool, device=value.device)
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
         """Run the transformer, honouring ``is_init`` for state resets.
 
         With ``recurrent_mode=False``, one step is processed against the
-        cache carried in the tensordict (zeroed where ``is_init`` is set) and
-        the updated state is written under the ``("next", ...)`` keys. With
-        ``recurrent_mode=True``, a full ``(B, T)`` window is processed under
-        a block-diagonal causal mask built from ``is_init``; no cache is read
-        or written.
+        module's cache, whose rows are cleared where ``is_init`` is set. With
+        ``recurrent_mode=True``, a full ``(B, T)`` window is processed under a
+        block-diagonal causal mask built from ``is_init``; the cache is
+        neither read nor written.
         """
-        defaults = [NO_DEFAULT, None, None, None]
         shape = tensordict.shape
         if self.recurrent_mode:
             td_ndim = tensordict.ndim
@@ -574,37 +643,30 @@ class TransformerModule(ModuleBase):
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
         is_init = tensordict_shaped["is_init"].squeeze(-1)
-        value, cache_k, cache_v, pos = (
-            tensordict_shaped.get(key, default)
-            for key, default in zip(self.in_keys, defaults)
-        )
+        value = tensordict_shaped.get(self.in_keys[0])
 
         if self.recurrent_mode:
+            if not is_compiling() and not is_init[..., 0].all():
+                raise ValueError(
+                    "TransformerModule(recurrent_mode=True) expects "
+                    "episode-aligned windows: every row must start with "
+                    "is_init=True. Sample complete trajectories (for instance "
+                    "with a SliceSampler over episode boundaries) or include "
+                    "the beginning of the episode in the window."
+                )
             positions = positions_from_is_init(is_init)
             mask = segment_causal_mask_from_is_init(is_init)
             out, _ = self.transformer(value, positions, mask=mask)
-            tensordict_shaped.set(self.out_keys[0], out)
         else:
-            if cache_k is None:
-                cache_k, cache_v = self._init_cache(value), self._init_cache(value)
-            else:
-                cache_k, cache_v = cache_k.squeeze(1), cache_v.squeeze(1)
-            if pos is None:
-                pos = value.new_zeros(value.shape[0], 1, dtype=torch.long)
-            else:
-                pos = pos.squeeze(-1)
-            init = is_init.view(-1)
-            cache_k, cache_v, pos = (
-                t.masked_fill(expand_as_right(init, t), 0)
-                for t in (cache_k, cache_v, pos)
+            init = is_init.reshape(-1) | self._restart_mask(value)
+            kv_cache = self.transformer.reset_kv_cache(self._kv_cache, init)
+            positions = self._positions.masked_fill(init, 0)
+            out, kv_cache = self.transformer(
+                value, positions.unsqueeze(-1), kv_cache=kv_cache
             )
-            out, (cache_k, cache_v) = self.transformer(
-                value, pos, kv_cache=(cache_k, cache_v)
-            )
-            tensordict_shaped.set(self.out_keys[0], out)
-            tensordict_shaped.set(self.out_keys[1], cache_k.unsqueeze(1))
-            tensordict_shaped.set(self.out_keys[2], cache_v.unsqueeze(1))
-            tensordict_shaped.set(self.out_keys[3], (pos + 1).unsqueeze(-1))
+            self._kv_cache = kv_cache
+            self._positions = positions + 1
+        tensordict_shaped.set(self.out_keys[0], out)
 
         if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:
             tensordict.update(tensordict_shaped.reshape(shape))
