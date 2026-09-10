@@ -13,7 +13,12 @@ matches the support size.
 Returns:
 
 The softmax-weighted expectation with the trailing category dimension
-removed, preserving the dtype and device of `logits`.
+removed, preserving the dtype and device of `logits`. Mirrored bins are
+paired through their probability difference before the products are
+summed, so an antisymmetric support such as the default symexp grid
+decodes uniform probabilities to exactly zero under any reduction
+order or fused multiply-add contraction, including the kernels that
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) emits.
 
 Examples
 
