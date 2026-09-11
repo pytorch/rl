@@ -211,7 +211,7 @@ class PPOTrainer(OnPolicyTrainer):
         if sub_traj_len is None:
             replay = TensorDictReplayBuffer(
                 storage=LazyTensorStorage(
-                    collected_batch_size, device=next(critic.parameters()).device
+                    collected_batch_size, device=next(loss.parameters()).device
                 ),
                 sampler=SamplerWithoutReplacement(),
                 batch_size=minibatch_size,

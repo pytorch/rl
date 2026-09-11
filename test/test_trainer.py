@@ -1051,19 +1051,21 @@ class TestOptimizer:
 class TestLogReward:
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
-    def test_log_reward(self, logname, pbar):
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.int64])
+    def test_log_reward(self, logname, pbar, dtype):
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
         log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
-        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.arange(3, dtype=dtype)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
         else:
             assert logname not in trainer._pbar_str
         assert trainer._log_dict[logname][-1] == 1
+        assert trainer._log_dict[f"{logname}_std"][-1] == 1
 
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
