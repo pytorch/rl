@@ -514,24 +514,35 @@ class _TorchBackend(_PhysicsBackend):
         height: int = 64,
         background: tuple[float, float, float] | None = None,
     ) -> torch.Tensor:
-        import mujoco_torch
+        """Render via mujoco's renderer after copying the torch state to MjData.
 
-        # Cache precomputed render data lazily (depends on the model only).
-        if not hasattr(self, "_render_precomp"):
-            self._render_precomp = mujoco_torch.precompute_render_data(self._mx)
+        The same slow path as the MJX backend (one MjData per env, sequential
+        render). It draws the scene as MuJoCo does whatever its size, whereas
+        mujoco-torch's ray caster tests every ray against every mesh triangle
+        and cannot render a scene with a few hundred thousand of them.
+        """
+        import mujoco
+
+        if (
+            not hasattr(self, "_renderer")
+            or self._renderer.height != height
+            or self._renderer.width != width
+        ):
+            self._renderer = mujoco.Renderer(self._m_mj, height=height, width=width)
+        if not hasattr(self, "_render_d"):
+            self._render_d = mujoco.MjData(self._m_mj)
+
+        qpos = self.qpos.detach().cpu().double().numpy()
+        qvel = self.qvel.detach().cpu().double().numpy()
         frames = []
         for i in range(self.num_envs):
-            rgb, _, _ = mujoco_torch.render(
-                self._mx,
-                self._dx[i],
-                camera_id=camera_id,
-                width=width,
-                height=height,
-                precomp=self._render_precomp,
-                background=background,
-            )
-            frames.append((rgb * 255).clamp(0, 255).to(torch.uint8))
-        return torch.stack(frames)
+            self._render_d.qpos[:] = qpos[i]
+            self._render_d.qvel[:] = qvel[i]
+            mujoco.mj_forward(self._m_mj, self._render_d)
+            self._renderer.update_scene(self._render_d, camera=camera_id)
+            frames.append(self._renderer.render().copy())
+        rgb = np.stack(frames, axis=0)
+        return torch.as_tensor(np.ascontiguousarray(rgb), device=self.device)
 
 
 # ----------------------------------------------------------------------
