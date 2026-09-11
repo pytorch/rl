@@ -111,6 +111,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     DreamerV3ImageEncoderConfig,
     DreamerV3MLPConfig,
     DreamerV3SeededPolicyConfig,
+    LowLevelControllerConfig,
     MLPConfig,
     ModelConfig,
     QMixerNetworkConfig,
@@ -167,6 +168,7 @@ from torchrl.trainers.algorithms.configs.transforms import (
     CatTensorsConfig,
     CenterCropConfig,
     ClipTransformConfig,
+    ClosedLoopMultiActionConfig,
     ComposeConfig,
     ConditionalPolicySwitchConfig,
     ConditionalSkipConfig,
@@ -325,6 +327,7 @@ __all__ = [
     "DreamerV3SeededPolicyConfig",
     "RSSMStateEstimatorV3Config",
     "MLPConfig",
+    "LowLevelControllerConfig",
     "ModelConfig",
     "TanhModuleConfig",
     "TanhNormalModelConfig",
@@ -368,6 +371,7 @@ __all__ = [
     "LastActionConfig",
     "LineariseRewardsConfig",
     "ModuleTransformConfig",
+    "ClosedLoopMultiActionConfig",
     "MultiActionConfig",
     "MultiStepTransformConfig",
     "NoopResetEnvConfig",
@@ -661,6 +665,12 @@ def _register_configs():
     cs.store(group="transform", name="module", node=ModuleTransformConfig)
     cs.store(group="transform", name="conditional_skip", node=ConditionalSkipConfig)
     cs.store(group="transform", name="multi_action", node=MultiActionConfig)
+    cs.store(
+        group="transform",
+        name="closed_loop_multi_action",
+        node=ClosedLoopMultiActionConfig,
+    )
+    cs.store(group="model", name="low_level_controller", node=LowLevelControllerConfig)
     cs.store(group="transform", name="timer", node=TimerConfig)
     cs.store(
         group="transform",
