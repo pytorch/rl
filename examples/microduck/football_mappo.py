@@ -299,16 +299,20 @@ def make_models(
     hidden_size: int = 256,
     depth: int = 2,
     initial_policy_scale: float = 1.0,
+    centralized_critic: bool = False,
 ) -> tuple[ProbabilisticActor, TensorDictModule]:
-    """Create the shared-parameter actor and the centralized critic.
+    """Create the shared-parameter actor and the critic.
 
     Both are :class:`~torchrl.modules.MultiAgentMLP` networks built on
     ``device`` and shared by every duck. The actor is decentralized (each duck
     acts on its own observation): a categorical head over the skills when the
     env's action is a skill index, a tanh-squashed Gaussian over the 14 joint
     offsets otherwise, with a state-independent exploration scale starting at
-    ``initial_policy_scale``. The critic reads the observations of every duck
-    and returns one value per duck.
+    ``initial_policy_scale``. The critic returns one value per duck from that
+    duck's observation, which already describes the whole match in the duck's
+    team frame; with ``centralized_critic`` it reads every duck's observation
+    instead and returns the same value for all of them, which cannot tell the
+    two teams of a zero-sum match apart.
     """
     if not math.isfinite(initial_policy_scale) or initial_policy_scale <= 0:
         raise ValueError("initial_policy_scale must be finite and positive.")
@@ -369,7 +373,9 @@ def make_models(
             return_log_prob=True,
         )
     critic = TensorDictModule(
-        MultiAgentMLP(observation_dim, 1, centralized=True, **network_kwargs),
+        MultiAgentMLP(
+            observation_dim, 1, centralized=centralized_critic, **network_kwargs
+        ),
         in_keys=[OBSERVATION_KEY],
         out_keys=[VALUE_KEY],
     )
@@ -550,6 +556,7 @@ def train_mappo(
     minibatch_size: int = 1200,
     learning_rate: float = 3e-4,
     target_kl: float | None = 0.02,
+    max_learning_rate: float = 1e-2,
     clip_epsilon: float = 0.2,
     entropy_coeff: float = 0.01,
     critic_coeff: float = 0.5,
@@ -639,7 +646,9 @@ def train_mappo(
     advantage = loss_module.value_estimator
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=learning_rate)
     scheduler = (
-        KLAdaptiveLR(optimizer, target_kl=target_kl) if target_kl is not None else None
+        KLAdaptiveLR(optimizer, target_kl=target_kl, max_lr=max_learning_rate)
+        if target_kl is not None
+        else None
     )
     replay_buffer = ReplayBuffer(
         storage=LazyTensorStorage(frames_per_batch),
@@ -876,6 +885,7 @@ def main(cfg: DictConfig) -> None:
         "hidden_size": cfg.policy.hidden_size,
         "depth": cfg.policy.depth,
         "initial_policy_scale": cfg.policy.initial_policy_scale,
+        "centralized_critic": cfg.policy.centralized_critic,
     }
     env = make_env(cfg)
     skills = cfg.policy.walker_checkpoint is not None

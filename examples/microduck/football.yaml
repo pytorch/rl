@@ -32,6 +32,7 @@ policy:
   decision_period: 5        # walker steps per skill decision (10 Hz)
   hidden_size: 256
   depth: 2
+  centralized_critic: false # true: one value from every duck's observation (identical across ducks); false: per-duck value from its own observation
   initial_policy_scale: 1.0 # exploration std of the joint-level Gaussian policy (end-to-end mode)
   init_from: null           # checkpoint whose actor and critic parameters initialize the models
 
@@ -42,6 +43,7 @@ ppo:
   minibatch_size: 1200      # env steps per minibatch, every duck of a step included
   learning_rate: 3e-4
   target_kl: 0.02           # null disables the KL-adaptive learning rate
+  max_learning_rate: 1e-3   # ceiling of the KL-adaptive learning rate
   clip_epsilon: 0.2
   entropy_coeff: 0.01
   critic_coeff: 0.5
