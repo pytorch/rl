@@ -92,8 +92,9 @@ if _has_mujoco:
     _AVAILABLE_BACKENDS.append("mujoco")
 
 _VMAP_BACKENDS = [b for b in _AVAILABLE_BACKENDS if b in ("mujoco-torch", "mjx")]
-# A football scene has too many degrees of freedom for mujoco-torch's dense
-# solver path under vmap (index_put_ on the mass matrix).
+# mujoco-torch cannot step a football scene yet: its Newton solver has no
+# dense mass matrix from 100 degrees of freedom on, and its sparse-to-dense
+# mass matrix conversion is not vmap-safe between 60 and 99.
 _FOOTBALL_BACKENDS = [b for b in _AVAILABLE_BACKENDS if b != "mujoco-torch"]
 _LOCOMOTION_ENVS = [HumanoidEnv, AntEnv, Walker2dEnv, HopperEnv]
 
