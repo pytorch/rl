@@ -1269,7 +1269,9 @@ class ClosedLoopMultiAction(MultiAction):
                 current = td.get(key, None)
                 if current is not None and td.get(path, None) is None:
                     td.set(path, current.clone())
-        td[active] = result
+        # active can be td["_step"], which indexed assignment also writes.
+        # Keep the indexing mask independent of the destination tensors.
+        td[active.clone()] = result
         return td
 
     def _stack_tds(self, td_list, next_tensordict, keys):

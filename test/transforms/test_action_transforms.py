@@ -2115,35 +2115,48 @@ class TestClosedLoopMultiAction:
         controller = LowLevelController(
             _FeedbackController(), Composite(command=Bounded(-1, 1, shape=(1,)))
         )
-        base = _ControllerTestEnv(batch_size=(2,) if locked else (), locked=locked)
+        base = _ControllerTestEnv(batch_size=(3,) if locked else (), locked=locked)
         env = ClosedLoopMultiAction.from_env(
             base, controller, steps=3, reward_aggregation=mode
         )
         td = env.reset()
         if not locked:
-            td = td.expand(2).clone()
-        td["limit"] = torch.tensor([[1], [3]])
-        td["command"] = torch.ones(2, 1)
+            td = td.expand(3).clone()
+        # Two live rows expose mask/destination aliasing in indexed writes.
+        td["limit"] = torch.tensor([[1], [3], [3]])
+        td["command"] = torch.ones(3, 1)
         result = env.step(td)["next"]
-        torch.testing.assert_close(result["count"], torch.tensor([[1], [3]]))
+        torch.testing.assert_close(result["count"], torch.tensor([[1], [3], [3]]))
         torch.testing.assert_close(
-            result["_controller", "memory"], torch.tensor([[1.0], [3.0]])
+            result["_controller", "memory"], torch.tensor([[1.0], [3.0], [3.0]])
         )
-        expected = {"sum": [0.5, 2.16], "mean": [0.5, 0.72], "last": [0.5, 0.9]}
+        expected = {
+            "sum": [0.5, 2.16, 2.16],
+            "mean": [0.5, 0.72, 0.72],
+            "last": [0.5, 0.9, 0.9],
+        }
         if mode == "stack":
             torch.testing.assert_close(
                 result["reward"],
-                torch.tensor([[[0.5], [0.0], [0.0]], [[0.5], [0.76], [0.9]]]),
+                torch.tensor(
+                    [
+                        [[0.5], [0.0], [0.0]],
+                        [[0.5], [0.76], [0.9]],
+                        [[0.5], [0.76], [0.9]],
+                    ]
+                ),
             )
         else:
             torch.testing.assert_close(
                 result["reward"], torch.tensor(expected[mode]).unsqueeze(-1)
             )
         assert result["done"].all()
-        reset_input = env.step_mdp(td).set("_reset", torch.tensor([[True], [False]]))
+        reset_input = env.step_mdp(td).set(
+            "_reset", torch.tensor([[True], [False], [False]])
+        )
         reset = env.reset(reset_input)
         torch.testing.assert_close(
-            reset["_controller", "memory"], torch.tensor([[0.0], [3.0]])
+            reset["_controller", "memory"], torch.tensor([[0.0], [3.0], [3.0]])
         )
         env.close()
 
