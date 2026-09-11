@@ -528,12 +528,12 @@ short clip written by a CSV logger.
 Native MuJoCo steps a 5-a-side scene at about 500 control steps per second
 per worker process on an Apple-silicon CPU, so 16 workers give a few
 thousand duck-steps per second; the default batch is one 30 s match per
-worker. `env.backend=mujoco-torch` cannot step this scene at the time of
-writing because of two solver bugs, both with straightforward fixes: with
-100 or more degrees of freedom (3v3 and up) its Newton solver is handed an
-empty dense mass matrix, with 60 to 99 (2v2) the sparse-to-dense conversion
-of the mass matrix is not `vmap`-safe. Until they land, `env.backend=mjx`
-on a GPU host is the way to scale the number of matches.
+worker. `env.backend=mujoco-torch` needs mujoco-torch built from its `main`
+branch with [vmoens/mujoco-torch#88](https://github.com/vmoens/mujoco-torch/pull/88);
+the 0.2.0 release cannot step a scene with more than one duck. Eager on a
+CPU it takes seconds per control step for a 5-a-side match, so it and
+`env.backend=mjx` are the backends for a GPU host, where they vectorize the
+matches.
 
 Checkpoints are unified TorchRL checkpoints. To render one:
 

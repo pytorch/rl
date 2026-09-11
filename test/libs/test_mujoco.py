@@ -92,10 +92,6 @@ if _has_mujoco:
     _AVAILABLE_BACKENDS.append("mujoco")
 
 _VMAP_BACKENDS = [b for b in _AVAILABLE_BACKENDS if b in ("mujoco-torch", "mjx")]
-# mujoco-torch cannot step a football scene yet: its Newton solver has no
-# dense mass matrix from 100 degrees of freedom on, and its sparse-to-dense
-# mass matrix conversion is not vmap-safe between 60 and 99.
-_FOOTBALL_BACKENDS = [b for b in _AVAILABLE_BACKENDS if b != "mujoco-torch"]
 _LOCOMOTION_ENVS = [HumanoidEnv, AntEnv, Walker2dEnv, HopperEnv]
 
 
@@ -928,7 +924,7 @@ class TestMujoco:
         with pytest.raises(ValueError, match="STAND"):
             build_football_scene(no_key)
 
-    @pytest.mark.parametrize("backend", _FOOTBALL_BACKENDS)
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_football_env_specs_and_rollout(self, tmp_path, backend):
         num_envs = 1 if backend == "mujoco" else 2
         env = self._football_env(

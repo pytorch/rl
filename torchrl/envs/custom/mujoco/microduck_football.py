@@ -693,9 +693,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
 
     The env runs on every :class:`~torchrl.envs.MujocoEnv` backend, but the
     default is ``"mujoco"``: the native bindings step a 5-a-side scene at
-    several hundred control steps per second per worker process, while
-    ``mujoco-torch`` cannot vectorize a scene with more than one duck at the
-    time of writing.
+    several hundred control steps per second per worker process on a CPU,
+    while the vectorized backends (``"mujoco-torch"``, built from its
+    ``main`` branch, and ``"mjx"``) pay off on a GPU.
 
     Args:
         scene (str or Path, optional): path to a football MJCF written by
