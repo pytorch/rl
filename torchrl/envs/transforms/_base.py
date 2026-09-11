@@ -1076,7 +1076,11 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
 
         if auto_unwrap:
             self._set_env(base_env.base_env, device)
-            if type(transform) is not Compose:
+            if transform is None:
+                # Wrapping a transformed env without a transform of its own keeps
+                # the inner transforms only.
+                transform = []
+            elif type(transform) is not Compose:
                 # we don't use isinstance as some transforms may be subclassed from
                 # Compose but with other features that we don't want to lose.
                 if not isinstance(transform, Transform):
@@ -1087,10 +1091,7 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
                             "Invalid transform type, expected a Transform instance or a callable "
                             f"but got an object of type {type(transform)}."
                         )
-                if transform is not None:
-                    transform = [transform]
-                else:
-                    transform = []
+                transform = [transform]
             else:
                 for t in transform:
                     t.reset_parent()
