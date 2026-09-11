@@ -6,37 +6,34 @@ MicroDuck: train skills, then compose behaviors
 
 .. _microduck_skills_tuto:
 
-A low-level policy controls MicroDuck's joints. A high-level policy chooses
-which skill it should perform. We will train both with
-:class:`~torchrl.trainers.algorithms.PPOTrainer`. After a brief low-level training
-demonstration, we load a saved walker for a new task: approach a waypoint.
-For the environment's task, reward and simulator interfaces, see
-:doc:`microduck`. This tutorial can also be run on its own.
+Our duck needs two kinds of practice: moving its legs, and choosing where to
+go. We'll teach it to stand, walk, sidestep and jump, then give it a destination.
+A second policy will learn when to use each of those skills to get there.
+Both policies learn with :class:`~torchrl.trainers.algorithms.PPOTrainer`.
+
+You can start here, or explore the robot and its tasks first in :doc:`microduck`.
 
 What you will learn
 -------------------
 
-- Train a recurrent policy conditioned on a library of locomotion tasks.
-- Deploy it with :class:`~torchrl.envs.MicroDuckController` and
-  :class:`~torchrl.envs.transforms.ClosedLoopMultiAction`.
-- Train a high-level skill selector with ordinary PPO, then run a rollout.
+- Teach one policy several ways to move.
+- Reuse those skills in a new task without retraining the walker.
+- Train a second policy to choose skills that bring the duck closer to its goal.
 
-Allow 10–15 minutes to read and try this tutorial. It uses one CPU simulator
-and short training budgets. Deployment uses a published checkpoint trained for
-10 million transitions, so the high-level policy starts with learned skills.
-The full training launcher at the end uses the same components with larger
-budgets, parallel workers and evaluation.
+Allow 10–15 minutes to follow along. We'll try a little training at each stage,
+then load saved policies to see what more practice can achieve. You won't need
+to wait for a duck to learn to walk before trying the navigation task.
 
 Watch the composed behavior
 ---------------------------
 
-This recording streams directly from
+Here's where we're headed: a duck using its learned skills to approach a
+waypoint at ``(0.5, 0.3)`` metres. You can play the recording now, before running
+any code. The waypoint isn't drawn, and the duck returns to the start between
+episodes. The :doc:`integration tutorial <microduck>` shows each skill on its own.
+
+The videos and trained policies are available in
 `torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
-Play it here, or run just the first notebook cell: no training, checkpoint
-loading or simulator rendering is needed. The high-level policy selects among
-six learned skills to approach ``(0.5, 0.3)`` metres. The waypoint is not drawn;
-the clip includes episode resets. This is the result of the full training run.
-The :doc:`integration tutorial <microduck>` shows the individual skills.
 """
 
 from __future__ import annotations
@@ -55,10 +52,8 @@ Video(
 # Run the tutorial
 # ----------------
 #
-# The remaining cells need a TorchRL checkout with ``mujoco``,
-# ``huggingface_hub`` and the ``utils`` extra installed. ``download=True``
-# fetches pinned robot assets into ``~/.cache/torchrl/microduck`` on the first
-# run. The video cell above only needs IPython, which Jupyter provides.
+# To follow along, use a TorchRL checkout with ``mujoco``, ``huggingface_hub``
+# and the ``utils`` extra installed. The robot assets download on the first run.
 
 import functools as ft
 import os
@@ -92,12 +87,11 @@ from examples.microduck.train_skills import (  # noqa: E402
 )
 
 # %%
-# Small budgets for an interactive run
-# ------------------------------------
+# Start with a little practice
+# -----------------------------
 #
-# Both the script and generated notebook execute top to bottom. One simulator
-# means no worker processes and no ``__main__`` guards. Documentation builds
-# set ``TORCHRL_TUTORIALS_FAST=1`` and execute 64 steps per training stage.
+# These short runs let us try both stages in a few moments. Learning a steady
+# gait takes much longer; we'll pick up from a trained walker when we get there.
 
 fast = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
 low_frames = 64 if fast else 1024
@@ -148,11 +142,11 @@ walker, low_critic = make_models(low_env, hidden_size=32, initial_policy_scale=1
 # 2. Train the low-level policy
 # -----------------------------
 #
-# :meth:`~torchrl.trainers.algorithms.PPOTrainer.from_env` supplies the collector,
-# PPO loss, Adam optimizer, GAE and minibatches. We keep the two recurrent-policy
-# choices explicit: sample consecutive 64-step windows, and normalize advantages
-# separately within each task. A walking reward should not set the advantage
-# scale for a jumping task.
+# Let's give the duck its first practice session with
+# :meth:`~torchrl.trainers.algorithms.PPOTrainer.from_env`. Two choices matter
+# here: keep consecutive steps together so the GRU can use its memory, and
+# normalize advantages separately for each task. Otherwise, tasks with larger
+# reward variation can drown out the learning signal from the others.
 
 low_trainer = PPOTrainer.from_env(
     low_env,
@@ -173,16 +167,17 @@ low_trainer.train()
 # Reuse a saved walker
 # --------------------
 #
-# The short update above demonstrates training. Now load the policy from
+# A few updates won't make an accomplished walker. We've saved one that has
+# practiced for ten million steps in
 # `torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
-# It survived all 48 ten-second evaluation episodes, but its directional skills
-# have substantial speed variation and drift; the model card includes metrics
-# and a video. Learned skills do not guarantee successful navigation.
+# It stayed upright in all 48 ten-second evaluation episodes. It still drifts
+# and doesn't always match the requested speed, as the skill videos show.
+# Our next policy will have to work with the movements it actually learned.
 #
-# The pinned download is cached and also used during the short doc build.
-# ``load_walker`` restores the larger network, frozen weights and exact task
-# order: skill indices address learned embeddings. We reuse its action scale
-# too. Set ``MICRODUCK_WALKER_CHECKPOINT`` to use your own local checkpoint.
+# ``load_walker`` restores the trained network and its task library, then freezes
+# its weights. Keeping the original task order matters: skill 1 must still mean
+# the same thing to the walker. We also keep its action scale. To try your own
+# walker, set ``MICRODUCK_WALKER_CHECKPOINT`` to its checkpoint path.
 
 checkpoint_path = os.environ.get("MICRODUCK_WALKER_CHECKPOINT") or hf_hub_download(
     repo_id="torchrl/microduck-skills",
@@ -197,14 +192,13 @@ action_scale = checkpoint["config"]["env"]["action_scale"]
 # 3. Give the walker a new task
 # -----------------------------
 #
-# ``WaypointMicroDuck`` reuses MicroDuck's physics and adds six observation
-# values: displacement to the goal and robot orientation. Its reward is progress
-# toward ``(0.5, 0.3)`` metres, plus an arrival bonus and a fall penalty::
+# Now give the duck somewhere to go. ``WaypointMicroDuck`` tells it where the
+# goal is relative to its position, and which way it's facing. Getting closer
+# earns a reward, reaching the waypoint earns a bonus, and falling costs it::
 #
 #    reward = 10 * (old_distance - distance) + arrived - fallen - 0.001
 #
-# The episode ends on arrival or a fall. The task class contains observation,
-# reward and termination definitions; it has no policy-execution loop.
+# The episode ends when the duck arrives or falls.
 #
 # ``MicroDuckController`` adapts skill indices to the walker's original inputs.
 # ``ClosedLoopMultiAction`` holds that decision for up to five physical steps,
@@ -277,8 +271,8 @@ high_trainer.train()
 # 5. Roll out the composed policy
 # -------------------------------
 #
-# The short PPO update demonstrates training. For playback, load the paired
-# selector trained for one million decisions. It reached this fixed waypoint
+# Let's see how a practiced skill selector handles the task. Load the one
+# trained with our walker for one million decisions. It reached this waypoint
 # in 26 of 32 evaluation episodes (81.25%), with a mean final distance of 9.3 cm.
 # This does not establish navigation to arbitrary goals. The
 # `model repository <https://huggingface.co/torchrl/microduck-skills>`_ includes
@@ -296,11 +290,9 @@ if not os.environ.get("MICRODUCK_WALKER_CHECKPOINT"):
     Checkpoint(policy=high_actor).load(navigation_path)
 
 # %%
-# Training closes its environment, so evaluation creates a fresh instance.
-# The rollout records high-level skill decisions; each decision invokes the
-# walker repeatedly inside the environment. Plot distance to the waypoint to
-# see what the composed policy actually did. Playback allows up to ten seconds
-# of simulated time, including during the short documentation build.
+# Give the duck up to ten seconds to reach the waypoint, and plot its distance
+# after each skill choice. A successful trip should bring the curve below
+# 5 cm, our arrival threshold.
 
 evaluation_env = ClosedLoopMultiAction.from_env(
     make_task_env(max_episode_steps=500),
@@ -325,9 +317,8 @@ plt.show()
 # Run a full experiment locally
 # -----------------------------
 #
-# The companion launcher shares these task and model definitions. It trains a
-# larger GRU using parallel native MuJoCo workers, logs CSV metrics, saves
-# resumable trainer state, and evaluates every skill before deployment::
+# To train your own walker and skill selector, give them more time to practice.
+# The companion script runs both stages and evaluates the result::
 #
 #    python -m examples.microduck.train_skills --num-envs 16 \
 #        --low-level-frames 10000000 --high-level-frames 1000000 \
@@ -340,10 +331,9 @@ plt.show()
 #        --walker-checkpoint ~/microduck-training/walker.ckpt \
 #        --output-dir ~/microduck-training --resume
 #
-# ``walker.ckpt`` stores architecture, weights and the ordered task definitions.
-# ``skills.json`` measures survival and command tracking; ``navigation.json``
-# measures arrival rate and final distance. Use these evaluations to assess
-# learned behavior. Larger budgets alone do not establish that training succeeded.
+# Check ``skills.json`` to see whether the duck stays upright and follows its
+# commands, and ``navigation.json`` to see how often it reaches the goal.
+# ``walker.ckpt`` saves the policy and its task library for your next experiment.
 
 # %%
 # Reuse the deployment for 5-vs-5 football

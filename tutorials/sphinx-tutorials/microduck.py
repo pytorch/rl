@@ -6,11 +6,13 @@ MicroDuck: tasks, rewards and simulation
 
 .. _microduck_tuto:
 
-MicroDuck is a small open-hardware biped by Pollen Robotics. TorchRL's
-:class:`~torchrl.envs.MicroDuckEnv` represents locomotion tasks as data:
-standing, walking, sidestepping and jumping share one environment, with
-different commands and reward weights. We will explore that interface,
-customize a reward, and run a walking controller without training a policy.
+MicroDuck is a small open-hardware biped by Pollen Robotics. Let's get it moving.
+We'll choose a few tasks, look at what the robot sees, and adjust what it gets
+rewarded for. Then we'll try a walking controller that needs no training.
+
+In :class:`~torchrl.envs.MicroDuckEnv`, standing, walking, sidestepping and jumping
+share one environment. Changing the behavior starts with changing its commands
+and reward weights.
 
 What you will learn
 -------------------
@@ -35,8 +37,7 @@ right / jumping. Notice the sideways drift while walking and forward drift
 while jumping. These are learned policies from the companion training tutorial;
 the gait controller we will run here is hand-written.
 
-Play the clip here, or run just this notebook cell. Playback needs no training,
-checkpoint download or simulator rendering; the cell only imports IPython.
+You can play the recording now, before running any code.
 """
 
 from __future__ import annotations
@@ -55,11 +56,8 @@ Video(
 # Set up the simulator
 # --------------------
 #
-# The remaining cells need a TorchRL checkout with ``mujoco`` and the ``utils``
-# extra installed. ``download=True`` fetches pinned robot assets into
-# ``~/.cache/torchrl/microduck`` on the first run. You can instead point
-# ``MICRODUCK_RL_ROOT`` at a local ``microduck_rl`` checkout.
-# Documentation builds set ``TORCHRL_TUTORIALS_FAST=1`` for shorter rollouts.
+# To follow along, use a TorchRL checkout with ``mujoco`` and the ``utils`` extra
+# installed. The robot assets download on the first run.
 
 import os
 import sys
@@ -164,9 +162,8 @@ mixed.close()
 drawn
 
 # %%
-# To evaluate different tasks side by side, pin one index per simulator.
-# ``parallel=False`` runs these two CPU simulators serially in this process,
-# so the notebook needs no worker processes or entry-point guard.
+# Let's put two ducks side by side: one walking forward, the other sidestepping.
+# Pin a task index to each simulator so they keep their assignments after resets.
 
 paired = TransformedEnv(
     MicroDuckEnv(

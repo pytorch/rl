@@ -24,9 +24,22 @@ gait controller. It opens with a recorded skill grid that plays without simulati
 is a separate, standalone train → deploy → train tutorial. It uses one CPU simulator and
 `PPOTrainer.from_env` at both levels: train a recurrent walker, deploy it with
 `MicroDuckController` and `ClosedLoopMultiAction`, then train a categorical
-skill selector for waypoint navigation. Script and notebook defaults are small
-(1024 physical transitions, then 512 decisions); docs/CI run 64 steps per stage.
-There are no multiprocessing guards in the tutorial.
+skill selector for waypoint navigation.
+
+<details>
+<summary>Notebook execution and documentation builds</summary>
+
+The scripts and generated notebooks run top to bottom. They use a single CPU
+simulator (two serial simulators for the task-sampling example), so no worker
+processes or `__main__` guards are needed.
+
+The training tutorial runs 1,024 low-level transitions and 512 high-level
+decisions. Documentation builds set `TORCHRL_TUTORIALS_FAST=1` for 64 steps per
+training stage and shorter integration rollouts. Checkpoint evaluation still
+allows ten seconds of simulated time. Published files are cached after the first
+download. The opening video cells only need IPython.
+
+</details>
 
 [`train_skills.py`](train_skills.py) shares the same tasks and model definitions
 and owns the full CPU training recipe, including macOS parallel workers:
