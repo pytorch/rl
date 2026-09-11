@@ -25,9 +25,9 @@ and short training budgets. Deployment uses a published checkpoint trained for
 The full training launcher at the end uses the same components with larger
 budgets, parallel workers and evaluation.
 
-Run this notebook from a TorchRL checkout with ``mujoco`` and the ``utils``
-extra installed. ``download=True`` fetches the pinned robot assets into
-``~/.cache/torchrl/microduck`` on the first run.
+Run this notebook from a TorchRL checkout with ``mujoco``, ``huggingface_hub``
+and the ``utils`` extra installed. ``download=True`` fetches the pinned robot
+assets into ``~/.cache/torchrl/microduck`` on the first run.
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ import matplotlib.pyplot as plt
 import torch
 import torchrl
 from huggingface_hub import hf_hub_download
+from torchrl.checkpoint import Checkpoint
 from torchrl.envs import MicroDuckController, MicroDuckEnv
 from torchrl.envs.transforms import ClosedLoopMultiAction
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
@@ -248,20 +249,39 @@ high_trainer.train()
 # 5. Roll out the composed policy
 # -------------------------------
 #
+# The short PPO update demonstrates training. For playback, load the paired
+# selector trained for one million decisions. It reached this fixed waypoint
+# in 26 of 32 evaluation episodes (81.25%), with a mean final distance of 9.3 cm.
+# This does not establish navigation to arbitrary goals. The
+# `model repository <https://huggingface.co/torchrl/microduck-skills>`_ includes
+# both final videos, evaluation metrics and training configuration.
+#
+# A selector depends on its walker. When using your own walker checkpoint,
+# keep the selector you just trained instead of loading this published pair.
+
+if not os.environ.get("MICRODUCK_WALKER_CHECKPOINT"):
+    navigation_path = hf_hub_download(
+        repo_id="torchrl/microduck-skills",
+        filename="navigation.ckpt",
+        revision="6330ae68b8cf00cda62feb661e50df327f12ebcd",
+    )
+    Checkpoint(policy=high_actor).load(navigation_path)
+
+# %%
 # Training closes its environment, so evaluation creates a fresh instance.
 # The rollout records high-level skill decisions; each decision invokes the
 # walker repeatedly inside the environment. Plot distance to the waypoint to
-# see what the composed policy actually did. The high-level run is still short;
-# use the full launcher to train and evaluate navigation over a larger budget.
+# see what the composed policy actually did. Playback allows up to ten seconds
+# of simulated time, including during the short documentation build.
 
 evaluation_env = ClosedLoopMultiAction.from_env(
-    make_task_env(),
+    make_task_env(max_episode_steps=500),
     controller,
     steps=5,
 )
 with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
     trajectory = evaluation_env.rollout(
-        20 if fast else 100,
+        100,
         high_actor,
         break_when_any_done=True,
     )
