@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+CausalTransformer
+=================
+
+.. autoclass:: CausalTransformer
+    :members:

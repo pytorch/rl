@@ -22,6 +22,10 @@ Value networks estimate the value of states or state-action pairs.
 | [`GRUModule`](generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule)(*args, **kwargs) | An embedder for an GRU module. |
 | [`canonicalize_rnn_subset`](generated/torchrl.modules.canonicalize_rnn_subset.html#torchrl.modules.canonicalize_rnn_subset)(data, modules, *[, ...]) | Canonicalize only the union of RNN keys used by `modules`. |
 | [`set_recurrent_mode`](generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode)([mode]) | Context manager for setting RNNs recurrent mode. |
+| [`TransformerModule`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule)(*args, **kwargs) | A TensorDict wrapper turning a causal transformer into a temporal policy module. |
+| [`CausalTransformer`](generated/torchrl.modules.CausalTransformer.html#torchrl.modules.CausalTransformer)(input_size, hidden_size[, ...]) | A causal transformer backbone with matching windowed and cached-step semantics. |
+| [`positions_from_is_init`](generated/torchrl.modules.positions_from_is_init.html#torchrl.modules.positions_from_is_init)(is_init) | Compute per-token positions within each episode segment of a window. |
+| [`segment_causal_mask_from_is_init`](generated/torchrl.modules.segment_causal_mask_from_is_init.html#torchrl.modules.segment_causal_mask_from_is_init)(is_init) | Build a block-diagonal causal attention mask from `is_init` flags. |
 | [`OnlineDTActor`](generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor)(state_dim, action_dim[, ...]) | Online Decision Transformer Actor class. |
 | [`DTActor`](generated/torchrl.modules.DTActor.html#torchrl.modules.DTActor)(state_dim, action_dim[, ...]) | Decision Transformer Actor class. |
 | [`DecisionTransformer`](generated/torchrl.modules.DecisionTransformer.html#torchrl.modules.DecisionTransformer)(state_dim, action_dim[, ...]) | Online Decision Transformer. |

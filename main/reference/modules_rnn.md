@@ -185,6 +185,71 @@ A module-level `recurrent_matmul_precision=...` value takes precedence over
 the process-wide setting. Use [`get_recurrent_matmul_precision()`](generated/torchrl.modules.get_recurrent_matmul_precision.html#torchrl.modules.get_recurrent_matmul_precision) to inspect
 the resolved concrete mode for the current device.
 
+## Transformer temporal policies
+
+[`TransformerModule`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule) extends the same contract to causal transformers:
+observations are read from the TensorDict, features written back, and the
+`is_init` key drives state resets. Collection runs one step at a time
+against a key/value cache, while training processes `[B, T]` windows under
+a block-diagonal causal mask so attention never crosses an episode boundary.
+The two paths share parameters and produce matching outputs.
+
+```
+from tensordict.nn import TensorDictModule, TensorDictSequential
+from torch import nn
+from torchrl.envs import GymEnv, InitTracker, TransformedEnv
+from torchrl.modules import TransformerModule, set_recurrent_mode
+
+env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
+transformer = TransformerModule(
+ input_size=3,
+ hidden_size=64,
+ num_layers=2,
+ num_heads=4,
+ max_seq_len=256,
+ in_key="observation",
+ out_key="features",
+)
+policy = TensorDictSequential(
+ transformer,
+ TensorDictModule(nn.Linear(64, 1), in_keys=["features"], out_keys=["action"]),
+)
+
+rollout = env.rollout(100, policy) # cached steps, no state in the rollout
+with set_recurrent_mode(True):
+ window = transformer(rollout.exclude("features")) # same features
+```
+
+Unlike the RNN modules, no state travels in the TensorDict. The key/value
+cache is inference state owned by the module instance: the backbone allocates
+it on the first cached step in the dtype of its projections, one stream per
+batch position, and the module clears the streams flagged by `is_init`,
+restarts every stream when the parameters change, and releases the cache on
+[`reset_cache()`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule.reset_cache); copies and pickled
+instances start with an empty cache. TorchRL's weight-synchronization paths
+(collectors and the inference server) notify the module through
+[`mark_weight_update()`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule.mark_weight_update) once new
+weights are applied; call it yourself after updating parameters by other
+means. Under autocast the cache is allocated in the compute dtype, so no
+conversion happens on the hot path. Rollouts and replay buffers never carry
+a cache, whatever the context length. Use one module instance per collector
+(or per collector worker); batches whose composition changes between calls
+are not supported yet.
+
+Training windows must be episode-aligned: every row must start with
+`is_init=True`, which complete-trajectory sampling provides, and a window
+that starts mid-episode raises an error. The check is data-dependent, so it
+costs one graph break under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile); pass
+`validate_windows=False` to compile the window path as a single graph and
+take responsibility for alignment. Episode boundaries inside a window
+are recovered from `is_init` through [`positions_from_is_init()`](generated/torchrl.modules.positions_from_is_init.html#torchrl.modules.positions_from_is_init) and
+[`segment_causal_mask_from_is_init()`](generated/torchrl.modules.segment_causal_mask_from_is_init.html#torchrl.modules.segment_causal_mask_from_is_init). Any backbone honoring the
+[`CausalTransformer`](generated/torchrl.modules.CausalTransformer.html#torchrl.modules.CausalTransformer) contract (`forward`, `new_kv_cache` and
+`reset_kv_cache` plus the `num_layers`, `num_heads`, `head_dim` and
+`max_seq_len` attributes) can be passed via the `transformer` argument;
+the cache object is opaque to the module, so an adapter over an inference
+engine can keep it in the engine's own representation.
+
 ## Choosing a layout and backend
 
 For most recurrent RL pipelines:

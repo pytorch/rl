@@ -34237,7 +34237,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fa3065f71a0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f7e1d38a390>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47554,7 +47554,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fa309624f40>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f7e1fe14f40>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -209124,6 +209124,140 @@ Parameters:
 
 ---
 
+# CausalTransformer
+
+*class*torchrl.modules.CausalTransformer(*input_size: int*, *hidden_size: int*, *num_layers: int = 1*, ***, *num_heads: int*, *max_seq_len: int*, *dim_feedforward: int | None = None*, *dropout: float = 0.0*, *device=None*)[[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#CausalTransformer)
+
+A causal transformer backbone with matching windowed and cached-step semantics.
+
+This is the reference implementation of the temporal-transformer backbone
+contract consumed by [`TransformerModule`](torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule):
+
+- `forward(features, positions, mask=None, kv_cache=None) -> (out, kv_cache)`
+- `new_kv_cache(batch_size, device=None) -> kv_cache`
+- `reset_kv_cache(kv_cache, mask) -> kv_cache`
+
+together with `num_layers`, `num_heads`, `head_dim` and
+`max_seq_len` attributes. The cache object is opaque to the module: the
+backbone decides its layout, dtype and device and how a reset clears the
+rows selected by a boolean mask over the batch. Any module honoring that
+contract can be used in its place, including adapters over an inference
+engine that keeps the cache in its own representation.
+
+Two execution paths share the same parameters and produce the same
+outputs: a window path processing `[B, T]` at once under a causal mask
+(training), and a cached-step path attending against a fixed-shape
+key/value cache (collection). Positions are always explicit inputs, which
+is what keeps the two paths consistent across episode resets.
+
+The reference cache is a `(k, v)` pair of shape `[B, num_layers,
+num_heads, max_seq_len, head_dim]` allocated in the dtype of the
+projection weights, so a module converted to `bfloat16` or `float64`
+gets a matching cache. Under autocast the projected keys and values are
+cast to the cache dtype on write and the cache to the query dtype on
+read. Cached entries are detached: the cached-step path is inference
+only.
+
+Parameters:
+
+- **input_size** (*int*) - number of input features.
+- **hidden_size** (*int*) - dimension of the residual stream. Must be divisible
+by `num_heads`.
+- **num_layers** (*int**,**optional*) - number of transformer blocks. Defaults to
+`1`.
+
+Keyword Arguments:
+
+- **num_heads** (*int*) - number of attention heads.
+- **max_seq_len** (*int*) - maximum episode length; sets the positional
+embedding table and the cache size. Episodes longer than this
+raise an error (sliding-window semantics are deliberately not
+implemented).
+- **dim_feedforward** (*int**,**optional*) - hidden dimension of the per-block
+MLP. Defaults to `4 * hidden_size`.
+- **dropout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - dropout probability in the block MLPs.
+Defaults to `0.0`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - device to build the parameters on.
+
+Examples
+
+```
+>>> import torch
+>>> net = CausalTransformer(3, 16, 2, num_heads=4, max_seq_len=10)
+>>> features = torch.randn(2, 5, 3)
+>>> positions = torch.arange(5).expand(2, 5)
+>>> out, _ = net(features, positions)
+>>> out.shape
+torch.Size([2, 5, 16])
+>>> cache = net.new_kv_cache(2)
+>>> step, cache = net(features[:, :1], positions[:, :1], kv_cache=cache)
+>>> torch.allclose(step, out[:, :1], atol=1e-6)
+True
+```
+
+forward(*features: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *positions: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *mask: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *kv_cache: tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | None = None*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | None][[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#CausalTransformer.forward)
+
+Run the backbone over a window or a single cached step.
+
+Parameters:
+
+- **features** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - `[B, T, input_size]` inputs. `T` must
+be `1` when `kv_cache` is provided.
+- **positions** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - `[B, T]` integer positions of each
+step within its episode.
+- **mask** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - `[B, T, T]` boolean mask
+(`True` = attend) for the window path; defaults to a plain
+causal mask. Ignored on the cached-step path, where validity
+is derived from `positions`.
+- **kv_cache** (*tuple**of*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - a cache from
+`new_kv_cache()`. Providing it selects the cached-step
+path; the cache is updated in place at `positions`.
+
+Returns:
+
+A tuple `(out, kv_cache)` with `out` of shape
+`[B, T, hidden_size]` and `kv_cache` the updated cache on the
+cached-step path (`None` on the window path).
+
+new_kv_cache(*batch_size: int*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)][[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#CausalTransformer.new_kv_cache)
+
+Allocate an empty key/value cache for `batch_size` streams.
+
+Parameters:
+
+**batch_size** (*int*) - number of concurrent streams (environments).
+
+Keyword Arguments:
+
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - where to allocate the cache.
+Defaults to the device of the projection weights.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - dtype of the cache. Pass the
+compute dtype under autocast so cached keys and values are
+stored as the projections produce them, without a conversion
+on every step. Defaults to the dtype of the projection
+weights.
+
+Returns:
+
+A `(k, v)` tuple of zero tensors of shape `[batch_size,
+num_layers, num_heads, max_seq_len, head_dim]`.
+
+*static*reset_kv_cache(*kv_cache: tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)]*, *mask: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)][[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#CausalTransformer.reset_kv_cache)
+
+Clear the cache rows of the streams selected by `mask`.
+
+Parameters:
+
+- **kv_cache** (*tuple**of*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a cache from `new_kv_cache()`.
+- **mask** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a boolean tensor of shape `[batch_size]`;
+`True` rows are zeroed in place.
+
+Returns:
+
+The same `(k, v)` tuple.
+
+---
+
 # ComposeValueTransform
 
 *class*torchrl.modules.ComposeValueTransform(**transforms: [ValueTransform](torchrl.modules.ValueTransform.html#torchrl.modules.ValueTransform)*)[[source]](../../_modules/torchrl/modules/value_transforms.html#ComposeValueTransform)
@@ -213593,6 +213727,171 @@ sample_shape + batch_shape, respectively.
 
 Returns a [`Constraint`](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.constraints.Constraint) object
 representing this distribution's support.
+
+---
+
+# TransformerModule
+
+*class*torchrl.modules.TransformerModule(**args*, ***kwargs*)[[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#TransformerModule)
+
+A TensorDict wrapper turning a causal transformer into a temporal policy module.
+
+The transformer analogue of [`LSTMModule`](torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule): the same
+network runs either over a full `[B, T]` window (training) or one step
+at a time against a key/value cache (collection), with matching outputs.
+The execution path is selected by the
+[`set_recurrent_mode`](torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode) context manager, exactly as
+for the recurrent modules.
+
+Unlike the recurrent modules, no state travels in the tensordict. The
+key/value cache is inference state owned by the module instance: it is
+allocated by the backbone on the first cached step, indexed by batch
+position (one stream per environment of the batch), cleared wherever
+`is_init` is set (sourced from `InitTracker`),
+invalidated when the parameters change (in place or swapped for other
+tensors), and released by `reset_cache()`. Copies and pickled
+instances start with an empty cache. Rollouts and replay buffers hold
+observations and features only, never a cache; the training path reads
+`is_init` to rebuild positions and a block-diagonal causal mask over the
+window.
+
+Parameters:
+
+- **input_size** (*int**,**optional*) - number of input features. Unused if
+`transformer` is passed.
+- **hidden_size** (*int**,**optional*) - dimension of the transformer's residual
+stream. Unused if `transformer` is passed.
+- **num_layers** (*int**,**optional*) - number of transformer blocks. Defaults to
+`1`. Unused if `transformer` is passed.
+
+Keyword Arguments:
+
+- **num_heads** (*int**,**optional*) - number of attention heads. Required unless
+`transformer` is passed.
+- **max_seq_len** (*int**,**optional*) - maximum episode length (positional table
+and cache size). Required unless `transformer` is passed.
+- **dim_feedforward** (*int**,**optional*) - per-block MLP width. Defaults to
+`4 * hidden_size`.
+- **dropout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - dropout probability. Defaults to `0.0`.
+- **transformer** (*nn.Module**,**optional*) - a pre-built backbone honoring the
+contract described in [`CausalTransformer`](torchrl.modules.CausalTransformer.html#torchrl.modules.CausalTransformer)
+(`forward`, `new_kv_cache` and `reset_kv_cache` plus the
+`num_layers`, `num_heads`, `head_dim` and `max_seq_len`
+attributes). Exclusive with the size arguments.
+- **in_key** (*NestedKey**,**optional*) - the input value key. Exclusive with
+`in_keys`.
+- **in_keys** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**NestedKey**,**optional*) - the input value key, optionally
+followed by `"is_init"`. Defaults to `[in_key, "is_init"]`.
+- **out_key** (*NestedKey**,**optional*) - the output value key. Exclusive with
+`out_keys`.
+- **out_keys** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**NestedKey**,**optional*) - a one-element list with the
+output value key. Defaults to `[out_key]`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - device to build the parameters on.
+- **default_recurrent_mode** (*bool**,**optional*) - the recurrent mode when not
+overridden by the [`set_recurrent_mode`](torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode)
+context manager. Defaults to `False`.
+- **validate_windows** (*bool**,**optional*) - whether the window path checks that
+every row starts with `is_init=True` and raises otherwise. The
+check is data-dependent: under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) it costs one
+graph break, and `fullgraph=True` rejects it at compile time.
+Pass `False` to compile the window path as one graph, in which
+case the caller is responsible for episode-aligned windows.
+Defaults to `True`.
+
+Note
+
+The cache is discarded whenever the parameters change. Parameter
+edits in place or swapped parameter tensors are detected on the next
+eager step; TorchRL's weight-synchronization paths (collectors and
+the inference server) call `mark_weight_update()` explicitly,
+which also covers compiled modules and updates that write through
+`.data`. Call `mark_weight_update()` (or `reset_cache()`)
+yourself after updating the parameters by any other means.
+
+Note
+
+The batch position is the stream identity of the cached-step path:
+a module instance must see the same environments in the same order
+on every call, which is what a collector over a batched environment
+provides. Use one instance per collector (or per collector worker)
+and call `reset_cache()` before reusing an instance with another
+environment. Batches whose composition changes between calls, such as
+the partial batches of an asynchronous collector, need a stream-keyed
+cache and are not supported by this module yet.
+
+Note
+
+Training windows must be episode-aligned: every row must start with
+`is_init=True`, which is what complete-trajectory sampling
+provides. A window that starts mid-episode raises a `ValueError`
+rather than silently recomputing the prefix from position `0`.
+
+Note
+
+Episodes longer than `max_seq_len` raise an error; sliding-window
+attention is deliberately out of scope.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict.nn import TensorDictModule, TensorDictSequential
+>>> from torch import nn
+>>> from torchrl.envs import GymEnv, InitTracker, TransformedEnv
+>>> from torchrl.modules import TransformerModule, set_recurrent_mode
+>>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
+>>> module = TransformerModule(
+... input_size=env.observation_spec["observation"].shape[-1],
+... hidden_size=16,
+... num_layers=2,
+... num_heads=4,
+... max_seq_len=200,
+... in_key="observation",
+... out_key="embed",
+... )
+>>> policy = TensorDictSequential(
+... module,
+... TensorDictModule(nn.Linear(16, 1), in_keys=["embed"], out_keys=["action"]),
+... )
+>>> rollout = env.rollout(10, policy)
+>>> rollout["embed"].shape
+torch.Size([10, 16])
+>>> "transformer_state" in rollout.keys()
+False
+>>> with set_recurrent_mode(True):
+... window = module(rollout.exclude("embed").clone())
+>>> torch.allclose(window["embed"], rollout["embed"], atol=1e-5)
+True
+```
+
+forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*)[[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#TransformerModule.forward)
+
+Run the transformer, honouring `is_init` for state resets.
+
+With `recurrent_mode=False`, one step is processed against the
+module's cache, whose rows are cleared where `is_init` is set; this
+path is inference only and runs under `torch.no_grad()`. With
+`recurrent_mode=True`, a full `(B, T)` window is processed under a
+block-diagonal causal mask built from `is_init`; the cache is
+neither read nor written, and gradients flow through the window.
+
+mark_weight_update() → None[[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#TransformerModule.mark_weight_update)
+
+Discard the cache after a weight update.
+
+TorchRL's weight-synchronization paths (collectors and the inference
+server) call this through `torchrl._utils.mark_weight_update()`
+once new weights are applied, so every stream restarts instead of
+attending to keys and values computed with the previous weights. Call
+it yourself after updating the parameters by other means.
+
+reset_cache() → None[[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#TransformerModule.reset_cache)
+
+Release the key/value cache and the position counters.
+
+The next cached step allocates a fresh cache for the batch it sees.
+Call this before reusing the module with a different environment or
+collector.
 
 ---
 
@@ -232168,6 +232467,68 @@ Although the recipe for forward pass needs to be defined within
 this function, one should call the `Module` instance afterwards
 instead of this since the former takes care of running the
 registered hooks while the latter silently ignores them.
+
+---
+
+# positions_from_is_init
+
+*class*torchrl.modules.positions_from_is_init(*is_init: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*)[[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#positions_from_is_init)
+
+Compute per-token positions within each episode segment of a window.
+
+Positions restart at `0` on every `is_init` flag. The first step of
+the window is always treated as position `0`, so callers must pass
+episode-aligned windows: [`TransformerModule`](torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule) validates that every
+row of a training window starts with `is_init=True`.
+
+Parameters:
+
+**is_init** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a boolean tensor of shape `[*batch, T]`
+marking the first step of each episode.
+
+Returns:
+
+A `torch.long` tensor of shape `[*batch, T]` holding the position
+of each step within its episode segment.
+
+Examples
+
+```
+>>> is_init = torch.tensor([[True, False, True, False]])
+>>> positions_from_is_init(is_init)
+tensor([[0, 1, 0, 1]])
+```
+
+---
+
+# segment_causal_mask_from_is_init
+
+*class*torchrl.modules.segment_causal_mask_from_is_init(*is_init: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*)[[source]](../../_modules/torchrl/modules/tensordict_module/transformer.html#segment_causal_mask_from_is_init)
+
+Build a block-diagonal causal attention mask from `is_init` flags.
+
+Entry `[..., i, j]` is `True` (attend) iff `j <= i` and steps `i`
+and `j` belong to the same episode segment, so attention never crosses
+an episode boundary within a training window.
+
+Parameters:
+
+**is_init** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a boolean tensor of shape `[*batch, T]`
+marking the first step of each episode.
+
+Returns:
+
+A boolean tensor of shape `[*batch, T, T]` where `True` means
+"may attend".
+
+Examples
+
+```
+>>> is_init = torch.tensor([[False, True]])
+>>> segment_causal_mask_from_is_init(is_init)
+tensor([[[ True, False],
+ [False, True]]])
+```
 
 ---
 
@@ -275112,6 +275473,10 @@ actor = ProbabilisticActor(
 - [GRUModule](generated/torchrl.modules.GRUModule.html)
 - [canonicalize_rnn_subset](generated/torchrl.modules.canonicalize_rnn_subset.html)
 - [set_recurrent_mode](generated/torchrl.modules.set_recurrent_mode.html)
+- [TransformerModule](generated/torchrl.modules.TransformerModule.html)
+- [CausalTransformer](generated/torchrl.modules.CausalTransformer.html)
+- [positions_from_is_init](generated/torchrl.modules.positions_from_is_init.html)
+- [segment_causal_mask_from_is_init](generated/torchrl.modules.segment_causal_mask_from_is_init.html)
 - [OnlineDTActor](generated/torchrl.modules.OnlineDTActor.html)
 - [DTActor](generated/torchrl.modules.DTActor.html)
 - [DecisionTransformer](generated/torchrl.modules.DecisionTransformer.html)
@@ -275122,6 +275487,7 @@ actor = ProbabilisticActor(
 - [Backend selection](modules_rnn.html#backend-selection)
 - [Optimized GRU scan backward](modules_rnn.html#optimized-gru-scan-backward)
 - [Triton precision controls](modules_rnn.html#triton-precision-controls)
+- [Transformer temporal policies](modules_rnn.html#transformer-temporal-policies)
 - [Choosing a layout and backend](modules_rnn.html#choosing-a-layout-and-backend)
 - [See also](modules_rnn.html#see-also)
 - [torchrl.modules.mcts package](modules_mcts.html)
@@ -275264,6 +275630,10 @@ Value networks estimate the value of states or state-action pairs.
 | [`GRUModule`](generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule)(*args, **kwargs) | An embedder for an GRU module. |
 | [`canonicalize_rnn_subset`](generated/torchrl.modules.canonicalize_rnn_subset.html#torchrl.modules.canonicalize_rnn_subset)(data, modules, *[, ...]) | Canonicalize only the union of RNN keys used by `modules`. |
 | [`set_recurrent_mode`](generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode)([mode]) | Context manager for setting RNNs recurrent mode. |
+| [`TransformerModule`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule)(*args, **kwargs) | A TensorDict wrapper turning a causal transformer into a temporal policy module. |
+| [`CausalTransformer`](generated/torchrl.modules.CausalTransformer.html#torchrl.modules.CausalTransformer)(input_size, hidden_size[, ...]) | A causal transformer backbone with matching windowed and cached-step semantics. |
+| [`positions_from_is_init`](generated/torchrl.modules.positions_from_is_init.html#torchrl.modules.positions_from_is_init)(is_init) | Compute per-token positions within each episode segment of a window. |
+| [`segment_causal_mask_from_is_init`](generated/torchrl.modules.segment_causal_mask_from_is_init.html#torchrl.modules.segment_causal_mask_from_is_init)(is_init) | Build a block-diagonal causal attention mask from `is_init` flags. |
 | [`OnlineDTActor`](generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor)(state_dim, action_dim[, ...]) | Online Decision Transformer Actor class. |
 | [`DTActor`](generated/torchrl.modules.DTActor.html#torchrl.modules.DTActor)(state_dim, action_dim[, ...]) | Decision Transformer Actor class. |
 | [`DecisionTransformer`](generated/torchrl.modules.DecisionTransformer.html#torchrl.modules.DecisionTransformer)(state_dim, action_dim[, ...]) | Online Decision Transformer. |
@@ -275932,6 +276302,71 @@ gru = GRUModule(
 A module-level `recurrent_matmul_precision=...` value takes precedence over
 the process-wide setting. Use [`get_recurrent_matmul_precision()`](generated/torchrl.modules.get_recurrent_matmul_precision.html#torchrl.modules.get_recurrent_matmul_precision) to inspect
 the resolved concrete mode for the current device.
+
+## Transformer temporal policies
+
+[`TransformerModule`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule) extends the same contract to causal transformers:
+observations are read from the TensorDict, features written back, and the
+`is_init` key drives state resets. Collection runs one step at a time
+against a key/value cache, while training processes `[B, T]` windows under
+a block-diagonal causal mask so attention never crosses an episode boundary.
+The two paths share parameters and produce matching outputs.
+
+```
+from tensordict.nn import TensorDictModule, TensorDictSequential
+from torch import nn
+from torchrl.envs import GymEnv, InitTracker, TransformedEnv
+from torchrl.modules import TransformerModule, set_recurrent_mode
+
+env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
+transformer = TransformerModule(
+ input_size=3,
+ hidden_size=64,
+ num_layers=2,
+ num_heads=4,
+ max_seq_len=256,
+ in_key="observation",
+ out_key="features",
+)
+policy = TensorDictSequential(
+ transformer,
+ TensorDictModule(nn.Linear(64, 1), in_keys=["features"], out_keys=["action"]),
+)
+
+rollout = env.rollout(100, policy) # cached steps, no state in the rollout
+with set_recurrent_mode(True):
+ window = transformer(rollout.exclude("features")) # same features
+```
+
+Unlike the RNN modules, no state travels in the TensorDict. The key/value
+cache is inference state owned by the module instance: the backbone allocates
+it on the first cached step in the dtype of its projections, one stream per
+batch position, and the module clears the streams flagged by `is_init`,
+restarts every stream when the parameters change, and releases the cache on
+[`reset_cache()`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule.reset_cache); copies and pickled
+instances start with an empty cache. TorchRL's weight-synchronization paths
+(collectors and the inference server) notify the module through
+[`mark_weight_update()`](generated/torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule.mark_weight_update) once new
+weights are applied; call it yourself after updating parameters by other
+means. Under autocast the cache is allocated in the compute dtype, so no
+conversion happens on the hot path. Rollouts and replay buffers never carry
+a cache, whatever the context length. Use one module instance per collector
+(or per collector worker); batches whose composition changes between calls
+are not supported yet.
+
+Training windows must be episode-aligned: every row must start with
+`is_init=True`, which complete-trajectory sampling provides, and a window
+that starts mid-episode raises an error. The check is data-dependent, so it
+costs one graph break under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile); pass
+`validate_windows=False` to compile the window path as a single graph and
+take responsibility for alignment. Episode boundaries inside a window
+are recovered from `is_init` through [`positions_from_is_init()`](generated/torchrl.modules.positions_from_is_init.html#torchrl.modules.positions_from_is_init) and
+[`segment_causal_mask_from_is_init()`](generated/torchrl.modules.segment_causal_mask_from_is_init.html#torchrl.modules.segment_causal_mask_from_is_init). Any backbone honoring the
+[`CausalTransformer`](generated/torchrl.modules.CausalTransformer.html#torchrl.modules.CausalTransformer) contract (`forward`, `new_kv_cache` and
+`reset_kv_cache` plus the `num_layers`, `num_heads`, `head_dim` and
+`max_seq_len` attributes) can be passed via the `transformer` argument;
+the cache object is opaque to the module, so an adapter over an inference
+engine can keep it in the engine's own representation.
 
 ## Choosing a layout and backend
 
