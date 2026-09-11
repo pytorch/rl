@@ -16,38 +16,49 @@ raises an error listing the options.
 | [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
 
-The [MicroDuck tutorial](../../tutorials/sphinx-tutorials/microduck.py) continues
-from low-level PPO to high-level training: reload the walker's checkpoint and
-task library, deploy it with `MicroDuckController` and `ClosedLoopMultiAction`,
-then train a categorical PPO actor to select skills for waypoint navigation.
-Both stages use `PPOTrainer`. It also shows the grouped deployment and trainer
-configuration for a supplied 5-vs-5 task.
+The [MicroDuck tutorial](../../tutorials/sphinx-tutorials/microduck.py) is a short,
+linear train → deploy → train example. It uses one CPU simulator and
+`PPOTrainer.from_env` at both levels: train a recurrent walker, deploy it with
+`MicroDuckController` and `ClosedLoopMultiAction`, then train a categorical
+skill selector for waypoint navigation. Script and notebook defaults are small
+(1024 physical transitions, then 512 decisions); docs/CI run 64 steps per stage.
+There are no multiprocessing guards in the tutorial.
+
+[`train_skills.py`](train_skills.py) shares the same tasks and model definitions
+and owns the full CPU training recipe, including macOS parallel workers:
 
 ```bash
-# Full CPU recipe (including macOS): 10M physical transitions, then 1M decisions.
-MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
-    python tutorials/sphinx-tutorials/microduck.py
+# Read and run the tutorial end to end.
+python tutorials/sphinx-tutorials/microduck.py
 
-# Short pipeline check: 64 steps per training stage, one epoch, one simulator.
-TORCHRL_TUTORIALS_FAST=1 python tutorials/sphinx-tutorials/microduck.py
+# Full training: 10M physical transitions, then 1M decisions.
+python -m examples.microduck.train_skills --num-envs 16 \
+    --low-level-frames 10000000 --high-level-frames 1000000 \
+    --output-dir ~/microduck-training
 
-# Resume an interrupted low-level run; use the same number of workers.
-MICRODUCK_RESUME=1 MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
-    python tutorials/sphinx-tutorials/microduck.py
+# Check the launcher with one simulator and 64 steps per stage.
+python -m examples.microduck.train_skills --smoke --output-dir /tmp/microduck-smoke
 
-# Load a walker and resume high-level training (omit RESUME for a new run).
-MICRODUCK_WALKER_CHECKPOINT=$HOME/microduck-training/walker.ckpt \
-    MICRODUCK_RESUME=1 MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
-    python tutorials/sphinx-tutorials/microduck.py
+# Resume low-level training, retaining worker count and batch/model settings.
+python -m examples.microduck.train_skills --num-envs 16 \
+    --output-dir ~/microduck-training --resume
+
+# Reuse a walker and resume high-level training (omit --resume for a new run).
+python -m examples.microduck.train_skills --num-envs 16 \
+    --walker-checkpoint ~/microduck-training/walker.ckpt \
+    --output-dir ~/microduck-training --resume
 ```
 
-`MICRODUCK_LOW_LEVEL_FRAMES`, `MICRODUCK_HIGH_LEVEL_FRAMES` and
-`MICRODUCK_NUM_ENVS` override the local budgets and worker count (default 16).
-Documentation builds and tutorial CI force fast mode, which takes precedence
-over these overrides. Full runs write CSV metrics, resumable trainer state,
-`walker.ckpt`, per-skill evaluation in `skills.json`, and navigation evaluation
-in `navigation.json`. Evaluate survival, tracking and arrival rate before
-claiming learned behavior; the documentation run only checks the pipeline.
+The launcher writes CSV metrics under `low_level/` and `high_level/`, resumable
+`low_level.trainer` and `high_level.trainer` checkpoints, `walker.ckpt` (including
+architecture and ordered task definitions), per-skill evaluation in `skills.json`,
+and navigation evaluation in `navigation.json`. A high-level checkpoint must be
+paired with its original walker. Native MuJoCo resets simulator episodes after
+restarting, so checkpoint continuation is not bit-exact.
+
+Evaluate survival, command tracking and arrival rate before claiming learned
+behavior. Short runs exercise the complete pipeline; they do not establish skill
+quality. Full training can take hours and is separate from the 10–20 minute tutorial.
 
 ## The task
 
