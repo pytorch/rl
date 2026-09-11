@@ -523,11 +523,10 @@ GRPO, DAPO, CISPO
     :toctree: generated/
     :template: rl_template.rst
 
-    LLMLossOutput
-    GRPOLoss
-    GRPOLossOutput
-    CISPOLoss
-    CISPOLossOutput
+    assert_buffer_contract
+    assert_collector_contract
+    assert_loss_contract
+
     DAPO
     DAPOLossOutput
     MCAdvantage
