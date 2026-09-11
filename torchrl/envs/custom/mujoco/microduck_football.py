@@ -689,6 +689,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
     * ``approach_ball``: the agent's planar velocity toward the ball, capped
       at :attr:`APPROACH_SPEED_CAP` and off within a ball radius plus 5 cm.
     * ``fall`` (one-off, negative weight): paid on the step the agent goes down.
+    * ``crowd`` (negative weight): number of other ducks within
+      :attr:`CROWD_RADIUS` of the agent, so the team spreads out instead of
+      piling onto the ball.
     * ``action_rate`` (negative weight): squared change of the action.
 
     A fall (base height below :attr:`~torchrl.envs.MicroDuckEnv.MIN_HEIGHT_RATIO`
@@ -810,11 +813,14 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         "approach_ball": 0.5,
         "fall": -1.0,
         "action_rate": -0.05,
+        "crowd": -0.5,
     }
     """Default weight of every reward term; ``goal`` and ``fall`` are one-off."""
     APPROACH_SPEED_CAP: ClassVar[float] = 0.5
     """Cap on the speed toward the ball that ``approach_ball`` pays for, in m/s."""
     APPROACH_RADIUS_MARGIN: ClassVar[float] = 0.05
+    CROWD_RADIUS: ClassVar[float] = 0.2
+    """Planar distance under which another duck counts as crowding, in meters."""
     CAMERAS: ClassVar[tuple[str, str]] = ("broadcast", "topdown")
     """Names of the scene cameras, in id order."""
 
@@ -1410,10 +1416,14 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             distance > self.ball_radius + self.APPROACH_RADIUS_MARGIN
         ).to(self.dtype)
         action_rate = (action - self._previous_action).square().sum(-1)
+        xy = ducks_q[..., :2]
+        spacing = (xy.unsqueeze(1) - xy.unsqueeze(2)).norm(dim=-1)
+        neighbors = (spacing < self.CROWD_RADIUS).sum(-1).to(self.dtype) - 1.0
         per_second = (
             weights["ball_progress"] * progress
             + weights["approach_ball"] * approach
             + weights["action_rate"] * action_rate
+            + weights["crowd"] * neighbors
         )
         one_off = weights["goal"] * goal.to(self.dtype) * sign + weights[
             "fall"

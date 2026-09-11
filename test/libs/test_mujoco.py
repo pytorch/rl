@@ -1086,6 +1086,33 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_crowding_charges_each_close_neighbor(self, tmp_path):
+        weights = {name: 0.0 for name in MicroDuckFootballEnv.REWARD_WEIGHTS}
+        weights["crowd"] = -1.0
+        env = self._football_env(tmp_path, players_per_team=2, reward_weights=weights)
+        env.reset()
+        state = env.get_state()
+        qpos = state["qpos"].clone()
+        nq = MicroDuckFootballEnv.DUCK_NQ
+        # blue0 and blue1 stand 10 cm apart, red0 15 cm from both, red1 far away.
+        for index, (x, y) in enumerate(
+            [(0.0, 0.0), (0.1, 0.0), (0.05, 0.14), (1.0, 0.8)]
+        ):
+            qpos[0, index * nq] = x
+            qpos[0, index * nq + 1] = y
+        env.reset(
+            TensorDict(qpos=qpos, qvel=state["qvel"], batch_size=[1]), set_state=True
+        )
+        reward = env.step(self._football_action(env))["next"]["agents", "reward"][
+            0, :, 0
+        ]
+        dt = env.frame_skip * env._backend.timestep
+        assert reward.tolist() == pytest.approx(
+            [-2 * dt, -2 * dt, -2 * dt, 0.0], abs=1e-6
+        )
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_football_observation_is_team_symmetric(self, tmp_path):
         env = self._football_env(tmp_path, players_per_team=2)
         env.reset()
