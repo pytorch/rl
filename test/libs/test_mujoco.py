@@ -42,6 +42,7 @@ from torchrl.envs import (
     SatelliteEnv,
     SerialEnv,
     set_exploration_type,
+    StepCounter,
     TensorDictPrimer,
     TransformedEnv,
     URScriptPrimitiveTransform,
@@ -3000,6 +3001,26 @@ class _MicroDuckRecordingPolicy(TensorDictModuleBase):
 
 
 class TestMicroDuckController:
+    def test_terminal_transition_keeps_skill_observation(self):
+        env = microduck_skill_env(
+            TransformedEnv(_MicroDuckDeploymentEnv(), StepCounter(max_steps=2)),
+            _MicroDuckRecordingPolicy(),
+            [MicroDuckEnv.standing_task(), MicroDuckEnv.tracking_task(0.2)],
+            steps=3,
+        )
+        check_env_specs(env)
+        transition = env.rand_step(env.reset())
+        assert transition["next", "done"].all()
+        assert (
+            transition["next", "agents", "observation"].shape
+            == transition["agents", "observation"].shape
+        )
+        torch.testing.assert_close(
+            transition["next", "agents", "observation"][..., -2:].argmax(-1),
+            transition["agents", "skill"],
+        )
+        env.close()
+
     @pytest.mark.parametrize("parameterized", [False, True])
     def test_deployment_matches_commands_clocks_and_respawns(self, parameterized):
         tasks = [

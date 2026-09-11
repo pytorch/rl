@@ -207,7 +207,14 @@ class _MicroDuckSkillHistory(TensorDictPrimer):
         group = next_td if self.group_key is None else next_td[self.group_key]
         source = td if self.group_key is None else td[self.group_key]
         next_td[self.fallen_path] = td[self.fallen_path] | group["fallen"]
-        next_td[self.skill_path] = source["skill"].clone()
+        skill = source["skill"]
+        active = td.get("_step", None)
+        if active is not None:
+            active = active.reshape(
+                (*active.shape, *([1] * (skill.ndim - active.ndim)))
+            )
+            skill = torch.where(active, skill, td[self.skill_path])
+        next_td[self.skill_path] = skill.clone()
         return next_td
 
 
@@ -311,5 +318,7 @@ def microduck_skill_env(
     num_skills = controller.decision_spec["skill"].n
     result = ClosedLoopMultiAction.from_env(env, controller, steps=steps)
     result.insert_transform(-1, _MicroDuckSkillHistory(env, group_key, num_skills))
-    result.append_transform(_MicroDuckSkillObservation(group_key, num_skills))
-    return result
+    # Run outer reporting even when termination skips the final physical step.
+    return TransformedEnv(
+        result, _MicroDuckSkillObservation(group_key, num_skills), auto_unwrap=False
+    )
