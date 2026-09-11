@@ -220,7 +220,7 @@ The two paths share parameters and produce matching outputs.
     with set_recurrent_mode(True):
         window = transformer(rollout.exclude("features"))  # same features
 
-Unlike the RNN modules, no state travels in the TensorDict. The key/value
+With the default CausalTransformer backbone, no state travels in the TensorDict. The key/value
 cache is inference state owned by the module instance: the backbone allocates
 it on the first cached step in the dtype of its projections, one stream per
 batch position, and the module clears the streams flagged by ``is_init``,
@@ -249,6 +249,50 @@ are recovered from ``is_init`` through :func:`positions_from_is_init` and
 ``max_seq_len`` attributes) can be passed via the ``transformer`` argument;
 the cache object is opaque to the module, so an adapter over an inference
 engine can keep it in the engine's own representation.
+
+Explicit GTrXL memory and compact windows
+------------------------------------------
+
+:class:`GTrXL` uses the same :class:`TransformerModule` wrapper and recurrent-mode
+selection, with caller-owned state. Register ``InitTracker`` and
+``module.make_tensordict_primer()`` on the environment. Its root state is the
+carry before the current observation, and the policy writes its successor to
+``("next", state_key)``. The state spec is an ordinary ``Composite`` whose
+``data_cls`` selects the container; memory and validity retain explicit leaf specs.
+
+A per-step state has floating memory ``[*batch, L, M, D]`` and boolean validity
+``[*batch, M]``. Memory stores each layer's inputs at the last ``M`` positions,
+oldest to newest. The dimensions ``L``, ``M`` and ``D`` are features, separate from
+environment batch and training time. GTrXL uses the same rolling causal horizon
+in step and window execution; episodes can exceed the memory capacity.
+
+There are two explicit-state training layouts:
+
+* **Per-step states:** a TensorDict with batch ``[B, T]`` contains a state at every
+  step. Training starts from the first saved carry, including when its ``is_init``
+  is false, and loads saved carries at subsequent ``is_init`` boundaries. This
+  supports arbitrary contiguous slices and ``SliceSampler``'s inserted starts.
+* **Whole-window records:** an outer TensorDict with batch ``[B]`` contains a state
+  with batch ``[B]`` and observation features ``[B, T, F]``. ``is_init`` has shape
+  ``[B, T, 1]`` and marks real episode resets only. GTrXL computes the window with
+  parallel attention, returns features ``[B, T, D]`` and one final state with batch
+  ``[B]``. Store transitions in a nested child with batch ``[B, T]`` and sample
+  whole outer records. Intermediate starting carries cannot be recovered after
+  they have been discarded.
+
+For ``B`` stored windows of length ``T``, compact replay stores ``B*L*M*D`` memory
+values rather than ``B*T*L*M*D`` (plus any next-state duplicates). Observations
+and transitions retain their usual per-step cost. Packing a standard collector's
+output saves replay storage, but does not remove the collector's per-step
+snapshots or reduce its peak memory. Attention and differentiable window
+activations have their own training cost.
+
+Supplied memory is detached at training boundaries. Gradients flow through
+recomputed states within a window. Weight updates do not discard caller-owned
+state: saved activations may be stale, as with other recurrent training. Default
+module-owned-cache behavior and existing GRU/LSTM defaults remain unchanged.
+See :ref:`transformer_policies_tutorial` for executable input/output examples and
+``sota-implementations/gtrxl`` for PPO with padded fixed-window replay.
 
 Choosing a layout and backend
 -----------------------------

@@ -176,7 +176,8 @@ uv pip install --no-progress \
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install --no-progress --no-deps git+https://github.com/pytorch/tensordict.git
+  # Draft dependency: TensorDict #1766 + #1789; remove after both merge.
+  uv pip install --no-progress --no-deps git+https://github.com/pytorch/tensordict.git@786fab0440d0476c1b6f9f5d558c3791614d5723
 else
   uv pip install --no-progress --no-deps tensordict
 fi
