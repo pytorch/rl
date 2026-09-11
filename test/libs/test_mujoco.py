@@ -20,10 +20,9 @@ import pytest
 import torch
 
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase
-from torchrl.data import Categorical, Composite, Unbounded
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from torch import nn
+from torchrl.data import Categorical, Composite, Unbounded
 from torchrl.envs import (
     AntEnv,
     build_football_scene,
@@ -1021,13 +1020,27 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    @pytest.mark.parametrize("respawn", [True, False])
-    def test_football_fallen_duck_is_charged_once_and_respawns(self, tmp_path, respawn):
-        env = self._football_env(tmp_path, respawn=respawn)
+    @pytest.mark.parametrize(
+        "respawn, mode, delay_s",
+        [
+            (False, "in_place", 0.0),
+            (True, "kickoff", 0.0),
+            (True, "in_place", 0.0),
+            (True, "in_place", 0.1),
+        ],
+    )
+    def test_football_fallen_duck_is_charged_once_and_respawns(
+        self, tmp_path, respawn, mode, delay_s
+    ):
+        env = self._football_env(
+            tmp_path, respawn=respawn, respawn_mode=mode, respawn_delay_s=delay_s
+        )
         env.reset()
         state = env.get_state()
         qpos = state["qpos"].clone()
-        # Blue's duck lies on its side on the floor.
+        # Blue's duck lies on its side on the floor, away from its slot.
+        qpos[0, 0] += 0.5
+        qpos[0, 1] += 0.2
         qpos[0, 2] = 0.02
         qpos[0, 3:7] = torch.tensor(
             [math.cos(math.pi / 4), math.sin(math.pi / 4), 0.0, 0.0]
@@ -1041,17 +1054,35 @@ class TestMujoco:
         assert abs(first["agents", "reward"][0, 0, 0].item() - fall) < 0.05
         assert not first["done"].item()
         duck = env.get_state()["qpos"][0, : MicroDuckFootballEnv.DUCK_NQ]
-        second = env.step(self._football_action(env))["next"]
-        if respawn:
-            slot = kickoff_positions(1, env.pitch_length, env.pitch_width)[0]
-            assert duck[:2].tolist() == pytest.approx(list(slot), abs=1e-5)
-            assert duck[2].item() == pytest.approx(0.12, abs=1e-5)
-            assert not second["agents", "fallen"].any()
-        else:
+        if not respawn:
             assert duck[2].item() < 0.05
+            second = env.step(self._football_action(env))["next"]
             assert second["agents", "fallen"][0, 0, 0]
             # Down for a second step: no second fall penalty.
             assert second["agents", "reward"][0, 0, 0].item() > fall / 2
+            env.close()
+            return
+        delay_steps = round(delay_s / (env.frame_skip * env._backend.timestep))
+        for index in range(delay_steps):
+            # Still on the floor, flagged, not charged again.
+            assert duck[2].item() < 0.05
+            step = env.step(self._football_action(env))["next"]
+            assert step["agents", "fallen"][0, 0, 0].item() == (index < delay_steps - 1)
+            assert step["agents", "reward"][0, 0, 0].item() > fall / 2
+            duck = env.get_state()["qpos"][0, : MicroDuckFootballEnv.DUCK_NQ]
+        # Standing again, still, facing the goal blue attacks (+x).
+        assert duck[2].item() == pytest.approx(0.12, abs=1e-5)
+        assert duck[3:7].tolist() == pytest.approx([1.0, 0.0, 0.0, 0.0], abs=1e-6)
+        slot = kickoff_positions(1, env.pitch_length, env.pitch_width)[0]
+        if mode == "kickoff":
+            assert duck[:2].tolist() == pytest.approx(list(slot), abs=1e-5)
+        else:
+            # Where it lay when it got up: it slid a few millimeters on the floor.
+            assert duck[:2].tolist() == pytest.approx(
+                [slot[0] + 0.5, slot[1] + 0.2], abs=0.02
+            )
+        after = env.step(self._football_action(env))["next"]
+        assert not after["agents", "fallen"].any()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")

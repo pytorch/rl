@@ -42,7 +42,7 @@ import os
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, ClassVar, TYPE_CHECKING
+from typing import Any, ClassVar, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -674,7 +674,8 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
       every teammate then of every opponent (fixed order), and the fraction
       of the match left.
     * ``("agents", "reward")``: per-agent reward, ``(num_envs, num_agents, 1)``.
-    * ``("agents", "fallen")``: whether the agent fell during the step.
+    * ``("agents", "fallen")``: whether the agent is down, because it fell
+      during the step or has not stood up again yet.
     * ``ball_position`` (``(num_envs, 3)``) and ``goal`` (``(num_envs, 1)``,
       ``1`` when blue scored on this step, ``-1`` when red did, else ``0``).
 
@@ -692,8 +693,11 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
 
     A fall (base height below :attr:`~torchrl.envs.MicroDuckEnv.MIN_HEIGHT_RATIO`
     of the standing height, or tilt beyond
-    :attr:`~torchrl.envs.MicroDuckEnv.MIN_UPRIGHT`) puts the duck back on its
-    kickoff slot, upright and still, when ``respawn`` is set. A goal
+    :attr:`~torchrl.envs.MicroDuckEnv.MIN_UPRIGHT`) costs the duck
+    ``respawn_delay_s`` seconds on the ground, its actions ignored, before it
+    stands up again, still: where it fell, facing the goal it attacks
+    (``respawn_mode="in_place"``), or on its kickoff slot (``"kickoff"``).
+    Without ``respawn`` it stays down for the rest of the match. A goal
     terminates the match; ``max_episode_steps`` (1500 steps, 30 s at 50 Hz)
     truncates it. A non-finite state terminates it as well.
 
@@ -729,8 +733,13 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             MicroDuck policies.
         reward_weights (Mapping[str, float], optional): weights replacing
             entries of :attr:`REWARD_WEIGHTS`.
-        respawn (bool, optional): put fallen ducks back on their kickoff
-            slot. Defaults to ``True``.
+        respawn (bool, optional): stand fallen ducks up again. Defaults to
+            ``True``.
+        respawn_mode (str, optional): ``"in_place"`` (default) stands a duck
+            up where it fell, facing the goal it attacks; ``"kickoff"`` puts it
+            back on its kickoff slot.
+        respawn_delay_s (float, optional): seconds a fallen duck stays down,
+            actions ignored, before standing up. Defaults to ``1.0``.
         spawn_noise (float, optional): uniform noise on the kickoff positions
             at reset, in meters. Defaults to ``0.1``.
         yaw_noise (float, optional): uniform noise on the kickoff heading, in
@@ -816,6 +825,8 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         action_scale: float = 1.0,
         reward_weights: Mapping[str, float] | None = None,
         respawn: bool = True,
+        respawn_mode: Literal["in_place", "kickoff"] = "in_place",
+        respawn_delay_s: float = 1.0,
         spawn_noise: float = 0.1,
         yaw_noise: float = 0.3,
         joint_reset_noise_scale: float = 0.02,
@@ -856,6 +867,12 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self.scene_path = Path(scene).expanduser().resolve()
         self.action_scale = float(action_scale)
         self.respawn = bool(respawn)
+        if respawn_mode not in ("in_place", "kickoff"):
+            raise ValueError("respawn_mode must be 'in_place' or 'kickoff'.")
+        if not math.isfinite(respawn_delay_s) or respawn_delay_s < 0:
+            raise ValueError("respawn_delay_s must be finite and non-negative.")
+        self.respawn_mode = respawn_mode
+        self.respawn_delay_s = float(respawn_delay_s)
         self.spawn_noise = float(spawn_noise)
         self.yaw_noise = float(yaw_noise)
         self.joint_reset_noise_scale = float(joint_reset_noise_scale)
@@ -866,6 +883,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             backend=backend,
             max_episode_steps=max_episode_steps,
             **kwargs,
+        )
+        self._respawn_delay_steps = int(
+            round(self.respawn_delay_s / (self.frame_skip * self._backend.timestep))
         )
 
     # ------------------------------------------------------------------
@@ -1025,6 +1045,8 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             *shape, self.NUM_JOINTS, dtype=self.dtype, device=self.device
         )
         self._fallen = torch.zeros(shape, dtype=torch.bool, device=self.device)
+        self._down = torch.zeros(shape, dtype=torch.bool, device=self.device)
+        self._down_steps = torch.zeros(shape, dtype=torch.long, device=self.device)
         self._goal = torch.zeros(self.num_envs, 1, dtype=torch.long, device=self.device)
 
     # ------------------------------------------------------------------
@@ -1222,6 +1244,8 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
     def _on_reset_all(self, tensordict: TensorDictBase | None = None) -> None:
         self._previous_action.zero_()
         self._fallen.zero_()
+        self._down.zero_()
+        self._down_steps.zero_()
         self._goal.zero_()
 
     def _on_reset_mask(
@@ -1237,6 +1261,12 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         )
         self._fallen = torch.where(
             mask[:, None], torch.zeros_like(self._fallen), self._fallen
+        )
+        self._down = torch.where(
+            mask[:, None], torch.zeros_like(self._down), self._down
+        )
+        self._down_steps = torch.where(
+            mask[:, None], torch.zeros_like(self._down_steps), self._down_steps
         )
         self._goal = torch.where(
             mask[:, None], torch.zeros_like(self._goal), self._goal
@@ -1396,6 +1426,28 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         target = target.clamp(self._joint_low, self._joint_high)
         return target.reshape(action.shape[0], -1)
 
+    def _upright_qpos(self, ducks_q: torch.Tensor) -> torch.Tensor:
+        """Standing pose of every duck where it is, facing the goal it attacks."""
+        n = ducks_q.shape[0]
+        margin = 2.0 * _WALL_THICKNESS + 0.1
+        half = torch.tensor(
+            [self.pitch_length / 2.0 - margin, self.pitch_width / 2.0 - margin],
+            dtype=self.dtype,
+            device=self.device,
+        )
+        xy = torch.minimum(torch.maximum(ducks_q[..., :2], -half), half)
+        half_yaw = self._kickoff_yaw.expand(n, -1) / 2.0
+        zeros = torch.zeros_like(half_yaw)
+        quaternion = torch.stack((half_yaw.cos(), zeros, zeros, half_yaw.sin()), dim=-1)
+        height = torch.full(
+            (n, self.num_agents, 1),
+            self._standing_height,
+            dtype=self.dtype,
+            device=self.device,
+        )
+        joints = self._home_joints.expand(n, self.num_agents, -1)
+        return torch.cat((xy, height, quaternion, joints), dim=-1)
+
     def _respawn(
         self,
         state: TensorDictBase,
@@ -1403,8 +1455,11 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         ducks_v: torch.Tensor,
         fallen: torch.Tensor,
     ) -> None:
-        """Put the fallen ducks back, upright and still, on their kickoff slots."""
-        home = self._kickoff_qpos(self.num_envs, noisy=False)
+        """Stand the selected ducks up, still, where the respawn mode says."""
+        if self.respawn_mode == "kickoff":
+            home = self._kickoff_qpos(self.num_envs, noisy=False)
+        else:
+            home = self._upright_qpos(ducks_q)
         column = fallen.unsqueeze(-1)
         ducks_q = torch.where(column, home, ducks_q)
         ducks_v = torch.where(column, torch.zeros_like(ducks_v), ducks_v)
@@ -1447,6 +1502,8 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
                     self._last_pixels = result["pixels"]
             return result
         action = tensordict["agents", "action"].to(self.dtype).clamp(-1.0, 1.0)
+        # A duck that is down holds its standing targets until it gets up.
+        action = torch.where(self._down.unsqueeze(-1), torch.zeros_like(action), action)
         self._backend.step(self._prepare_ctrl(action), self.frame_skip)
         self._step_count += 1
         self._render_counter += 1
@@ -1459,17 +1516,29 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         ).all(dim=-1)
         goal = self._goals(ball_q)
         # The fall penalty is paid on the step a duck goes down, not while it
-        # lies there when respawning is off.
-        fell = fallen & ~self._fallen
+        # lies there.
+        fell = fallen & ~self._down
         reward = self._rewards(ducks_q, ducks_v, ball_q, ball_v, action, fell, goal)
-        if self.respawn and bool(fallen.any()):
-            self._respawn(state, ducks_q, ducks_v, fallen)
-            state = self._state_td()
-        # A respawned duck restarts with a zero previous action, like a reset.
+        down = fallen | self._down
+        if self.respawn:
+            # A duck that just fell waits the whole delay, the others count down.
+            steps = torch.where(
+                fell,
+                torch.full_like(self._down_steps, self._respawn_delay_steps),
+                (self._down_steps - 1).clamp_min(0),
+            )
+            ready = down & (steps <= 0)
+            if bool(ready.any()):
+                self._respawn(state, ducks_q, ducks_v, ready)
+                state = self._state_td()
+            self._down_steps = torch.where(ready, torch.zeros_like(steps), steps)
+            down = down & ~ready
+        # A duck that fell or lies down restarts with a zero previous action.
         self._previous_action = torch.where(
-            fallen.unsqueeze(-1), torch.zeros_like(action), action
+            (fell | down).unsqueeze(-1), torch.zeros_like(action), action
         )
-        self._fallen = fallen
+        self._down = down
+        self._fallen = fell | down
         self._goal = goal
         terminated = ((goal != 0) | ~finite.unsqueeze(-1)).to(torch.bool)
         truncated = (self._step_count >= self.max_episode_steps).unsqueeze(-1)
@@ -1504,12 +1573,16 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         return {
             "previous_action": self._previous_action[index].clone(),
             "fallen": self._fallen[index].clone(),
+            "down": self._down[index].clone(),
+            "down_steps": self._down_steps[index].clone(),
             "goal": self._goal[index].clone(),
         }
 
     def _load_indexed_extra_state(self, state: dict[str, Any]) -> None:
         self._previous_action = state["previous_action"].clone()
         self._fallen = state["fallen"].clone()
+        self._down = state["down"].clone()
+        self._down_steps = state["down_steps"].clone()
         self._goal = state["goal"].clone()
 
     def _set_indexed_extra_state(
@@ -1524,4 +1597,6 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             )
         self._previous_action[index] = source._previous_action.to(self.device)
         self._fallen[index] = source._fallen.to(self.device)
+        self._down[index] = source._down.to(self.device)
+        self._down_steps[index] = source._down_steps.to(self.device)
         self._goal[index] = source._goal.to(self.device)

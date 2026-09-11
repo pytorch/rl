@@ -256,6 +256,8 @@ def make_env(
         "action_scale": env_cfg["action_scale"],
         "reward_weights": dict(env_cfg["reward_weights"] or {}),
         "respawn": env_cfg["respawn"],
+        "respawn_mode": env_cfg["respawn_mode"],
+        "respawn_delay_s": env_cfg["respawn_delay_s"],
         "camera_id": env_cfg["camera_id"],
         "render_width": env_cfg["render_width"],
         "render_height": env_cfg["render_height"],

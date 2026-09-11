@@ -15,7 +15,9 @@ env:
   max_episode_steps: 1500   # match length in control steps at 50 Hz (30 s)
   action_scale: 1.0         # radians of actuator target per unit action; the walker checkpoint was trained with 1.0
   reward_weights: {}        # overrides of MicroDuckFootballEnv.REWARD_WEIGHTS, e.g. {approach_ball: 0.0}
-  respawn: true             # put fallen ducks back on their kickoff slot
+  respawn: true             # stand fallen ducks up again after respawn_delay_s
+  respawn_mode: in_place    # in_place: where the duck fell, facing its goal; kickoff: back on its kickoff slot
+  respawn_delay_s: 1.0      # seconds a fallen duck lies down, actions ignored, before standing up
   camera_id: 0              # rendering: 0 broadcast, 1 top-down
   render_width: 640
   render_height: 360
