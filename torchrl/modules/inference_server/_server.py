@@ -42,6 +42,7 @@ from torchrl._comm.backends import (
 )
 from torchrl._comm.mailbox import _exit_on_parent_exit
 from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
+from torchrl._utils import mark_weight_update
 from torchrl.modules.inference_server._client import (
     _INTERACTION_TYPE_TO_CODE,
     _NO_INTERACTION_TYPE_CODE,
@@ -680,6 +681,7 @@ class InferenceServer(metaclass=_InferenceServerMeta):
             self._num_weight_updates += 1
             if self._policy_version_shared is not None:
                 self._policy_version_shared.value = self._policy_version
+        mark_weight_update(self.model)
 
     def update_policy_weights_(self, model_id=None, policy_or_weights=None, **kwargs):
         """Weight-sync cascade hook: record an applied weight update.

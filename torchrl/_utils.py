@@ -1864,3 +1864,25 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
 def rl_warnings():
     """Checks the status of the RL_WARNINGS env varioble."""
     return RL_WARNINGS
+
+
+def mark_weight_update(module: Any) -> None:
+    """Notify a policy that its weights were just replaced.
+
+    Modules that keep inference-time state derived from their parameters, such
+    as the key/value cache of :class:`~torchrl.modules.TransformerModule`,
+    implement a ``mark_weight_update()`` method that discards that state.
+    TorchRL's weight-synchronization paths call this helper after applying new
+    weights so every such module below ``module`` is notified; user code that
+    updates parameters by other means should call it too.
+
+    Args:
+        module (Any): the policy that received new weights. Objects that are
+            not :class:`torch.nn.Module` instances are ignored.
+    """
+    if not isinstance(module, torch.nn.Module):
+        return
+    for submodule in module.modules():
+        hook = getattr(submodule, "mark_weight_update", None)
+        if callable(hook):
+            hook()

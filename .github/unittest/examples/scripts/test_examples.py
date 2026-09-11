@@ -44,6 +44,7 @@ RUNNABLE_EXAMPLES = (
     ExampleSpec("agent-composite-ppo", "examples/agents/composite_ppo.py"),
     ExampleSpec("agent-multi-step", "examples/agents/multi-step.py"),
     ExampleSpec("agent-recurrent", "examples/agents/recurrent_actor.py"),
+    ExampleSpec("agent-transformer", "examples/agents/transformer_actor.py"),
     ExampleSpec(
         "collector-async-batched",
         "examples/collectors/async_batched_collector.py",
