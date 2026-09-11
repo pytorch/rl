@@ -1768,6 +1768,19 @@ class _FeedbackController(TensorDictModuleBase):
 
 
 class TestClosedLoopMultiAction:
+    def test_opt_in_low_level_gradients(self):
+        policy = _FeedbackController()
+        env = ClosedLoopMultiAction.from_env(
+            _ControllerTestEnv(),
+            LowLevelController(policy, Composite(command=Bounded(-1, 1, shape=(1,)))),
+            steps=3,
+            no_grad=False,
+        )
+        td = env.reset().set("command", torch.ones(1))
+        env.step(td)["next", "reward"].sum().backward()
+        assert policy.gain.grad is not None and policy.gain.grad.abs() > 0
+        env.close()
+
     @pytest.mark.parametrize("shared_initializer", [False, True])
     def test_callable_defaults_reset_only_selected_controller(self, shared_initializer):
         class Policy(_FeedbackController):
