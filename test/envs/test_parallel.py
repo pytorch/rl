@@ -39,7 +39,7 @@ from torchrl.envs import (
 from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import Compose, StepCounter
+from torchrl.envs.transforms import Compose, StepCounter, Transform
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
@@ -243,6 +243,35 @@ class TestParallel:
         try:
             assert isinstance(env, SerialEnv)
             env.reset()
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_no_buffers_partial_reset_keeps_current_state(self, maybe_fork_ParallelEnv):
+        # Without buffers, workers that are not reset used to come back as
+        # empty slots when the caller passed only the reset signal (the
+        # collector's maybe_reset), which broke transforms reading the
+        # observation on reset and left a ragged lazy stack.
+        class ReadsObservationOnReset(Transform):
+            def _reset(self, tensordict, tensordict_reset):
+                assert tensordict_reset["observation"].shape[0] == 2
+                return tensordict_reset
+
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, CountingEnv, use_buffers=False),
+            ReadsObservationOnReset(),
+        )
+        try:
+            td = env.reset()
+            td = env.step(env.rand_action(td))
+            td = env.step(env.rand_action(td))
+            kept = td["next", "observation"][1].clone()
+            td["next", "done"][0] = True
+            td["next", "terminated"][0] = True
+            out = env.maybe_reset(env.step_mdp(td))
+            assert not isinstance(out, LazyStackedTensorDict)
+            assert (out["observation"][0] == 0).all()
+            assert (out["observation"][1] == kept).all()
+            assert not out["done"].any()
         finally:
             env.close(raise_if_closed=False)
 
