@@ -326,6 +326,26 @@ class TestTransformedEnv:
         with set_auto_unwrap_transformed_env(False):
             test_wrap()
 
+    def test_nested_transformed_env_without_transform(self):
+        # Wrapping a transformed env without a transform used to fail in the
+        # unwrap path, which checked the type of None before its None guard.
+        base_env = ContinuousActionVecMockEnv()
+        t1 = RewardScaling(0, 1)
+        with set_auto_unwrap_transformed_env(True):
+            env = TransformedEnv(TransformedEnv(base_env, t1))
+            assert env.base_env is base_env
+            assert isinstance(env.transform, Compose)
+            children = list(env.transform.transforms.children())
+            assert len(children) == 1
+            assert children[0].scale == 1
+        with set_auto_unwrap_transformed_env(False):
+            env = TransformedEnv(TransformedEnv(base_env, t1))
+            assert env.base_env is not base_env
+            assert isinstance(env.base_env.transform, RewardScaling)
+            assert isinstance(env.transform, Compose)
+            assert len(list(env.transform.transforms.children())) == 0
+        env.rollout(2)
+
     def test_auto_unwrap_env_var_restored_on_exit(self, monkeypatch):
         # Regression test: exiting set_auto_unwrap_transformed_env when the
         # setting was previously unset used to write the literal string
