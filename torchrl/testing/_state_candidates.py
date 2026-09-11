@@ -9,6 +9,14 @@ import torch
 from tensordict import TensorClass, TensorDict, TypedTensorDict
 
 
+class _GRUTC(TensorClass):
+    carry: torch.Tensor
+
+
+class _GRUTTD(TypedTensorDict):
+    carry: torch.Tensor
+
+
 class _GTrXLTC(TensorClass):
     memory: torch.Tensor
     valid: torch.Tensor
@@ -20,5 +28,6 @@ class _GTrXLTTD(TypedTensorDict):
 
 
 _STATE_CLASSES = {
+    "gru": {"td": TensorDict, "tc": _GRUTC, "ttd": _GRUTTD},
     "gtrxl": {"td": TensorDict, "tc": _GTrXLTC, "ttd": _GTrXLTTD},
 }
