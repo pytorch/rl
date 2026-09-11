@@ -39,6 +39,7 @@ policy:
   centralized_critic: false # true: one value from every duck's observation (identical across ducks); false: per-duck value from its own observation
   initial_policy_scale: 1.0 # exploration std of the joint-level Gaussian policy (end-to-end mode)
   init_from: null           # checkpoint whose actor and critic parameters initialize the models
+  opponent_skill: null      # index into policy.skills that the red team executes instead of the policy (0: standing statues); null: self-play
 
 ppo:
   total_frames: 5_000_000   # env steps summed over matches (skill decisions, or control steps end to end)
@@ -54,6 +55,7 @@ ppo:
   gamma: 0.99
   gae_lambda: 0.95
   max_grad_norm: 1.0
+  train_team: both          # both | blue: update on the blue team's transitions only (opponent curriculum)
 
 evaluation:
   interval: 10              # iterations between deterministic evaluations; null disables them

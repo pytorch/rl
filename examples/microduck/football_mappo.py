@@ -52,13 +52,13 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
-from tensordict import TensorDictBase
-from tensordict.nn import NormalParamExtractor, TensorDictModule
+from tensordict import NestedKey, TensorDictBase
+from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictModuleBase
 from torch import nn
 from torch.distributions import Categorical
 from torchrl import timeit, torchrl_logger
@@ -386,6 +386,37 @@ def make_models(
     return actor, critic
 
 
+class OpponentSkill(TensorDictModuleBase):
+    """Run the actor for every duck, then make the red team execute one skill.
+
+    The opponent curriculum: blue learns to attack a team of statues
+    (``skill`` 0, standing) or of ducks running one fixed skill while red's
+    transitions are dropped from the update (``ppo.train_team=blue``). The
+    actor's own parameters are shared, so the loss keeps training the actor.
+    """
+
+    def __init__(
+        self,
+        actor: ProbabilisticActor,
+        players_per_team: int,
+        skill: int,
+        action_key: NestedKey,
+    ) -> None:
+        super().__init__()
+        self.actor = actor
+        self.players_per_team = int(players_per_team)
+        self.skill = int(skill)
+        self.action_key = action_key
+        self.in_keys = list(actor.in_keys)
+        self.out_keys = list(actor.out_keys)
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        tensordict = self.actor(tensordict)
+        action = tensordict.get(self.action_key).clone()
+        action[..., self.players_per_team :] = self.skill
+        return tensordict.set(self.action_key, action)
+
+
 def make_render_policy(
     env: EnvBase,
     *,
@@ -591,6 +622,8 @@ def train_mappo(
     policy_kwargs: Mapping[str, Any] | None = None,
     config: Mapping[str, Any] | None = None,
     logger: Logger | None = None,
+    train_team: Literal["both", "blue"] = "both",
+    collection_policy: TensorDictModuleBase | None = None,
 ) -> list[dict[str, float]]:
     """Train the shared policy with multi-agent PPO and a centralized critic.
 
@@ -637,9 +670,11 @@ def train_mappo(
         raise ValueError("Checkpoint paths require config and policy_kwargs.")
 
     device = next(actor.parameters()).device
+    if collection_policy is None:
+        collection_policy = actor
     collector = Collector(
         env,
-        actor,
+        collection_policy,
         frames_per_batch=frames_per_batch,
         total_frames=-1,
         storing_device="cpu",
@@ -697,7 +732,7 @@ def train_mappo(
 
     def evaluate(step: int) -> dict[str, float]:
         nonlocal best_score, best_state, evaluations
-        result = evaluator.evaluate(weights=actor, step=step)
+        result = evaluator.evaluate(weights=collection_policy, step=step)
         metrics = {
             key.replace("/custom/", "/"): float(value)
             for key, value in result.items()
@@ -755,6 +790,14 @@ def train_mappo(
                 )
             with timeit("advantage"), torch.no_grad():
                 processed = advantage(data.to(device))
+                if train_team == "blue":
+                    # Opponent curriculum: red's rows stay (the networks are
+                    # built for every duck) but carry no learning signal.
+                    players = processed.get(("agents", "observation")).shape[-2] // 2
+                    processed["advantage"][..., players:, :] = 0.0
+                    processed["value_target"][..., players:, :] = processed.get(
+                        VALUE_KEY
+                    )[..., players:, :]
             value_target = processed["value_target"]
             metrics["value/explained_variance"] = float(
                 1.0
@@ -920,10 +963,18 @@ def main(cfg: DictConfig) -> None:
                 cfg.policy.init_from,
                 trained,
             )
+        policy = actor
+        if cfg.policy.opponent_skill is not None:
+            policy = OpponentSkill(
+                actor,
+                cfg.env.players_per_team,
+                cfg.policy.opponent_skill,
+                env.action_key,
+            )
         if cfg.evaluation.interval is not None:
             evaluator = Evaluator(
                 make_env(cfg, num_envs=1, parallel=False),
-                actor,
+                policy,
                 num_trajectories=cfg.evaluation.num_matches,
                 max_steps=cfg.evaluation.steps,
                 metrics_fn=football_metrics,
@@ -967,7 +1018,7 @@ def main(cfg: DictConfig) -> None:
                 record_match(
                     video_env,
                     recorder,
-                    actor,
+                    policy,
                     steps=cfg.evaluation.video.steps,
                     step=step,
                 )
@@ -988,6 +1039,7 @@ def main(cfg: DictConfig) -> None:
             policy_kwargs=policy_kwargs,
             config=config,
             logger=logger,
+            collection_policy=policy,
         )
     finally:
         if logger is not None and hasattr(logger.experiment, "finish"):
