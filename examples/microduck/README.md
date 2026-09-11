@@ -16,6 +16,15 @@ raises an error listing the options.
 | [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
 
+The [MicroDuck tutorial](../../tutorials/sphinx-tutorials/microduck.py) continues
+from low-level PPO to high-level training: reload the walker's checkpoint and
+task library, deploy it with `MicroDuckController` and `ClosedLoopMultiAction`,
+then train a categorical PPO actor to select skills for waypoint navigation.
+It also shows the grouped deployment for a supplied 5-vs-5 task. Run a short
+CPU pipeline check with `TORCHRL_TUTORIALS_FAST=1`; set
+`MICRODUCK_WALKER_CHECKPOINT` to a trained checkpoint and
+`MICRODUCK_HIGH_LEVEL_FRAMES` to increase the high-level training budget.
+
 ## The task
 
 `MicroDuckEnv` is a family of locomotion tasks written once against
