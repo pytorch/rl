@@ -927,6 +927,28 @@ class TestMujoco:
         with pytest.raises(ValueError, match="STAND"):
             build_football_scene(no_key)
 
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_scene_keeps_the_robot_compiler_flags(self, tmp_path):
+        # The collision proxies of the walking scene are fitted by the compiler
+        # (fitaabb); the attaching spec's compiler must carry the same flags.
+        # MjSpec.to_xml bakes the fitted boxes into the geoms and drops the flag
+        # itself, so the round trip is checked on a flag the writer keeps.
+        import mujoco
+
+        scene = self._write_microduck_fixture(tmp_path)
+        flagged = scene.with_name("robot_flags.xml")
+        flagged.write_text(
+            scene.read_text().replace(
+                '<mujoco model="microduck-test">',
+                '<mujoco model="microduck-test">'
+                '<compiler fitaabb="true" boundmass="0.001"/>',
+            )
+        )
+        spec = mujoco.MjSpec.from_string(
+            build_football_scene(flagged, players_per_team=1)
+        )
+        assert spec.compiler.boundmass == pytest.approx(0.001)
+
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_football_env_specs_and_rollout(self, tmp_path, backend):
         num_envs = 1 if backend == "mujoco" else 2

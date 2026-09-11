@@ -66,6 +66,14 @@ TEAM_NAMES: tuple[str, str] = ("blue", "red")
 FOOTBALL_NUMERIC: str = "football"
 """Name of the MJCF ``<numeric>`` element that records the pitch parameters."""
 _WALL_THICKNESS = 0.02
+_ROBOT_COMPILER_FLAGS = (
+    "fitaabb",
+    "inertiafromgeom",
+    "balanceinertia",
+    "boundmass",
+    "boundinertia",
+    "settotalmass",
+)
 _POST_RADIUS = 0.01
 
 
@@ -322,6 +330,10 @@ def build_football_scene(
         spec.modelname = "microduck_football"
         spec.compiler.degree = False
         spec.compiler.autolimits = True
+        # The compiler of the attaching spec applies to the robot's geoms too;
+        # the collision proxies rely on the walking scene's fitting flags.
+        for flag in _ROBOT_COMPILER_FLAGS:
+            setattr(spec.compiler, flag, getattr(robot.compiler, flag))
         spec.option.timestep = robot.option.timestep
         spec.meshdir = str(meshdir)
         spec.stat.extent = max(pitch_length, pitch_width)
