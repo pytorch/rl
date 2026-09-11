@@ -62,26 +62,26 @@ quality. Full training can take hours and is separate from the 10–20 minute tu
 
 ### Reuse and share a trained checkpoint
 
-The tutorial can perform its small PPO update, then switch to a saved walker
-for high-level training. This works in the generated notebook and in docs mode:
+The tutorial performs its small PPO update, then loads the evaluated
+[10M-transition walker](https://huggingface.co/torchrl/microduck-skills) for
+high-level training. It pins a Hub revision and caches the download. This works
+in the generated notebook and in docs mode. To use your own trained walker:
 
 ```bash
 MICRODUCK_WALKER_CHECKPOINT=~/microduck-training/walker.ckpt \
     python tutorials/sphinx-tutorials/microduck.py
 ```
 
-For a checkpoint hosted on Hugging Face, download it before running the tutorial
-cells. Replace the repository and revision placeholders with the published
-model's identifiers; use the full commit hash to keep doc builds reproducible:
+The published checkpoint can also be downloaded directly:
 
 ```python
 import os
 from huggingface_hub import hf_hub_download
 
 checkpoint_path = hf_hub_download(
-    repo_id="YOUR_ORG/microduck-skills",
+    repo_id="torchrl/microduck-skills",
     filename="walker.ckpt",
-    revision="FULL_HUB_COMMIT_SHA",
+    revision="4191d7d25c4fd58a5c6e6395fcf8217459fdd073",
 )
 os.environ["MICRODUCK_WALKER_CHECKPOINT"] = checkpoint_path
 ```

@@ -8,8 +8,8 @@ MicroDuck: train skills, then choose how to use them
 
 A low-level policy controls MicroDuck's joints. A high-level policy chooses
 which skill it should perform. We will train both with
-:class:`~torchrl.trainers.algorithms.PPOTrainer`, using the same walker inside
-a new task: approach a waypoint.
+:class:`~torchrl.trainers.algorithms.PPOTrainer`. After a brief low-level training
+demonstration, we load a saved walker for a new task: approach a waypoint.
 
 What you will learn
 -------------------
@@ -20,9 +20,10 @@ What you will learn
 - Train a high-level skill selector with ordinary PPO, then run a rollout.
 
 Allow 10–20 minutes to read and try this tutorial. It uses one CPU simulator
-and short training budgets; these demonstrate learning updates and deployment,
-but do not produce a competent walker. The full training launcher at the end
-uses the same components with larger budgets, parallel workers and evaluation.
+and short training budgets. Deployment uses a published checkpoint trained for
+10 million transitions, so the high-level policy starts with learned skills.
+The full training launcher at the end uses the same components with larger
+budgets, parallel workers and evaluation.
 
 Run this notebook from a TorchRL checkout with ``mujoco`` and the ``utils``
 extra installed. ``download=True`` fetches the pinned robot assets into
@@ -39,6 +40,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import torch
 import torchrl
+from huggingface_hub import hf_hub_download
 from torchrl.envs import MicroDuckController, MicroDuckEnv
 from torchrl.envs.transforms import ClosedLoopMultiAction
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
@@ -137,30 +139,30 @@ low_trainer = PPOTrainer.from_env(
     progress_bar=False,
 )
 low_trainer.train()
-walker.eval().requires_grad_(False)
-walker.zero_grad(set_to_none=True)
 
 # %%
 # Reuse a saved walker
 # --------------------
 #
-# The short update above demonstrates training. To deploy weights from a full
-# run, set ``MICRODUCK_WALKER_CHECKPOINT`` to its ``walker.ckpt`` before executing
-# the notebook or script. This also works in a documentation build: ``fast``
-# changes the training budget, not which checkpoint is loaded.
+# The short update above demonstrates training. Now load the policy from
+# `torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
+# It survived all 48 ten-second evaluation episodes, but its directional skills
+# have substantial speed variation and drift; the model card includes metrics
+# and a video. Learned skills do not guarantee successful navigation.
 #
-# ``load_walker`` reconstructs the recorded network and restores the ordered
-# task library: skill indices address learned embeddings, so reordering the
-# tasks would change their meaning. We also reuse the saved action scale.
-# The checkpoint can be a local training output or a file downloaded from a
-# model repository; see the companion example's checkpoint-sharing instructions.
+# The pinned download is cached and also used during the short doc build.
+# ``load_walker`` restores the larger network, frozen weights and exact task
+# order: skill indices address learned embeddings. We reuse its action scale
+# too. Set ``MICRODUCK_WALKER_CHECKPOINT`` to use your own local checkpoint.
 
-checkpoint_path = os.environ.get("MICRODUCK_WALKER_CHECKPOINT")
-action_scale = 1.0
-if checkpoint_path:
-    checkpoint = load_checkpoint(checkpoint_path, weights_only=True)
-    walker, skill_tasks = load_walker(checkpoint)
-    action_scale = checkpoint["config"]["env"]["action_scale"]
+checkpoint_path = os.environ.get("MICRODUCK_WALKER_CHECKPOINT") or hf_hub_download(
+    repo_id="torchrl/microduck-skills",
+    filename="walker.ckpt",
+    revision="4191d7d25c4fd58a5c6e6395fcf8217459fdd073",
+)
+checkpoint = load_checkpoint(checkpoint_path, weights_only=True)
+walker, skill_tasks = load_walker(checkpoint)
+action_scale = checkpoint["config"]["env"]["action_scale"]
 
 # %%
 # 3. Give the walker a new task
@@ -249,8 +251,8 @@ high_trainer.train()
 # Training closes its environment, so evaluation creates a fresh instance.
 # The rollout records high-level skill decisions; each decision invokes the
 # walker repeatedly inside the environment. Plot distance to the waypoint to
-# see what the composed policy actually did. The short run is a pipeline check;
-# successful navigation needs trained skills and a longer high-level run.
+# see what the composed policy actually did. The high-level run is still short;
+# use the full launcher to train and evaluate navigation over a larger budget.
 
 evaluation_env = ClosedLoopMultiAction.from_env(
     make_task_env(),
