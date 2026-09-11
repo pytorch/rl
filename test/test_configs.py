@@ -10,6 +10,7 @@ import dataclasses
 import enum
 import importlib.util
 import inspect
+import math
 import os
 import pkgutil
 import subprocess
@@ -2015,6 +2016,72 @@ class TestLossConfigs:
         assert loss.delay_actor
         assert "target_actor_network_params" in dict(loss.named_children())
         assert loss.max_importance_ratio == 100.0
+
+    @pytest.mark.parametrize("discrete", [False, True])
+    def test_sac_loss_config(self, discrete):
+        # SACLoss and DiscreteSACLoss accept different kwargs, so each variant
+        # must only receive the config fields that apply to it
+        from hydra.utils import instantiate
+        from torchrl.modules import ProbabilisticActor
+        from torchrl.modules.distributions import OneHotCategorical
+        from torchrl.objectives.sac import DiscreteSACLoss, SACLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import SACLossConfig
+
+        num_actions = 4
+        if discrete:
+            actor_network = ProbabilisticActor(
+                TensorDictModule(
+                    torch.nn.Linear(10, num_actions),
+                    in_keys=["observation"],
+                    out_keys=["logits"],
+                ),
+                in_keys=["logits"],
+                distribution_class=OneHotCategorical,
+            )
+            qvalue_network = TensorDictModuleConfig(
+                module=MLPConfig(
+                    in_features=10, out_features=num_actions, depth=2, num_cells=32
+                ),
+                in_keys=["observation"],
+                out_keys=["action_value"],
+            )
+        else:
+            actor_network = TanhNormalModelConfig(
+                network=MLPConfig(
+                    in_features=10, out_features=4, depth=2, num_cells=32
+                ),
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+            qvalue_network = TensorDictModuleConfig(
+                module=MLPConfig(in_features=12, out_features=1, depth=2, num_cells=32),
+                in_keys=["observation", "action"],
+                out_keys=["state_action_value"],
+            )
+        cfg = SACLossConfig(
+            actor_network=actor_network,
+            qvalue_network=qvalue_network,
+            discrete=discrete,
+            action_space="one-hot",
+            num_actions=num_actions,
+            target_entropy_weight=0.5,
+            num_qvalue_nets=3,
+        )
+
+        loss = instantiate(cfg)
+        assert loss.num_qvalue_nets == 3
+        if discrete:
+            assert type(loss) is DiscreteSACLoss
+            # target_entropy="auto" is derived from num_actions and target_entropy_weight
+            expected_entropy = 0.5 * math.log(num_actions)
+            assert loss.target_entropy.item() == pytest.approx(expected_entropy)
+        else:
+            assert type(loss) is SACLoss
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_loss_config(self):
