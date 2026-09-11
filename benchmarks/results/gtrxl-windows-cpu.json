@@ -1,0 +1,70 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "torch_version": "2.11.0",
+  "num_threads": 1,
+  "description": "Clone input, forward and backward with identical weights/tensors; no optimizer or collection. Plain TensorDict in both paths.",
+  "results": [
+    {
+      "layout": "per_step",
+      "batch": 1,
+      "window_length": 8,
+      "memory_len": 8,
+      "hidden_size": 16,
+      "latency_ms": 12.879833499027882,
+      "transitions_per_second": 621.1260417771556,
+      "carry_payload_bytes": 8192
+    },
+    {
+      "layout": "compact",
+      "batch": 1,
+      "window_length": 8,
+      "memory_len": 8,
+      "hidden_size": 16,
+      "latency_ms": 3.183433299818716,
+      "transitions_per_second": 2513.0100889676464,
+      "carry_payload_bytes": 1024
+    },
+    {
+      "layout": "per_step",
+      "batch": 32,
+      "window_length": 32,
+      "memory_len": 16,
+      "hidden_size": 32,
+      "latency_ms": 165.9579790011776,
+      "transitions_per_second": 6170.236623529466,
+      "carry_payload_bytes": 4194304
+    },
+    {
+      "layout": "compact",
+      "batch": 32,
+      "window_length": 32,
+      "memory_len": 16,
+      "hidden_size": 32,
+      "latency_ms": 7.787541999277892,
+      "transitions_per_second": 131492.06772752578,
+      "carry_payload_bytes": 131072
+    },
+    {
+      "layout": "per_step",
+      "batch": 32,
+      "window_length": 64,
+      "memory_len": 64,
+      "hidden_size": 64,
+      "latency_ms": 195.36791599966818,
+      "transitions_per_second": 10482.785720064077,
+      "carry_payload_bytes": 67108864
+    },
+    {
+      "layout": "compact",
+      "batch": 32,
+      "window_length": 64,
+      "memory_len": 64,
+      "hidden_size": 64,
+      "latency_ms": 20.851875000516884,
+      "transitions_per_second": 98216.58723492413,
+      "carry_payload_bytes": 1048576
+    }
+  ],
+  "implementation_commit": "5a482b92f",
+  "tensordict_commit": "786fab0440d0476c1b6f9f5d558c3791614d5723"
+}
