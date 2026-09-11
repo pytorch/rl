@@ -1,0 +1,4105 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "torch": "2.11.0",
+  "device": "cpu",
+  "threads": 1,
+  "cases": [
+    {
+      "kind": "gru",
+      "container": "flat",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 27.057874482125044,
+          "iqr_us": 0.5921034316997966,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.3160791005939245,
+          "iqr_us": 0.02432505716569724,
+          "samples": 79
+        },
+        "typed_access": {
+          "median_us": 0.4136603965889662,
+          "iqr_us": 0.03952498082071541,
+          "samples": 60
+        },
+        "spec_zero": {
+          "median_us": 31.124082976020873,
+          "iqr_us": 1.3964171521365656,
+          "samples": 9
+        },
+        "partial_reset": {
+          "median_us": 13.14720802474767,
+          "iqr_us": 0.6462086457759159,
+          "samples": 19
+        },
+        "step_mdp": {
+          "median_us": 5.125146068166941,
+          "iqr_us": 0.48319852794520507,
+          "samples": 48
+        },
+        "policy_step": {
+          "median_us": 105.87083525024354,
+          "iqr_us": 3.667912678793073,
+          "samples": 24
+        },
+        "collect": {
+          "median_us": 2790.0041081011295,
+          "iqr_us": 151.70420520007602,
+          "samples": 9,
+          "frames_per_second": 2867.37929050749
+        },
+        "train_window": {
+          "median_us": 668.408302590251,
+          "iqr_us": 52.15830169618123,
+          "samples": 37,
+          "frames_per_second": 11968.732238959301
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 7911,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 33.08883297722786,
+          "iqr_us": 5.2934897248633215,
+          "samples": 8
+        },
+        "mapping_access": {
+          "median_us": 0.32035839976742864,
+          "iqr_us": 0.05383965326473117,
+          "samples": 75
+        },
+        "typed_access": {
+          "median_us": 0.41567079024389386,
+          "iqr_us": 0.052293750923126894,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 48.126874607987695,
+          "iqr_us": 6.233956955838952,
+          "samples": 52
+        },
+        "partial_reset": {
+          "median_us": 22.66495896037668,
+          "iqr_us": 4.857103980612008,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 11.940249998588117,
+          "iqr_us": 3.293812274932861,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 155.83687520120293,
+          "iqr_us": 21.019581763539467,
+          "samples": 16
+        },
+        "collect": {
+          "median_us": 3632.295806892216,
+          "iqr_us": 89.81875143945251,
+          "samples": 7,
+          "frames_per_second": 2202.463792959853
+        },
+        "train_window": {
+          "median_us": 691.4020981639625,
+          "iqr_us": 178.45624824985862,
+          "samples": 34,
+          "frames_per_second": 11570.690949946815
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 12471,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 28.42079196125269,
+          "iqr_us": 2.3207499179989095,
+          "samples": 9
+        },
+        "mapping_access": {
+          "median_us": 0.508720800280571,
+          "iqr_us": 0.04817920271307232,
+          "samples": 49
+        },
+        "typed_access": {
+          "median_us": 0.32921354519203305,
+          "iqr_us": 0.01803364924853663,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 46.90749978180975,
+          "iqr_us": 9.075210255105045,
+          "samples": 52
+        },
+        "partial_reset": {
+          "median_us": 24.238582933321595,
+          "iqr_us": 0.9713114704936718,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 17.56091695278883,
+          "iqr_us": 0.8613335085101397,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 153.39708072133362,
+          "iqr_us": 6.28208043053748,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 3949.9170379713178,
+          "iqr_us": 370.0425149872899,
+          "samples": 59,
+          "frames_per_second": 2025.358994402781
+        },
+        "train_window": {
+          "median_us": 699.0708061493933,
+          "iqr_us": 74.74370067939162,
+          "samples": 35,
+          "frames_per_second": 11443.762104822295
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 13023,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 27.55627100123093,
+          "iqr_us": 0.7655724184587602,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.4361000028438866,
+          "iqr_us": 0.04248330369591714,
+          "samples": 57
+        },
+        "typed_access": {
+          "median_us": 0.13493999955244362,
+          "iqr_us": 0.006233334424905443,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 45.334999449551105,
+          "iqr_us": 8.144999737851323,
+          "samples": 55
+        },
+        "partial_reset": {
+          "median_us": 21.828458469826728,
+          "iqr_us": 0.27989604859612965,
+          "samples": 12
+        },
+        "step_mdp": {
+          "median_us": 14.663083013147116,
+          "iqr_us": 0.5949590122327209,
+          "samples": 17
+        },
+        "policy_step": {
+          "median_us": 156.32750000804663,
+          "iqr_us": 15.727604331914339,
+          "samples": 16
+        },
+        "collect": {
+          "median_us": 3229.97901821509,
+          "iqr_us": 1148.8762393128127,
+          "samples": 70,
+          "frames_per_second": 2476.796274800837
+        },
+        "train_window": {
+          "median_us": 687.3541045933962,
+          "iqr_us": 89.06240109354249,
+          "samples": 37,
+          "frames_per_second": 11638.833530691425
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 13170,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "flat",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 49.84125029295683,
+          "iqr_us": 5.421249661594628,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.3181045799283311,
+          "iqr_us": 0.018294994661118794,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.41520625818520784,
+          "iqr_us": 0.0373416522052139,
+          "samples": 60
+        },
+        "spec_zero": {
+          "median_us": 56.59229005686939,
+          "iqr_us": 3.7788605550304033,
+          "samples": 44
+        },
+        "partial_reset": {
+          "median_us": 20.136791456025094,
+          "iqr_us": 1.3920632773078958,
+          "samples": 12
+        },
+        "step_mdp": {
+          "median_us": 5.6249171029776335,
+          "iqr_us": 0.5316250026226039,
+          "samples": 45
+        },
+        "policy_step": {
+          "median_us": 118.63040970638394,
+          "iqr_us": 3.806670429185025,
+          "samples": 21
+        },
+        "collect": {
+          "median_us": 3035.104100126773,
+          "iqr_us": 224.97918689623475,
+          "samples": 9,
+          "frames_per_second": 2635.823924347718
+        },
+        "train_window": {
+          "median_us": 655.1000056788325,
+          "iqr_us": 88.6333582457155,
+          "samples": 39,
+          "frames_per_second": 12211.87594359762
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 8490,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 48.480420373380184,
+          "iqr_us": 4.5850046444684285,
+          "samples": 51
+        },
+        "mapping_access": {
+          "median_us": 0.3145649947691709,
+          "iqr_us": 0.00219687091885137,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4240917041897774,
+          "iqr_us": 0.027954147662967384,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 74.87082970328629,
+          "iqr_us": 6.261260714381927,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 28.105124947614968,
+          "iqr_us": 0.7122510578483345,
+          "samples": 9
+        },
+        "step_mdp": {
+          "median_us": 12.80464552110061,
+          "iqr_us": 0.38031151052564327,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 151.39958006329834,
+          "iqr_us": 7.568750297650675,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 3784.9290994927287,
+          "iqr_us": 65.37084700539674,
+          "samples": 7,
+          "frames_per_second": 2113.6459335716995
+        },
+        "train_window": {
+          "median_us": 631.5083533991127,
+          "iqr_us": 58.33227769471707,
+          "samples": 40,
+          "frames_per_second": 12668.082626207175
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13045,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 51.56958301085979,
+          "iqr_us": 2.232291037216782,
+          "samples": 5
+        },
+        "mapping_access": {
+          "median_us": 0.48512079520151014,
+          "iqr_us": 0.06644795066677035,
+          "samples": 51
+        },
+        "typed_access": {
+          "median_us": 0.32651646062731743,
+          "iqr_us": 0.0027563492767512837,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 72.93000002391636,
+          "iqr_us": 3.9547850610688298,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 32.38864603918046,
+          "iqr_us": 0.8964899170678104,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 19.43516603205353,
+          "iqr_us": 0.45483408030122463,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 169.1666606348008,
+          "iqr_us": 11.106670717708788,
+          "samples": 15
+        },
+        "collect": {
+          "median_us": 4138.625110499561,
+          "iqr_us": 543.4380145743489,
+          "samples": 59,
+          "frames_per_second": 1933.0090999796655
+        },
+        "train_window": {
+          "median_us": 641.0290952771902,
+          "iqr_us": 72.96879775822165,
+          "samples": 39,
+          "frames_per_second": 12479.932750229824
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13564,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 51.45541043020785,
+          "iqr_us": 5.734988953918218,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.4311896045692265,
+          "iqr_us": 0.05139787972439081,
+          "samples": 58
+        },
+        "typed_access": {
+          "median_us": 0.1377220853464678,
+          "iqr_us": 0.00903104461031037,
+          "samples": 18
+        },
+        "spec_zero": {
+          "median_us": 75.45083062723279,
+          "iqr_us": 10.714374948292974,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 30.61987494584173,
+          "iqr_us": 0.37562509533018223,
+          "samples": 9
+        },
+        "step_mdp": {
+          "median_us": 16.512020549271256,
+          "iqr_us": 0.4190317413304,
+          "samples": 16
+        },
+        "policy_step": {
+          "median_us": 176.55542003922164,
+          "iqr_us": 3.561454941518609,
+          "samples": 15
+        },
+        "collect": {
+          "median_us": 4058.9170530438423,
+          "iqr_us": 542.8340518847108,
+          "samples": 61,
+          "frames_per_second": 1970.9690775771535
+        },
+        "train_window": {
+          "median_us": 660.5708040297031,
+          "iqr_us": 51.55625403858717,
+          "samples": 39,
+          "frames_per_second": 12110.738093777867
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13711,
+      "repeat": 0
+    },
+    {
+      "kind": "gtrxl",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 48.00874972715974,
+          "iqr_us": 4.644994041882456,
+          "samples": 51
+        },
+        "mapping_access": {
+          "median_us": 0.30773584032431245,
+          "iqr_us": 0.011915828799828884,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.42379579972475767,
+          "iqr_us": 0.03623334923759102,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 73.4704197384417,
+          "iqr_us": 4.179578972980386,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 29.881459777243432,
+          "iqr_us": 3.316767688374967,
+          "samples": 82
+        },
+        "step_mdp": {
+          "median_us": 12.43039546534419,
+          "iqr_us": 0.9142915660049772,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 419.6688067167997,
+          "iqr_us": 49.43225358147176,
+          "samples": 60
+        },
+        "collect": {
+          "median_us": 5810.25006249547,
+          "iqr_us": 434.58351865410805,
+          "samples": 43,
+          "frames_per_second": 1376.8770558842427
+        },
+        "train_window": {
+          "median_us": 6354.291981551796,
+          "iqr_us": 565.8544541802257,
+          "samples": 40,
+          "frames_per_second": 1258.9915640052634
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 13294,
+      "repeat": 0
+    },
+    {
+      "kind": "gtrxl",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 51.21791968122125,
+          "iqr_us": 7.235000375658273,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.48927919706329703,
+          "iqr_us": 0.0646999978926033,
+          "samples": 51
+        },
+        "typed_access": {
+          "median_us": 0.3253064554883167,
+          "iqr_us": 0.00458468712167815,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 74.62083012796938,
+          "iqr_us": 8.711670525372034,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 32.42281201528385,
+          "iqr_us": 0.31571829458698353,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 19.021229003556073,
+          "iqr_us": 0.41499003418721325,
+          "samples": 14
+        },
+        "policy_step": {
+          "median_us": 453.37920309975743,
+          "iqr_us": 49.345806473866105,
+          "samples": 55
+        },
+        "collect": {
+          "median_us": 6119.375000707805,
+          "iqr_us": 617.7079631015658,
+          "samples": 41,
+          "frames_per_second": 1307.323051631036
+        },
+        "train_window": {
+          "median_us": 6209.916027728468,
+          "iqr_us": 538.7183337006718,
+          "samples": 40,
+          "frames_per_second": 1288.2621865220822
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 13848,
+      "repeat": 0
+    },
+    {
+      "kind": "gtrxl",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 49.910839879885316,
+          "iqr_us": 12.992914998903874,
+          "samples": 51
+        },
+        "mapping_access": {
+          "median_us": 0.4404542036354542,
+          "iqr_us": 0.06324169225990775,
+          "samples": 57
+        },
+        "typed_access": {
+          "median_us": 0.13107582926750183,
+          "iqr_us": 0.0034645805135369084,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 76.83167001232505,
+          "iqr_us": 6.362920394167312,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 32.31558296829461,
+          "iqr_us": 1.1920627148356353,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 16.58895844593644,
+          "iqr_us": 0.4557704087346793,
+          "samples": 16
+        },
+        "policy_step": {
+          "median_us": 441.27085129730403,
+          "iqr_us": 74.77925391867755,
+          "samples": 56
+        },
+        "collect": {
+          "median_us": 6238.291040062904,
+          "iqr_us": 449.4590684771538,
+          "samples": 41,
+          "frames_per_second": 1282.4024959116578
+        },
+        "train_window": {
+          "median_us": 6282.062502577901,
+          "iqr_us": 415.1982138864696,
+          "samples": 40,
+          "frames_per_second": 1273.467113184106
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 14143,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "flat",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 27.350165997631848,
+          "iqr_us": 5.411250051110985,
+          "samples": 9
+        },
+        "mapping_access": {
+          "median_us": 0.3056833299342543,
+          "iqr_us": 0.0037324998993426384,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.42805420234799385,
+          "iqr_us": 0.03357295063324274,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 30.57149995584041,
+          "iqr_us": 0.8642920292913947,
+          "samples": 9
+        },
+        "partial_reset": {
+          "median_us": 14.934042003005743,
+          "iqr_us": 0.7148329168558123,
+          "samples": 17
+        },
+        "step_mdp": {
+          "median_us": 5.266728985588998,
+          "iqr_us": 0.3063124895561489,
+          "samples": 48
+        },
+        "policy_step": {
+          "median_us": 153.12416944652796,
+          "iqr_us": 9.38832992687823,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 6373.459007591009,
+          "iqr_us": 634.5000583678484,
+          "samples": 39,
+          "frames_per_second": 80333.14396314314
+        },
+        "train_window": {
+          "median_us": 2377.3707915097475,
+          "iqr_us": 64.01659338735061,
+          "samples": 11,
+          "frames_per_second": 215363.96502745574
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 7911,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 26.820396014954895,
+          "iqr_us": 0.7761042506899702,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.3341952100163326,
+          "iqr_us": 0.017856976483017168,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.42966665350832045,
+          "iqr_us": 0.04476555914152415,
+          "samples": 58
+        },
+        "spec_zero": {
+          "median_us": 44.83875003643334,
+          "iqr_us": 7.051255088299507,
+          "samples": 55
+        },
+        "partial_reset": {
+          "median_us": 21.75322902621701,
+          "iqr_us": 0.716020265826958,
+          "samples": 12
+        },
+        "step_mdp": {
+          "median_us": 11.193249956704676,
+          "iqr_us": 0.329145987052472,
+          "samples": 23
+        },
+        "policy_step": {
+          "median_us": 182.0591650903225,
+          "iqr_us": 6.914787518326194,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 7767.333998344839,
+          "iqr_us": 345.9160216152668,
+          "samples": 33,
+          "frames_per_second": 65917.0830183308
+        },
+        "train_window": {
+          "median_us": 2190.391649492085,
+          "iqr_us": 100.75518512167028,
+          "samples": 12,
+          "frames_per_second": 233748.15189727562
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 12420,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 27.150770532898605,
+          "iqr_us": 0.6032391393091554,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.4964479012414813,
+          "iqr_us": 0.05909269966650765,
+          "samples": 50
+        },
+        "typed_access": {
+          "median_us": 0.3302602103212848,
+          "iqr_us": 0.034478328307159294,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 48.61603491008282,
+          "iqr_us": 3.6710369749925995,
+          "samples": 52
+        },
+        "partial_reset": {
+          "median_us": 25.27339605148882,
+          "iqr_us": 0.6740005337633181,
+          "samples": 10
+        },
+        "step_mdp": {
+          "median_us": 16.904457937926054,
+          "iqr_us": 0.49670843873172993,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 196.3912497740239,
+          "iqr_us": 6.979999598115682,
+          "samples": 13
+        },
+        "collect": {
+          "median_us": 8542.854513507336,
+          "iqr_us": 585.1664755027741,
+          "samples": 30,
+          "frames_per_second": 59933.128814316464
+        },
+        "train_window": {
+          "median_us": 2288.545807823539,
+          "iqr_us": 73.79999733529968,
+          "samples": 11,
+          "frames_per_second": 223722.85415904527
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 13023,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 26.538374542724338,
+          "iqr_us": 0.6207394180819398,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.4326707974541932,
+          "iqr_us": 0.02622179454192525,
+          "samples": 58
+        },
+        "typed_access": {
+          "median_us": 0.13439917005598545,
+          "iqr_us": 0.004011035198345778,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 46.0520846536383,
+          "iqr_us": 4.657390527427196,
+          "samples": 54
+        },
+        "partial_reset": {
+          "median_us": 24.887708015739918,
+          "iqr_us": 0.8090000483207412,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 15.140415984205902,
+          "iqr_us": 0.4158749943599113,
+          "samples": 17
+        },
+        "policy_step": {
+          "median_us": 206.2958397436887,
+          "iqr_us": 3.543329657986757,
+          "samples": 13
+        },
+        "collect": {
+          "median_us": 8100.166916847229,
+          "iqr_us": 447.52046233043075,
+          "samples": 31,
+          "frames_per_second": 63208.57400297649
+        },
+        "train_window": {
+          "median_us": 2262.370800599456,
+          "iqr_us": 68.60830471850906,
+          "samples": 11,
+          "frames_per_second": 226311.26598006676
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 13119,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "flat",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 48.64270507823676,
+          "iqr_us": 2.6777046150527823,
+          "samples": 52
+        },
+        "mapping_access": {
+          "median_us": 0.3087716700974852,
+          "iqr_us": 0.0033537507988512095,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.42616045102477074,
+          "iqr_us": 0.03551975241862236,
+          "samples": 58
+        },
+        "spec_zero": {
+          "median_us": 61.665410175919526,
+          "iqr_us": 4.56208013929427,
+          "samples": 41
+        },
+        "partial_reset": {
+          "median_us": 24.926958023570478,
+          "iqr_us": 0.5292083951644583,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 5.811499955598266,
+          "iqr_us": 0.8414791373070337,
+          "samples": 42
+        },
+        "policy_step": {
+          "median_us": 176.4389598974958,
+          "iqr_us": 6.167505343910283,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 7322.999997995794,
+          "iqr_us": 371.4790800586343,
+          "samples": 35,
+          "frames_per_second": 69916.70082481598
+        },
+        "train_window": {
+          "median_us": 2560.3020505513996,
+          "iqr_us": 54.06865093391397,
+          "samples": 10,
+          "frames_per_second": 199976.4050846005
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 8490,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 50.43665994890034,
+          "iqr_us": 3.4331253846175978,
+          "samples": 50
+        },
+        "mapping_access": {
+          "median_us": 0.31507584033533925,
+          "iqr_us": 0.004483852535486177,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.42396249482408166,
+          "iqr_us": 0.02206250210292636,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 73.18833959288895,
+          "iqr_us": 5.7008344447240145,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 32.367437437642366,
+          "iqr_us": 1.3783227768726662,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 12.50789553159848,
+          "iqr_us": 0.7519265054725117,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 209.13624961394817,
+          "iqr_us": 11.43604284152387,
+          "samples": 12
+        },
+        "collect": {
+          "median_us": 8700.0000057742,
+          "iqr_us": 625.4999898374081,
+          "samples": 29,
+          "frames_per_second": 58850.57467358449
+        },
+        "train_window": {
+          "median_us": 2615.608350606635,
+          "iqr_us": 86.54688135720798,
+          "samples": 10,
+          "frames_per_second": 195747.9604625258
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13045,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 51.06375087052584,
+          "iqr_us": 3.625419922173023,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.5097083980217576,
+          "iqr_us": 0.03822919679805638,
+          "samples": 49
+        },
+        "typed_access": {
+          "median_us": 0.3365625045262277,
+          "iqr_us": 0.023262493778020147,
+          "samples": 73
+        },
+        "spec_zero": {
+          "median_us": 78.00458464771509,
+          "iqr_us": 5.565727769862866,
+          "samples": 32
+        },
+        "partial_reset": {
+          "median_us": 38.71312492992729,
+          "iqr_us": 2.169729559682305,
+          "samples": 7
+        },
+        "step_mdp": {
+          "median_us": 32.36937499605119,
+          "iqr_us": 13.063583057373762,
+          "samples": 9
+        },
+        "policy_step": {
+          "median_us": 273.08624994475394,
+          "iqr_us": 65.2172925765626,
+          "samples": 8
+        },
+        "collect": {
+          "median_us": 11938.749928958714,
+          "iqr_us": 2072.5419744849205,
+          "samples": 21,
+          "frames_per_second": 42885.56197647538
+        },
+        "train_window": {
+          "median_us": 3251.197899226099,
+          "iqr_us": 450.81356365699304,
+          "samples": 8,
+          "frames_per_second": 157480.41671713503
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13717,
+      "repeat": 0
+    },
+    {
+      "kind": "lstm",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 51.401464734226465,
+          "iqr_us": 10.416454751975833,
+          "samples": 48
+        },
+        "mapping_access": {
+          "median_us": 0.4474979010410607,
+          "iqr_us": 0.04542086971923708,
+          "samples": 56
+        },
+        "typed_access": {
+          "median_us": 0.1336474996060133,
+          "iqr_us": 0.002540199784561993,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 74.35479550622405,
+          "iqr_us": 4.120007506571721,
+          "samples": 34
+        },
+        "partial_reset": {
+          "median_us": 37.2646659379825,
+          "iqr_us": 0.6112494156695935,
+          "samples": 7
+        },
+        "step_mdp": {
+          "median_us": 17.390584107488394,
+          "iqr_us": 0.3065204364247637,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 248.61915968358514,
+          "iqr_us": 4.161664983257671,
+          "samples": 11
+        },
+        "collect": {
+          "median_us": 11266.291956417263,
+          "iqr_us": 1164.5409977063537,
+          "samples": 21,
+          "frames_per_second": 45445.298415896774
+        },
+        "train_window": {
+          "median_us": 2602.9604487121105,
+          "iqr_us": 215.16254055313792,
+          "samples": 10,
+          "frames_per_second": 196699.10860663545
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13864,
+      "repeat": 0
+    },
+    {
+      "kind": "gtrxl",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 49.32750016450882,
+          "iqr_us": 5.420734814833851,
+          "samples": 50
+        },
+        "mapping_access": {
+          "median_us": 0.3061541693750769,
+          "iqr_us": 0.003688340075314056,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.41286669438704854,
+          "iqr_us": 0.054166727932170027,
+          "samples": 60
+        },
+        "spec_zero": {
+          "median_us": 86.46833477541806,
+          "iqr_us": 3.6376016214489812,
+          "samples": 30
+        },
+        "partial_reset": {
+          "median_us": 124.17187506798653,
+          "iqr_us": 4.444272490218256,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 12.843479460570963,
+          "iqr_us": 0.4429682740010314,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 1375.3208506386727,
+          "iqr_us": 75.5510031012817,
+          "samples": 18
+        },
+        "collect": {
+          "median_us": 28267.2910252586,
+          "iqr_us": 2693.457994610071,
+          "samples": 9,
+          "frames_per_second": 18112.807468621446
+        },
+        "train_window": {
+          "median_us": 53666.66603367776,
+          "iqr_us": 4823.416937142611,
+          "samples": 5,
+          "frames_per_second": 9540.372783334475
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 13141,
+      "repeat": 0
+    },
+    {
+      "kind": "gtrxl",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 50.13457965105772,
+          "iqr_us": 8.449581218883392,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.5048645543865861,
+          "iqr_us": 0.04165725549682973,
+          "samples": 50
+        },
+        "typed_access": {
+          "median_us": 0.3320879145758227,
+          "iqr_us": 0.00923740008147434,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 89.7999998414889,
+          "iqr_us": 4.33395500294863,
+          "samples": 28
+        },
+        "partial_reset": {
+          "median_us": 127.5320799322799,
+          "iqr_us": 3.110000106971712,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 20.0442080385983,
+          "iqr_us": 0.6407080218195932,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 1410.6895541772246,
+          "iqr_us": 126.8562860786914,
+          "samples": 18
+        },
+        "collect": {
+          "median_us": 51743.66646679118,
+          "iqr_us": 11384.884739527479,
+          "samples": 6,
+          "frames_per_second": 9894.930818800769
+        },
+        "train_window": {
+          "median_us": 49762.41709664464,
+          "iqr_us": 320.750055834651,
+          "samples": 5,
+          "frames_per_second": 10288.889283766783
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 13899,
+      "repeat": 0
+    },
+    {
+      "kind": "gtrxl",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 52.25187516771257,
+          "iqr_us": 4.579262458719307,
+          "samples": 46
+        },
+        "mapping_access": {
+          "median_us": 0.467529206071049,
+          "iqr_us": 0.044179102405905696,
+          "samples": 53
+        },
+        "typed_access": {
+          "median_us": 0.13570957933552563,
+          "iqr_us": 0.00244333990849554,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 87.15083939023316,
+          "iqr_us": 4.159579402767124,
+          "samples": 27
+        },
+        "partial_reset": {
+          "median_us": 166.2649994250387,
+          "iqr_us": 81.3416705932468,
+          "samples": 13
+        },
+        "step_mdp": {
+          "median_us": 23.532583960331976,
+          "iqr_us": 4.942249506711961,
+          "samples": 11
+        },
+        "policy_step": {
+          "median_us": 1522.9166951030493,
+          "iqr_us": 319.1957948729396,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 35141.458036378026,
+          "iqr_us": 3843.853948637843,
+          "samples": 7,
+          "frames_per_second": 14569.685738991922
+        },
+        "train_window": {
+          "median_us": 48738.81250387058,
+          "iqr_us": 2536.666579544544,
+          "samples": 6,
+          "frames_per_second": 10504.97485878097
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 14296,
+      "repeat": 0
+    },
+    {
+      "kind": "gru",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 26.552395545877516,
+          "iqr_us": 1.215968572068962,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.31109228963032365,
+          "iqr_us": 0.0068843775079585265,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.41964580304920673,
+          "iqr_us": 0.02505620068404821,
+          "samples": 60
+        },
+        "spec_zero": {
+          "median_us": 46.114590368233614,
+          "iqr_us": 5.193436809349809,
+          "samples": 54
+        },
+        "partial_reset": {
+          "median_us": 20.24920901749283,
+          "iqr_us": 0.9839169215410956,
+          "samples": 13
+        },
+        "step_mdp": {
+          "median_us": 11.191667057573795,
+          "iqr_us": 0.2361455117352303,
+          "samples": 23
+        },
+        "policy_step": {
+          "median_us": 136.36582996696234,
+          "iqr_us": 6.304585258476447,
+          "samples": 19
+        },
+        "collect": {
+          "median_us": 3509.235446108505,
+          "iqr_us": 74.94482269976288,
+          "samples": 8,
+          "frames_per_second": 2279.6988469016624
+        },
+        "train_window": {
+          "median_us": 684.779102448374,
+          "iqr_us": 42.61250142008062,
+          "samples": 37,
+          "frames_per_second": 11682.599500184258
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 12471,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 28.961458476260304,
+          "iqr_us": 5.102999450173226,
+          "samples": 8
+        },
+        "mapping_access": {
+          "median_us": 0.6755479087587447,
+          "iqr_us": 0.22205410350579768,
+          "samples": 32
+        },
+        "typed_access": {
+          "median_us": 0.43534083059057593,
+          "iqr_us": 0.3205370903015137,
+          "samples": 5
+        },
+        "spec_zero": {
+          "median_us": 106.31749988533556,
+          "iqr_us": 26.307491352781653,
+          "samples": 21
+        },
+        "partial_reset": {
+          "median_us": 38.30334055237472,
+          "iqr_us": 14.267090009525425,
+          "samples": 65
+        },
+        "step_mdp": {
+          "median_us": 31.8761250237003,
+          "iqr_us": 6.792916508857162,
+          "samples": 8
+        },
+        "policy_step": {
+          "median_us": 208.67375016678125,
+          "iqr_us": 63.921874971129014,
+          "samples": 12
+        },
+        "collect": {
+          "median_us": 4193.749453406781,
+          "iqr_us": 1144.6767312008888,
+          "samples": 56,
+          "frames_per_second": 1907.6008447527122
+        },
+        "train_window": {
+          "median_us": 710.462499409914,
+          "iqr_us": 109.0082922019064,
+          "samples": 31,
+          "frames_per_second": 11260.270607730215
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 13023,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 29.75975000299513,
+          "iqr_us": 7.3776250064838615,
+          "samples": 8
+        },
+        "mapping_access": {
+          "median_us": 0.4328500013798475,
+          "iqr_us": 0.031112506985664343,
+          "samples": 57
+        },
+        "typed_access": {
+          "median_us": 0.1359279197640717,
+          "iqr_us": 0.004447285900823789,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 54.05375035479665,
+          "iqr_us": 5.560414283536371,
+          "samples": 47
+        },
+        "partial_reset": {
+          "median_us": 24.118750530760735,
+          "iqr_us": 2.7632087294477956,
+          "samples": 10
+        },
+        "step_mdp": {
+          "median_us": 15.046916087158024,
+          "iqr_us": 0.4619999090209602,
+          "samples": 17
+        },
+        "policy_step": {
+          "median_us": 189.23082971014082,
+          "iqr_us": 37.48666844330728,
+          "samples": 13
+        },
+        "collect": {
+          "median_us": 5392.5629472360015,
+          "iqr_us": 2584.416826721281,
+          "samples": 44,
+          "frames_per_second": 1483.5246390773166
+        },
+        "train_window": {
+          "median_us": 708.7270496413112,
+          "iqr_us": 76.79165282752369,
+          "samples": 34,
+          "frames_per_second": 11287.843470979164
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 13111,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "flat",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 30.00945900566876,
+          "iqr_us": 2.3536670487374023,
+          "samples": 9
+        },
+        "mapping_access": {
+          "median_us": 0.34134750021621585,
+          "iqr_us": 0.0867185444803908,
+          "samples": 7
+        },
+        "typed_access": {
+          "median_us": 0.423845904879272,
+          "iqr_us": 0.03412085352465513,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 31.130562420003116,
+          "iqr_us": 0.917218800168479,
+          "samples": 8
+        },
+        "partial_reset": {
+          "median_us": 13.255042023956776,
+          "iqr_us": 0.7407285447698087,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 5.2174165030010045,
+          "iqr_us": 0.41640654671937216,
+          "samples": 48
+        },
+        "policy_step": {
+          "median_us": 121.1362547473982,
+          "iqr_us": 26.959784445352856,
+          "samples": 20
+        },
+        "collect": {
+          "median_us": 3124.7291015461087,
+          "iqr_us": 202.0584070123732,
+          "samples": 9,
+          "frames_per_second": 2560.2219392527877
+        },
+        "train_window": {
+          "median_us": 670.5416482873261,
+          "iqr_us": 48.405199777335035,
+          "samples": 38,
+          "frames_per_second": 11930.653405993973
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 7911,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 50.16291455831379,
+          "iqr_us": 5.326770187821244,
+          "samples": 50
+        },
+        "mapping_access": {
+          "median_us": 0.3179860452655703,
+          "iqr_us": 0.024294796749018206,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4634377144975588,
+          "iqr_us": 0.021339381928555667,
+          "samples": 6
+        },
+        "spec_zero": {
+          "median_us": 72.86875043064356,
+          "iqr_us": 4.673339426517493,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 29.35504203196615,
+          "iqr_us": 1.2893339153379195,
+          "samples": 9
+        },
+        "step_mdp": {
+          "median_us": 12.597791501320899,
+          "iqr_us": 0.37236398202367205,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 154.36082961969078,
+          "iqr_us": 6.437080446630727,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 3879.1249971836805,
+          "iqr_us": 835.1255091838539,
+          "samples": 63,
+          "frames_per_second": 2062.320756822261
+        },
+        "train_window": {
+          "median_us": 624.4770542252809,
+          "iqr_us": 47.81245370395488,
+          "samples": 40,
+          "frames_per_second": 12810.71889811021
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13045,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 49.242080422118306,
+          "iqr_us": 9.488749783486126,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.5050958483479916,
+          "iqr_us": 0.05556144751608368,
+          "samples": 50
+        },
+        "typed_access": {
+          "median_us": 0.324528124765493,
+          "iqr_us": 0.011414373293518994,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 77.28624972514808,
+          "iqr_us": 7.207910530269144,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 33.501541474834085,
+          "iqr_us": 0.47407310921698614,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 19.913582946173847,
+          "iqr_us": 1.3341669691726539,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 162.70791995339098,
+          "iqr_us": 11.270824761595573,
+          "samples": 16
+        },
+        "collect": {
+          "median_us": 4197.374975774437,
+          "iqr_us": 702.3540383670479,
+          "samples": 60,
+          "frames_per_second": 1905.9531364657166
+        },
+        "train_window": {
+          "median_us": 655.2916951477528,
+          "iqr_us": 36.785448901355224,
+          "samples": 39,
+          "frames_per_second": 12208.303659633882
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13564,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 52.264375262893736,
+          "iqr_us": 17.039592494256794,
+          "samples": 42
+        },
+        "mapping_access": {
+          "median_us": 0.444810395129025,
+          "iqr_us": 0.045559430145658525,
+          "samples": 52
+        },
+        "typed_access": {
+          "median_us": 0.17546750023029745,
+          "iqr_us": 0.04425938066560776,
+          "samples": 15
+        },
+        "spec_zero": {
+          "median_us": 76.95083040744066,
+          "iqr_us": 6.530419923365103,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 32.19228994566948,
+          "iqr_us": 5.231250834185627,
+          "samples": 76
+        },
+        "step_mdp": {
+          "median_us": 17.069854540750384,
+          "iqr_us": 1.8737500358838584,
+          "samples": 14
+        },
+        "policy_step": {
+          "median_us": 181.95916491094977,
+          "iqr_us": 5.4139603162184295,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 4189.104196848348,
+          "iqr_us": 145.20206896122528,
+          "samples": 6,
+          "frames_per_second": 1909.716164620293
+        },
+        "train_window": {
+          "median_us": 658.6291478015482,
+          "iqr_us": 42.65940806362782,
+          "samples": 38,
+          "frames_per_second": 12146.440871472762
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13813,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "flat",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 50.56729540228844,
+          "iqr_us": 6.528950762003655,
+          "samples": 48
+        },
+        "mapping_access": {
+          "median_us": 0.31730500515550375,
+          "iqr_us": 0.009093545668292775,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4392938048113137,
+          "iqr_us": 0.10787500068545347,
+          "samples": 52
+        },
+        "spec_zero": {
+          "median_us": 58.63750004209578,
+          "iqr_us": 7.535420591011645,
+          "samples": 41
+        },
+        "partial_reset": {
+          "median_us": 20.521020982414484,
+          "iqr_us": 3.687031741719693,
+          "samples": 12
+        },
+        "step_mdp": {
+          "median_us": 5.948249949142337,
+          "iqr_us": 1.1263330234214664,
+          "samples": 41
+        },
+        "policy_step": {
+          "median_us": 130.8445807080716,
+          "iqr_us": 44.30791945196687,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 3084.0541003271937,
+          "iqr_us": 124.70000656321628,
+          "samples": 9,
+          "frames_per_second": 2593.98821802486
+        },
+        "train_window": {
+          "median_us": 695.3791482374072,
+          "iqr_us": 109.9489163607359,
+          "samples": 34,
+          "frames_per_second": 11504.515227811728
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 8541,
+      "repeat": 1
+    },
+    {
+      "kind": "gtrxl",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 57.950420305132866,
+          "iqr_us": 13.39790876954793,
+          "samples": 41
+        },
+        "mapping_access": {
+          "median_us": 0.5659500020556152,
+          "iqr_us": 0.11684579658322039,
+          "samples": 43
+        },
+        "typed_access": {
+          "median_us": 0.36447910824790597,
+          "iqr_us": 0.06513119442388418,
+          "samples": 67
+        },
+        "spec_zero": {
+          "median_us": 89.22250010073185,
+          "iqr_us": 14.913335326127703,
+          "samples": 27
+        },
+        "partial_reset": {
+          "median_us": 40.10146018117667,
+          "iqr_us": 14.060005487408485,
+          "samples": 56
+        },
+        "step_mdp": {
+          "median_us": 21.437916497234255,
+          "iqr_us": 4.038916464196518,
+          "samples": 12
+        },
+        "policy_step": {
+          "median_us": 530.3374491631985,
+          "iqr_us": 116.13332899287334,
+          "samples": 44
+        },
+        "collect": {
+          "median_us": 7289.958011824638,
+          "iqr_us": 1092.1660286840051,
+          "samples": 32,
+          "frames_per_second": 1097.4000106754584
+        },
+        "train_window": {
+          "median_us": 6799.000082537532,
+          "iqr_us": 2416.1567562259734,
+          "samples": 34,
+          "frames_per_second": 1176.6436097783117
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 13746,
+      "repeat": 1
+    },
+    {
+      "kind": "gtrxl",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 57.04979528672993,
+          "iqr_us": 17.54614931996912,
+          "samples": 42
+        },
+        "mapping_access": {
+          "median_us": 0.45492920326069,
+          "iqr_us": 0.04371465183794497,
+          "samples": 55
+        },
+        "typed_access": {
+          "median_us": 0.15019062440842393,
+          "iqr_us": 0.0407528059440665,
+          "samples": 16
+        },
+        "spec_zero": {
+          "median_us": 81.85790968127549,
+          "iqr_us": 18.491250229999423,
+          "samples": 29
+        },
+        "partial_reset": {
+          "median_us": 38.09899999760091,
+          "iqr_us": 2.4791245232336174,
+          "samples": 7
+        },
+        "step_mdp": {
+          "median_us": 21.372187533415854,
+          "iqr_us": 3.182999935233967,
+          "samples": 12
+        },
+        "policy_step": {
+          "median_us": 515.8125073648989,
+          "iqr_us": 66.65419787168506,
+          "samples": 47
+        },
+        "collect": {
+          "median_us": 7376.646040938795,
+          "iqr_us": 1350.5002425517887,
+          "samples": 32,
+          "frames_per_second": 1084.5037101687847
+        },
+        "train_window": {
+          "median_us": 7576.791918836534,
+          "iqr_us": 1704.4164706021547,
+          "samples": 31,
+          "frames_per_second": 1055.8558405321037
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 14235,
+      "repeat": 1
+    },
+    {
+      "kind": "gtrxl",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 58.97832976188511,
+          "iqr_us": 26.43396001076325,
+          "samples": 38
+        },
+        "mapping_access": {
+          "median_us": 0.33568687504157424,
+          "iqr_us": 0.01107989432057365,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4475187452044338,
+          "iqr_us": 0.04788234655279669,
+          "samples": 56
+        },
+        "spec_zero": {
+          "median_us": 121.03832967113703,
+          "iqr_us": 32.78760268585757,
+          "samples": 22
+        },
+        "partial_reset": {
+          "median_us": 31.7305619828403,
+          "iqr_us": 1.2261137017048895,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 13.294916949234903,
+          "iqr_us": 0.4797705332748603,
+          "samples": 19
+        },
+        "policy_step": {
+          "median_us": 462.5875037163496,
+          "iqr_us": 65.98023173864925,
+          "samples": 54
+        },
+        "collect": {
+          "median_us": 6448.167026974261,
+          "iqr_us": 850.625045131892,
+          "samples": 39,
+          "frames_per_second": 1240.6626513447995
+        },
+        "train_window": {
+          "median_us": 6309.124990366399,
+          "iqr_us": 401.2078861705959,
+          "samples": 39,
+          "frames_per_second": 1268.0046777033979
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 13141,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 27.652707998640835,
+          "iqr_us": 1.1647499632090317,
+          "samples": 9
+        },
+        "mapping_access": {
+          "median_us": 0.320695000118576,
+          "iqr_us": 0.0075390690471977195,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4596237500663847,
+          "iqr_us": 0.01203093706862999,
+          "samples": 6
+        },
+        "spec_zero": {
+          "median_us": 48.534160014241934,
+          "iqr_us": 3.6091779475100383,
+          "samples": 52
+        },
+        "partial_reset": {
+          "median_us": 23.943208041600883,
+          "iqr_us": 0.6876040715724215,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 11.57324999803677,
+          "iqr_us": 0.47279201680794386,
+          "samples": 22
+        },
+        "policy_step": {
+          "median_us": 184.50895964633673,
+          "iqr_us": 15.782601549290108,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 8118.374971672893,
+          "iqr_us": 427.8330015949905,
+          "samples": 31,
+          "frames_per_second": 63066.80854068705
+        },
+        "train_window": {
+          "median_us": 2335.3957920335233,
+          "iqr_us": 93.17290387116356,
+          "samples": 11,
+          "frames_per_second": 219234.78741656075
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 12471,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 28.894542017951608,
+          "iqr_us": 2.525040879845621,
+          "samples": 9
+        },
+        "mapping_access": {
+          "median_us": 0.49616249743849034,
+          "iqr_us": 0.01767709618434315,
+          "samples": 51
+        },
+        "typed_access": {
+          "median_us": 0.3341702051693574,
+          "iqr_us": 0.0060430201119743305,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 49.55958458594977,
+          "iqr_us": 4.298848216421897,
+          "samples": 50
+        },
+        "partial_reset": {
+          "median_us": 26.103125012014065,
+          "iqr_us": 0.9870317589957281,
+          "samples": 10
+        },
+        "step_mdp": {
+          "median_us": 17.360417055897415,
+          "iqr_us": 0.39325008401647465,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 198.96042067557573,
+          "iqr_us": 3.3908407203852966,
+          "samples": 13
+        },
+        "collect": {
+          "median_us": 8616.707986220717,
+          "iqr_us": 1201.999984914437,
+          "samples": 28,
+          "frames_per_second": 59419.444272540895
+        },
+        "train_window": {
+          "median_us": 2368.647896219045,
+          "iqr_us": 93.12080510426313,
+          "samples": 10,
+          "frames_per_second": 216157.0745982466
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 13023,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 26.8087710137479,
+          "iqr_us": 0.444052449893205,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.43514170683920383,
+          "iqr_us": 0.04845419898629186,
+          "samples": 57
+        },
+        "typed_access": {
+          "median_us": 0.1351175003219396,
+          "iqr_us": 0.00663625018205495,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 47.24687954876572,
+          "iqr_us": 8.414576877839862,
+          "samples": 52
+        },
+        "partial_reset": {
+          "median_us": 26.560832979157567,
+          "iqr_us": 0.6101147446315711,
+          "samples": 10
+        },
+        "step_mdp": {
+          "median_us": 15.03095799125731,
+          "iqr_us": 0.8232080144807696,
+          "samples": 17
+        },
+        "policy_step": {
+          "median_us": 206.36582979932427,
+          "iqr_us": 3.9425108116120273,
+          "samples": 13
+        },
+        "collect": {
+          "median_us": 8176.916977390647,
+          "iqr_us": 584.7921129316092,
+          "samples": 31,
+          "frames_per_second": 62615.28659465311
+        },
+        "train_window": {
+          "median_us": 2354.854205623269,
+          "iqr_us": 91.90419805236169,
+          "samples": 11,
+          "frames_per_second": 217423.2267871916
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 13170,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "flat",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 25.79972898820415,
+          "iqr_us": 0.8801772200968112,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.30408665887080133,
+          "iqr_us": 0.008347500115632997,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.41131669422611594,
+          "iqr_us": 0.015804194845259197,
+          "samples": 61
+        },
+        "spec_zero": {
+          "median_us": 33.92645507119596,
+          "iqr_us": 11.532816861290486,
+          "samples": 66
+        },
+        "partial_reset": {
+          "median_us": 14.616666943766177,
+          "iqr_us": 0.24724996183067613,
+          "samples": 17
+        },
+        "step_mdp": {
+          "median_us": 4.992333007976413,
+          "iqr_us": 0.2555000828579076,
+          "samples": 51
+        },
+        "policy_step": {
+          "median_us": 151.3716601766646,
+          "iqr_us": 5.833749892190102,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 6495.521054603159,
+          "iqr_us": 570.4892100766301,
+          "samples": 38,
+          "frames_per_second": 78823.54559333815
+        },
+        "train_window": {
+          "median_us": 2268.5375064611435,
+          "iqr_us": 103.02084847353416,
+          "samples": 11,
+          "frames_per_second": 225696.07006353006
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 7852,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 48.90416457783431,
+          "iqr_us": 6.7405149457044855,
+          "samples": 50
+        },
+        "mapping_access": {
+          "median_us": 0.308620419818908,
+          "iqr_us": 0.006317090010270485,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.42172499233856797,
+          "iqr_us": 0.0398021074943244,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 71.42583024688065,
+          "iqr_us": 4.675414529629038,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 32.487437478266656,
+          "iqr_us": 0.5996252584736846,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 12.329416000284255,
+          "iqr_us": 0.5394580075517297,
+          "samples": 21
+        },
+        "policy_step": {
+          "median_us": 218.01895927637815,
+          "iqr_us": 7.626036531291906,
+          "samples": 12
+        },
+        "collect": {
+          "median_us": 8852.124912664294,
+          "iqr_us": 259.87508706748486,
+          "samples": 29,
+          "frames_per_second": 57839.21996711853
+        },
+        "train_window": {
+          "median_us": 2705.2666468080133,
+          "iqr_us": 56.206213776022544,
+          "samples": 10,
+          "frames_per_second": 189260.45630441527
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13045,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 52.03042062930763,
+          "iqr_us": 2.929168986156589,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.5261021025944502,
+          "iqr_us": 0.032140658004209406,
+          "samples": 48
+        },
+        "typed_access": {
+          "median_us": 0.34114396024961025,
+          "iqr_us": 0.017028650327120008,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 81.40624966472387,
+          "iqr_us": 8.888550219126053,
+          "samples": 31
+        },
+        "partial_reset": {
+          "median_us": 41.04541032575071,
+          "iqr_us": 6.723329424858096,
+          "samples": 57
+        },
+        "step_mdp": {
+          "median_us": 19.387208041734993,
+          "iqr_us": 0.63254195265472,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 232.45375021360815,
+          "iqr_us": 12.529584928415709,
+          "samples": 11
+        },
+        "collect": {
+          "median_us": 9719.916037283838,
+          "iqr_us": 2420.7919486798346,
+          "samples": 23,
+          "frames_per_second": 52675.35213638273
+        },
+        "train_window": {
+          "median_us": 2440.0916998274624,
+          "iqr_us": 191.5290951728819,
+          "samples": 11,
+          "frames_per_second": 209828.17983283303
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13717,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 51.32417078129947,
+          "iqr_us": 3.447919152677062,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.46575419837608933,
+          "iqr_us": 0.041612505447119516,
+          "samples": 53
+        },
+        "typed_access": {
+          "median_us": 0.13283791951835155,
+          "iqr_us": 0.0039958348497748574,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 75.08666487410665,
+          "iqr_us": 4.377077566459781,
+          "samples": 34
+        },
+        "partial_reset": {
+          "median_us": 35.46316648134962,
+          "iqr_us": 0.6012599624227735,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 16.645124997012317,
+          "iqr_us": 0.9063755860552186,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 240.7529205083847,
+          "iqr_us": 8.51978489663452,
+          "samples": 11
+        },
+        "collect": {
+          "median_us": 9430.708014406264,
+          "iqr_us": 796.9170110300183,
+          "samples": 27,
+          "frames_per_second": 54290.72761216586
+        },
+        "train_window": {
+          "median_us": 2746.3583508506417,
+          "iqr_us": 147.99692435190065,
+          "samples": 10,
+          "frames_per_second": 186428.69377967954
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13762,
+      "repeat": 1
+    },
+    {
+      "kind": "lstm",
+      "container": "flat",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 49.38708967529237,
+          "iqr_us": 4.397919401526461,
+          "samples": 51
+        },
+        "mapping_access": {
+          "median_us": 0.31542542041279376,
+          "iqr_us": 0.004726567131001485,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4116667027119547,
+          "iqr_us": 0.046473927795887,
+          "samples": 60
+        },
+        "spec_zero": {
+          "median_us": 59.032089775428176,
+          "iqr_us": 9.256874327547843,
+          "samples": 43
+        },
+        "partial_reset": {
+          "median_us": 24.389749974943697,
+          "iqr_us": 0.9268540306948142,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 5.632707965560257,
+          "iqr_us": 0.4968339344486595,
+          "samples": 45
+        },
+        "policy_step": {
+          "median_us": 181.86582950875163,
+          "iqr_us": 8.718957251403504,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 7432.83296469599,
+          "iqr_us": 808.6675079539418,
+          "samples": 35,
+          "frames_per_second": 68883.56060628107
+        },
+        "train_window": {
+          "median_us": 2750.4978992510582,
+          "iqr_us": 137.72917445749104,
+          "samples": 10,
+          "frames_per_second": 186148.11527011677
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 8388,
+      "repeat": 1
+    },
+    {
+      "kind": "gtrxl",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 52.188124973326914,
+          "iqr_us": 7.1579145151190415,
+          "samples": 48
+        },
+        "mapping_access": {
+          "median_us": 0.52541249897331,
+          "iqr_us": 0.07882912759669118,
+          "samples": 46
+        },
+        "typed_access": {
+          "median_us": 0.3227066656108946,
+          "iqr_us": 0.0068767799530178204,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 86.89417038112879,
+          "iqr_us": 5.658749723806982,
+          "samples": 29
+        },
+        "partial_reset": {
+          "median_us": 126.83646054938434,
+          "iqr_us": 3.831874928437166,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 19.14929150370881,
+          "iqr_us": 0.8847400604281584,
+          "samples": 14
+        },
+        "policy_step": {
+          "median_us": 1367.5417052581906,
+          "iqr_us": 318.05000035092223,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 29616.729472763836,
+          "iqr_us": 7291.95837629959,
+          "samples": 8,
+          "frames_per_second": 17287.526648438543
+        },
+        "train_window": {
+          "median_us": 83286.39599494636,
+          "iqr_us": 6402.864237315953,
+          "samples": 4,
+          "frames_per_second": 6147.462546357116
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 13899,
+      "repeat": 1
+    },
+    {
+      "kind": "gtrxl",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 91.0066650249064,
+          "iqr_us": 43.02375949919224,
+          "samples": 30
+        },
+        "mapping_access": {
+          "median_us": 0.4609334049746394,
+          "iqr_us": 0.061908399220556014,
+          "samples": 53
+        },
+        "typed_access": {
+          "median_us": 0.1364549994468689,
+          "iqr_us": 0.007749999640509476,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 93.17792020738125,
+          "iqr_us": 10.123960673809055,
+          "samples": 27
+        },
+        "partial_reset": {
+          "median_us": 136.2308394163847,
+          "iqr_us": 9.619789198041001,
+          "samples": 19
+        },
+        "step_mdp": {
+          "median_us": 16.60624996293336,
+          "iqr_us": 1.129812037106606,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 1323.2833007350564,
+          "iqr_us": 62.5458080321553,
+          "samples": 19
+        },
+        "collect": {
+          "median_us": 27504.811936523765,
+          "iqr_us": 1231.4999767113477,
+          "samples": 10,
+          "frames_per_second": 18614.924587799593
+        },
+        "train_window": {
+          "median_us": 48160.25006584823,
+          "iqr_us": 746.3540532626212,
+          "samples": 6,
+          "frames_per_second": 10631.174034602313
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 14296,
+      "repeat": 1
+    },
+    {
+      "kind": "gtrxl",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 51.51021003257483,
+          "iqr_us": 8.796152833383523,
+          "samples": 44
+        },
+        "mapping_access": {
+          "median_us": 0.3148206247715279,
+          "iqr_us": 0.01407541800290345,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.5352562526240945,
+          "iqr_us": 0.04224479489494119,
+          "samples": 48
+        },
+        "spec_zero": {
+          "median_us": 89.03500041924417,
+          "iqr_us": 10.571454768069087,
+          "samples": 27
+        },
+        "partial_reset": {
+          "median_us": 126.16916501428932,
+          "iqr_us": 7.049900304991738,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 12.253582943230867,
+          "iqr_us": 0.3294990165159106,
+          "samples": 21
+        },
+        "policy_step": {
+          "median_us": 1292.8291922435164,
+          "iqr_us": 137.72285310551533,
+          "samples": 19
+        },
+        "collect": {
+          "median_us": 28567.16699898243,
+          "iqr_us": 2952.583017759025,
+          "samples": 9,
+          "frames_per_second": 17922.67325696796
+        },
+        "train_window": {
+          "median_us": 49332.91650377214,
+          "iqr_us": 3367.0729608274996,
+          "samples": 6,
+          "frames_per_second": 10378.46606861062
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 13090,
+      "repeat": 1
+    },
+    {
+      "kind": "gru",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 28.357167029753327,
+          "iqr_us": 1.8951670499518518,
+          "samples": 9
+        },
+        "mapping_access": {
+          "median_us": 0.5061186966486275,
+          "iqr_us": 0.02291456621605897,
+          "samples": 50
+        },
+        "typed_access": {
+          "median_us": 0.34014833043329423,
+          "iqr_us": 0.015329794841818466,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 50.176664954051375,
+          "iqr_us": 3.7041641189716787,
+          "samples": 50
+        },
+        "partial_reset": {
+          "median_us": 25.320829590782523,
+          "iqr_us": 4.579999949783086,
+          "samples": 97
+        },
+        "step_mdp": {
+          "median_us": 18.531041510868818,
+          "iqr_us": 1.2663434608839448,
+          "samples": 14
+        },
+        "policy_step": {
+          "median_us": 158.82645442616194,
+          "iqr_us": 7.438541797455416,
+          "samples": 16
+        },
+        "collect": {
+          "median_us": 4064.542008563876,
+          "iqr_us": 452.9579309746623,
+          "samples": 41,
+          "frames_per_second": 1968.241436093962
+        },
+        "train_window": {
+          "median_us": 1060.2104535792023,
+          "iqr_us": 242.30625422205765,
+          "samples": 22,
+          "frames_per_second": 7545.671685270141
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 13023,
+      "repeat": 2
+    },
+    {
+      "kind": "gru",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 29.061250388622284,
+          "iqr_us": 5.487081361934544,
+          "samples": 81
+        },
+        "mapping_access": {
+          "median_us": 0.4841290996409953,
+          "iqr_us": 0.10414164862595504,
+          "samples": 47
+        },
+        "typed_access": {
+          "median_us": 0.18502313003409654,
+          "iqr_us": 0.044321877649053945,
+          "samples": 14
+        },
+        "spec_zero": {
+          "median_us": 52.99916549120098,
+          "iqr_us": 8.425103733316067,
+          "samples": 42
+        },
+        "partial_reset": {
+          "median_us": 23.89941702131182,
+          "iqr_us": 0.6944164633750948,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 15.502021007705478,
+          "iqr_us": 0.35733348340727417,
+          "samples": 16
+        },
+        "policy_step": {
+          "median_us": 177.12791915982962,
+          "iqr_us": 31.56750113703308,
+          "samples": 13
+        },
+        "collect": {
+          "median_us": 3997.695806901902,
+          "iqr_us": 84.76239745505102,
+          "samples": 7,
+          "frames_per_second": 2001.1527605948006
+        },
+        "train_window": {
+          "median_us": 700.799998594448,
+          "iqr_us": 58.3656481467187,
+          "samples": 36,
+          "frames_per_second": 11415.525137050678
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 13111,
+      "repeat": 2
+    },
+    {
+      "kind": "gru",
+      "container": "flat",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 27.290625032037497,
+          "iqr_us": 0.8909482276067144,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.3116295801009983,
+          "iqr_us": 0.005143749294802511,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.416824989952147,
+          "iqr_us": 0.04447499522939324,
+          "samples": 61
+        },
+        "spec_zero": {
+          "median_us": 30.629354470875118,
+          "iqr_us": 0.7320728327613325,
+          "samples": 8
+        },
+        "partial_reset": {
+          "median_us": 12.425562483258545,
+          "iqr_us": 0.4963016544934357,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 4.947499546688049,
+          "iqr_us": 0.6257814529817552,
+          "samples": 50
+        },
+        "policy_step": {
+          "median_us": 108.99208020418882,
+          "iqr_us": 4.016665043309333,
+          "samples": 23
+        },
+        "collect": {
+          "median_us": 2995.36669626832,
+          "iqr_us": 108.21670293808009,
+          "samples": 9,
+          "frames_per_second": 2670.7915294533186
+        },
+        "train_window": {
+          "median_us": 723.7958023324609,
+          "iqr_us": 87.38329634070394,
+          "samples": 33,
+          "frames_per_second": 11052.841111014572
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 7911,
+      "repeat": 2
+    },
+    {
+      "kind": "gru",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 27.768744621425867,
+          "iqr_us": 4.506671975832431,
+          "samples": 88
+        },
+        "mapping_access": {
+          "median_us": 0.3359131299657747,
+          "iqr_us": 0.013314269890543103,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.5206999951042235,
+          "iqr_us": 0.17202921444550157,
+          "samples": 41
+        },
+        "spec_zero": {
+          "median_us": 82.73917017504573,
+          "iqr_us": 32.422285585198566,
+          "samples": 28
+        },
+        "partial_reset": {
+          "median_us": 31.26566647551954,
+          "iqr_us": 11.499010783154521,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 13.459958950988948,
+          "iqr_us": 1.420478569343686,
+          "samples": 19
+        },
+        "policy_step": {
+          "median_us": 177.29083017911762,
+          "iqr_us": 22.43001130409537,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 4003.7294384092093,
+          "iqr_us": 959.697732469067,
+          "samples": 62,
+          "frames_per_second": 1998.1370177647714
+        },
+        "train_window": {
+          "median_us": 700.2770493272693,
+          "iqr_us": 104.18647434562445,
+          "samples": 36,
+          "frames_per_second": 11424.049963775493
+        }
+      },
+      "state_tensor_bytes": 128,
+      "rollout_tensor_bytes": 3824,
+      "rollout_state_tensor_bytes": 2048,
+      "policy_step_python_peak_bytes": 12471,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 60.600420692935586,
+          "iqr_us": 14.092500787228342,
+          "samples": 41
+        },
+        "mapping_access": {
+          "median_us": 0.5393812491092831,
+          "iqr_us": 0.10479684860911223,
+          "samples": 46
+        },
+        "typed_access": {
+          "median_us": 0.33962917048484087,
+          "iqr_us": 0.020563751168083386,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 84.84542020596564,
+          "iqr_us": 11.571148061193515,
+          "samples": 30
+        },
+        "partial_reset": {
+          "median_us": 33.89747906476259,
+          "iqr_us": 1.480312785133717,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 19.522666931152344,
+          "iqr_us": 2.0626250188797695,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 175.7366646779701,
+          "iqr_us": 20.499162492342304,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 4916.811943985522,
+          "iqr_us": 1616.2082320079207,
+          "samples": 48,
+          "frames_per_second": 1627.0705675017691
+        },
+        "train_window": {
+          "median_us": 666.8665912002325,
+          "iqr_us": 50.15829810872674,
+          "samples": 37,
+          "frames_per_second": 11996.402437257395
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13717,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 50.58311973698437,
+          "iqr_us": 5.126981995999813,
+          "samples": 48
+        },
+        "mapping_access": {
+          "median_us": 0.44133335468359297,
+          "iqr_us": 0.038546870928257704,
+          "samples": 56
+        },
+        "typed_access": {
+          "median_us": 0.1366737496573478,
+          "iqr_us": 0.01071583537850526,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 76.9262493122369,
+          "iqr_us": 4.2291602585464805,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 33.72183302417397,
+          "iqr_us": 5.072937696240847,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 17.280791071243584,
+          "iqr_us": 1.078687084373089,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 180.66249962430447,
+          "iqr_us": 5.691667320206767,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 4581.624991260469,
+          "iqr_us": 692.4584740772843,
+          "samples": 55,
+          "frames_per_second": 1746.1053698764395
+        },
+        "train_window": {
+          "median_us": 759.3458984047174,
+          "iqr_us": 135.86875866167247,
+          "samples": 31,
+          "frames_per_second": 10535.383172289352
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13711,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "flat",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 51.920004771091044,
+          "iqr_us": 5.011036701034752,
+          "samples": 48
+        },
+        "mapping_access": {
+          "median_us": 0.3174745803698897,
+          "iqr_us": 0.0028893825947307137,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4231083090417087,
+          "iqr_us": 0.04926670226268468,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 56.28750077448785,
+          "iqr_us": 8.847500430420043,
+          "samples": 45
+        },
+        "partial_reset": {
+          "median_us": 19.18258296791464,
+          "iqr_us": 0.7825419306755063,
+          "samples": 13
+        },
+        "step_mdp": {
+          "median_us": 5.744853988289833,
+          "iqr_us": 0.5990942299831655,
+          "samples": 44
+        },
+        "policy_step": {
+          "median_us": 121.49541056714952,
+          "iqr_us": 5.791661096736788,
+          "samples": 21
+        },
+        "collect": {
+          "median_us": 2920.1250290498137,
+          "iqr_us": 672.7919680997729,
+          "samples": 85,
+          "frames_per_second": 2739.6087223714317
+        },
+        "train_window": {
+          "median_us": 627.445854479447,
+          "iqr_us": 81.89064392354344,
+          "samples": 40,
+          "frames_per_second": 12750.104160999048
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 8482,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": null,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 49.66125008650124,
+          "iqr_us": 5.696454900316886,
+          "samples": 51
+        },
+        "mapping_access": {
+          "median_us": 0.31295749940909445,
+          "iqr_us": 0.004876250168308653,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.41770204552449286,
+          "iqr_us": 0.028141669463366256,
+          "samples": 60
+        },
+        "spec_zero": {
+          "median_us": 73.67250043898821,
+          "iqr_us": 5.923334392718977,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 28.97295798175037,
+          "iqr_us": 0.3924579359591035,
+          "samples": 9
+        },
+        "step_mdp": {
+          "median_us": 12.635291554033758,
+          "iqr_us": 0.4580625100061313,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 154.37916037626565,
+          "iqr_us": 9.061660384759314,
+          "samples": 17
+        },
+        "collect": {
+          "median_us": 3765.87500795722,
+          "iqr_us": 651.1249812319875,
+          "samples": 65,
+          "frames_per_second": 2124.340288271957
+        },
+        "train_window": {
+          "median_us": 656.0708512552083,
+          "iqr_us": 44.1885262262077,
+          "samples": 38,
+          "frames_per_second": 12193.804959775664
+        }
+      },
+      "state_tensor_bytes": 256,
+      "rollout_tensor_bytes": 5872,
+      "rollout_state_tensor_bytes": 4096,
+      "policy_step_python_peak_bytes": 13045,
+      "repeat": 2
+    },
+    {
+      "kind": "gtrxl",
+      "container": "ttd",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 51.181670278310776,
+          "iqr_us": 3.6562501918524517,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.44332919642329216,
+          "iqr_us": 0.04249579505994914,
+          "samples": 57
+        },
+        "typed_access": {
+          "median_us": 0.13076125003863126,
+          "iqr_us": 0.0033445801818743253,
+          "samples": 20
+        },
+        "spec_zero": {
+          "median_us": 78.17916921339929,
+          "iqr_us": 7.308750646188849,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 31.495416071265936,
+          "iqr_us": 1.3421456969808827,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 16.5999160381034,
+          "iqr_us": 1.9449374522082479,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 444.01249615475535,
+          "iqr_us": 31.662383116781744,
+          "samples": 57
+        },
+        "collect": {
+          "median_us": 6309.85398311168,
+          "iqr_us": 273.2077264226973,
+          "samples": 40,
+          "frames_per_second": 1267.8581820454158
+        },
+        "train_window": {
+          "median_us": 5931.1039512977,
+          "iqr_us": 535.9067872632295,
+          "samples": 42,
+          "frames_per_second": 1348.82141093643
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 14347,
+      "repeat": 2
+    },
+    {
+      "kind": "gtrxl",
+      "container": "td",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 54.217090364545584,
+          "iqr_us": 15.80458017997443,
+          "samples": 45
+        },
+        "mapping_access": {
+          "median_us": 0.30465541989542544,
+          "iqr_us": 0.004786670906469272,
+          "samples": 9
+        },
+        "typed_access": {
+          "median_us": 0.4154000082053244,
+          "iqr_us": 0.021241698414087264,
+          "samples": 61
+        },
+        "spec_zero": {
+          "median_us": 72.42499967105687,
+          "iqr_us": 4.688959452323614,
+          "samples": 35
+        },
+        "partial_reset": {
+          "median_us": 28.030875022523105,
+          "iqr_us": 0.3340420080348855,
+          "samples": 9
+        },
+        "step_mdp": {
+          "median_us": 12.491875037085263,
+          "iqr_us": 0.2754994493443513,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 459.08335014246404,
+          "iqr_us": 81.31457143463196,
+          "samples": 48
+        },
+        "collect": {
+          "median_us": 12108.124908991158,
+          "iqr_us": 7038.833922706544,
+          "samples": 13,
+          "frames_per_second": 660.7133689263002
+        },
+        "train_window": {
+          "median_us": 6657.458026893437,
+          "iqr_us": 2939.3748845905066,
+          "samples": 33,
+          "frames_per_second": 1201.6598479003903
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 13294,
+      "repeat": 2
+    },
+    {
+      "kind": "gtrxl",
+      "container": "tc",
+      "batch": 1,
+      "hidden": 16,
+      "memory_len": 8,
+      "window": 8,
+      "timing": {
+        "construct": {
+          "median_us": 51.332919392734766,
+          "iqr_us": 3.5070802550762923,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.5081209004856646,
+          "iqr_us": 0.021987594664096867,
+          "samples": 49
+        },
+        "typed_access": {
+          "median_us": 0.3341833013109863,
+          "iqr_us": 0.0446624937467277,
+          "samples": 73
+        },
+        "spec_zero": {
+          "median_us": 79.54749977216125,
+          "iqr_us": 8.140000863932068,
+          "samples": 31
+        },
+        "partial_reset": {
+          "median_us": 33.56499946676195,
+          "iqr_us": 5.091670900583266,
+          "samples": 73
+        },
+        "step_mdp": {
+          "median_us": 19.969500019215047,
+          "iqr_us": 0.5226259818300609,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 463.683350244537,
+          "iqr_us": 53.64172684494404,
+          "samples": 54
+        },
+        "collect": {
+          "median_us": 6811.250001192093,
+          "iqr_us": 454.4999683275819,
+          "samples": 37,
+          "frames_per_second": 1174.5274360212668
+        },
+        "train_window": {
+          "median_us": 6372.874951921403,
+          "iqr_us": 508.56301095336676,
+          "samples": 39,
+          "frames_per_second": 1255.320410388411
+        }
+      },
+      "state_tensor_bytes": 1032,
+      "rollout_tensor_bytes": 18288,
+      "rollout_state_tensor_bytes": 16512,
+      "policy_step_python_peak_bytes": 13746,
+      "repeat": 2
+    },
+    {
+      "kind": "gru",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 28.590000001713634,
+          "iqr_us": 1.2392909266054648,
+          "samples": 9
+        },
+        "mapping_access": {
+          "median_us": 0.5063562479335815,
+          "iqr_us": 0.033436474041081875,
+          "samples": 50
+        },
+        "typed_access": {
+          "median_us": 0.33733083051629364,
+          "iqr_us": 0.010413950949441647,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 54.00353984441608,
+          "iqr_us": 8.041045512072742,
+          "samples": 46
+        },
+        "partial_reset": {
+          "median_us": 27.47741690836847,
+          "iqr_us": 1.6056044551078257,
+          "samples": 10
+        },
+        "step_mdp": {
+          "median_us": 17.542916000820696,
+          "iqr_us": 0.5206665373407309,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 199.90542088635266,
+          "iqr_us": 6.270420271903276,
+          "samples": 13
+        },
+        "collect": {
+          "median_us": 8800.458046607673,
+          "iqr_us": 337.5830128788948,
+          "samples": 29,
+          "frames_per_second": 58178.78993211739
+        },
+        "train_window": {
+          "median_us": 2315.662510227412,
+          "iqr_us": 43.981248745695275,
+          "samples": 11,
+          "frames_per_second": 221103.031093127
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 13023,
+      "repeat": 2
+    },
+    {
+      "kind": "gru",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 27.786375081632286,
+          "iqr_us": 1.3212917256169026,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.44345830101519823,
+          "iqr_us": 0.039149995427578646,
+          "samples": 57
+        },
+        "typed_access": {
+          "median_us": 0.13505666982382536,
+          "iqr_us": 0.005151665536686767,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 49.139208043925464,
+          "iqr_us": 4.699540906585754,
+          "samples": 5
+        },
+        "partial_reset": {
+          "median_us": 31.513374997302893,
+          "iqr_us": 9.060656011570241,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 15.523667098022997,
+          "iqr_us": 0.883957953192294,
+          "samples": 17
+        },
+        "policy_step": {
+          "median_us": 213.20125029888004,
+          "iqr_us": 5.241767212282894,
+          "samples": 12
+        },
+        "collect": {
+          "median_us": 9251.624927856028,
+          "iqr_us": 1057.1875027380884,
+          "samples": 27,
+          "frames_per_second": 55341.62960480618
+        },
+        "train_window": {
+          "median_us": 2667.870803270489,
+          "iqr_us": 531.0209002345802,
+          "samples": 9,
+          "frames_per_second": 191913.34129536914
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 13170,
+      "repeat": 2
+    },
+    {
+      "kind": "gru",
+      "container": "flat",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 27.204312034882605,
+          "iqr_us": 1.4046349970158207,
+          "samples": 10
+        },
+        "mapping_access": {
+          "median_us": 0.31309125071857125,
+          "iqr_us": 0.007912805012892881,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.42544170282781124,
+          "iqr_us": 0.027787499129772165,
+          "samples": 57
+        },
+        "spec_zero": {
+          "median_us": 30.298291007056832,
+          "iqr_us": 0.664040911942717,
+          "samples": 9
+        },
+        "partial_reset": {
+          "median_us": 15.302791027352212,
+          "iqr_us": 0.24333305191248614,
+          "samples": 17
+        },
+        "step_mdp": {
+          "median_us": 5.091667058877647,
+          "iqr_us": 0.2629170194268221,
+          "samples": 49
+        },
+        "policy_step": {
+          "median_us": 152.84499968402088,
+          "iqr_us": 35.891035804525,
+          "samples": 15
+        },
+        "collect": {
+          "median_us": 8888.541953638196,
+          "iqr_us": 4761.29149319604,
+          "samples": 23,
+          "frames_per_second": 57602.24822817332
+        },
+        "train_window": {
+          "median_us": 2482.5667031109333,
+          "iqr_us": 259.74170421250165,
+          "samples": 11,
+          "frames_per_second": 206238.16446035742
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 7852,
+      "repeat": 2
+    },
+    {
+      "kind": "gru",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 31.890416983515028,
+          "iqr_us": 3.1659466621931656,
+          "samples": 8
+        },
+        "mapping_access": {
+          "median_us": 0.3272433305392042,
+          "iqr_us": 0.019792916136793792,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4300041473470628,
+          "iqr_us": 0.017257235595025146,
+          "samples": 58
+        },
+        "spec_zero": {
+          "median_us": 46.377090038731694,
+          "iqr_us": 6.009589415043591,
+          "samples": 53
+        },
+        "partial_reset": {
+          "median_us": 22.18250004807487,
+          "iqr_us": 0.8957391837611812,
+          "samples": 12
+        },
+        "step_mdp": {
+          "median_us": 11.4864794886671,
+          "iqr_us": 0.47222906141541776,
+          "samples": 22
+        },
+        "policy_step": {
+          "median_us": 182.5889601605013,
+          "iqr_us": 9.565205837134265,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 8587.083080783486,
+          "iqr_us": 812.0409911498427,
+          "samples": 29,
+          "frames_per_second": 59624.43767963231
+        },
+        "train_window": {
+          "median_us": 2331.887499894947,
+          "iqr_us": 155.80619801767222,
+          "samples": 11,
+          "frames_per_second": 219564.6230888351
+        }
+      },
+      "state_tensor_bytes": 16384,
+      "rollout_tensor_bytes": 736256,
+      "rollout_state_tensor_bytes": 524288,
+      "policy_step_python_peak_bytes": 12412,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 54.58104540593922,
+          "iqr_us": 11.487081937957559,
+          "samples": 44
+        },
+        "mapping_access": {
+          "median_us": 0.5212707968894391,
+          "iqr_us": 0.03989061806350946,
+          "samples": 48
+        },
+        "typed_access": {
+          "median_us": 0.3426406247308478,
+          "iqr_us": 0.0065102108055725815,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 77.43833004496992,
+          "iqr_us": 5.39166969247162,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 37.70084003917873,
+          "iqr_us": 6.535839056596166,
+          "samples": 65
+        },
+        "step_mdp": {
+          "median_us": 20.23516607005149,
+          "iqr_us": 1.4098340179771198,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 243.02665959112346,
+          "iqr_us": 12.88291532546278,
+          "samples": 11
+        },
+        "collect": {
+          "median_us": 9891.354537103325,
+          "iqr_us": 575.6045284215361,
+          "samples": 26,
+          "frames_per_second": 51762.37471616691
+        },
+        "train_window": {
+          "median_us": 2714.8624998517334,
+          "iqr_us": 558.0791854299604,
+          "samples": 9,
+          "frames_per_second": 188591.5032632267
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13717,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 49.68125023879111,
+          "iqr_us": 6.315000355243683,
+          "samples": 49
+        },
+        "mapping_access": {
+          "median_us": 0.4355291021056473,
+          "iqr_us": 0.05138749256730079,
+          "samples": 57
+        },
+        "typed_access": {
+          "median_us": 0.13236416969448328,
+          "iqr_us": 0.004174374626018124,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 76.67375029996037,
+          "iqr_us": 8.540410781279213,
+          "samples": 33
+        },
+        "partial_reset": {
+          "median_us": 35.37912497995421,
+          "iqr_us": 1.5099687734618779,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 17.29297952260822,
+          "iqr_us": 1.6468951944261765,
+          "samples": 14
+        },
+        "policy_step": {
+          "median_us": 250.3599994815886,
+          "iqr_us": 12.088755611330283,
+          "samples": 11
+        },
+        "collect": {
+          "median_us": 9427.291923202574,
+          "iqr_us": 339.9584675207734,
+          "samples": 27,
+          "frames_per_second": 54310.40050216955
+        },
+        "train_window": {
+          "median_us": 2737.554151099175,
+          "iqr_us": 129.62390319444256,
+          "samples": 10,
+          "frames_per_second": 187028.2638224428
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 13711,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "flat",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 50.59813032858074,
+          "iqr_us": 3.405415045563136,
+          "samples": 50
+        },
+        "mapping_access": {
+          "median_us": 0.31223062542267144,
+          "iqr_us": 0.006174480076879206,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.43071875115856534,
+          "iqr_us": 0.05213027179706839,
+          "samples": 58
+        },
+        "spec_zero": {
+          "median_us": 58.95666894502938,
+          "iqr_us": 7.0758356014266575,
+          "samples": 43
+        },
+        "partial_reset": {
+          "median_us": 24.318541050888598,
+          "iqr_us": 0.26781344786286354,
+          "samples": 11
+        },
+        "step_mdp": {
+          "median_us": 5.608999985270202,
+          "iqr_us": 0.27058296836912643,
+          "samples": 45
+        },
+        "policy_step": {
+          "median_us": 190.2275049360469,
+          "iqr_us": 6.149581167846946,
+          "samples": 14
+        },
+        "collect": {
+          "median_us": 7733.709062449634,
+          "iqr_us": 534.6660036593676,
+          "samples": 33,
+          "frames_per_second": 66203.6800021315
+        },
+        "train_window": {
+          "median_us": 2681.039599701762,
+          "iqr_us": 151.7604425316679,
+          "samples": 10,
+          "frames_per_second": 190970.69661222261
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 8439,
+      "repeat": 2
+    },
+    {
+      "kind": "lstm",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": null,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 52.26084031164646,
+          "iqr_us": 7.303335005417471,
+          "samples": 47
+        },
+        "mapping_access": {
+          "median_us": 0.3161622950574383,
+          "iqr_us": 0.003796661039814392,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.43477208528202027,
+          "iqr_us": 0.008041045221034455,
+          "samples": 6
+        },
+        "spec_zero": {
+          "median_us": 75.5302095785737,
+          "iqr_us": 4.522710223682215,
+          "samples": 34
+        },
+        "partial_reset": {
+          "median_us": 32.6492500025779,
+          "iqr_us": 0.43911472312175664,
+          "samples": 8
+        },
+        "step_mdp": {
+          "median_us": 12.809583509806542,
+          "iqr_us": 0.7868021784815948,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 222.2397900186479,
+          "iqr_us": 9.29426518268882,
+          "samples": 12
+        },
+        "collect": {
+          "median_us": 8764.87500499934,
+          "iqr_us": 446.18771062232554,
+          "samples": 28,
+          "frames_per_second": 58414.98021454541
+        },
+        "train_window": {
+          "median_us": 2648.858347674832,
+          "iqr_us": 44.83232914935824,
+          "samples": 10,
+          "frames_per_second": 193290.8192125236
+        }
+      },
+      "state_tensor_bytes": 32768,
+      "rollout_tensor_bytes": 1260544,
+      "rollout_state_tensor_bytes": 1048576,
+      "policy_step_python_peak_bytes": 12986,
+      "repeat": 2
+    },
+    {
+      "kind": "gtrxl",
+      "container": "ttd",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 50.20375014282764,
+          "iqr_us": 4.0333296055905565,
+          "samples": 50
+        },
+        "mapping_access": {
+          "median_us": 0.4451291461009532,
+          "iqr_us": 0.030804148991592246,
+          "samples": 56
+        },
+        "typed_access": {
+          "median_us": 0.13651582994498312,
+          "iqr_us": 0.003788539906963708,
+          "samples": 19
+        },
+        "spec_zero": {
+          "median_us": 87.11957954801619,
+          "iqr_us": 5.38500025868415,
+          "samples": 29
+        },
+        "partial_reset": {
+          "median_us": 126.5147898811847,
+          "iqr_us": 4.74541506264358,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 17.134416033513844,
+          "iqr_us": 0.6692081224173305,
+          "samples": 15
+        },
+        "policy_step": {
+          "median_us": 1394.716597860679,
+          "iqr_us": 73.52505053859225,
+          "samples": 18
+        },
+        "collect": {
+          "median_us": 29640.665976330638,
+          "iqr_us": 2036.7909455671906,
+          "samples": 9,
+          "frames_per_second": 17273.565999119397
+        },
+        "train_window": {
+          "median_us": 51327.70910859108,
+          "iqr_us": 1232.7489675953984,
+          "samples": 5,
+          "frames_per_second": 9975.118876176435
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 14398,
+      "repeat": 2
+    },
+    {
+      "kind": "gtrxl",
+      "container": "td",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 48.20000031031668,
+          "iqr_us": 8.273550774902107,
+          "samples": 51
+        },
+        "mapping_access": {
+          "median_us": 0.3141183353727683,
+          "iqr_us": 0.0044688623165711405,
+          "samples": 8
+        },
+        "typed_access": {
+          "median_us": 0.4202374955639243,
+          "iqr_us": 0.0583375513087958,
+          "samples": 59
+        },
+        "spec_zero": {
+          "median_us": 85.65749973058702,
+          "iqr_us": 7.185939757619047,
+          "samples": 30
+        },
+        "partial_reset": {
+          "median_us": 120.77457970008254,
+          "iqr_us": 4.40166098996998,
+          "samples": 21
+        },
+        "step_mdp": {
+          "median_us": 12.600791931618005,
+          "iqr_us": 0.4737807321362203,
+          "samples": 20
+        },
+        "policy_step": {
+          "median_us": 1359.47500821203,
+          "iqr_us": 54.27710129879393,
+          "samples": 19
+        },
+        "collect": {
+          "median_us": 28032.207977958024,
+          "iqr_us": 1366.5410224348307,
+          "samples": 9,
+          "frames_per_second": 18264.70467123354
+        },
+        "train_window": {
+          "median_us": 48380.936961621046,
+          "iqr_us": 980.2918939385563,
+          "samples": 6,
+          "frames_per_second": 10582.68053812501
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 13396,
+      "repeat": 2
+    },
+    {
+      "kind": "gtrxl",
+      "container": "tc",
+      "batch": 32,
+      "hidden": 64,
+      "memory_len": 64,
+      "window": 16,
+      "timing": {
+        "construct": {
+          "median_us": 51.17662495467812,
+          "iqr_us": 1.0252920910716103,
+          "samples": 5
+        },
+        "mapping_access": {
+          "median_us": 0.5080875009298325,
+          "iqr_us": 0.025224895216524577,
+          "samples": 49
+        },
+        "typed_access": {
+          "median_us": 0.33226562547497446,
+          "iqr_us": 0.004958437348250298,
+          "samples": 8
+        },
+        "spec_zero": {
+          "median_us": 89.89291964098811,
+          "iqr_us": 5.89583069086074,
+          "samples": 29
+        },
+        "partial_reset": {
+          "median_us": 126.70833501033485,
+          "iqr_us": 3.971764817833922,
+          "samples": 20
+        },
+        "step_mdp": {
+          "median_us": 19.563125097192824,
+          "iqr_us": 0.6592500722035776,
+          "samples": 13
+        },
+        "policy_step": {
+          "median_us": 1364.6084000356495,
+          "iqr_us": 52.349996985867705,
+          "samples": 19
+        },
+        "collect": {
+          "median_us": 29218.959040008485,
+          "iqr_us": 609.9579622969031,
+          "samples": 9,
+          "frames_per_second": 17522.86928835954
+        },
+        "train_window": {
+          "median_us": 48717.79156383127,
+          "iqr_us": 3474.5002340059727,
+          "samples": 6,
+          "frames_per_second": 10509.507585727994
+        }
+      },
+      "state_tensor_bytes": 1050624,
+      "rollout_tensor_bytes": 33831936,
+      "rollout_state_tensor_bytes": 33619968,
+      "policy_step_python_peak_bytes": 13690,
+      "repeat": 2
+    }
+  ],
+  "notes": [
+    "GTrXL uses a sequential reference window implementation.",
+    "Payload bytes include both root and next-state snapshots.",
+    "Python peak allocations exclude native tensor storage."
+  ]
+}
