@@ -2716,14 +2716,15 @@ class BatchSubSampler(TrainerHookBase):
 
         If the batch has one dimension, a random subsample of length
         self.bach_size will be returned. If the batch has two or more
-        dimensions, it is assumed that the first dimension represents the
-        batch, and the second the time. If so, the resulting subsample will
-        contain consecutive samples across time.
+        dimensions, the last batch dimension represents time. All leading
+        batch dimensions represent independent trajectories. The resulting
+        subsample contains consecutive samples across time.
 
         """
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
+        batch = batch.reshape(-1, batch.shape[-1])
         sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
         if ("collector", "mask") in batch.keys(True):
             # if a valid mask is present, it's important to sample only

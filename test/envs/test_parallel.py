@@ -368,6 +368,40 @@ class TestParallel:
 
     @pytest.mark.parametrize("parallel", [False, True])
     @pytest.mark.parametrize("use_buffers", [False, True])
+    @pytest.mark.parametrize("worker_batch", [(), (1,), (2, 3)])
+    def test_partial_step_preserves_worker_batch(
+        self, parallel, use_buffers, worker_batch, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(
+            3,
+            CountingEnv,
+            create_env_kwargs={"batch_size": worker_batch},
+            use_buffers=use_buffers,
+        )
+        try:
+            td = env.reset()
+            expected = torch.zeros(3, *worker_batch, 1, dtype=torch.int32)
+            for selected in ([False, True, True], [True, False, False]):
+                td.update(self._ones_action(env))
+                mask = torch.tensor(selected).reshape(3, *([1] * len(worker_batch)))
+                td["_step"] = mask.expand(env.batch_size)
+                td = env.step_mdp(env.step(td))
+                expected[torch.tensor(selected)] += 1
+                torch.testing.assert_close(td["observation"], expected)
+                # Stopped workers must not advance their internal state either.
+                torch.testing.assert_close(self._batched_count(env), expected)
+            if worker_batch == (2, 3):
+                td.update(self._ones_action(env))
+                td["_step"] = torch.ones(env.batch_size, dtype=torch.bool)
+                td["_step"][0, 0, 0] = False
+                with pytest.raises(ValueError, match="select whole workers"):
+                    env.step(td)
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    @pytest.mark.parametrize("use_buffers", [False, True])
     def test_batched_env_indexing_returns_live_view(
         self, parallel, use_buffers, maybe_fork_ParallelEnv
     ):

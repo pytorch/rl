@@ -1222,7 +1222,8 @@ def test_masking():
 
 
 class TestSubSampler:
-    def test_subsampler(self):
+    @pytest.mark.parametrize("batch_shape", [(2,), (2, 1), (1, 2, 1)])
+    def test_subsampler(self, batch_shape):
         torch.manual_seed(0)
         trainer = mocking_trainer()
 
@@ -1243,9 +1244,13 @@ class TestSubSampler:
             [2, 10],
         )
 
+        td = td.reshape(*batch_shape, 10)
         td_out = trainer._process_optim_batch_hook(td)
         assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
         assert (td_out.get(key1) == td_out.get(key2)).all()
+        # Every sampled window advances in time within a single trajectory.
+        assert (td_out[key1].diff(dim=-1) == 1).all()
+        assert (td_out[key1] // 10 == td_out[key1][..., :1] // 10).all()
 
     def test_subsampler_state_dict(self):
         trainer = mocking_trainer()
