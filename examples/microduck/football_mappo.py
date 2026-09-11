@@ -472,13 +472,19 @@ def load_parameters(
 # ----------------------------------------------------------------------
 
 
+def _fall_events(fallen: torch.Tensor) -> torch.Tensor:
+    """Steps on which a duck goes down, from the flag that stays up while it lies there."""
+    return torch.cat((fallen[:, :1], fallen[:, 1:] & ~fallen[:, :-1]), dim=1)
+
+
 def football_metrics(trajectories: TensorDictBase) -> dict[str, float]:
     """Match statistics of the padded trajectory batch an :class:`Evaluator` collects.
 
     Goals are counted per match for each team (both teams play the same
     policy, so a lasting difference between the two is a sign of an asymmetry
     in the env), together with the fraction of matches decided by a goal, the
-    match length, the falls per duck and per match, and how far the ball
+    match length, the falls per duck and per match (a duck that lies down
+    for a while counts once), and how far the ball
     traveled along blue's attacking direction.
     """
     mask = trajectories["collector", "mask"]
@@ -487,6 +493,7 @@ def football_metrics(trajectories: TensorDictBase) -> dict[str, float]:
     goal = trajectories["next", "goal"].squeeze(-1)
     goal = torch.where(mask, goal, torch.zeros_like(goal))
     fallen = trajectories["next", "agents", "fallen"].squeeze(-1) & mask.unsqueeze(-1)
+    fallen = _fall_events(fallen)
     ball_x = trajectories["next", "ball_position"][..., 0]
     start_x = trajectories["ball_position"][..., 0, 0]
     end_x = ball_x.gather(-1, last).squeeze(-1)
@@ -506,7 +513,7 @@ def _collection_metrics(data: TensorDictBase) -> dict[str, float]:
     reward = data["next", REWARD_KEY].squeeze(-1)
     done = data["next", "done"].squeeze(-1)
     goal = data["next", "goal"].squeeze(-1)
-    fallen = data["next", "agents", "fallen"].squeeze(-1)
+    fallen = _fall_events(data["next", "agents", "fallen"].squeeze(-1))
     players = reward.shape[-1] // 2
     traj_ids = data["collector", "traj_ids"]
     unique_ids, inverse = torch.unique(traj_ids, return_inverse=True)
