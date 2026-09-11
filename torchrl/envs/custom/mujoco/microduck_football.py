@@ -9,7 +9,7 @@ The scene is built procedurally from the walking MJCF that
 attaches one copy of the robot per player, with the name prefix
 ``blue<i>/`` or ``red<i>/``, onto a pitch with walls, two goals, a ball and
 two cameras, and returns the MJCF as text. :class:`MicroDuckFootballEnv` is
-the multi-agent env over that scene, and :class:`MicroDuckSkillEnv` runs a
+the multi-agent env over that scene, and :func:`~torchrl.envs.microduck_skill_env` runs a
 trained joint-level MicroDuck controller under a coarser policy that picks
 one of its locomotion tasks per duck.
 
@@ -46,9 +46,7 @@ from typing import Any, ClassVar, TYPE_CHECKING
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase
-from torchrl.data.tensor_specs import Binary, Bounded, Categorical, Composite, Unbounded
-from torchrl.envs.common import EnvBase
+from torchrl.data.tensor_specs import Binary, Bounded, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
 from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
 from torchrl.envs.custom.mujoco.microduck import (
@@ -56,11 +54,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
     _projected_gravity,
     MicroDuckEnv,
-    MicroDuckTask,
 )
-from torchrl.envs.transforms.transforms import Compose
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.utils import get_primers_from_module
 
 if TYPE_CHECKING:
     import mujoco
@@ -1425,6 +1419,21 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         raise NotImplementedError("MicroDuckFootballEnv computes termination in _step.")
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        active = tensordict.get("_step", None)
+        if active is not None and not active.all():
+            result = self._skip_tensordict(tensordict)
+            result.update(self.full_reward_spec.zero())
+            if active.any():
+                # Snapshot indexing is shared by the MuJoCo backends. Only
+                # live matches advance physics, clocks, and respawn state.
+                indices = active.nonzero(as_tuple=True)[0]
+                live = self[indices]
+                result[active] = live._step(tensordict[active].exclude("_step"))
+                self[indices] = live
+                self._render_counter += 1
+                if self.from_pixels:
+                    self._last_pixels = result["pixels"]
+            return result
         action = tensordict["agents", "action"].to(self.dtype).clamp(-1.0, 1.0)
         self._backend.step(self._prepare_ctrl(action), self.frame_skip)
         self._step_count += 1
@@ -1504,316 +1513,3 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self._previous_action[index] = source._previous_action.to(self.device)
         self._fallen[index] = source._fallen.to(self.device)
         self._goal[index] = source._goal.to(self.device)
-
-
-class MicroDuckSkillEnv(EnvBase):
-    """Run a trained MicroDuck controller under a policy that picks its tasks.
-
-    The wrapped env controls the ducks' joints, like
-    :class:`MicroDuckFootballEnv`; this env exposes a discrete action per
-    agent instead, the index of a skill, and executes it for
-    ``decision_period`` steps of the wrapped env with ``walker``, a policy
-    trained on :class:`~torchrl.envs.MicroDuckEnv` (for instance with
-    ``examples/microduck/ppo_mujoco.py``). A skill is one task of the
-    library the walker was trained with: the walker receives the task's
-    index under ``task_id`` and the leading 56 values of the agent's
-    observation with the task's command (the center of its command box) and
-    gait clock (at the task's frequency, integrated per duck across skill
-    changes and restarted when the duck falls) written in place of the
-    wrapped env's zero command and fixed clock. The walker's recurrent state
-    comes from its primers (:func:`~torchrl.modules.get_primers_from_module`)
-    and is reset with the episode and after a fall, through the walker's
-    ``is_init`` input.
-
-    Rewards are summed over the ``decision_period`` steps, done flags are
-    latched, ``("agents", "fallen")`` reports a fall anywhere in the window,
-    and the observation is the wrapped env's last one followed by a one-hot
-    of the skill in effect. Rendering, if the wrapped env renders, shows the
-    last step of the window, so a video recorder on this env films at
-    ``1 / (decision_period * control_period_s)`` frames per second.
-
-    The wrapped env must expose ``("agents", "observation")`` whose first
-    :attr:`MicroDuckFootballEnv.PROPRIOCEPTION_DIM` values follow the
-    :class:`~torchrl.envs.MicroDuckEnv` layout, ``("agents", "action")`` of
-    14 joint offsets, ``("agents", "reward")`` and ``("agents", "fallen")``.
-
-    Args:
-        env (EnvBase): the joint-level env.
-        walker (TensorDictModuleBase): the trained controller, reading
-            ``observation`` (56), ``task_id`` (1, integer) and ``is_init``
-            (1, boolean) and writing ``action`` (14); recurrent modules read
-            and write their state through their primers. It runs in
-            deterministic exploration mode without gradients.
-        tasks (MicroDuckTask or Sequence[MicroDuckTask]): the task library the
-            walker was trained with, in the order of its ``task_id``.
-
-    Keyword Args:
-        skills (Sequence[int], optional): library indices offered as skills,
-            in action order. Defaults to every task of the library.
-        decision_period (int, optional): wrapped env steps per skill decision.
-            Defaults to ``5`` (10 Hz at 50 Hz control).
-        control_period_s (float, optional): duration of one wrapped env step,
-            for the gait clock. Defaults to ``0.02``, the
-            :class:`MicroDuckFootballEnv` control period.
-
-    Examples:
-        >>> from torchrl.envs import MicroDuckEnv, MicroDuckFootballEnv, MicroDuckSkillEnv
-        >>> library = [MicroDuckEnv.standing_task(), MicroDuckEnv.tracking_task(0.2), MicroDuckEnv.sidestep_task(0.15)]
-        >>> walker = make_walker(library)  # a policy trained on MicroDuckEnv with that library  # doctest: +SKIP
-        >>> env = MicroDuckSkillEnv(  # doctest: +SKIP
-        ...     MicroDuckFootballEnv(download=True, players_per_team=2, num_envs=8), walker, library
-        ... )
-        >>> env.action_spec["agents", "action"]  # doctest: +SKIP
-        Categorical(shape=torch.Size([8, 4]), space=CategoricalBox(n=3), ...)
-        >>> rollout = env.rollout(10)  # 50 steps of the wrapped env  # doctest: +SKIP
-    """
-
-    batch_locked = True
-
-    def __init__(
-        self,
-        env: EnvBase,
-        walker: TensorDictModuleBase,
-        tasks: MicroDuckTask | Sequence[MicroDuckTask],
-        *,
-        skills: Sequence[int] | None = None,
-        decision_period: int = 5,
-        control_period_s: float = 0.02,
-    ) -> None:
-        if decision_period < 1:
-            raise ValueError("decision_period must be at least 1.")
-        if not math.isfinite(control_period_s) or control_period_s <= 0:
-            raise ValueError("control_period_s must be finite and positive.")
-        super().__init__(device=env.device, batch_size=env.batch_size)
-        self.base_env = env
-        self.walker = walker
-        self.decision_period = int(decision_period)
-        self.control_period_s = float(control_period_s)
-        library = MicroDuckEnv.stack_tasks(tasks).to(self.device)
-        if skills is None:
-            skills = list(range(library.shape[0]))
-        skills = [int(skill) for skill in skills]
-        if not skills or any(
-            skill < 0 or skill >= library.shape[0] for skill in skills
-        ):
-            raise ValueError(
-                f"skills must be non-empty indices of the {library.shape[0]} tasks."
-            )
-        self.tasks = library
-        self.register_buffer("skill_task_id", torch.tensor(skills, device=self.device))
-        rows = library[self.skill_task_id]
-        command = (rows.command_low + rows.command_high) / 2.0
-        self.register_buffer("skill_command", command)
-        self.register_buffer(
-            "skill_frequency_hz",
-            rows.gait_frequency_hz + rows.gait_frequency_per_mps * command.norm(dim=-1),
-        )
-        observation = env.observation_spec["agents", "observation"]
-        if observation.shape[-1] < MicroDuckFootballEnv.PROPRIOCEPTION_DIM:
-            raise ValueError(
-                "The wrapped env's agent observation must start with the "
-                f"{MicroDuckFootballEnv.PROPRIOCEPTION_DIM} MicroDuck values."
-            )
-        self.num_agents = int(observation.shape[-2])
-        self.num_skills = len(skills)
-        primers = Composite(shape=torch.Size([]), device=self.device)
-        primer = get_primers_from_module(walker, warn=False)
-        for transform in primer.transforms if isinstance(primer, Compose) else [primer]:
-            if transform is not None:
-                primers.update(transform.primers)
-        self._primers = primers
-        self._state_keys = list(primers.keys(True, True))
-        self._build_specs()
-        rows = (*self.batch_size, self.num_agents)
-        self._skill = torch.zeros(rows, dtype=torch.long, device=self.device)
-        self._phase = torch.full(
-            rows,
-            MicroDuckEnv.GAIT_PHASE_OFFSET,
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self._elapsed = torch.zeros(rows, dtype=torch.float32, device=self.device)
-        self._is_init = torch.ones(
-            self.batch_size.numel() * self.num_agents,
-            1,
-            dtype=torch.bool,
-            device=self.device,
-        )
-        self._walker_state = self._primers.expand(
-            self.batch_size.numel() * self.num_agents
-        ).zero()
-        self._current: TensorDictBase | None = None
-
-    def _build_specs(self) -> None:
-        base = self.base_env
-        observation_spec = base.observation_spec.clone()
-        agents = observation_spec["agents", "observation"]
-        observation_spec["agents", "observation"] = Unbounded(
-            shape=(*agents.shape[:-1], agents.shape[-1] + self.num_skills),
-            dtype=agents.dtype,
-            device=self.device,
-        )
-        self.observation_spec = observation_spec
-        self.action_spec = Composite(
-            agents=Composite(
-                action=Categorical(
-                    n=self.num_skills,
-                    shape=(*self.batch_size, self.num_agents),
-                    dtype=torch.long,
-                    device=self.device,
-                ),
-                shape=(*self.batch_size, self.num_agents),
-                device=self.device,
-            ),
-            shape=self.batch_size,
-            device=self.device,
-        )
-        self.reward_spec = base.full_reward_spec.clone()
-        self.done_spec = base.full_done_spec.clone()
-
-    @property
-    def observation_keys(self) -> list[Any]:
-        """Keys of the wrapped env's observations copied into this env's outputs."""
-        return list(self.base_env.full_observation_spec.keys(True, True))
-
-    def _observe(self, base: TensorDictBase) -> TensorDictBase:
-        out = base.select(
-            *self.observation_keys,
-            *self.base_env.full_done_spec.keys(True, True),
-            strict=False,
-        )
-        skill = torch.nn.functional.one_hot(self._skill, self.num_skills).to(
-            out["agents", "observation"].dtype
-        )
-        out["agents", "observation"] = torch.cat(
-            (out["agents", "observation"], skill), dim=-1
-        )
-        return out
-
-    def _reset_rows(self, mask: torch.Tensor) -> None:
-        """Reset the clock, skill and walker state of the ducks selected by ``mask``."""
-        self._phase = torch.where(
-            mask,
-            torch.full_like(self._phase, MicroDuckEnv.GAIT_PHASE_OFFSET),
-            self._phase,
-        )
-        self._elapsed = torch.where(
-            mask, torch.zeros_like(self._elapsed), self._elapsed
-        )
-        self._skill = torch.where(mask, torch.zeros_like(self._skill), self._skill)
-        flat = mask.reshape(-1, 1)
-        self._is_init = self._is_init | flat
-        for key in self._state_keys:
-            state = self._walker_state.get(key)
-            zero_mask = flat.reshape(-1, *([1] * (state.ndim - 1)))
-            self._walker_state.set(
-                key, torch.where(zero_mask, torch.zeros_like(state), state)
-            )
-
-    def _reset(
-        self, tensordict: TensorDictBase | None = None, **kwargs
-    ) -> TensorDictBase:
-        base = self.base_env.reset(tensordict)
-        mask = torch.ones(
-            *self.batch_size, self.num_agents, dtype=torch.bool, device=self.device
-        )
-        if tensordict is not None and "_reset" in tensordict.keys():
-            reset = tensordict["_reset"].to(self.device)
-            reset = reset.reshape(*self.batch_size)
-            mask = mask & reset.unsqueeze(-1)
-        self._reset_rows(mask)
-        self._current = base
-        return self._observe(base)
-
-    def _walker_action(self, current: TensorDictBase) -> torch.Tensor:
-        """Run the walker on every duck for the skills in effect."""
-        proprio = current["agents", "observation"][
-            ..., : MicroDuckFootballEnv.PROPRIOCEPTION_DIM
-        ].clone()
-        command = self.skill_command[self._skill].to(proprio.dtype)
-        start = MicroDuckEnv.COMMAND_START
-        proprio[..., start : start + 2] = command
-        start = MicroDuckEnv.GAIT_PHASE_START
-        proprio[..., start] = self._phase.sin().to(proprio.dtype)
-        proprio[..., start + 1] = self._phase.cos().to(proprio.dtype)
-        proprio[..., start + 2] = (
-            (self._elapsed / MicroDuckEnv.GAIT_RAMP_DURATION_S).clamp(max=1.0)
-        ).to(proprio.dtype)
-        rows = proprio.shape[:-1].numel()
-        walker_input = TensorDict(
-            {
-                "observation": proprio.reshape(rows, -1),
-                "task_id": self.skill_task_id[self._skill].reshape(rows, 1),
-                "is_init": self._is_init,
-            },
-            batch_size=[rows],
-            device=self.device,
-        )
-        walker_input.update(self._walker_state)
-        with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
-            output = self.walker(walker_input)
-        if self._state_keys:
-            self._walker_state = output["next"].select(*self._state_keys)
-        self._is_init = torch.zeros_like(self._is_init)
-        return output["action"].reshape(*self.batch_size, self.num_agents, -1)
-
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._current is None:
-            raise RuntimeError("Call reset() before step().")
-        self._skill = tensordict["agents", "action"].to(self.device).long()
-        reward_key = self.base_env.reward_key
-        current = self._current
-        reward = None
-        done = torch.zeros(*self.batch_size, 1, dtype=torch.bool, device=self.device)
-        terminated = torch.zeros_like(done)
-        truncated = torch.zeros_like(done)
-        fallen = torch.zeros(
-            *self.batch_size, self.num_agents, dtype=torch.bool, device=self.device
-        )
-        frequency = self.skill_frequency_hz[self._skill]
-        for _ in range(self.decision_period):
-            action = self._walker_action(current)
-            step = TensorDict(
-                {("agents", "action"): action},
-                batch_size=self.batch_size,
-                device=self.device,
-            )
-            current = self.base_env.step(step)["next"]
-            live = (~done).unsqueeze(-1)
-            step_reward = current.get(reward_key)
-            step_reward = torch.where(live, step_reward, torch.zeros_like(step_reward))
-            reward = step_reward if reward is None else reward + step_reward
-            terminated = terminated | current["terminated"]
-            truncated = truncated | current["truncated"]
-            done = done | current["done"]
-            fell = current["agents", "fallen"].squeeze(-1)
-            fallen = fallen | fell
-            self._elapsed = self._elapsed + self.control_period_s
-            self._phase = (
-                self._phase + 2.0 * math.pi * frequency * self.control_period_s
-            )
-            if bool(fell.any()):
-                self._reset_rows(fell)
-                # A respawned duck keeps executing the skill it was given.
-                self._skill = tensordict["agents", "action"].to(self.device).long()
-            if bool(done.all()):
-                break
-        self._current = current
-        out = self._observe(current)
-        out["agents", "fallen"] = fallen.unsqueeze(-1)
-        out.set(reward_key, reward)
-        out["done"] = done
-        out["terminated"] = terminated
-        out["truncated"] = truncated
-        return out
-
-    def _set_seed(self, seed: int | None) -> None:
-        self.base_env.set_seed(seed)
-
-    def render(self, **kwargs: Any) -> torch.Tensor:
-        """Render the wrapped env; see :meth:`~torchrl.envs.MujocoEnv.render`."""
-        return self.base_env.render(**kwargs)
-
-    def close(self, *, raise_if_closed: bool = True) -> None:
-        self.base_env.close(raise_if_closed=raise_if_closed)
-        super().close(raise_if_closed=raise_if_closed)

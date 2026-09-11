@@ -15,8 +15,8 @@ and predicts one value per duck. Data flows through
 
 The ducks come with a walker. ``policy.walker_checkpoint`` names a MicroDuck
 locomotion policy trained with ``ppo_mujoco.py`` (a local path or a URL,
-verified against ``policy.walker_sha256``); the training env is then a
-:class:`~torchrl.envs.MicroDuckSkillEnv` in which the football policy picks
+verified against ``policy.walker_sha256``);
+:func:`~torchrl.envs.microduck_skill_env` builds an env in which the football policy picks
 one of the walker's tasks per duck (stand, walk forward or backward, sidestep
 left or right) every ``policy.decision_period`` control steps, and the frozen
 walker drives the joints in between. ``policy.walker_checkpoint=null`` trains
@@ -67,9 +67,9 @@ from torchrl.data import LazyTensorStorage, ReplayBuffer, SamplerWithoutReplacem
 from torchrl.data.tensor_specs import Categorical as CategoricalSpec
 from torchrl.envs import (
     EnvBase,
+    microduck_skill_env,
     MicroDuckEnv,
     MicroDuckFootballEnv,
-    MicroDuckSkillEnv,
     MicroDuckTask,
     TransformedEnv,
 )
@@ -90,7 +90,6 @@ from examples.microduck.ppo_mujoco import make_actor_critic, make_tasks  # noqa:
 ASSET_KEYS = ("microduck_root", "root", "download")
 CONTROL_PERIOD_S = MicroDuckFootballEnv.FRAME_SKIP * 0.002
 OBSERVATION_KEY = ("agents", "observation")
-ACTION_KEY = ("agents", "action")
 REWARD_KEY = ("agents", "reward")
 VALUE_KEY = ("agents", "state_value")
 
@@ -202,8 +201,8 @@ def make_env(
     renders with one match from a local asset path.
 
     With ``policy.walker_checkpoint`` set, the joint-level
-    :class:`~torchrl.envs.MicroDuckFootballEnv` is wrapped in a
-    :class:`~torchrl.envs.MicroDuckSkillEnv` driven by the walker, and the
+    :class:`~torchrl.envs.MicroDuckFootballEnv` is wrapped by
+    :func:`~torchrl.envs.microduck_skill_env`, driven by the walker, and the
     env's actions are skill indices. ``from_pixels`` adds a rendered
     ``pixels`` observation for the video.
     """
@@ -275,12 +274,12 @@ def make_env(
             sha256=policy_cfg["walker_sha256"],
             action_scale=env_cfg["action_scale"],
         )
-        env = MicroDuckSkillEnv(
+        env = microduck_skill_env(
             env,
             walker,
             tasks,
             skills=policy_cfg["skills"],
-            decision_period=policy_cfg["decision_period"],
+            steps=policy_cfg["decision_period"],
             control_period_s=CONTROL_PERIOD_S,
         )
     return TransformedEnv(env)
@@ -314,7 +313,7 @@ def make_models(
     device = torch.device(device)
     observation = env.observation_spec[OBSERVATION_KEY]
     num_agents, observation_dim = observation.shape[-2:]
-    action_spec = env.full_action_spec_unbatched[ACTION_KEY]
+    action_spec = env.full_action_spec_unbatched[env.action_key]
     network_kwargs = {
         "n_agents": num_agents,
         "share_params": True,
@@ -338,7 +337,7 @@ def make_models(
             module=head,
             spec=action_spec,
             in_keys={"logits": ("agents", "logits")},
-            out_keys=[ACTION_KEY],
+            out_keys=[env.action_key],
             distribution_class=Categorical,
             return_log_prob=True,
         )
@@ -362,7 +361,7 @@ def make_models(
             module=head,
             spec=action_spec,
             in_keys={"loc": ("agents", "loc"), "scale": ("agents", "scale")},
-            out_keys=[ACTION_KEY],
+            out_keys=[env.action_key],
             distribution_class=TanhNormal,
             distribution_kwargs={"low": -1.0, "high": 1.0},
             return_log_prob=True,
@@ -629,7 +628,7 @@ def train_mappo(
     )
     loss_module.set_keys(
         reward=REWARD_KEY,
-        action=ACTION_KEY,
+        action=env.action_key,
         value=VALUE_KEY,
         done=("agents", "done"),
         terminated=("agents", "terminated"),

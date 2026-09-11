@@ -366,7 +366,7 @@ cameras (the MJCF is cached as text and can be exported), and the env exposes
 one action, observation and reward per duck along an ``agents`` dimension,
 with every quantity expressed in the duck's own frame and its team's frame so
 that one set of parameters plays both sides. A goal ends the match, fallen
-ducks are put back on their kickoff slot. :class:`~torchrl.envs.MicroDuckSkillEnv`
+ducks are put back on their kickoff slot. :func:`~torchrl.envs.microduck_skill_env`
 wraps it so that a policy picks one locomotion task of a trained
 :class:`~torchrl.envs.MicroDuckEnv` controller per duck and per decision
 period, and the controller drives the joints.
@@ -390,7 +390,6 @@ state into the parent batch. Boolean masks are not supported.
     MicroDuckController
     microduck_skill_env
     MicroDuckFootballEnv
-    MicroDuckSkillEnv
     MicroDuckTask
     MicroDuckTaskSampler
     SatelliteEnv

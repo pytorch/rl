@@ -39,7 +39,6 @@ from torchrl.envs import (
     microduck_skill_env,
     MicroDuckEnv,
     MicroDuckFootballEnv,
-    MicroDuckSkillEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
     ParallelEnv,
@@ -79,6 +78,10 @@ from torchrl.envs.custom.mujoco.microduck_football import (
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule
 from torchrl.render import load_checkpoint
+
+_has_hydra = importlib.util.find_spec("hydra") is not None
+if _has_hydra:
+    from examples.microduck import football_mappo
 
 if _has_mujoco:
     import mujoco
@@ -1096,17 +1099,17 @@ class TestMujoco:
 
         walker = Walker()
         base = self._football_env(tmp_path, max_episode_steps=7)
-        env = MicroDuckSkillEnv(base, walker, tasks, skills=[1, 2], decision_period=3)
-        assert env.action_spec["agents", "action"].space.n == 2
+        env = microduck_skill_env(base, walker, tasks, skills=[1, 2], steps=3)
+        assert env.action_spec["agents", "skill"].space.n == 2
         check_env_specs(env)
         walker.calls.clear()
         td = env.reset()
         assert td["agents", "observation"].shape == (1, 2, base.observation_dim + 2)
         assert (td["agents", "observation"][..., -2:] == torch.tensor([1.0, 0.0])).all()
         skills = TensorDict(
-            {("agents", "action"): torch.tensor([[0, 1]])}, batch_size=[1]
+            {("agents", "skill"): torch.tensor([[0, 1]])}, batch_size=[1]
         )
-        out = env.step(skills.clone())["next"]
+        out = env.step(td.update(skills))["next"]
         assert base._step_count.item() == 3
         assert len(walker.calls) == 3
         first, second = walker.calls[:2]
@@ -1149,13 +1152,93 @@ class TestMujoco:
         )
         assert not out["done"].any()
         # A truncation inside the window ends it early and is latched.
-        env.step(skills.clone())
+        td = env.step_mdp(td).update(skills)
+        env.step(td)
         assert base._step_count.item() == 6
-        out = env.step(skills.clone())["next"]
+        td = env.step_mdp(td).update(skills)
+        out = env.step(td)["next"]
         assert out["truncated"].item() and out["done"].item()
         assert base._step_count.item() == 7
         env.close()
         twin.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_microduck_football_skill_training(self, tmp_path):
+        low = TensorDictModule(
+            nn.Linear(MicroDuckEnv.OBSERVATION_DIM, MicroDuckEnv.NUM_JOINTS),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        with torch.no_grad():
+            low.module.weight.zero_()
+            low.module.bias.zero_()
+        env = microduck_skill_env(
+            self._football_env(tmp_path, players_per_team=5, max_episode_steps=12),
+            low,
+            [MicroDuckEnv.standing_task(), MicroDuckEnv.tracking_task(0.2)],
+            steps=3,
+        )
+        actor, critic = football_mappo.make_models(env, hidden_size=8, depth=1)
+        before = [p.detach().clone() for p in actor.parameters()]
+        low_before = [p.detach().clone() for p in low.parameters()]
+        metrics = football_mappo.train_mappo(
+            env,
+            actor,
+            critic,
+            total_frames=8,
+            frames_per_batch=8,
+            epochs=1,
+            minibatch_size=4,
+            target_kl=None,
+        )
+        assert metrics
+        assert any(
+            not torch.equal(old, new) for old, new in zip(before, actor.parameters())
+        )
+        for old, new in zip(low_before, low.parameters()):
+            torch.testing.assert_close(old, new)
+            assert new.grad is None
+        env.close(raise_if_closed=False)
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_football_skip_keeps_physics_state(self, tmp_path):
+        env = self._football_env(tmp_path)
+        td = env.reset().update(self._football_action(env))
+        state = env.get_state().clone()
+        td["_step"] = torch.zeros(1, dtype=torch.bool)
+        result = env.step(td)["next"]
+        torch.testing.assert_close(env.get_state()["qpos"], state["qpos"])
+        torch.testing.assert_close(env.get_state()["qvel"], state["qvel"])
+        assert env._step_count.item() == 0
+        assert not result["agents", "reward"].any()
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch is not installed")
+    def test_microduck_skills_stop_finished_matches(self, tmp_path):
+        base = self._football_env(
+            tmp_path, backend="mujoco-torch", num_envs=2, max_episode_steps=20
+        )
+        policy = TensorDictModule(
+            nn.Linear(MicroDuckEnv.OBSERVATION_DIM, MicroDuckEnv.NUM_JOINTS),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        with torch.no_grad():
+            policy.module.weight.zero_()
+            policy.module.bias.zero_()
+        env = microduck_skill_env(base, policy, [MicroDuckEnv.standing_task()], steps=3)
+        td = env.reset()
+        base._step_count[0] = 19
+        transition = env.rand_step(td)
+        torch.testing.assert_close(base._step_count, torch.tensor([20, 3]))
+        assert transition["next", "done"][0].all()
+        assert not transition["next", "done"][1].any()
+        torch.testing.assert_close(
+            transition["next", "agents", "_controller", "gait_elapsed"],
+            torch.tensor([[0.02, 0.02], [0.06, 0.06]]),
+        )
+        env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_skill_env_carries_the_walker_state(self, tmp_path):
@@ -1178,22 +1261,16 @@ class TestMujoco:
             ),
         )
         base = self._football_env(tmp_path)
-        env = MicroDuckSkillEnv(
-            base, walker, [MicroDuckEnv.standing_task()], decision_period=2
-        )
-        env.reset()
-        assert (env._walker_state["recurrent_state"] == 0).all()
-        env.step(
-            TensorDict(
-                {("agents", "action"): torch.zeros(1, 2, dtype=torch.long)},
-                batch_size=[1],
-            )
-        )
-        state = env._walker_state["recurrent_state"]
-        assert state.shape == (2, 1, 8)
+        env = microduck_skill_env(base, walker, [MicroDuckEnv.standing_task()], steps=2)
+        td = env.reset()
+        state_key = ("agents", "_controller", "recurrent_state")
+        assert (td[state_key] == 0).all()
+        td["agents", "skill"] = torch.zeros(1, 2, dtype=torch.long)
+        transition = env.step(td)
+        state = transition["next"].get(state_key)
+        assert state.shape == (1, 2, 1, 8)
         assert (state != 0).any()
-        env.reset()
-        assert (env._walker_state["recurrent_state"] == 0).all()
+        assert (env.reset().get(state_key) == 0).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")

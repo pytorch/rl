@@ -497,7 +497,8 @@ plain self-play with a shared policy and a centralized critic
 The ducks do not learn to walk again. `policy.walker_checkpoint` names a
 `ppo_mujoco.py` checkpoint (by default the run 9 walker, downloaded from the
 `assets/microduck-run9` branch and checked against `policy.walker_sha256`)
-and the training env becomes a `torchrl.envs.MicroDuckSkillEnv`: the football
+and `torchrl.envs.microduck_skill_env` builds the training env using the generic
+`ClosedLoopMultiAction` deployment: the football
 policy picks one of the walker's tasks per duck every `policy.decision_period`
 control steps (stand, walk forward or backward, sidestep left or right, the
 library indices in `policy.skills`), and the frozen walker drives the joints
