@@ -60,6 +60,45 @@ Evaluate survival, command tracking and arrival rate before claiming learned
 behavior. Short runs exercise the complete pipeline; they do not establish skill
 quality. Full training can take hours and is separate from the 10–20 minute tutorial.
 
+### Reuse and share a trained checkpoint
+
+The tutorial can perform its small PPO update, then switch to a saved walker
+for high-level training. This works in the generated notebook and in docs mode:
+
+```bash
+MICRODUCK_WALKER_CHECKPOINT=~/microduck-training/walker.ckpt \
+    python tutorials/sphinx-tutorials/microduck.py
+```
+
+For a checkpoint hosted on Hugging Face, download it before running the tutorial
+cells. Replace the repository and revision placeholders with the published
+model's identifiers; use the full commit hash to keep doc builds reproducible:
+
+```python
+import os
+from huggingface_hub import hf_hub_download
+
+checkpoint_path = hf_hub_download(
+    repo_id="YOUR_ORG/microduck-skills",
+    filename="walker.ckpt",
+    revision="FULL_HUB_COMMIT_SHA",
+)
+os.environ["MICRODUCK_WALKER_CHECKPOINT"] = checkpoint_path
+```
+
+The tutorial's loading cell uses the checkpoint's architecture, task order,
+weights and action scale, including when its network is larger than the small
+training demonstration. `TORCHRL_TUTORIALS_FAST=1` still executes this cell.
+The Hub's [download cache](https://huggingface.co/docs/huggingface_hub/guides/download)
+reuses the pinned file on subsequent builds.
+
+Publish `walker.ckpt` together with `skills.json`, evaluation videos and a model
+card recording the TorchRL commit, training recipe and measured limitations.
+Include the paired navigation checkpoint and `navigation.json` when sharing a
+trained skill selector. Hub storage supplies the files; the generated notebook
+needs a Python runtime (local Jupyter or a hosted notebook) to simulate new
+trajectories. See [Rendering](#rendering) for `rlrender` notebook playback.
+
 ## The task
 
 `MicroDuckEnv` is a family of locomotion tasks written once against

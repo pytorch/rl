@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import functools as ft
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 
@@ -32,7 +34,7 @@ from torch.distributions import Categorical
 from torchrl.checkpoint import Checkpoint, GlobalRNGState
 from torchrl.collectors import Evaluator
 from torchrl.data import Composite, Unbounded
-from torchrl.envs import EnvBase, MicroDuckController, MicroDuckEnv
+from torchrl.envs import EnvBase, MicroDuckController, MicroDuckEnv, MicroDuckTask
 from torchrl.envs.transforms import ClosedLoopMultiAction
 from torchrl.modules import MLP, ProbabilisticActor
 from torchrl.record.loggers import CSVLogger
@@ -49,6 +51,33 @@ SKILL_PRESETS = [
     {"preset": "sidestep_task", "speed": -0.15},
     {"preset": "jump_task", "weight": 3.0},
 ]
+
+
+def load_walker(
+    checkpoint: Mapping[str, Any],
+) -> tuple[ProbabilisticActor, MicroDuckTask]:
+    """Restore frozen inference weights and the exact ordered skill library.
+
+    Accepts the payload returned by ``torchrl.render.load_checkpoint``. The
+    recorded architecture may differ from the small tutorial network. Robot
+    assets are resolved on this machine, and reconstruction uses one CPU
+    simulator even when training used parallel workers or an accelerator.
+    Deployment must also use ``checkpoint["config"]["env"]["action_scale"]``.
+    """
+    env = make_env(
+        checkpoint=checkpoint,
+        cfg={"backend": "mujoco", "device": "cpu", "parallel": False},
+        download=True,
+        num_envs=1,
+    )
+    try:
+        walker = make_render_policy(env, checkpoint=checkpoint)
+        walker.load_state_dict(checkpoint["model_state_dict"])
+        walker.eval().requires_grad_(False)
+    finally:
+        env.close()
+    tasks = torch.stack(make_tasks(checkpoint["config"]["env"]["tasks"]))
+    return walker, tasks
 
 
 class WaypointMicroDuck(MicroDuckEnv):
@@ -163,7 +192,7 @@ def main() -> None:
     (output_dir / "run.json").write_text(json.dumps(vars(args), default=str, indent=2))
 
     if args.walker_checkpoint:
-        payload = load_checkpoint(args.walker_checkpoint)
+        payload = load_checkpoint(args.walker_checkpoint, weights_only=True)
     else:
         env_config = {
             "backend": "mujoco",
@@ -218,19 +247,7 @@ def main() -> None:
         finally:
             low_trainer.collector.shutdown()
 
-    model_env = make_env(
-        checkpoint=payload,
-        cfg={"backend": "mujoco", "device": "cpu", "parallel": False},
-        download=True,
-        num_envs=1,
-    )
-    try:
-        walker = make_render_policy(model_env, checkpoint=payload)
-        walker.load_state_dict(payload["model_state_dict"])
-        walker.eval().requires_grad_(False)
-    finally:
-        model_env.close()
-    skill_tasks = torch.stack(make_tasks(payload["config"]["env"]["tasks"]))
+    walker, skill_tasks = load_walker(payload)
 
     skill_results = []
     jump_index = list(MicroDuckEnv.REWARD_TERMS).index("jump")

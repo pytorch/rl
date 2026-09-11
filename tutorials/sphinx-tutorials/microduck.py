@@ -42,6 +42,7 @@ import torchrl
 from torchrl.envs import MicroDuckController, MicroDuckEnv
 from torchrl.envs.transforms import ClosedLoopMultiAction
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
+from torchrl.render import load_checkpoint
 from torchrl.trainers.algorithms import PPOTrainer
 
 # The example shares task and network definitions with the full training run.
@@ -53,6 +54,7 @@ from examples.microduck.ppo_mujoco import (  # noqa: E402
     make_tasks,
 )
 from examples.microduck.train_skills import (  # noqa: E402
+    load_walker,
     make_navigation_models,
     SKILL_PRESETS,
     WaypointMicroDuck,
@@ -139,6 +141,28 @@ walker.eval().requires_grad_(False)
 walker.zero_grad(set_to_none=True)
 
 # %%
+# Reuse a saved walker
+# --------------------
+#
+# The short update above demonstrates training. To deploy weights from a full
+# run, set ``MICRODUCK_WALKER_CHECKPOINT`` to its ``walker.ckpt`` before executing
+# the notebook or script. This also works in a documentation build: ``fast``
+# changes the training budget, not which checkpoint is loaded.
+#
+# ``load_walker`` reconstructs the recorded network and restores the ordered
+# task library: skill indices address learned embeddings, so reordering the
+# tasks would change their meaning. We also reuse the saved action scale.
+# The checkpoint can be a local training output or a file downloaded from a
+# model repository; see the companion example's checkpoint-sharing instructions.
+
+checkpoint_path = os.environ.get("MICRODUCK_WALKER_CHECKPOINT")
+action_scale = 1.0
+if checkpoint_path:
+    checkpoint = load_checkpoint(checkpoint_path, weights_only=True)
+    walker, skill_tasks = load_walker(checkpoint)
+    action_scale = checkpoint["config"]["env"]["action_scale"]
+
+# %%
 # 3. Give the walker a new task
 # -----------------------------
 #
@@ -160,7 +184,7 @@ make_task_env = ft.partial(
     backend="mujoco",
     download=True,
     tasks=MicroDuckEnv.standing_task(),
-    action_scale=1.0,
+    action_scale=action_scale,
     max_episode_steps=64 if fast else 500,
     seed=0,
 )
