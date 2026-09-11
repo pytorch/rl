@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 """
 Transformer policies: inputs, memory and training windows
-========================================================
+=========================================================
 
 .. _transformer_policies_tutorial:
 
@@ -43,7 +43,7 @@ from torchrl.objectives.value import GAE
 
 ######################################################################
 # Two state contracts, one wrapper
-# -------------------------------
+# --------------------------------
 #
 # ``TransformerModule`` selects collection or training with
 # ``set_recurrent_mode(False/True)``, just like GRU/LSTM modules. It returns
@@ -230,7 +230,7 @@ sample = replay.sample()
 
 ######################################################################
 # Recompute features from the starting carry
-# -----------------------------------------
+# ------------------------------------------
 #
 # ``TransformerModule`` also accepts an outer record with batch ``[B]`` and
 # observations ``[B, T, F]`` in recurrent mode. The single state remains ``[B]``.
@@ -271,7 +271,7 @@ optimizer.step()
 
 ######################################################################
 # Padding, staleness and memory cost
-# ---------------------------------
+# ----------------------------------
 #
 # PPO automatically reads ``("collector", "mask")``. If a final window is
 # shorter than ``T``, pad its transitions and set the mask false on padding;
