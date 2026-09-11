@@ -472,9 +472,15 @@ def load_parameters(
 # ----------------------------------------------------------------------
 
 
-def _fall_events(fallen: torch.Tensor) -> torch.Tensor:
-    """Steps on which a duck goes down, from the flag that stays up while it lies there."""
-    return torch.cat((fallen[:, :1], fallen[:, 1:] & ~fallen[:, :-1]), dim=1)
+def _fall_events(fallen: torch.Tensor, dim: int) -> torch.Tensor:
+    """Steps on which a duck goes down, from the flag that stays up while it lies there.
+
+    ``dim`` is the time dimension of ``fallen``.
+    """
+    first = fallen.narrow(dim, 0, 1)
+    later = fallen.narrow(dim, 1, fallen.shape[dim] - 1)
+    earlier = fallen.narrow(dim, 0, fallen.shape[dim] - 1)
+    return torch.cat((first, later & ~earlier), dim=dim)
 
 
 def football_metrics(trajectories: TensorDictBase) -> dict[str, float]:
@@ -493,7 +499,7 @@ def football_metrics(trajectories: TensorDictBase) -> dict[str, float]:
     goal = trajectories["next", "goal"].squeeze(-1)
     goal = torch.where(mask, goal, torch.zeros_like(goal))
     fallen = trajectories["next", "agents", "fallen"].squeeze(-1) & mask.unsqueeze(-1)
-    fallen = _fall_events(fallen)
+    fallen = _fall_events(fallen, dim=trajectories.ndim - 1)
     ball_x = trajectories["next", "ball_position"][..., 0]
     start_x = trajectories["ball_position"][..., 0, 0]
     end_x = ball_x.gather(-1, last).squeeze(-1)
@@ -513,7 +519,9 @@ def _collection_metrics(data: TensorDictBase) -> dict[str, float]:
     reward = data["next", REWARD_KEY].squeeze(-1)
     done = data["next", "done"].squeeze(-1)
     goal = data["next", "goal"].squeeze(-1)
-    fallen = _fall_events(data["next", "agents", "fallen"].squeeze(-1))
+    fallen = _fall_events(
+        data["next", "agents", "fallen"].squeeze(-1), dim=data.ndim - 1
+    )
     players = reward.shape[-1] // 2
     traj_ids = data["collector", "traj_ids"]
     unique_ids, inverse = torch.unique(traj_ids, return_inverse=True)
