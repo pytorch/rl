@@ -687,7 +687,9 @@ def train_mappo(
         entropy_coeff=entropy_coeff,
         critic_coeff=critic_coeff,
         loss_critic_type="smooth_l1",
-        normalize_advantage=True,
+        # With one team's rows zeroed, the loss's own normalization would
+        # count them; the curriculum normalizes over the trained team below.
+        normalize_advantage=train_team == "both",
     )
     loss_module.set_keys(
         reward=REWARD_KEY,
@@ -792,9 +794,16 @@ def train_mappo(
                 processed = advantage(data.to(device))
                 if train_team == "blue":
                     # Opponent curriculum: red's rows stay (the networks are
-                    # built for every duck) but carry no learning signal.
+                    # built for every duck) but carry no learning signal, and
+                    # the advantage is normalized over blue's rows alone.
                     players = processed.get(("agents", "observation")).shape[-2] // 2
-                    processed["advantage"][..., players:, :] = 0.0
+                    advantage_ = processed["advantage"]
+                    blue = advantage_[..., :players, :]
+                    eps = torch.finfo(blue.dtype).eps
+                    advantage_[..., :players, :] = (blue - blue.mean()) / (
+                        blue.std() + eps
+                    )
+                    advantage_[..., players:, :] = 0.0
                     processed["value_target"][..., players:, :] = processed.get(
                         VALUE_KEY
                     )[..., players:, :]
