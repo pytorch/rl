@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import os
 import pickle
+from functools import partial
 
 import pytest
 import torch
@@ -16,13 +18,28 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
 from torchrl.collectors import Collector
-from torchrl.envs import InitTracker, SerialEnv, TransformedEnv
+from torchrl.data import (
+    LazyMemmapStorage,
+    LazyTensorStorage,
+    SliceSampler,
+    TensorDictReplayBuffer,
+)
+from torchrl.envs import (
+    check_env_specs,
+    Compose,
+    InitTracker,
+    ParallelEnv,
+    SerialEnv,
+    step_mdp,
+    TransformedEnv,
+)
 from torchrl.modules import CausalTransformer, set_recurrent_mode, TransformerModule
 from torchrl.modules.tensordict_module.transformer import (
     positions_from_is_init,
     segment_causal_mask_from_is_init,
 )
 from torchrl.testing import get_default_devices
+from torchrl.testing._state_candidates import _make_candidate, _STATE_CLASSES
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 
 
@@ -434,6 +451,176 @@ class TestTransformerModule:
         torch.testing.assert_close(
             second["embed"][:1], first_step["embed"], atol=1e-4, rtol=1e-4
         )
+
+
+def _explicit_state_env(kind, container):
+    module = _make_candidate(kind, container)
+    return TransformedEnv(
+        ContinuousActionVecMockEnv(),
+        Compose(InitTracker(), module.make_tensordict_primer()),
+    )
+
+
+@pytest.mark.parametrize("kind", ["gru", "lstm", "gtrxl"])
+@pytest.mark.parametrize("container", ["td", "tc", "ttd"])
+@pytest.mark.parametrize("env_kind", ["single", "serial", "parallel"])
+@pytest.mark.parametrize("storage_cls", [LazyTensorStorage, LazyMemmapStorage])
+def test_explicit_state_lifecycle(kind, container, env_kind, storage_cls, tmp_path):
+    torch.manual_seed(0)
+    module = _make_candidate(kind, container)
+    if env_kind == "single":
+        env = _explicit_state_env(kind, container)
+    else:
+        env_cls = SerialEnv if env_kind == "serial" else ParallelEnv
+        env = env_cls(2, partial(_explicit_state_env, kind, container))
+    policy = TensorDictSequential(
+        module,
+        TensorDictModule(nn.Linear(16, 7), in_keys=["embed"], out_keys=["action"]),
+    )
+    cls = _STATE_CLASSES[kind][container]
+    try:
+        check_env_specs(env)
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=16,
+            total_frames=32,
+            auto_register_policy_transforms=False,
+        )
+        try:
+            iterator = iter(collector)
+            first = next(iterator)
+            snapshot = first.clone()
+            second = next(iterator).clone()
+            # This is checked on a clone because collector buffers are reusable.
+            first = snapshot
+        finally:
+            collector.shutdown()
+        for batch in (first, second):
+            assert type(batch.get(("agent", "state"))) is cls
+            assert type(batch.get(("next", "agent", "state"))) is cls
+        # Direct slices retain their real episode flags and initial memory.
+        window = second[..., 1:5].clone()
+        expected = window["embed"].clone()
+        with set_recurrent_mode(True):
+            actual = module(window)["embed"]
+        torch.testing.assert_close(actual, expected, atol=2e-5, rtol=2e-5)
+        storage_kwargs = (
+            {"scratch_dir": str(tmp_path)} if storage_cls is LazyMemmapStorage else {}
+        )
+        rb = TensorDictReplayBuffer(
+            storage=storage_cls(64, **storage_kwargs),
+            sampler=SliceSampler(slice_len=4, truncated_key=None),
+            batch_size=8,
+        )
+        rb.extend(torch.cat((first, second), -1).reshape(-1))
+        sample = rb.sample().reshape(2, 4)
+        assert type(sample.get(("agent", "state"))) is cls
+        assert sample["is_init"][:, 0].all()
+        expected = sample["embed"].clone()
+        with set_recurrent_mode(True):
+            actual = module(sample.clone())["embed"]
+        torch.testing.assert_close(actual, expected, atol=2e-5, rtol=2e-5)
+        if kind == "gtrxl":
+            assert sample.get(("agent", "state")).get("valid").dtype is torch.bool
+    finally:
+        if not env.is_closed:
+            env.close()
+
+
+@pytest.mark.parametrize("container", ["td", "tc", "ttd"])
+@pytest.mark.parametrize("batch_shape", [(2,), (2, 2)])
+@pytest.mark.parametrize("device", get_default_devices())
+def test_gtrxl_explicit_state_numerics(container, batch_shape, device):
+    # Each case deliberately changes the schema/shape of the same forward code.
+    torch._dynamo.reset()
+    torch.manual_seed(1)
+    module = _make_candidate("gtrxl", container, memory_len=3, device=device)
+    spec = module.transformer.state_spec
+    td = TensorDict(
+        {
+            "observation": torch.randn(*batch_shape, 7, device=device),
+            "is_init": torch.ones(*batch_shape, 1, dtype=torch.bool, device=device),
+            ("agent", "state"): spec.zero(batch_shape),
+        },
+        batch_shape,
+    )
+    trajectory = []
+    for step in range(7):
+        td["observation"] = torch.randn(*batch_shape, 7, device=device)
+        td["is_init"] = torch.zeros(*batch_shape, 1, dtype=torch.bool, device=device)
+        if step == 4:
+            td["is_init"][0] = True
+            state = td.get(("agent", "state"))
+            state[0] = spec.zero(batch_shape[1:])
+        before = td.get(("agent", "state")).clone()
+        module(td)
+        torch.testing.assert_close(
+            td.get(("agent", "state")).get("memory"), before.get("memory")
+        )
+        trajectory.append(td.clone())
+        td = step_mdp(td)
+    trajectory = torch.stack(trajectory, -1)
+    expected = trajectory["embed"].clone()
+    with set_recurrent_mode(True):
+        out = module(trajectory.clone())
+    torch.testing.assert_close(out["embed"], expected, atol=2e-5, rtol=2e-5)
+    # Compile the state-carrying window, including resets, as one graph.
+    compiled = torch.compile(module, backend="aot_eager", fullgraph=True)
+    with set_recurrent_mode(True):
+        result = compiled(trajectory.clone())
+    torch.testing.assert_close(result["embed"], expected, atol=2e-5, rtol=2e-5)
+    window = trajectory[..., 1:4].clone()
+    memory = window.get(("agent", "state")).get("memory").requires_grad_()
+    obs = window["observation"].requires_grad_()
+    with set_recurrent_mode(True):
+        module(window)["embed"][..., -1, :].square().sum().backward()
+    assert memory.grad is None
+    assert obs.grad[..., 0, :].abs().sum() > 0
+    assert all(
+        p.grad is not None and p.grad.isfinite().all() for p in module.parameters()
+    )
+    # Weight synchronization may clear module caches, but must retain the
+    # caller's supplied history, even though its activations are now stale.
+    with torch.no_grad():
+        module.transformer.embedding.bias.add_(0.1)
+    module.mark_weight_update()
+    retained = trajectory[..., 3].clone()
+    empty = retained.clone()
+    empty.get(("agent", "state")).get("valid").zero_()
+    assert not torch.allclose(module(retained)["embed"], module(empty)["embed"])
+
+
+@pytest.mark.parametrize("precision", ["float64", "bfloat16", "autocast"])
+def test_gtrxl_validity_and_precision(precision):
+    module = _make_candidate("gtrxl", "ttd", memory_len=3)
+    dtype = torch.float32 if precision == "autocast" else getattr(torch, precision)
+    module.to(dtype=dtype)
+    state = module.transformer.state_spec.zero([2])
+    state.valid[:, 1] = True  # Usable slots need not form a contiguous suffix.
+    state.memory.normal_()
+    td = TensorDict(
+        {
+            "observation": torch.randn(2, 7, dtype=dtype),
+            "is_init": torch.zeros(2, 1, dtype=torch.bool),
+            ("agent", "state"): state,
+        },
+        [2],
+    )
+    perturbed = td.clone()
+    memory = perturbed.get(("agent", "state")).memory
+    memory[:, :, [0, 2]] = 1000  # Invalid slots must not influence attention.
+    context = (
+        torch.autocast("cpu", dtype=torch.bfloat16)
+        if precision == "autocast"
+        else contextlib.nullcontext()
+    )
+    with context:
+        expected = module(td.clone())["embed"]
+        actual = module(perturbed)["embed"]
+    torch.testing.assert_close(actual, expected)
+    assert actual.isfinite().all()
+    assert module.transformer.state_spec.zero().memory.dtype is dtype
 
 
 if __name__ == "__main__":
