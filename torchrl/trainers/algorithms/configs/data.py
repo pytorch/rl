@@ -151,6 +151,7 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
     beta: float | None = None
     eps: float | None = None
     reduction: str | None = None
+    max_pending: int = 64
     _target_: str = "torchrl.data.replay_buffers.PrioritizedSliceSampler"
 
 
@@ -226,6 +227,7 @@ class PrioritizedSamplerConfig(SamplerConfig):
     beta: float | None = None
     eps: float | None = None
     reduction: str | None = None
+    max_pending: int = 64
     _target_: str = "torchrl.data.replay_buffers.PrioritizedSampler"
 
 

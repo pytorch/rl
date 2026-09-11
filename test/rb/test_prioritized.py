@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import functools
+import pickle
 import warnings
 
 import numpy as np
@@ -482,8 +484,10 @@ def test_prb_new_item_gets_max_priority(alpha, max_priority_within_buffer):
     )
     # index 0 receives a large TD-error priority
     sampler.update_priority(torch.tensor([0]), torch.tensor([100.0]))
-    # index 1 is a fresh item written at the default (max) priority, as writers do
+    # index 1 is a fresh item written at the default (max) priority, as writers do.
+    # mark_update defers the tree write, so materialize it before reading the tree.
     sampler.mark_update(torch.tensor([1]))
+    sampler._flush_pending_updates()
     eps = sampler._eps
     expected = (100.0 + eps) ** alpha
     got = float(sampler._sum_tree[1])
@@ -508,6 +512,7 @@ def test_prb_within_buffer_max_priority_stays_raw():
     assert float(sampler._max_priority[0]) == pytest.approx(50.0, rel=1e-3)
     # a fresh default item then lands at (50 + eps) ** alpha
     sampler.mark_update(torch.tensor([2]))
+    sampler._flush_pending_updates()
     expected = (50.0 + sampler._eps) ** alpha
     assert float(sampler._sum_tree[2]) == pytest.approx(expected, rel=1e-3)
 
@@ -614,6 +619,162 @@ def test_prb_alpha_change_from_zero_warns():
     assert float(sampler._sum_tree[0]) == pytest.approx(
         (3.0 + sampler._eps) ** 0.5, rel=1e-4
     )
+
+
+def test_prioritized_sampler_mark_update_is_lazy():
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0),
+        batch_size=2,
+    )
+    rb.extend(torch.arange(4))
+
+    # Priorities are lazily materialized from mark_update.
+    assert rb._sampler._sum_tree.query(0, 4) == pytest.approx(0.0)
+
+    rb.sample()
+    assert rb._sampler._sum_tree.query(0, 4) == pytest.approx(4.0)
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0),
+        batch_size=2,
+    )
+    idx = rb.extend(torch.arange(4))
+    rb.update_priority(idx, 2)
+    assert rb._sampler._sum_tree.query(0, 4) == pytest.approx(8.0)
+
+
+def test_prioritized_sampler_lazy_multiple_extends():
+    """Multiple extends accumulate pending updates; all are flushed on sample."""
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0),
+        batch_size=2,
+    )
+    rb.extend(torch.arange(3))
+    rb.extend(torch.arange(3) + 3)
+
+    # Nothing written yet.
+    assert rb._sampler._sum_tree.query(0, 6) == pytest.approx(0.0)
+
+    rb.sample()
+    # All 6 indices should now have default priority (~1.0 each).
+    assert rb._sampler._sum_tree.query(0, 6) == pytest.approx(6.0, abs=1e-4)
+
+
+def test_prioritized_sampler_lazy_empty_clears_pending():
+    """Calling empty on the buffer must discard pending updates."""
+    sampler = PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0)
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=sampler,
+        batch_size=2,
+    )
+    rb.extend(torch.arange(4))
+    assert len(sampler._pending_updates) > 0
+
+    rb.empty()
+    assert len(sampler._pending_updates) == 0
+    assert sampler._sum_tree.query(0, 10) == pytest.approx(0.0)
+
+
+def test_prioritized_sampler_lazy_copy_keeps_pending_priorities():
+    """Copying a sampler must not silently drop the deferred priorities."""
+    sampler = PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0)
+    rb = ReplayBuffer(storage=LazyTensorStorage(10), sampler=sampler, batch_size=2)
+    rb.extend(torch.arange(4))
+    assert len(sampler._pending_updates) > 0
+
+    for clone in (copy.deepcopy(sampler), pickle.loads(pickle.dumps(sampler))):
+        assert len(clone._pending_updates) == 0
+        assert clone._sum_tree.query(0, 4) == pytest.approx(4.0, abs=1e-4)
+
+
+def test_prioritized_sampler_lazy_state_dict_roundtrip():
+    """state_dict flushes pending updates; load_state_dict clears them."""
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0),
+        batch_size=2,
+    )
+    rb.extend(torch.arange(4))
+
+    # state_dict should flush before saving.
+    sd = rb._sampler.state_dict()
+    assert len(rb._sampler._pending_updates) == 0
+
+    # Load into a fresh sampler.
+    sampler2 = PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0)
+    sampler2.load_state_dict(sd)
+    assert len(sampler2._pending_updates) == 0
+    assert sampler2._sum_tree.query(0, 4) == pytest.approx(4.0, abs=1e-4)
+
+
+def test_prioritized_sampler_pending_updates_are_bounded():
+    """mark_update is called on every extend; the pending list must stay bounded."""
+    max_pending = 4
+    sampler = PrioritizedSampler(
+        max_capacity=200, alpha=1.0, beta=1.0, max_pending=max_pending
+    )
+    rb = ReplayBuffer(storage=LazyTensorStorage(200), sampler=sampler, batch_size=2)
+
+    # Write far more often than the bound, never reading in between.
+    for _ in range(50):
+        rb.extend(torch.arange(4))
+        assert len(sampler._pending_updates) <= max_pending
+
+    # The bound must not lose any update: everything written so far is either
+    # already in the trees or still pending, and sampling flushes the remainder.
+    rb.sample()
+    assert len(sampler._pending_updates) == 0
+    assert sampler._sum_tree.query(0, 200) == pytest.approx(200.0, abs=1e-3)
+
+
+def test_prioritized_sampler_max_pending_zero_is_eager():
+    sampler = PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0, max_pending=0)
+    rb = ReplayBuffer(storage=LazyTensorStorage(10), sampler=sampler, batch_size=2)
+    rb.extend(torch.arange(4))
+    assert len(sampler._pending_updates) == 0
+    assert sampler._sum_tree.query(0, 4) == pytest.approx(4.0)
+
+
+def test_prioritized_sampler_max_pending_validated():
+    with pytest.raises(ValueError, match="max_pending must be greater or equal to 0"):
+        PrioritizedSampler(max_capacity=10, alpha=1.0, beta=1.0, max_pending=-1)
+
+
+@pytest.mark.parametrize("max_pending", [0, 1, 3, 64])
+def test_prioritized_sampler_lazy_matches_eager_end_to_end(max_pending):
+    """A full extend/sample/update_priority loop is unaffected by the deferral.
+
+    ``max_pending=0`` flushes on every ``mark_update`` and therefore reproduces
+    the eager behavior; every other value must give bit-identical trees.
+    """
+
+    def run(max_pending):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        sampler = PrioritizedSampler(
+            max_capacity=64, alpha=0.7, beta=0.5, max_pending=max_pending
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(64), sampler=sampler, batch_size=8
+        )
+        for step in range(10):
+            rb.extend(
+                TensorDict({"a": torch.arange(4) + 4 * step}, [4]),
+            )
+            sample = rb.sample()
+            rb.update_priority(
+                sample["index"], torch.arange(1, 9, dtype=torch.float) / 8
+            )
+        return [float(sampler._sum_tree[i]) for i in range(64)], sampler._max_priority
+
+    tree, max_priority = run(max_pending)
+    tree_eager, max_priority_eager = run(0)
+    torch.testing.assert_close(torch.tensor(tree), torch.tensor(tree_eager))
+    assert max_priority[0] == max_priority_eager[0]
 
 
 if __name__ == "__main__":
