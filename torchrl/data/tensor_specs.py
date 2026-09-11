@@ -5063,7 +5063,7 @@ class Composite(TensorSpec):
             to ``None``.
         shape (torch.Size): the leading shape of all the leaves. Equivalent
             to the batch-size of the corresponding tensordicts.
-        data_cls (type, optional): the tensordict subclass (TensorDict, TensorClass, tensorclass...) that should be
+        data_cls (type, optional): the tensor container class (TensorDict, TypedTensorDict, TensorClass, tensorclass...) that should be
             enforced in the env. Defaults to ``None``.
         step_mdp_static (bool, optional): whether the spec is static under step_mdp. Defaults to ``False``.
             Defining a `Composite` as a step_mdp_static spec will make it so that the entire related TensorDict/TensorClass
@@ -5631,10 +5631,10 @@ class Composite(TensorSpec):
     def _encode_eager(
         self, vals: dict[str, Any], *, ignore_device: bool = False
     ) -> dict[str, torch.Tensor]:
-        if isinstance(vals, TensorDict):
+        if isinstance(vals, TensorDictBase):
             out = vals.empty()  # create and empty tensordict similar to vals
         elif self.data_cls is not None:
-            out = {}
+            out = TensorDict({}, batch_size=getattr(vals, "batch_size", self.shape))
         else:
             out = TensorDict._new_unsafe({}, self.shape)
         for key, item in vals.items():
@@ -5653,7 +5653,7 @@ class Composite(TensorSpec):
                     f"Encoding key {key} raised a RuntimeError. Scroll up to know more."
                 ) from err
         if self.data_cls is not None:
-            return self.data_cls.from_dict(out)
+            return self.data_cls.from_dict(out, batch_size=out.batch_size)
         return out
 
     def _encode_memo(
@@ -5673,7 +5673,7 @@ class Composite(TensorSpec):
         elif self.data_cls is not None:
 
             def empty(vals):
-                out = {}
+                out = TensorDict({}, batch_size=getattr(vals, "batch_size", self.shape))
                 return vals, out
 
         else:
@@ -5705,7 +5705,11 @@ class Composite(TensorSpec):
 
         funcs.append(populate)
         if self.data_cls is not None:
-            funcs.append(self.data_cls.from_dict)
+
+            def cast(out):
+                return self.data_cls.from_dict(out, batch_size=out.batch_size)
+
+            funcs.append(cast)
         if len(funcs) == 0:
             self._encode_memo_dict[ignore_device] = lambda x: x
         elif len(funcs) == 1:
@@ -5738,7 +5742,14 @@ class Composite(TensorSpec):
             if self[_key] is not None and (
                 selected_keys is None or _key in selected_keys
             ):
-                self._specs[_key].type_check(value[_key], _key)
+                item = value.get(_key, NO_DEFAULT)
+                if item is NO_DEFAULT:
+                    raise KeyError(_key)
+                spec = self._specs[_key]
+                if isinstance(spec, Composite):
+                    spec.type_check(item)
+                else:
+                    spec.type_check(item, _key)
 
     def is_in(self, val: dict | TensorDictBase) -> bool:
         # TODO: make warnings for these

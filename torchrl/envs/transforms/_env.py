@@ -370,6 +370,13 @@ class TensorDictPrimer(Transform):
                 extra_kwargs = {}
             primers = Composite(kwargs, device=device, shape=shape, **extra_kwargs)
         self.primers = primers
+        # Leaf-wise initialization otherwise creates plain TensorDict parents.
+        # Restore children before parents, without copying their tensor storage.
+        self._data_classes = tuple(
+            (key, spec.data_cls)
+            for key, spec in reversed(list(primers.items(True)))
+            if isinstance(spec, Composite) and spec.data_cls is not None
+        )
         self.expand_specs = expand_specs
         self.call_before_env_reset = call_before_env_reset
 
@@ -511,6 +518,8 @@ class TensorDictPrimer(Transform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.single_default_value and callable(self.default_value):
             tensordict.update(self.default_value())
+            if self._data_classes:
+                self._restore_data_classes(tensordict)
             for key, spec in self.primers.items(True, True):
                 if not self._validated:
                     self._validate_value_tensor(tensordict.get(key), spec)
@@ -542,9 +551,17 @@ class TensorDictPrimer(Transform):
                     )
 
             tensordict.set(key, value)
+        if self._data_classes:
+            self._restore_data_classes(tensordict)
         if not self._validated:
             self._validated = True
         return tensordict
+
+    def _restore_data_classes(self, tensordict):
+        for key, data_cls in self._data_classes:
+            value = tensordict.get(key, None)
+            if value is not None and type(value) is not data_cls:
+                tensordict.set(key, data_cls.from_tensordict(value))
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -555,6 +572,8 @@ class TensorDictPrimer(Transform):
             if key not in next_tensordict.keys(True, is_leaf=_is_leaf_nontensor):
                 prev_val = tensordict.get(key)
                 next_tensordict.set(key, prev_val)
+        if self._data_classes:
+            self._restore_data_classes(next_tensordict)
         return next_tensordict
 
     def _reset(
@@ -622,6 +641,8 @@ class TensorDictPrimer(Transform):
                 for key, spec in self.primers.items(True, True):
                     if not self._validated:
                         self._validate_value_tensor(tensordict_reset.get(key), spec)
+                if self._data_classes:
+                    self._restore_data_classes(tensordict_reset)
                 self._validated = True
                 return tensordict_reset
 
@@ -654,6 +675,8 @@ class TensorDictPrimer(Transform):
                         )
                 tensordict_reset.set(key, value)
             self._validated = True
+        if self._data_classes:
+            self._restore_data_classes(tensordict_reset)
         return tensordict_reset
 
     def __repr__(self) -> str:

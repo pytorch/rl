@@ -218,6 +218,8 @@ class _StepMDP:
                 val_out = data_out._get_str(key, None)
                 if val_out is None or val_out.batch_size != val.batch_size:
                     val_out = val.empty(batch_size=val.batch_size)
+                elif type(val_out) is not type(val):
+                    val_out = type(val).from_dict(val_out, batch_size=val.batch_size)
                 if isinstance(val, LazyStackedTensorDict):
 
                     val = LazyStackedTensorDict.lazy_stack(
@@ -554,6 +556,8 @@ def _set(source, dest, key, total_key, excluded):
                 new_val = dest.get(key, None)
                 if new_val is None:
                     new_val = val.empty()
+                elif type(new_val) is not type(val):
+                    new_val = type(val).from_dict(new_val, batch_size=val.batch_size)
                 non_empty_local = False
                 for subkey in val.keys():
                     non_empty_local = (

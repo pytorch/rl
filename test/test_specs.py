@@ -42,11 +42,44 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
 from torchrl.testing import get_available_devices, get_default_devices, set_global_var
+from torchrl.testing._state_candidates import _STATE_CLASSES
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),
     pytest.mark.filterwarnings("ignore: memoized encoding is an experimental feature"),
 ]
+
+
+@pytest.mark.parametrize("container", ["td", "tc", "ttd"])
+@pytest.mark.parametrize("memo", [False, True])
+@pytest.mark.parametrize("source_kind", ["dict", "container"])
+def test_composite_typed_state_encode(container, memo, source_kind):
+    cls = _STATE_CLASSES["gtrxl"][container]
+    spec = Composite(
+        memory=Unbounded((2, 3, 4, 8)),
+        valid=Binary(shape=(2, 4), dtype=torch.bool),
+        shape=(2,),
+        data_cls=cls,
+    )
+    spec.memoize_encode(memo)
+    for _ in range(2):
+        original = spec.zero()
+        source = original if source_kind == "container" else original.to_dict()
+        encoded = spec.encode(source)
+        assert type(encoded) is cls
+        assert encoded.batch_size == original.batch_size
+        assert encoded.get("valid").dtype is torch.bool
+        torch.testing.assert_close(encoded.get("memory"), original.get("memory"))
+        spec.type_check(encoded)
+        assert spec.is_in(encoded)
+    expanded = spec.clone().expand(3, 2)
+    assert expanded.data_cls is cls
+    assert type(expanded.rand()) is cls
+    outer_spec = Composite(state=spec, shape=spec.shape)
+    invalid = outer_spec.zero()
+    invalid.get("state").set("memory", invalid.get(("state", "memory")).long())
+    with pytest.raises(TypeError):
+        outer_spec.type_check(invalid)
 
 
 class TestRanges:
