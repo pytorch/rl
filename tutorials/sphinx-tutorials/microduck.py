@@ -25,12 +25,51 @@ and short training budgets. Deployment uses a published checkpoint trained for
 The full training launcher at the end uses the same components with larger
 budgets, parallel workers and evaluation.
 
-Run this notebook from a TorchRL checkout with ``mujoco``, ``huggingface_hub``
-and the ``utils`` extra installed. ``download=True`` fetches the pinned robot
-assets into ``~/.cache/torchrl/microduck`` on the first run.
+Watch the trained policies
+--------------------------
+
+These recorded clips stream directly from
+`torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
+Play them here, or run just the two video cells in the notebook: no training,
+checkpoint loading or simulator rendering is needed. The skill grid shows
+standing / forward / backward on top and left / right / jumping below.
+Notice the sideways drift while walking and the forward drift while jumping.
 """
 
 from __future__ import annotations
+
+from IPython.display import Video
+
+Video(
+    url="https://huggingface.co/torchrl/microduck-skills/resolve/"
+    "4191d7d25c4fd58a5c6e6395fcf8217459fdd073/videos/skills.mp4",
+    width=800,
+    html_attributes='controls muted loop playsinline preload="metadata" '
+    'style="max-width: 100%"',
+)
+
+# %%
+# The high-level policy below selects among those same six skills to approach
+# ``(0.5, 0.3)`` metres. The waypoint is not drawn in the simulator; the clip
+# includes episode resets. This is playback from the full training run, rather
+# than the short PPO updates we will execute in this tutorial.
+
+Video(
+    url="https://huggingface.co/torchrl/microduck-skills/resolve/"
+    "5824a856131009e1ecbc95713677a8363e5f169b/videos/navigation.mp4",
+    width=640,
+    html_attributes='controls muted loop playsinline preload="metadata" '
+    'style="max-width: 100%"',
+)
+
+# %%
+# Run the tutorial
+# ----------------
+#
+# The remaining cells need a TorchRL checkout with ``mujoco``,
+# ``huggingface_hub`` and the ``utils`` extra installed. ``download=True``
+# fetches pinned robot assets into ``~/.cache/torchrl/microduck`` on the first
+# run. The video cells above only need IPython, which Jupyter provides.
 
 import functools as ft
 import os
