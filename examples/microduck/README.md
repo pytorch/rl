@@ -20,10 +20,34 @@ The [MicroDuck tutorial](../../tutorials/sphinx-tutorials/microduck.py) continue
 from low-level PPO to high-level training: reload the walker's checkpoint and
 task library, deploy it with `MicroDuckController` and `ClosedLoopMultiAction`,
 then train a categorical PPO actor to select skills for waypoint navigation.
-It also shows the grouped deployment for a supplied 5-vs-5 task. Run a short
-CPU pipeline check with `TORCHRL_TUTORIALS_FAST=1`; set
-`MICRODUCK_WALKER_CHECKPOINT` to a trained checkpoint and
-`MICRODUCK_HIGH_LEVEL_FRAMES` to increase the high-level training budget.
+Both stages use `PPOTrainer`. It also shows the grouped deployment and trainer
+configuration for a supplied 5-vs-5 task.
+
+```bash
+# Full CPU recipe (including macOS): 10M physical transitions, then 1M decisions.
+MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
+    python tutorials/sphinx-tutorials/microduck.py
+
+# Short pipeline check: 64 steps per training stage, one epoch, one simulator.
+TORCHRL_TUTORIALS_FAST=1 python tutorials/sphinx-tutorials/microduck.py
+
+# Resume an interrupted low-level run; use the same number of workers.
+MICRODUCK_RESUME=1 MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
+    python tutorials/sphinx-tutorials/microduck.py
+
+# Load a walker and resume high-level training (omit RESUME for a new run).
+MICRODUCK_WALKER_CHECKPOINT=$HOME/microduck-training/walker.ckpt \
+    MICRODUCK_RESUME=1 MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
+    python tutorials/sphinx-tutorials/microduck.py
+```
+
+`MICRODUCK_LOW_LEVEL_FRAMES`, `MICRODUCK_HIGH_LEVEL_FRAMES` and
+`MICRODUCK_NUM_ENVS` override the local budgets and worker count (default 16).
+Documentation builds and tutorial CI force fast mode, which takes precedence
+over these overrides. Full runs write CSV metrics, resumable trainer state,
+`walker.ckpt`, per-skill evaluation in `skills.json`, and navigation evaluation
+in `navigation.json`. Evaluate survival, tracking and arrival rate before
+claiming learned behavior; the documentation run only checks the pipeline.
 
 ## The task
 

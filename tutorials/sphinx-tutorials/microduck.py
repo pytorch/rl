@@ -33,7 +33,8 @@ What you will learn
   :class:`~torchrl.objectives.value.GAE` and its ``group_key``;
 - how to register a reward term of your own with
   :meth:`~torchrl.envs.MicroDuckEnv.register_reward`;
-- how to train and reload a recurrent low-level policy;
+- how to train both levels with PPOTrainer, save and resume local runs,
+  and keep documentation builds short;
 - how to deploy skills with :class:`~torchrl.envs.MicroDuckController` and
   :class:`~torchrl.envs.transforms.ClosedLoopMultiAction`;
 - how to train a high-level skill selector and reuse the deployment over
@@ -42,7 +43,9 @@ What you will learn
 
 from __future__ import annotations
 
+import functools as ft
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -55,8 +58,15 @@ from omegaconf import OmegaConf
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
 from torch.distributions import Categorical
-from torchrl.collectors import Collector
-from torchrl.data import Composite, Unbounded
+from torchrl.checkpoint import Checkpoint, GlobalRNGState
+from torchrl.collectors import Collector, Evaluator
+from torchrl.data import (
+    Composite,
+    LazyTensorStorage,
+    SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
+    Unbounded,
+)
 from torchrl.envs import (
     MicroDuckController,
     MicroDuckEnv,
@@ -65,11 +75,14 @@ from torchrl.envs import (
 )
 from torchrl.envs.transforms import ClosedLoopMultiAction
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
-from torchrl.modules import MLP, ProbabilisticActor
-from torchrl.objectives import ClipPPOLoss, ValueEstimators
+from torchrl.modules import MLP, ProbabilisticActor, set_recurrent_mode
+from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from torchrl.record import VideoRecorder
+from torchrl.record.loggers import CSVLogger
 from torchrl.render import load_checkpoint
+from torchrl.trainers import BatchSubSampler
+from torchrl.trainers.algorithms import PPOTrainer
 
 REPO_ROOT = Path(torchrl.__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / "examples" / "microduck"
@@ -79,12 +92,13 @@ from examples.microduck.heuristic_gait import (  # noqa: E402
     MicroDuckGaitActor,
 )
 from examples.microduck.ppo_mujoco import (  # noqa: E402
+    evaluation_metrics,
     make_env,
+    make_evaluator,
     make_models,
     make_render_policy,
     make_tasks,
     save_checkpoint,
-    train_ppo,
 )
 
 if importlib.util.find_spec("mujoco") is None:
@@ -98,11 +112,12 @@ if importlib.util.find_spec("mujoco") is None:
 # are not vendored in TorchRL. ``download=True`` fetches the pinned commit into
 # ``~/.cache/torchrl/microduck`` the first time (or set ``MICRODUCK_RL_ROOT``
 # to a checkout). ``TORCHRL_TUTORIALS_FAST=1`` shortens the rollouts for the
-# docs build.
+# docs build and reduces each PPO stage to 64 steps.
 
-TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
-ROLLOUT_STEPS = 100 if TUTORIAL_FAST else 300
-RENDER_WIDTH, RENDER_HEIGHT = (320, 240) if TUTORIAL_FAST else (480, 360)
+if __name__ == "__main__":
+    TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
+    ROLLOUT_STEPS = 100 if TUTORIAL_FAST else 300
+    RENDER_WIDTH, RENDER_HEIGHT = (320, 240) if TUTORIAL_FAST else (480, 360)
 
 # %%
 # A task is data
@@ -114,17 +129,18 @@ RENDER_WIDTH, RENDER_HEIGHT = (320, 240) if TUTORIAL_FAST else (480, 360)
 # and a name. The presets on :class:`~torchrl.envs.MicroDuckEnv` fill every
 # field and accept overrides by name, so a task is one call.
 
-library = [
-    MicroDuckEnv.standing_task(),
-    MicroDuckEnv.tracking_task(
-        0.2, warm_start_velocity=(0.05, 0.25), warm_start_fraction=0.5
-    ),
-    MicroDuckEnv.sidestep_task(0.15),
-    MicroDuckEnv.jump_task(weight=2.0),
-]
-tasks = torch.stack(library)
-print(tasks.shape, list(tasks.name))
-print("command boxes:", tasks.command_low.tolist(), tasks.command_high.tolist())
+if __name__ == "__main__":
+    library = [
+        MicroDuckEnv.standing_task(),
+        MicroDuckEnv.tracking_task(
+            0.2, warm_start_velocity=(0.05, 0.25), warm_start_fraction=0.5
+        ),
+        MicroDuckEnv.sidestep_task(0.15),
+        MicroDuckEnv.jump_task(weight=2.0),
+    ]
+    tasks = torch.stack(library)
+    print(tasks.shape, list(tasks.name))
+    print("command boxes:", tasks.command_low.tolist(), tasks.command_high.tolist())
 
 # %%
 # Stacking is the structural validation: every task carries the full weight
@@ -133,10 +149,11 @@ print("command boxes:", tasks.command_low.tolist(), tasks.command_high.tolist())
 # terms; the jump row turns the hop terms on and the vertical-velocity cost
 # off.
 
-terms = list(MicroDuckEnv.REWARD_TERMS)
-for name, weights in zip(tasks.name, tasks.reward_weights):
-    active = {term: round(float(w), 2) for term, w in zip(terms, weights) if w != 0}
-    print(f"{name:14s} {active}")
+if __name__ == "__main__":
+    terms = list(MicroDuckEnv.REWARD_TERMS)
+    for name, weights in zip(tasks.name, tasks.reward_weights):
+        active = {term: round(float(w), 2) for term, w in zip(terms, weights) if w != 0}
+        print(f"{name:14s} {active}")
 
 # %%
 # One row per simulator
@@ -149,16 +166,17 @@ for name, weights in zip(tasks.name, tasks.reward_weights):
 # (``task_id`` is also in the ``state_spec``, which is what lets a
 # :class:`~torchrl.envs.TransformedEnv` forward it at reset).
 
-env = MicroDuckEnv(
-    download=True, backend="mujoco", tasks=tasks, action_scale=1.0, seed=0
-)
-print(env.observation_spec["task_id"], env.observation_spec["command"])
+if __name__ == "__main__":
+    env = MicroDuckEnv(
+        download=True, backend="mujoco", tasks=tasks, action_scale=1.0, seed=0
+    )
+    print(env.observation_spec["task_id"], env.observation_spec["command"])
 
-reset = env.reset(TensorDict(task_id=torch.tensor([[2]]), batch_size=[1]))
-print("pinned task:", reset["task_id"].item(), reset["command"].tolist())
+    reset = env.reset(TensorDict(task_id=torch.tensor([[2]]), batch_size=[1]))
+    print("pinned task:", reset["task_id"].item(), reset["command"].tolist())
 
-rollout = env.rollout(20, tensordict=reset, auto_reset=False)
-print("held for the episode:", rollout["task_id"].unique().tolist())
+    rollout = env.rollout(20, tensordict=reset, auto_reset=False)
+    print("held for the episode:", rollout["task_id"].unique().tolist())
 
 # %%
 # :class:`~torchrl.envs.MicroDuckTaskSampler` writes ``task_id`` at reset for
@@ -167,10 +185,11 @@ print("held for the episode:", rollout["task_id"].unique().tolist())
 # every simulator its own task, which is how the example films four tasks side
 # by side.
 
-mixed = TransformedEnv(env, MicroDuckTaskSampler([0.0, 1.0, 1.0, 0.0], seed=0))
-drawn = [mixed.reset()["task_id"].item() for _ in range(6)]
-print("drawn from the walking rows only:", drawn)
-mixed.close()
+if __name__ == "__main__":
+    mixed = TransformedEnv(env, MicroDuckTaskSampler([0.0, 1.0, 1.0, 0.0], seed=0))
+    drawn = [mixed.reset()["task_id"].item() for _ in range(6)]
+    print("drawn from the walking rows only:", drawn)
+    mixed.close()
 
 # %%
 # Backends
@@ -195,9 +214,13 @@ mixed.close()
 # :class:`~torchrl.envs.MJLabWrapper` runs those directly, which is a
 # different task definition from the one in this tutorial.
 
-for backend in ("mjx", "mujoco-torch"):
-    module = {"mjx": "mujoco.mjx", "mujoco-torch": "mujoco_torch"}[backend]
-    print(backend, "available" if importlib.util.find_spec(module) else "not installed")
+if __name__ == "__main__":
+    for backend in ("mjx", "mujoco-torch"):
+        module = {"mjx": "mujoco.mjx", "mujoco-torch": "mujoco_torch"}[backend]
+        print(
+            backend,
+            "available" if importlib.util.find_spec(module) else "not installed",
+        )
 
 # %%
 # The closed-form gait
@@ -212,21 +235,22 @@ for backend in ("mjx", "mujoco-torch"):
 # ``examples/microduck/heuristic_gait.py``, next to the PPO script that can
 # use it as a prior (``policy.from_prior=true``).
 
-gait = MicroDuckGaitActor()
-gait_env = MicroDuckEnv(
-    download=True,
-    backend="mujoco",
-    tasks=MicroDuckEnv.tracking_task(0.03, **gait.config.task_kwargs()),
-    diagnostics=True,
-    seed=0,
-)
-gait_rollout = gait_env.rollout(ROLLOUT_STEPS, gait, break_when_any_done=True)
-metrics = gait_metrics(gait_rollout)
-print(
-    f"survived={bool(metrics['survived'])} forward_speed={float(metrics['forward_speed']):+.3f} m/s "
-    f"swing phases: left={int(metrics['left_swing_phases'])} right={int(metrics['right_swing_phases'])}"
-)
-gait_env.close()
+if __name__ == "__main__":
+    gait = MicroDuckGaitActor()
+    gait_env = MicroDuckEnv(
+        download=True,
+        backend="mujoco",
+        tasks=MicroDuckEnv.tracking_task(0.03, **gait.config.task_kwargs()),
+        diagnostics=True,
+        seed=0,
+    )
+    gait_rollout = gait_env.rollout(ROLLOUT_STEPS, gait, break_when_any_done=True)
+    metrics = gait_metrics(gait_rollout)
+    print(
+        f"survived={bool(metrics['survived'])} forward_speed={float(metrics['forward_speed']):+.3f} m/s "
+        f"swing phases: left={int(metrics['left_swing_phases'])} right={int(metrics['right_swing_phases'])}"
+    )
+    gait_env.close()
 
 # %%
 # Film it
@@ -239,25 +263,26 @@ gait_env.close()
 # here :meth:`~torchrl.record.VideoRecorder.to_animation` turns the frames
 # into an animation that Sphinx-Gallery embeds below.
 
-recorder = VideoRecorder(logger=None, tag="microduck_gait", skip=2, make_grid=False)
-video_env = TransformedEnv(
-    MicroDuckEnv(
-        download=True,
-        backend="mujoco",
-        tasks=MicroDuckEnv.tracking_task(0.03, **gait.config.task_kwargs()),
-        from_pixels=True,
-        render_width=RENDER_WIDTH,
-        render_height=RENDER_HEIGHT,
-        camera_id=-1,
-        seed=0,
-    ),
-    recorder,
-)
-video_env.rollout(ROLLOUT_STEPS, gait, break_when_any_done=True)
-gait_animation = recorder.to_animation(
-    title="Closed-form MicroDuck gait", interval=40, clear=True
-)
-video_env.close()
+if __name__ == "__main__":
+    recorder = VideoRecorder(logger=None, tag="microduck_gait", skip=2, make_grid=False)
+    video_env = TransformedEnv(
+        MicroDuckEnv(
+            download=True,
+            backend="mujoco",
+            tasks=MicroDuckEnv.tracking_task(0.03, **gait.config.task_kwargs()),
+            from_pixels=True,
+            render_width=RENDER_WIDTH,
+            render_height=RENDER_HEIGHT,
+            camera_id=-1,
+            seed=0,
+        ),
+        recorder,
+    )
+    video_env.rollout(ROLLOUT_STEPS, gait, break_when_any_done=True)
+    gait_animation = recorder.to_animation(
+        title="Closed-form MicroDuck gait", interval=40, clear=True
+    )
+    video_env.close()
 
 # %%
 # Advantages standardized within each task
@@ -271,40 +296,44 @@ video_env.close()
 # integer id per batch element, and standardize within its groups instead.
 # Here two pinned episodes, one per task, form the batch.
 
-env = MicroDuckEnv(
-    download=True, backend="mujoco", tasks=tasks, action_scale=1.0, seed=0
-)
-value_net = TensorDictModule(
-    MLP(in_features=MicroDuckEnv.OBSERVATION_DIM, out_features=1, num_cells=[64]),
-    in_keys=["observation"],
-    out_keys=["state_value"],
-)
-episodes = []
-for task_id in (0, 1):
-    start = env.reset(TensorDict(task_id=torch.tensor([[task_id]]), batch_size=[1]))
-    episodes.append(
-        env.rollout(
-            ROLLOUT_STEPS, tensordict=start, auto_reset=False, break_when_any_done=False
-        )[0]
+if __name__ == "__main__":
+    env = MicroDuckEnv(
+        download=True, backend="mujoco", tasks=tasks, action_scale=1.0, seed=0
     )
-batch = torch.stack(episodes)  # (2 tasks, T)
+    value_net = TensorDictModule(
+        MLP(in_features=MicroDuckEnv.OBSERVATION_DIM, out_features=1, num_cells=[64]),
+        in_keys=["observation"],
+        out_keys=["state_value"],
+    )
+    episodes = []
+    for task_id in (0, 1):
+        start = env.reset(TensorDict(task_id=torch.tensor([[task_id]]), batch_size=[1]))
+        episodes.append(
+            env.rollout(
+                ROLLOUT_STEPS,
+                tensordict=start,
+                auto_reset=False,
+                break_when_any_done=False,
+            )[0]
+        )
+    batch = torch.stack(episodes)  # (2 tasks, T)
 
-per_task = GAE(
-    gamma=0.99,
-    lmbda=0.95,
-    value_network=value_net,
-    average_gae=True,
-    group_key="task_id",
-)
-global_norm = GAE(gamma=0.99, lmbda=0.95, value_network=value_net, average_gae=True)
-with torch.no_grad():
-    grouped = per_task(batch.clone())["advantage"]
-    pooled = global_norm(batch.clone())["advantage"]
-for task_id, name in enumerate(tasks.name[:2]):
-    print(
-        f"{name:14s} per-task: mean={grouped[task_id].mean():+.3f} std={grouped[task_id].std():.3f} | "
-        f"pooled: mean={pooled[task_id].mean():+.3f} std={pooled[task_id].std():.3f}"
+    per_task = GAE(
+        gamma=0.99,
+        lmbda=0.95,
+        value_network=value_net,
+        average_gae=True,
+        group_key="task_id",
     )
+    global_norm = GAE(gamma=0.99, lmbda=0.95, value_network=value_net, average_gae=True)
+    with torch.no_grad():
+        grouped = per_task(batch.clone())["advantage"]
+        pooled = global_norm(batch.clone())["advantage"]
+    for task_id, name in enumerate(tasks.name[:2]):
+        print(
+            f"{name:14s} per-task: mean={grouped[task_id].mean():+.3f} std={grouped[task_id].std():.3f} | "
+            f"pooled: mean={pooled[task_id].mean():+.3f} std={pooled[task_id].std():.3f}"
+        )
 
 # %%
 # The example's ``ppo.per_task_advantage`` option is exactly
@@ -330,132 +359,209 @@ def heading(features, params):
     return torch.exp(-yaw_rate.square() / params["heading_std"].square())
 
 
-steady = MicroDuckEnv.tracking_task(
-    0.2, reward_weights={"heading": 1.0}, heading_std=0.3
-)
-print(
-    "heading weight:",
-    float(steady.reward_weights[-1]),
-    "(the newest term is the last entry)",
-)
-print("params:", sorted(steady.params.keys()))
+if __name__ == "__main__":
+    steady = MicroDuckEnv.tracking_task(
+        0.2, reward_weights={"heading": 1.0}, heading_std=0.3
+    )
+    print(
+        "heading weight:",
+        float(steady.reward_weights[-1]),
+        "(the newest term is the last entry)",
+    )
+    print("params:", sorted(steady.params.keys()))
 
 # %%
 # Tasks built before a registration have a shorter weight vector and are
 # rejected by the env, so register terms first; ``diagnostics=True`` then
 # exposes every weighted term under ``diagnostic_reward_<name>``.
 
-env.close()
-diag_env = MicroDuckEnv(
-    download=True,
-    backend="mujoco",
-    tasks=steady,
-    diagnostics=True,
-    action_scale=1.0,
-    seed=0,
-)
-diag_rollout = diag_env.rollout(20)
-print(
-    "heading term per step:",
-    diag_rollout["next", "diagnostic_reward_heading"].mean().item(),
-    "| total reward:",
-    diag_rollout["next", "reward"].mean().item(),
-)
-diag_env.close()
+if __name__ == "__main__":
+    env.close()
+    diag_env = MicroDuckEnv(
+        download=True,
+        backend="mujoco",
+        tasks=steady,
+        diagnostics=True,
+        action_scale=1.0,
+        seed=0,
+    )
+    diag_rollout = diag_env.rollout(20)
+    print(
+        "heading term per step:",
+        diag_rollout["next", "diagnostic_reward_heading"].mean().item(),
+        "| total reward:",
+        diag_rollout["next", "reward"].mean().item(),
+    )
+    diag_env.close()
 
 # %%
 # Train the low-level skills
 # --------------------------
 #
-# The low-level actor maps ``(observation, task_id, recurrent_state)`` to 14
-# joint targets. ``examples/microduck/ppo_mujoco.py`` trains it with recurrent
-# PPO, complete-episode replay and the per-task GAE described above.
+# Both stages use :class:`~torchrl.trainers.algorithms.PPOTrainer`. It owns
+# GAE, optimization, gradient clipping, logging and collector weight updates.
+# We supply the environment, networks, loss and minibatch strategy.
 #
-# Start a full training run from a TorchRL checkout. This command trains one
-# policy on six tasks and saves both its parameters and the configuration that
-# defines the task-id order:
-#
-# .. code-block:: bash
-#
-#    python examples/microduck/ppo_mujoco.py env.download=true \
-#        env.backend=mujoco env.parallel=true env.num_envs=16 \
-#        'env.tasks=[{preset:standing_task},{preset:tracking_task,speed:0.2},{preset:tracking_task,speed:-0.2},{preset:sidestep_task,speed:0.15},{preset:sidestep_task,speed:-0.15},{preset:jump_task,weight:3.0}]' \
-#        ppo.total_transitions=10000000 \
-#        evaluation.best_checkpoint_path=microduck_skills.ckpt \
-#        logger.backend=csv
-#
-# Evaluate the individual skills before deploying them: survival, command
-# tracking and foot contacts matter more than a finite PPO loss. See the
-# example README for locomotion recipes and evaluation results.
-#
-# To use that checkpoint for the rest of this tutorial:
+# Outside documentation mode this is a long CPU training recipe: 10 million
+# physical transitions for the walker, then one million high-level decisions.
+# Native MuJoCo uses parallel CPU workers on macOS; no CUDA backend is needed.
+# These are training budgets, not a guarantee that all six skills will succeed.
+# Evaluate survival and command tracking before interpreting navigation results.
 #
 # .. code-block:: bash
 #
-#    MICRODUCK_WALKER_CHECKPOINT=microduck_skills.ckpt \
-#        MICRODUCK_HIGH_LEVEL_FRAMES=1000000 \
+#    MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
 #        python tutorials/sphinx-tutorials/microduck.py
 #
-# With no checkpoint supplied, the following block runs a small recurrent PPO
-# update and round-trips its checkpoint. This checks the complete pipeline;
-# a few hundred transitions do not produce a trained walker. Fast mode
-# shortens both training stages further.
+#    # Change the budgets or number of simulator workers:
+#    MICRODUCK_LOW_LEVEL_FRAMES=20000000 MICRODUCK_HIGH_LEVEL_FRAMES=2000000 \
+#        MICRODUCK_NUM_ENVS=8 MICRODUCK_OUTPUT_DIR=$HOME/microduck-training-longer \
+#        python tutorials/sphinx-tutorials/microduck.py
+#
+# Documentation and tutorial CI set ``TORCHRL_TUTORIALS_FAST=1``: one simulator,
+# 64 steps per stage and one optimization epoch. This takes precedence over
+# the training-budget overrides. The same PPOTrainer code runs in both modes.
+# A main guard keeps spawned MuJoCo workers from running the tutorial again.
 
-walker_checkpoint = os.environ.get("MICRODUCK_WALKER_CHECKPOINT")
-if walker_checkpoint:
-    payload = load_checkpoint(walker_checkpoint)
-else:
-    low_cfg = OmegaConf.load(EXAMPLES_DIR / "config.yaml")
-    low_cfg.env.update(
-        backend="mujoco",
-        device="cpu",
-        num_envs=1,
-        parallel=False,
-        download=True,
-        max_episode_steps=32 if TUTORIAL_FAST else 64,
-        tasks=[
-            {"preset": "standing_task"},
-            {"preset": "tracking_task", "speed": 0.2},
-            {"preset": "tracking_task", "speed": -0.2},
-            {"preset": "sidestep_task", "speed": 0.15},
-            {"preset": "sidestep_task", "speed": -0.15},
-            {"preset": "jump_task", "weight": 3.0},
-        ],
+if __name__ == "__main__":
+    temporary_output = TemporaryDirectory() if TUTORIAL_FAST else None
+    output_dir = Path(
+        temporary_output.name
+        if TUTORIAL_FAST
+        else os.environ.get("MICRODUCK_OUTPUT_DIR", "microduck-training")
+    ).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    num_envs = 1 if TUTORIAL_FAST else int(os.environ.get("MICRODUCK_NUM_ENVS", 16))
+    low_frames = (
+        64
+        if TUTORIAL_FAST
+        else int(os.environ.get("MICRODUCK_LOW_LEVEL_FRAMES", 10_000_000))
     )
-    low_cfg.policy.hidden_size = 32
-    low_cfg.policy.initial_policy_scale = 1.0
-    policy_kwargs = {
-        "hidden_size": 32,
-        "policy_head": "gaussian",
-        "initial_policy_scale": 1.0,
-    }
-    low_env = make_env(low_cfg.env)
-    low_actor, low_critic = make_models(low_env, **policy_kwargs)
-    try:
-        low_history = train_ppo(
-            low_env,
+    high_frames = (
+        64
+        if TUTORIAL_FAST
+        else int(os.environ.get("MICRODUCK_HIGH_LEVEL_FRAMES", 1_000_000))
+    )
+    resume = not TUTORIAL_FAST and os.environ.get("MICRODUCK_RESUME", "0") == "1"
+    torch.set_num_threads(1)
+    torch.manual_seed(0)
+
+    walker_checkpoint = os.environ.get("MICRODUCK_WALKER_CHECKPOINT")
+    if walker_checkpoint:
+        payload = load_checkpoint(walker_checkpoint)
+    else:
+        low_env_cfg = OmegaConf.load(EXAMPLES_DIR / "config.yaml").env
+        low_env_cfg.update(
+            backend="mujoco",
+            device="cpu",
+            num_envs=num_envs,
+            parallel=num_envs > 1,
+            download=True,
+            max_episode_steps=32 if TUTORIAL_FAST else 500,
+            tasks=[
+                {"preset": "standing_task"},
+                {"preset": "tracking_task", "speed": 0.2},
+                {"preset": "tracking_task", "speed": -0.2},
+                {"preset": "sidestep_task", "speed": 0.15},
+                {"preset": "sidestep_task", "speed": -0.15},
+                {"preset": "jump_task", "weight": 3.0},
+            ],
+        )
+        policy_kwargs = {
+            "hidden_size": 32 if TUTORIAL_FAST else 128,
+            "policy_head": "gaussian",
+            "initial_policy_scale": 1.0,
+        }
+        low_env = make_env(low_env_cfg)
+        low_actor, low_critic = make_models(low_env, **policy_kwargs)
+        low_loss = ClipPPOLoss(
             low_actor,
             low_critic,
-            total_transitions=64 if TUTORIAL_FAST else 512,
-            transitions_per_update=64 if TUTORIAL_FAST else 256,
-            max_episode_steps=low_cfg.env.max_episode_steps,
-            epochs=1 if TUTORIAL_FAST else 2,
-            minibatch_trajectories=2,
-            per_task_advantage=True,
+            functional=False,
+            normalize_advantage=False,
+            entropy_coeff=0.01,
         )
-        with TemporaryDirectory() as directory:
+        low_gae = GAE(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=low_critic,
+            average_gae=True,
+            group_key="task_id",
+            shifted=True,
+            deactivate_vmap=True,
+        )
+        low_collector = Collector(
+            low_env,
+            low_actor,
+            frames_per_batch=64 if TUTORIAL_FAST else num_envs * 1024,
+            total_frames=low_frames,
+        )
+        low_trainer = PPOTrainer(
+            collector=low_collector,
+            total_frames=low_frames,
+            frame_skip=1,
+            loss_module=low_loss,
+            optimizer=torch.optim.Adam(low_loss.parameters(), lr=3e-4),
+            gae=set_recurrent_mode(True)(low_gae),
+            num_epochs=1 if TUTORIAL_FAST else 5,
+            optim_steps_per_batch=1 if TUTORIAL_FAST else 8,
+            clip_norm=1.0,
+            progress_bar=not TUTORIAL_FAST,
+            logger=CSVLogger("low_level", log_dir=str(output_dir)),
+            log_interval=1,
+            log_timings=True,
+            checkpoint=Checkpoint(rng=GlobalRNGState()),
+            save_trainer_file=output_dir / "low_level.trainer",
+            save_trainer_interval=100_000,
+        )
+        # Keep contiguous time windows for truncated backpropagation through the
+        # GRU. Each window starts from its collected state; is_init resets it at
+        # episode boundaries. Do not flatten time into independent transitions.
+        BatchSubSampler(
+            batch_size=64 if TUTORIAL_FAST else num_envs * 128,
+            sub_traj_len=64 if TUTORIAL_FAST else 128,
+        ).register(low_trainer)
+        if resume:
+            low_trainer.load_from_file(output_dir / "low_level.trainer")
+        try:
+            low_trainer.train()
             path = save_checkpoint(
-                Path(directory) / "walker.ckpt",
+                output_dir / "walker.ckpt",
                 low_actor,
                 low_critic,
-                transitions=int(low_history[-1]["progress/transitions"]),
+                transitions=low_trainer.collected_frames,
                 policy_kwargs=policy_kwargs,
                 metrics={},
-                config=OmegaConf.to_container(low_cfg, resolve=True),
+                config={"env": OmegaConf.to_container(low_env_cfg, resolve=True)},
             )
             payload = load_checkpoint(path)
-    finally:
-        low_env.close()
+        finally:
+            low_collector.shutdown()
+
+# %%
+# Checkpoints and resuming
+# ------------------------
+#
+# ``low_level.trainer`` and ``high_level.trainer`` contain the optimizer,
+# collector, model, RNG and training counters. ``walker.ckpt`` additionally
+# records the architecture and ordered task definitions for deployment.
+# CSV losses, rewards and timings live under ``low_level/`` and ``high_level/``.
+# Keep the same worker count and network/batch settings when resuming.
+# Native MuJoCo resets simulator episodes after a restart; restored model and
+# optimizer state continue learning, but the continuation is not bit-exact.
+#
+# .. code-block:: bash
+#
+#    # Resume an interrupted low-level stage, then run the high-level stage:
+#    MICRODUCK_RESUME=1 MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
+#        python tutorials/sphinx-tutorials/microduck.py
+#
+#    # Skip low-level training, or resume an interrupted high-level stage:
+#    MICRODUCK_WALKER_CHECKPOINT=$HOME/microduck-training/walker.ckpt \
+#        MICRODUCK_RESUME=1 MICRODUCK_OUTPUT_DIR=$HOME/microduck-training \
+#        python tutorials/sphinx-tutorials/microduck.py
+#
+# Omit ``MICRODUCK_RESUME`` for a new high-level run from a supplied walker.
 
 # %%
 # Rebuild the checkpoint's architecture and task library
@@ -471,20 +577,55 @@ else:
 # ``task_id=2`` with the third training task, even if only some tasks are offered
 # to the high-level actor.
 
-model_env = make_env(
-    checkpoint=payload,
-    cfg={"backend": "mujoco", "device": "cpu", "parallel": False},
-    download=True,
-    num_envs=1,
-)
-try:
-    walker = make_render_policy(model_env, checkpoint=payload)
-    walker.load_state_dict(payload["model_state_dict"])
-    walker.eval()
-finally:
-    model_env.close()
+if __name__ == "__main__":
+    model_env = make_env(
+        checkpoint=payload,
+        cfg={"backend": "mujoco", "device": "cpu", "parallel": False},
+        download=True,
+        num_envs=1,
+    )
+    try:
+        walker = make_render_policy(model_env, checkpoint=payload)
+        walker.load_state_dict(payload["model_state_dict"])
+        walker.eval()
+    finally:
+        model_env.close()
 
-skill_tasks = torch.stack(make_tasks(payload["config"]["env"]["tasks"]))
+    skill_tasks = torch.stack(make_tasks(payload["config"]["env"]["tasks"]))
+
+# %%
+# Evaluate each skill before deploying it
+# ---------------------------------------
+#
+# Pin one task at a time and evaluate deterministic rollouts on fresh resets.
+# ``skills.json`` reports survival, episode length, velocity-tracking error
+# and airborne time for jumping. A short documentation run only exercises
+# these measurements; it cannot establish that the walker has learned them.
+
+if __name__ == "__main__":
+    skill_results = []
+    jump_index = list(MicroDuckEnv.REWARD_TERMS).index("jump")
+    for task_id, task in enumerate(skill_tasks.unbind(0)):
+        evaluator = make_evaluator(
+            make_env(
+                checkpoint=payload,
+                cfg={"backend": "mujoco", "task_id": task_id, "diagnostics": True},
+                download=True,
+                num_envs=1,
+                parallel=False,
+            ),
+            walker,
+            label=str(task_id),
+            jumping=bool(task.reward_weights[jump_index] > 0),
+            num_episodes=1 if TUTORIAL_FAST else 8,
+            steps=32 if TUTORIAL_FAST else 500,
+        )
+        try:
+            skill_results.append(evaluator.evaluate())
+        finally:
+            evaluator.shutdown()
+    skill_metrics = evaluation_metrics(skill_results)
+    (output_dir / "skills.json").write_text(json.dumps(skill_metrics, indent=2))
 
 # %%
 # Give the walker a new job: reach a waypoint
@@ -565,39 +706,42 @@ class WaypointMicroDuck(MicroDuckEnv):
 # scale. The standard MicroDuck step is 0.02 s, so five steps make one
 # high-level decision last up to 0.1 s.
 
-task_env = WaypointMicroDuck(
-    download=True,
-    backend="mujoco",
-    tasks=MicroDuckEnv.standing_task(),
-    action_scale=payload["config"]["env"]["action_scale"],
-    max_episode_steps=64 if TUTORIAL_FAST else 500,
-    seed=0,
-)
-controller = MicroDuckController(
-    walker,
-    skill_tasks,
-    group_key=None,
-    reset_key=None,
-    control_period_s=0.02,
-)
-training_env = ClosedLoopMultiAction.from_env(
-    task_env, controller, steps=5, reward_aggregation="sum"
-)
-check_env_specs(training_env)
+if __name__ == "__main__":
+    make_task_env = ft.partial(
+        WaypointMicroDuck,
+        download=True,
+        backend="mujoco",
+        tasks=MicroDuckEnv.standing_task(),
+        action_scale=payload["config"]["env"]["action_scale"],
+        max_episode_steps=64 if TUTORIAL_FAST else 500,
+        seed=0,
+    )
+    task_env = make_task_env(num_envs=num_envs, parallel=num_envs > 1)
+    controller = MicroDuckController(
+        walker,
+        skill_tasks,
+        group_key=None,
+        reset_key=None,
+        control_period_s=0.02,
+    )
+    training_env = ClosedLoopMultiAction.from_env(
+        task_env, controller, steps=5, reward_aggregation="sum"
+    )
+    check_env_specs(training_env)
 
-assert training_env.action_key == "skill"
-assert training_env.full_action_spec["skill"].n == len(skill_tasks)
-# The high-level observation includes the six waypoint/orientation values.
-assert training_env.observation_spec["observation"].shape[-1] == (
-    MicroDuckEnv.OBSERVATION_DIM + 6
-)
+    assert training_env.action_key == "skill"
+    assert training_env.full_action_spec["skill"].n == len(skill_tasks)
+    # The high-level observation includes the six waypoint/orientation values.
+    assert training_env.observation_spec["observation"].shape[-1] == (
+        MicroDuckEnv.OBSERVATION_DIM + 6
+    )
 
-td = training_env.reset()
-td["skill"] = torch.zeros(training_env.batch_size, dtype=torch.long)
-transition = training_env.step(td)
-td = training_env.step_mdp(transition)
-hidden = td["_controller", "recurrent_state"]
-# hidden.shape == [1, 1, hidden_size]: env, GRU layer, features.
+    td = training_env.reset()
+    td["skill"] = torch.zeros(training_env.batch_size, dtype=torch.long)
+    transition = training_env.step(td)
+    td = training_env.step_mdp(transition)
+    hidden = td["_controller", "recurrent_state"]
+# hidden.shape == [*training_env.batch_size, 1, hidden_size].
 # This includes the final physical step's update; the next decision resumes it.
 
 # %%
@@ -609,92 +753,138 @@ hidden = td["_controller", "recurrent_state"]
 # ``gamma=0.99`` now discounts one high-level decision, whose reward is the sum
 # of executed physical-step rewards. Low-level inference is deterministic
 # and has gradients disabled by default.
+# ``functional=False`` lets the trainer's GAE read the critic's live parameters.
+# The replay buffer shuffles transitions without replacement for each epoch;
+# ``optim_steps_per_batch=None`` consumes all minibatches. Unlike the walker,
+# this actor has no recurrent state, so flattening time is appropriate here.
 
-num_skills = training_env.full_action_spec["skill"].n
-obs_dim = training_env.observation_spec["observation"].shape[-1]
-high_actor = ProbabilisticActor(
-    module=TensorDictModule(
-        MLP(in_features=obs_dim, out_features=num_skills, num_cells=[64, 64]),
+if __name__ == "__main__":
+    num_skills = training_env.full_action_spec["skill"].n
+    obs_dim = training_env.observation_spec["observation"].shape[-1]
+    high_actor = ProbabilisticActor(
+        module=TensorDictModule(
+            MLP(in_features=obs_dim, out_features=num_skills, num_cells=[64, 64]),
+            in_keys=["observation"],
+            out_keys=["logits"],
+        ),
+        in_keys=["logits"],
+        out_keys=["skill"],
+        spec=training_env.full_action_spec_unbatched,
+        distribution_class=Categorical,
+        return_log_prob=True,
+    )
+    high_critic = TensorDictModule(
+        MLP(in_features=obs_dim, out_features=1, num_cells=[64, 64]),
         in_keys=["observation"],
-        out_keys=["logits"],
-    ),
-    in_keys=["logits"],
-    out_keys=["skill"],
-    spec=training_env.full_action_spec_unbatched,
-    distribution_class=Categorical,
-    return_log_prob=True,
-)
-high_critic = TensorDictModule(
-    MLP(in_features=obs_dim, out_features=1, num_cells=[64, 64]),
-    in_keys=["observation"],
-    out_keys=["state_value"],
-)
-loss = ClipPPOLoss(
-    high_actor, high_critic, normalize_advantage=True, entropy_coeff=0.01
-)
-loss.set_keys(action="skill")
-loss.make_value_estimator(ValueEstimators.GAE, gamma=0.99, lmbda=0.95)
-optimizer = torch.optim.Adam(loss.parameters(), lr=3e-4)
+        out_keys=["state_value"],
+    )
+    loss = ClipPPOLoss(
+        high_actor,
+        high_critic,
+        functional=False,
+        normalize_advantage=True,
+        entropy_coeff=0.01,
+    )
+    optimizer = torch.optim.Adam(loss.parameters(), lr=3e-4)
 
-walker_before = [p.detach().clone() for p in walker.parameters()]
-actor_before = [p.detach().clone() for p in high_actor.parameters()]
-collector = Collector(
-    training_env,
-    high_actor,
-    frames_per_batch=32 if TUTORIAL_FAST else 128,
-    total_frames=int(
-        os.environ.get("MICRODUCK_HIGH_LEVEL_FRAMES", 64 if TUTORIAL_FAST else 1024)
-    ),
-)
-high_history = []
-try:
-    for batch in collector:
-        with torch.no_grad():
-            loss.value_estimator(
-                batch,
-                params=loss.critic_network_params,
-                target_params=loss.target_critic_network_params,
-            )
-        for _ in range(1 if TUTORIAL_FAST else 4):
-            losses = loss(batch.reshape(-1))
-            objective = (
-                losses["loss_objective"]
-                + losses["loss_critic"]
-                + losses["loss_entropy"]
-            )
-            assert torch.isfinite(objective)
-            optimizer.zero_grad()
-            objective.backward()
-            optimizer.step()
-        high_history.append(batch["next", "reward"].mean().item())
-        collector.update_policy_weights_()
-finally:
-    collector.shutdown(close_env=False)
+    collector = Collector(
+        training_env,
+        high_actor,
+        frames_per_batch=32 if TUTORIAL_FAST else num_envs * 128,
+        total_frames=high_frames,
+    )
+    replay = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(32 if TUTORIAL_FAST else num_envs * 128),
+        sampler=SamplerWithoutReplacement(),
+        batch_size=32 if TUTORIAL_FAST else 256,
+    )
+    high_trainer = PPOTrainer(
+        collector=collector,
+        total_frames=high_frames,
+        frame_skip=1,  # Count high-level decisions, not physical substeps.
+        loss_module=loss,
+        optimizer=optimizer,
+        action_key="skill",
+        gamma=0.99,
+        lmbda=0.95,
+        replay_buffer=replay,
+        optim_steps_per_batch=None,
+        num_epochs=1 if TUTORIAL_FAST else 4,
+        clip_norm=1.0,
+        progress_bar=not TUTORIAL_FAST,
+        log_actions=False,
+        logger=CSVLogger("high_level", log_dir=str(output_dir)),
+        log_interval=1,
+        log_timings=True,
+        checkpoint=Checkpoint(rng=GlobalRNGState()),
+        save_trainer_file=output_dir / "high_level.trainer",
+        save_trainer_interval=10_000,
+    )
+    if resume and walker_checkpoint:
+        high_trainer.load_from_file(output_dir / "high_level.trainer")
+    walker_before = [p.detach().clone() for p in walker.parameters()]
+    actor_before = [p.detach().clone() for p in high_actor.parameters()]
+    try:
+        high_trainer.train()
+    finally:
+        collector.shutdown()
 
-assert any(
-    not torch.equal(before, after)
-    for before, after in zip(actor_before, high_actor.parameters())
-)
-for before, after in zip(walker_before, walker.parameters()):
-    torch.testing.assert_close(before, after)
-    assert after.grad is None
+    assert any(
+        not torch.equal(before, after)
+        for before, after in zip(actor_before, high_actor.parameters())
+    )
+    for before, after in zip(walker_before, walker.parameters()):
+        torch.testing.assert_close(before, after)
+        assert after.grad is None
 
 # %%
 # Evaluate the composed policy
 # ----------------------------
 #
 # The high-level actor is also deterministic for evaluation. Increasing the
-# training budgets and loading a validated skill checkpoint is necessary to
-# judge navigation performance; the short default run checks learning and
-# deployment mechanics, not waypoint success.
+# training budgets alone does not establish navigation success. Inspect goal
+# distance and arrival rate over multiple episodes and seeds. The documentation
+# run checks the training/deployment pipeline, not learned skill quality.
+# PPOTrainer closes its collector environment, so evaluation uses a fresh one.
+# ``navigation.json`` records arrival rate and final distance across resets.
 
-with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
-    navigation = training_env.rollout(
-        20 if TUTORIAL_FAST else 100, high_actor, break_when_any_done=True
+
+def navigation_metrics(trajectories: TensorDictBase) -> dict[str, float]:
+    lengths = trajectories["collector", "mask"].sum(-1)
+    distance = trajectories["next", "observation"][..., -6:-4].norm(dim=-1)
+    final_distance = distance.gather(-1, (lengths - 1).unsqueeze(-1))
+    return {
+        "arrival_rate": (final_distance < 0.05).float().mean().item(),
+        "final_distance_m": final_distance.mean().item(),
+    }
+
+
+if __name__ == "__main__":
+    evaluation_env = ClosedLoopMultiAction.from_env(
+        make_task_env(), controller, steps=5, reward_aggregation="sum"
     )
-distance_to_goal = navigation["next", "observation"][..., -6:-4].norm(dim=-1)
-# Inspect distance_to_goal and navigation["next", "terminated"] when evaluating.
-training_env.close()
+    with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
+        navigation = evaluation_env.rollout(
+            20 if TUTORIAL_FAST else 100, high_actor, break_when_any_done=True
+        )
+    distance_to_goal = navigation["next", "observation"][..., -6:-4].norm(dim=-1)
+    # Inspect distance_to_goal and navigation["next", "terminated"] when evaluating.
+    evaluator = Evaluator(
+        evaluation_env,
+        high_actor,
+        num_trajectories=1 if TUTORIAL_FAST else 32,
+        max_steps=20 if TUTORIAL_FAST else 100,
+        metrics_fn=navigation_metrics,
+    )
+    try:
+        navigation_results = evaluator.evaluate()
+        (output_dir / "navigation.json").write_text(
+            json.dumps(navigation_results, indent=2)
+        )
+    finally:
+        evaluator.shutdown()
+    if temporary_output is not None:
+        temporary_output.cleanup()
 
 # %%
 # The same walker in a 5-vs-5 task
@@ -761,7 +951,10 @@ training_env.close()
 #        ),
 #        in_keys=[obs_key], out_keys=[value_key],
 #    )
-#    loss = ClipPPOLoss(actor, critic, normalize_advantage=False, entropy_coeff=0.01)
+#    loss = ClipPPOLoss(
+#        actor, critic, functional=False,
+#        normalize_advantage=False, entropy_coeff=0.01,
+#    )
 #    loss.set_keys(
 #        action=action_key,
 #        reward=("agents", "reward"),
@@ -769,20 +962,42 @@ training_env.close()
 #        done=("agents", "done"),
 #        terminated=("agents", "terminated"),
 #    )
-#    loss.make_value_estimator(ValueEstimators.GAE, gamma=0.99, lmbda=0.95)
+#    loss.make_value_estimator(gamma=0.99, lmbda=0.95)  # PPO defaults to GAE.
 #
-# The same collector/update loop applies. For this local critic, every player
+# The same PPOTrainer applies. For this local critic, every player
 # gets its own value prediction. A centralized critic can instead read the
 # global match state. When episodes end at match level, add the corresponding
 # per-agent done keys to each collected batch before computing GAE:
 #
 # .. code-block:: python
 #
-#    reward = batch["next", "agents", "reward"]
-#    for key in ("done", "terminated"):
-#        batch["next", "agents", key] = (
-#            batch["next", key].unsqueeze(-1).expand_as(reward)
-#        )
+#    def match_boundaries(batch):
+#        reward = batch["next", "agents", "reward"]
+#        for key in ("done", "terminated"):
+#            batch["next", "agents", key] = (
+#                batch["next", key].unsqueeze(-1).expand_as(reward)
+#            )
+#        return batch
+#
+#    collector = Collector(
+#        football_training_env, actor, frames_per_batch=4096,
+#        total_frames=1_000_000,
+#    )
+#    trainer = PPOTrainer(
+#        collector=collector, total_frames=1_000_000, frame_skip=1,
+#        loss_module=loss,
+#        optimizer=torch.optim.Adam(loss.parameters(), lr=3e-4),
+#        gae=loss.value_estimator,
+#        action_key=action_key, observation_key=obs_key,
+#        reward_key=("agents", "reward"),
+#        episode_reward_key=("agents", "reward"),
+#        done_key=("agents", "done"),
+#        terminated_key=("agents", "terminated"),
+#        num_epochs=4, optim_steps_per_batch=1, clip_norm=1.0,
+#        log_actions=False,
+#    )
+#    trainer.register_op("batch_process", match_boundaries)
+#    trainer.train()
 #
 # Team rewards, opponent policies and self-play are high-level training
 # choices. See the multi-agent PPO tutorial for those training conventions.
@@ -796,7 +1011,7 @@ training_env.close()
 # walker's parameters, architecture and task-id order. ``MicroDuckController``
 # adapts those skills to a new task, and ``ClosedLoopMultiAction`` executes them
 # with fresh feedback and independent recurrent state. The high-level actor
-# then trains with an ordinary collector and PPO loss.
+# then trains with the same PPOTrainer used for low-level learning.
 #
 # .. seealso::
 #
