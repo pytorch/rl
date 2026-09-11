@@ -10,6 +10,7 @@ Utility modules and helper functions for building RL networks.
     :template: rl_template_noinherit.rst
 
     ActorValueOperator
+    LowLevelController
     ActorCriticOperator
     ActorCriticWrapper
     get_primers_from_module

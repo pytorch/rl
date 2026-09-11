@@ -25,8 +25,15 @@ from _transforms_common import (
 )
 from packaging import version
 from tensordict import NonTensorData, TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase, TensorDictSequential, WrapModule
+from tensordict.nn import (
+    NormalParamExtractor,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictSequential,
+    WrapModule,
+)
 from torch import nn
+from torchrl.collectors import Collector
 
 from torchrl.data import (
     Binary,
@@ -50,6 +57,7 @@ from torchrl.envs import (
     ActionMask,
     ActionScaling,
     CartesianSolver,
+    ClosedLoopMultiAction,
     Compose,
     ConditionalPolicySwitch,
     ConditionalSkip,
@@ -68,19 +76,32 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetMacroAction,
+    TensorDictPrimer,
     ToyVLAEnv,
     TransformedEnv,
     URScriptPrimitive,
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import ActionChunkTransform, ActionTokenizerTransform
+from torchrl.envs.transforms import (
+    ActionChunkTransform,
+    ActionTokenizerTransform,
+    CatTensors,
+)
 from torchrl.envs.transforms.transforms import (
     ActionDiscretizer,
     FORWARD_NOT_IMPLEMENTED,
     Transform,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules import (
+    GRUModule,
+    LowLevelController,
+    ProbabilisticActor,
+    TanhNormal,
+)
+from torchrl.modules.utils import get_primers_from_module
+from torchrl.objectives import ClipPPOLoss, ValueEstimators
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
@@ -1659,6 +1680,459 @@ class TestMacroPrimitiveTransform:
         assert action_spec["action", "target"].shape == torch.Size([1, 4])
         assert action_spec["action", "target"].dtype is torch.float64
         assert ("action", "target") in action_spec.rand().keys(True, True)
+
+
+class _ControllerTestEnv(EnvBase):
+    """Stateless dynamics make masked execution independently observable."""
+
+    def __init__(self, group_key=None, batch_size=(), locked=True, action_key="action"):
+        super().__init__(batch_size=batch_size)
+        self._batch_locked = locked
+        self.group_key = group_key
+        self.action_path = action_key
+        self.group_shape = self.batch_size + ((3,) if group_key is not None else ())
+        observations = Composite(
+            observation=Unbounded((*self.group_shape, 1)),
+            fallen=Categorical(2, shape=(*self.group_shape, 1), dtype=torch.bool),
+            shape=self.group_shape,
+        )
+        actions = Composite(
+            {action_key: Unbounded((*self.group_shape, 1))}, shape=self.group_shape
+        )
+        rewards = Composite(
+            reward=Unbounded((*self.group_shape, 1)), shape=self.group_shape
+        )
+        if group_key is not None:
+            observations = Composite({group_key: observations}, shape=self.batch_size)
+            actions = Composite({group_key: actions}, shape=self.batch_size)
+            rewards = Composite({group_key: rewards}, shape=self.batch_size)
+        observations["count"] = Unbounded((*self.batch_size, 1), dtype=torch.long)
+        observations["limit"] = Unbounded((*self.batch_size, 1), dtype=torch.long)
+        self.observation_spec = observations
+        self.action_spec = actions
+        self.reward_spec = rewards
+        self.done_spec = Categorical(2, shape=(*self.batch_size, 1), dtype=torch.bool)
+
+    def _set_seed(self, seed):
+        return seed
+
+    def _reset(self, tensordict=None, **kwargs):
+        shape = self.batch_size if tensordict is None else tensordict.batch_size
+        out = self.observation_spec.zero()
+        if not self.batch_locked and shape:
+            out = out.expand(shape).clone()
+        out["limit"] = torch.full((*shape, 1), 100, dtype=torch.long)
+        out["done"] = torch.zeros((*shape, 1), dtype=torch.bool)
+        return out
+
+    def _step(self, td):
+        out = td.select(*self.observation_spec.keys(True, True)).clone()
+        active = td.get("_step", torch.ones(td.shape, dtype=torch.bool))
+        root_active = active.unsqueeze(-1)
+        count = td["count"] + root_active
+        group = out if self.group_key is None else out[self.group_key]
+        source = td if self.group_key is None else td[self.group_key]
+        mask = root_active if self.group_key is None else root_active.unsqueeze(-1)
+        position = source["observation"] + torch.where(
+            mask, source[self.action_path], 0
+        )
+        group["observation"] = position
+        group["reward"] = torch.where(mask, position, 0)
+        # One controller respawns on physical step two; the env stays alive.
+        fallen = torch.zeros_like(position, dtype=torch.bool)
+        if self.group_key is not None:
+            fallen[..., 0, :] = count == 2
+        group["fallen"] = fallen
+        out["count"] = count
+        out["done"] = count >= td["limit"]
+        out["terminated"] = out["done"].clone()
+        return out
+
+
+class _FeedbackController(TensorDictModuleBase):
+    in_keys = ["observation", "command", "memory", "is_init"]
+    out_keys = ["action", ("next", "memory")]
+
+    def __init__(self):
+        super().__init__()
+        self.gain = nn.Parameter(torch.tensor(0.5))
+
+    def make_tensordict_primer(self):
+        return TensorDictPrimer(memory=Unbounded((1,)), default_value=0)
+
+    def forward(self, td):
+        memory = torch.where(td["is_init"], 0, td["memory"])
+        td["action"] = self.gain * (td["command"] - td["observation"]) + 0.01 * memory
+        td["next", "memory"] = memory + 1
+        return td
+
+
+class TestClosedLoopMultiAction:
+    @pytest.mark.parametrize("shared_initializer", [False, True])
+    def test_callable_defaults_reset_only_selected_controller(self, shared_initializer):
+        class Policy(_FeedbackController):
+            @staticmethod
+            def defaults(*, reset):
+                count = int(reset.sum())
+                return TensorDict({"memory": torch.full((count, 1), 7.0)}, [count])
+
+            def make_tensordict_primer(self):
+                if shared_initializer:
+                    return TensorDictPrimer(
+                        memory=Unbounded((1,)),
+                        default_value=self.defaults,
+                        single_default_value=True,
+                    )
+                return TensorDictPrimer(
+                    memory=Unbounded((1,)), default_value=partial(torch.full, (1,), 7.0)
+                )
+
+        env = ClosedLoopMultiAction.from_env(
+            _ControllerTestEnv("agents", batch_size=(2,)),
+            LowLevelController(
+                Policy(),
+                Composite(command=Bounded(-1, 1, shape=(1,))),
+                group_key="agents",
+                reset_key="fallen",
+            ),
+            steps=2,
+        )
+        td = env.reset()
+        assert (td["agents", "_controller", "memory"] == 7).all()
+        td.update(env.full_action_spec.one())
+        next_td = env.step(td)["next"]
+        assert (next_td["agents", "_controller", "memory"][:, 0] == 7).all()
+        assert next_td["agents", "_controller", "is_init"][:, 0].all()
+        assert (next_td["agents", "_controller", "memory"][:, 1:] == 2).all()
+        assert not next_td["agents", "_controller", "is_init"][:, 1:].any()
+        env.close()
+
+    def test_plain_controller_preserves_unrelated_actions(self):
+        base = _ControllerTestEnv()
+        actions = base.full_action_spec.clone()
+        actions["unrelated"] = Bounded(0, 1, shape=(1,))
+        base.action_spec = actions
+        policy = TensorDictModule(
+            nn.Identity(), in_keys=["command"], out_keys=["action"]
+        )
+        env = ClosedLoopMultiAction.from_env(
+            base,
+            policy,
+            steps=2,
+            decision_spec=Composite(
+                command=Bounded(0, 1, shape=(1,)), unrelated=Bounded(0, 1, shape=(1,))
+            ),
+        )
+        td = (
+            env.reset()
+            .set("command", torch.ones(1))
+            .set("unrelated", torch.full((1,), 0.2))
+        )
+        transition = env.step(td)
+        torch.testing.assert_close(
+            transition["next", "observation"], torch.tensor([2.0])
+        )
+        torch.testing.assert_close(transition["unrelated"], torch.tensor([0.2]))
+        env.close()
+
+    @pytest.mark.parametrize("group_key", [None, "agents"])
+    def test_stacked_observations_keep_live_state(self, group_key):
+        controller = LowLevelController(
+            _FeedbackController(),
+            Composite(command=Bounded(-1, 1, shape=(1,))),
+            group_key=group_key,
+        )
+        env = ClosedLoopMultiAction.from_env(
+            _ControllerTestEnv(group_key), controller, steps=3, stack_observations=True
+        )
+        check_env_specs(env)
+        td = env.reset()
+        for decision in range(2):
+            td.update(env.full_action_spec.one())
+            transition = env.step(td)
+            group = (
+                transition["next"]
+                if group_key is None
+                else transition["next", group_key]
+            )
+            assert group["observation"].shape[-2:] == (3, 1)
+            assert (group["_controller", "memory"] == 3 * (decision + 1)).all()
+            td = env.step_mdp(transition)
+        env.close()
+
+    def test_inverse_next_precedes_primer_and_outer_fallback(self):
+        class AdvanceState(Transform):
+            def _inv_call(self, td):
+                td["next", "hidden"] = td["hidden"] + 1
+                td["next", "count"] = torch.full_like(td["count"], 999)
+                return td
+
+        env = TransformedEnv(
+            _ControllerTestEnv(),
+            Compose(
+                TensorDictPrimer(hidden=Unbounded((1,)), default_value=4),
+                AdvanceState(),
+            ),
+        )
+        td = env.reset().set("action", torch.ones(1))
+        td["next", "hidden"] = torch.tensor([-20.0])
+        result = env.step(td)
+        torch.testing.assert_close(result["next", "hidden"], torch.tensor([5.0]))
+        torch.testing.assert_close(result["hidden"], torch.tensor([4.0]))
+        assert result["next", "count"].item() == 1
+        env.close()
+
+    @pytest.mark.parametrize("compile_controller", [False, True])
+    def test_gru_nested_layout_across_decisions(self, compile_controller):
+        torch.manual_seed(0)
+        gru = GRUModule(
+            input_size=2,
+            hidden_size=4,
+            num_layers=2,
+            in_keys=["observation", ("rnn", "hidden"), "is_init"],
+            out_keys=["features", ("next", "rnn", "hidden")],
+        )
+        head = nn.Linear(4, 1)
+        policy = TensorDictSequential(
+            gru,
+            TensorDictModule(
+                head, in_keys=["features"], out_keys=[("motor", "output")]
+            ),
+        )
+        adapter = CatTensors(
+            in_keys=["observation", ("decision", "target")],
+            out_key="observation",
+            sort=False,
+        )
+        controller = LowLevelController(
+            policy,
+            Composite({("decision", "target"): Bounded(-1, 1, shape=(1,))}),
+            adapter=adapter,
+            group_key=("team", "players"),
+            state_key=("low", "state"),
+            policy_action_key=("motor", "output"),
+            action_key=("motor", "action"),
+        )
+        env = ClosedLoopMultiAction.from_env(
+            _ControllerTestEnv(
+                ("team", "players"), batch_size=(2,), action_key=("motor", "action")
+            ),
+            controller,
+            steps=3,
+        )
+        check_env_specs(env)
+        # Discovery through an enclosing sequence must not install raw RNN keys.
+        discovered = get_primers_from_module(TensorDictSequential(controller))
+        prepared = TransformedEnv(
+            _ControllerTestEnv(("team", "players"), batch_size=(2,)), discovered
+        ).reset()
+        assert ("rnn", "hidden") not in prepared.keys(True, True)
+        assert prepared["team", "players", "low", "state", "rnn", "hidden"].shape == (
+            2,
+            3,
+            2,
+            4,
+        )
+        if compile_controller:
+            # The existing GRU wrapper has Python context managers that break
+            # graphs. Verify compilation without requiring it to be one graph.
+            controller.compile(backend="eager")
+        td = env.reset()
+        reference = TensorDict(
+            {
+                "observation": torch.zeros(6, 2),
+                ("rnn", "hidden"): torch.zeros(6, 2, 4),
+                "is_init": torch.ones(6, 1, dtype=torch.bool),
+            },
+            [6],
+        )
+        position = torch.zeros(6, 1)
+        with torch.no_grad():
+            for decision in (0.8, -0.4):
+                td["team", "players", "decision", "target"] = torch.full(
+                    (2, 3, 1), decision
+                )
+                transition = env.step(td)
+                for _ in range(3):
+                    reference["observation"] = torch.cat(
+                        (position, torch.full_like(position, decision)), -1
+                    )
+                    reference = policy(reference)
+                    position = position + reference["motor", "output"]
+                    reference["rnn", "hidden"] = reference["next", "rnn", "hidden"]
+                    reference["is_init"] = torch.zeros(6, 1, dtype=torch.bool)
+                td = env.step_mdp(transition)
+                torch.testing.assert_close(
+                    td["team", "players", "observation"], position.reshape(2, 3, 1)
+                )
+                torch.testing.assert_close(
+                    td["team", "players", "low", "state", "rnn", "hidden"],
+                    reference["rnn", "hidden"].reshape(2, 3, 2, 4),
+                )
+        env.close()
+
+    def test_ppo_only_updates_high_level_policy(self):
+        torch.manual_seed(0)
+        low = _FeedbackController()
+        env = ClosedLoopMultiAction.from_env(
+            _ControllerTestEnv("agents", batch_size=(2,)),
+            LowLevelController(
+                low, Composite(command=Bounded(-1, 1, shape=(1,))), group_key="agents"
+            ),
+            steps=3,
+        )
+        actor = ProbabilisticActor(
+            TensorDictModule(
+                nn.Sequential(nn.Linear(1, 2), NormalParamExtractor()),
+                in_keys=[("agents", "observation")],
+                out_keys=[("agents", "loc"), ("agents", "scale")],
+            ),
+            in_keys={"loc": ("agents", "loc"), "scale": ("agents", "scale")},
+            out_keys=[("agents", "command")],
+            distribution_class=TanhNormal,
+            spec=env.full_action_spec_unbatched,
+            return_log_prob=True,
+        )
+        critic = TensorDictModule(
+            nn.Linear(1, 1),
+            in_keys=[("agents", "observation")],
+            out_keys=[("agents", "state_value")],
+        )
+        loss = ClipPPOLoss(actor, critic, normalize_advantage=False, entropy_coeff=0.01)
+        loss.set_keys(
+            action=("agents", "command"),
+            reward=("agents", "reward"),
+            value=("agents", "state_value"),
+            done=("agents", "done"),
+            terminated=("agents", "terminated"),
+        )
+        loss.make_value_estimator(ValueEstimators.GAE, gamma=0.99, lmbda=0.95)
+        optimizer = torch.optim.Adam(loss.parameters(), lr=1e-2)
+        high_before = [p.detach().clone() for p in actor.parameters()]
+        low_before = low.gain.detach().clone()
+        collector = Collector(env, actor, frames_per_batch=16, total_frames=16)
+        try:
+            batch = next(iter(collector))
+            reward = batch["next", "agents", "reward"]
+            for key in ("done", "terminated"):
+                batch["next", "agents", key] = (
+                    batch["next", key].unsqueeze(-1).expand_as(reward)
+                )
+            with torch.no_grad():
+                loss.value_estimator(
+                    batch,
+                    params=loss.critic_network_params,
+                    target_params=loss.target_critic_network_params,
+                )
+            losses = loss(batch.reshape(-1))
+            objective = (
+                losses["loss_objective"]
+                + losses["loss_critic"]
+                + losses["loss_entropy"]
+            )
+            optimizer.zero_grad()
+            objective.backward()
+            optimizer.step()
+            assert any(
+                not torch.equal(before, after)
+                for before, after in zip(high_before, actor.parameters())
+            )
+            torch.testing.assert_close(low.gain, low_before)
+            assert low.gain.grad is None
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("steps", [1, 3])
+    @pytest.mark.parametrize("group_key", [None, ("team", "players")])
+    def test_feedback_and_state(self, steps, group_key):
+        policy = _FeedbackController()
+        controller = LowLevelController(
+            policy,
+            Composite(command=Bounded(-1, 1, shape=(1,))),
+            group_key=group_key,
+            reset_key="fallen" if group_key else None,
+        )
+        if steps > 1:
+            torch._dynamo.reset()
+            controller.compile(backend="eager", fullgraph=True)
+        env = ClosedLoopMultiAction.from_env(
+            _ControllerTestEnv(group_key), controller, steps=steps
+        )
+        check_env_specs(env)
+        td = env.reset()
+        group = td if group_key is None else td[group_key]
+        group["command"] = torch.ones_like(group["observation"])
+        group["high_log_prob"] = torch.full_like(group["observation"], -0.7)
+        before = td.clone()
+        transition = env.step(td)
+        next_td = env.step_mdp(transition)
+        next_group = next_td if group_key is None else next_td[group_key]
+        expected = 0.5 if steps == 1 else 0.9
+        expected_reward = 0.5 if steps == 1 else 2.16
+        if group_key is None:
+            torch.testing.assert_close(
+                next_group["observation"], torch.full((1,), expected)
+            )
+            torch.testing.assert_close(
+                transition["next", "reward"], torch.full((1,), expected_reward)
+            )
+            assert next_group["_controller", "memory"].item() == steps
+        else:
+            torch.testing.assert_close(
+                next_group["observation"][1:], torch.full((2, 1), expected)
+            )
+            assert (next_group["_controller", "memory"][1:] == steps).all()
+            assert next_group["_controller", "memory"][0].item() == 1
+        root_group = transition if group_key is None else transition[group_key]
+        original_group = before if group_key is None else before[group_key]
+        torch.testing.assert_close(
+            root_group["observation"], original_group["observation"]
+        )
+        torch.testing.assert_close(root_group["command"], original_group["command"])
+        torch.testing.assert_close(
+            root_group["high_log_prob"], original_group["high_log_prob"]
+        )
+        assert next_td["count"].item() == steps
+        assert not next_group["_controller", "memory"].requires_grad
+        env.close()
+
+    @pytest.mark.parametrize("mode", ["sum", "mean", "last", "stack"])
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_partial_termination_rewards(self, mode, locked):
+        controller = LowLevelController(
+            _FeedbackController(), Composite(command=Bounded(-1, 1, shape=(1,)))
+        )
+        base = _ControllerTestEnv(batch_size=(2,) if locked else (), locked=locked)
+        env = ClosedLoopMultiAction.from_env(
+            base, controller, steps=3, reward_aggregation=mode
+        )
+        td = env.reset()
+        if not locked:
+            td = td.expand(2).clone()
+        td["limit"] = torch.tensor([[1], [3]])
+        td["command"] = torch.ones(2, 1)
+        result = env.step(td)["next"]
+        torch.testing.assert_close(result["count"], torch.tensor([[1], [3]]))
+        torch.testing.assert_close(
+            result["_controller", "memory"], torch.tensor([[1.0], [3.0]])
+        )
+        expected = {"sum": [0.5, 2.16], "mean": [0.5, 0.72], "last": [0.5, 0.9]}
+        if mode == "stack":
+            torch.testing.assert_close(
+                result["reward"],
+                torch.tensor([[[0.5], [0.0], [0.0]], [[0.5], [0.76], [0.9]]]),
+            )
+        else:
+            torch.testing.assert_close(
+                result["reward"], torch.tensor(expected[mode]).unsqueeze(-1)
+            )
+        assert result["done"].all()
+        reset_input = env.step_mdp(td).set("_reset", torch.tensor([[True], [False]]))
+        reset = env.reset(reset_input)
+        torch.testing.assert_close(
+            reset["_controller", "memory"], torch.tensor([[0.0], [3.0]])
+        )
+        env.close()
 
 
 class TestMultiAction(TransformBase):
