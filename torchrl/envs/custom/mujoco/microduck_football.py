@@ -42,7 +42,7 @@ import os
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TYPE_CHECKING
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -61,6 +61,9 @@ from torchrl.envs.custom.mujoco.microduck import (
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.utils import get_primers_from_module
+
+if TYPE_CHECKING:
+    import mujoco
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
@@ -149,6 +152,31 @@ def _camera_axes(position: Sequence[float], target: Sequence[float]) -> list[flo
     return right + camera_up
 
 
+def _share_meshes(spec: mujoco.MjSpec) -> None:
+    """Keep one copy of each mesh that was attached under several prefixes.
+
+    :meth:`mujoco.MjSpec.attach` copies the child's meshes under the player's
+    prefix, so a team of five carries five copies of every robot mesh. Point
+    the other players' geoms at the first copy and delete the rest; the
+    compiled model is unchanged apart from its mesh tables.
+    """
+    first: dict[str, str] = {}
+    replacement: dict[str, str] = {}
+    for mesh in spec.meshes:
+        if "/" not in mesh.name:
+            continue
+        stem = mesh.name.split("/", 1)[1]
+        kept = first.setdefault(stem, mesh.name)
+        if kept != mesh.name:
+            replacement[mesh.name] = kept
+    for geom in spec.geoms:
+        if geom.meshname in replacement:
+            geom.meshname = replacement[geom.meshname]
+    for mesh in list(spec.meshes):
+        if mesh.name in replacement:
+            spec.delete(mesh)
+
+
 def build_football_scene(
     scene: str | Path,
     *,
@@ -180,7 +208,7 @@ def build_football_scene(
     site and ``red3/left_hip_yaw`` an actuator). Only the robot comes along:
     the scene's floor, lights, ground textures and keyframes are dropped
     before attaching, and the materials whose name contains ``shell`` take
-    the team color.
+    the team color. The players share one copy of the robot's meshes.
 
     Around the ducks: a grass plane with pitch markings, walls of
     ``wall_height`` that keep the ball (and the feet) in, two goals with
@@ -539,6 +567,7 @@ def build_football_scene(
                 key_qpos += _quaternion_product(quaternion, stand_qpos[3:7])
                 key_qpos += stand_qpos[7:]
                 key_ctrl += stand_ctrl
+        _share_meshes(spec)
 
         ball = world.add_body(name="ball", pos=[0.0, 0.0, ball_radius])
         ball.add_joint(name="ball_free", type=mujoco.mjtJoint.mjJNT_FREE)
