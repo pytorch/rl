@@ -119,6 +119,7 @@ Intermediate
    tutorials/recurrent_sequence_training
    tutorials/mujoco_cube_bowl_macros
    tutorials/microduck
+   tutorials/microduck_skills
    tutorials/collector_trajectory_assembly
    tutorials/evaluator
    tutorials/rlrender

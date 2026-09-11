@@ -1,39 +1,42 @@
 """
-MicroDuck: train skills, then choose how to use them
-====================================================
+MicroDuck: tasks, rewards and simulation
+============================================
 
 **Author**: `TorchRL contributors <https://github.com/pytorch/rl>`_
 
 .. _microduck_tuto:
 
-A low-level policy controls MicroDuck's joints. A high-level policy chooses
-which skill it should perform. We will train both with
-:class:`~torchrl.trainers.algorithms.PPOTrainer`. After a brief low-level training
-demonstration, we load a saved walker for a new task: approach a waypoint.
+MicroDuck is a small open-hardware biped by Pollen Robotics. TorchRL's
+:class:`~torchrl.envs.MicroDuckEnv` represents locomotion tasks as data:
+standing, walking, sidestepping and jumping share one environment, with
+different commands and reward weights. We will explore that interface,
+customize a reward, and run a walking controller without training a policy.
 
 What you will learn
 -------------------
 
-- Train a recurrent policy conditioned on a library of locomotion tasks.
-- Deploy it with :class:`~torchrl.envs.MicroDuckController` and
-  :class:`~torchrl.envs.transforms.ClosedLoopMultiAction`.
-- Train a high-level skill selector with ordinary PPO, then run a rollout.
+- Build a task library and choose which task each simulator runs.
+- Inspect observations, actions and reward diagnostics.
+- Add a reward term and run the supplied gait controller.
+- Choose a simulator backend and record a rollout.
 
-Allow 10–20 minutes to read and try this tutorial. It uses one CPU simulator
-and short training budgets. Deployment uses a published checkpoint trained for
-10 million transitions, so the high-level policy starts with learned skills.
-The full training launcher at the end uses the same components with larger
-budgets, parallel workers and evaluation.
+Allow 10–15 minutes to read and try the tutorial on a CPU. Then continue to
+:doc:`microduck_skills` to train low-level skills with PPO and deploy them
+inside a new task. That second tutorial loads published checkpoints, so it
+also works independently.
 
-Watch the trained policies
---------------------------
+Watch the learned skills
+------------------------
 
-These recorded clips stream directly from
+This recorded grid streams from
 `torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
-Play them here, or run just the two video cells in the notebook: no training,
-checkpoint loading or simulator rendering is needed. The skill grid shows
-standing / forward / backward on top and left / right / jumping below.
-Notice the sideways drift while walking and the forward drift while jumping.
+The top row shows standing / forward / backward; the bottom row shows left /
+right / jumping. Notice the sideways drift while walking and forward drift
+while jumping. These are learned policies from the companion training tutorial;
+the gait controller we will run here is hand-written.
+
+Play the clip here, or run just this notebook cell. Playback needs no training,
+checkpoint download or simulator rendering; the cell only imports IPython.
 """
 
 from __future__ import annotations
@@ -49,354 +52,273 @@ Video(
 )
 
 # %%
-# The high-level policy below selects among those same six skills to approach
-# ``(0.5, 0.3)`` metres. The waypoint is not drawn in the simulator; the clip
-# includes episode resets. This is playback from the full training run, rather
-# than the short PPO updates we will execute in this tutorial.
-
-Video(
-    url="https://huggingface.co/torchrl/microduck-skills/resolve/"
-    "5824a856131009e1ecbc95713677a8363e5f169b/videos/navigation.mp4",
-    width=640,
-    html_attributes='controls muted loop playsinline preload="metadata" '
-    'style="max-width: 100%"',
-)
-
-# %%
-# Run the tutorial
-# ----------------
+# Set up the simulator
+# --------------------
 #
-# The remaining cells need a TorchRL checkout with ``mujoco``,
-# ``huggingface_hub`` and the ``utils`` extra installed. ``download=True``
-# fetches pinned robot assets into ``~/.cache/torchrl/microduck`` on the first
-# run. The video cells above only need IPython, which Jupyter provides.
+# The remaining cells need a TorchRL checkout with ``mujoco`` and the ``utils``
+# extra installed. ``download=True`` fetches pinned robot assets into
+# ``~/.cache/torchrl/microduck`` on the first run. You can instead point
+# ``MICRODUCK_RL_ROOT`` at a local ``microduck_rl`` checkout.
+# Documentation builds set ``TORCHRL_TUTORIALS_FAST=1`` for shorter rollouts.
 
-import functools as ft
 import os
 import sys
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import torch
 import torchrl
-from huggingface_hub import hf_hub_download
-from torchrl.checkpoint import Checkpoint
-from torchrl.envs import MicroDuckController, MicroDuckEnv
-from torchrl.envs.transforms import ClosedLoopMultiAction
-from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
-from torchrl.render import load_checkpoint
-from torchrl.trainers.algorithms import PPOTrainer
-
-# The example shares task and network definitions with the full training run.
-REPO_ROOT = Path(torchrl.__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT))
-from examples.microduck.ppo_mujoco import (  # noqa: E402
-    make_env,
-    make_models,
-    make_tasks,
-)
-from examples.microduck.train_skills import (  # noqa: E402
-    load_walker,
-    make_navigation_models,
-    SKILL_PRESETS,
-    WaypointMicroDuck,
-)
-
-# %%
-# Small budgets for an interactive run
-# ------------------------------------
-#
-# Both the script and generated notebook execute top to bottom. One simulator
-# means no worker processes and no ``__main__`` guards. Documentation builds
-# set ``TORCHRL_TUTORIALS_FAST=1`` and execute 64 steps per training stage.
+from tensordict import TensorDict, TensorDictBase
+from torchrl.envs import MicroDuckEnv, MicroDuckTaskSampler, TransformedEnv
+from torchrl.envs.utils import check_env_specs
 
 fast = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
-low_frames = 64 if fast else 1024
-high_frames = 64 if fast else 512
-epochs = 1 if fast else 4
-torch.set_num_threads(1)
+rollout_steps = 100 if fast else 300
 torch.manual_seed(0)
+torch.set_num_threads(1)
 
 # %%
-# 1. Define the skills and low-level policy
-# -----------------------------------------
+# A task is data
+# --------------
 #
-# A :class:`~torchrl.envs.MicroDuckTask` contains command ranges, reward weights
-# and gait parameters. The shared preset list defines these six tasks, in order:
-#
-# .. code-block:: python
-#
-#    SKILL_PRESETS = [
-#        {"preset": "standing_task"},
-#        {"preset": "tracking_task", "speed": 0.2},
-#        {"preset": "tracking_task", "speed": -0.2},
-#        {"preset": "sidestep_task", "speed": 0.15},
-#        {"preset": "sidestep_task", "speed": -0.15},
-#        {"preset": "jump_task", "weight": 3.0},
-#    ]
-#
-# At reset, the environment samples a task and holds it for the episode.
-# ``make_models`` builds a task embedding and GRU shared by a Gaussian actor
-# and a value head. The actor reads ``observation`` and ``task_id`` and writes
-# 14 normalized joint actions. Its recurrent state travels in the TensorDict.
+# A :class:`~torchrl.envs.MicroDuckTask` is a tensorclass containing a planar
+# command box ``(vx, vy)``, reset noise, warm-start settings, a gait clock,
+# reward weights and parameters. Presets fill all fields and accept overrides.
+# Stack them into a library: each simulator will hold one row per episode.
 
-skill_tasks = torch.stack(make_tasks(SKILL_PRESETS))
-low_env = make_env(
-    {
-        "backend": "mujoco",
-        "device": "cpu",
-        "num_envs": 1,
-        "parallel": False,
-        "download": True,
-        "action_scale": 1.0,
-        "tasks": SKILL_PRESETS,
-        "max_episode_steps": 32 if fast else 500,
-    }
+library = [
+    MicroDuckEnv.standing_task(),
+    MicroDuckEnv.tracking_task(
+        0.2, warm_start_velocity=(0.05, 0.25), warm_start_fraction=0.5
+    ),
+    MicroDuckEnv.sidestep_task(0.15),
+    MicroDuckEnv.jump_task(weight=2.0),
+]
+tasks = torch.stack(library)
+tasks.command_low, tasks.command_high
+
+# %%
+# Every row contains one weight per registered reward term. The standing preset
+# disables stepping rewards; the jumping preset enables hopping rewards and
+# disables the vertical-velocity cost. Compare three columns below: alternating
+# foot contacts (``phase_contact``), jumping, and vertical-velocity cost.
+# The rows are standing, walking, sidestepping, and jumping, in library order.
+
+terms = list(MicroDuckEnv.REWARD_TERMS)
+columns = [terms.index(name) for name in ("phase_contact", "jump", "lin_vel_z")]
+tasks.reward_weights[:, columns]
+
+# %%
+# Observations, actions and episode tasks
+# ---------------------------------------
+#
+# The native MuJoCo backend runs on CPU. One simulator has batch size ``[1]``.
+# Its policy interface is:
+#
+# .. list-table::
+#    :header-rows: 1
+#
+#    * - Key
+#      - Shape
+#      - Meaning
+#    * - ``observation``
+#      - ``[1, 56]``
+#      - Gravity, velocities, command, joint state, gait clock, previous action
+#    * - ``task_id``
+#      - ``[1, 1]``
+#      - Index into the task library
+#    * - ``command``
+#      - ``[1, 2]``
+#      - Target forward and lateral velocities in metres per second
+#    * - ``action``
+#      - ``[1, 14]``
+#      - Normalized joint-target offsets around the standing pose
+#
+# Actions are applied at 50 Hz; ``action_scale`` controls their physical range.
+# Explicitly supply ``task_id`` at reset to select row 2 (sidestepping).
+
+env = MicroDuckEnv(
+    download=True, backend="mujoco", tasks=tasks, action_scale=1.0, seed=0
 )
-walker, low_critic = make_models(low_env, hidden_size=32, initial_policy_scale=1.0)
-
-# %%
-# 2. Train the low-level policy
-# -----------------------------
-#
-# :meth:`~torchrl.trainers.algorithms.PPOTrainer.from_env` supplies the collector,
-# PPO loss, Adam optimizer, GAE and minibatches. We keep the two recurrent-policy
-# choices explicit: sample consecutive 64-step windows, and normalize advantages
-# separately within each task. A walking reward should not set the advantage
-# scale for a jumping task.
-
-low_trainer = PPOTrainer.from_env(
-    low_env,
-    actor=walker,
-    critic=low_critic,
-    total_frames=low_frames,
-    frames_per_batch=64 if fast else 256,
-    minibatch_size=64,
-    sub_traj_len=64,
-    gae_kwargs={"group_key": "task_id", "average_gae": True},
-    loss_kwargs={"entropy_coeff": 0.01},
-    num_epochs=epochs,
-    progress_bar=False,
+check_env_specs(env)
+reset = env.reset(
+    TensorDict(task_id=torch.tensor([[2]]), batch_size=[1]), set_state=True
 )
-low_trainer.train()
+rollout = env.rollout(20, tensordict=reset, auto_reset=False, break_when_any_done=True)
+env.close()
+rollout["task_id"].unique(), reset["command"]
 
 # %%
-# Reuse a saved walker
+# The task is held for the episode. Without an explicit index, resets sample
+# using the tasks' ``weight`` fields. The random actions above only demonstrate
+# the interface; they do not produce a useful gait.
+#
+# A :class:`~torchrl.envs.MicroDuckTaskSampler` can replace those probabilities
+# for a curriculum. This mixture samples only walking and sidestepping:
+
+mixed = TransformedEnv(
+    MicroDuckEnv(download=True, backend="mujoco", tasks=tasks, seed=0),
+    MicroDuckTaskSampler([0.0, 1.0, 1.0, 0.0], seed=0),
+)
+drawn = [mixed.reset()["task_id"].item() for _ in range(6)]
+mixed.close()
+drawn
+
+# %%
+# To evaluate different tasks side by side, pin one index per simulator.
+# ``parallel=False`` runs these two CPU simulators serially in this process,
+# so the notebook needs no worker processes or entry-point guard.
+
+paired = TransformedEnv(
+    MicroDuckEnv(
+        download=True, backend="mujoco", num_envs=2, parallel=False, tasks=tasks
+    ),
+    MicroDuckTaskSampler.fixed([1, 2]),
+)
+paired_reset = paired.reset()
+paired.close()
+paired_reset["task_id"], paired_reset["command"]
+
+# %%
+# Design a reward term
 # --------------------
 #
-# The short update above demonstrates training. Now load the policy from
-# `torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
-# It survived all 48 ten-second evaluation episodes, but its directional skills
-# have substantial speed variation and drift; the model card includes metrics
-# and a video. Learned skills do not guarantee successful navigation.
+# Each step computes a features TensorDict: body velocity, uprightness, joint
+# errors, contacts, foot heights, gait phase and more. A reward term maps those
+# features and the task's parameters to one value per simulator.
 #
-# The pinned download is cached and also used during the short doc build.
-# ``load_walker`` restores the larger network, frozen weights and exact task
-# order: skill indices address learned embeddings. We reuse its action scale
-# too. Set ``MICRODUCK_WALKER_CHECKPOINT`` to use your own local checkpoint.
+# Here we reward a small yaw rate. We give a subclass its own registries so this
+# experiment leaves other MicroDuck environments and saved task libraries usable.
+# Register terms **before** constructing that class's tasks: registration adds
+# an entry to every task's weight vector.
 
-checkpoint_path = os.environ.get("MICRODUCK_WALKER_CHECKPOINT") or hf_hub_download(
-    repo_id="torchrl/microduck-skills",
-    filename="walker.ckpt",
-    revision="4191d7d25c4fd58a5c6e6395fcf8217459fdd073",
+
+class HeadingMicroDuck(MicroDuckEnv):
+    REWARD_TERMS = MicroDuckEnv.REWARD_TERMS.copy()
+    REWARD_PARAMS = MicroDuckEnv.REWARD_PARAMS.copy()
+
+
+@HeadingMicroDuck.register_reward("heading", weight=0.0, heading_std=0.5)
+def heading(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    yaw_rate = features["angular_velocity"][..., 2]
+    return torch.exp(-yaw_rate.square() / params["heading_std"].square())
+
+
+steady = HeadingMicroDuck.tracking_task(
+    0.2, reward_weights={"heading": 1.0}, heading_std=0.3
 )
-checkpoint = load_checkpoint(checkpoint_path, weights_only=True)
-walker, skill_tasks = load_walker(checkpoint)
-action_scale = checkpoint["config"]["env"]["action_scale"]
 
 # %%
-# 3. Give the walker a new task
-# -----------------------------
-#
-# ``WaypointMicroDuck`` reuses MicroDuck's physics and adds six observation
-# values: displacement to the goal and robot orientation. Its reward is progress
-# toward ``(0.5, 0.3)`` metres, plus an arrival bonus and a fall penalty::
-#
-#    reward = 10 * (old_distance - distance) + arrived - fallen - 0.001
-#
-# The episode ends on arrival or a fall. The task class contains observation,
-# reward and termination definitions; it has no policy-execution loop.
-#
-# ``MicroDuckController`` adapts skill indices to the walker's original inputs.
-# ``ClosedLoopMultiAction`` holds that decision for up to five physical steps,
-# recomputing joint actions from fresh observations at every step.
+# The new term defaults to weight zero; ``steady`` switches it on and narrows
+# its tolerance. By default terms are rates multiplied by the control period;
+# one-off rewards such as fall penalties use ``per_second=False``.
+# ``diagnostics=True`` exposes each weighted contribution separately, making it
+# possible to see whether the reward you intended is the reward being collected.
 
-make_task_env = ft.partial(
-    WaypointMicroDuck,
-    backend="mujoco",
-    download=True,
-    tasks=MicroDuckEnv.standing_task(),
-    action_scale=action_scale,
-    max_episode_steps=64 if fast else 500,
-    seed=0,
+diag_env = HeadingMicroDuck(
+    download=True, backend="mujoco", tasks=steady, diagnostics=True, seed=0
 )
-controller = MicroDuckController(
-    walker,
-    skill_tasks,
-    group_key=None,
-    reset_key=None,
-    control_period_s=0.02,
+diagnostics = diag_env.rollout(20)["next"]
+diag_env.close()
+{
+    "heading contribution": diagnostics["diagnostic_reward_heading"].mean().item(),
+    "total reward": diagnostics["reward"].mean().item(),
+}
+
+# %%
+# Run the supplied gait controller
+# --------------------------------
+#
+# ``MicroDuckGaitActor`` is a hand-written controller in the examples directory.
+# A phase oscillator drives the legs, and torso-pitch feedback helps balance.
+# It reads the same observations as a learned policy and works with the ordinary
+# :meth:`~torchrl.envs.EnvBase.rollout` method. No training is needed.
+
+REPO_ROOT = Path(torchrl.__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+from examples.microduck.heuristic_gait import (  # noqa: E402
+    gait_metrics,
+    MicroDuckGaitActor,
 )
-training_env = ClosedLoopMultiAction.from_env(
-    make_task_env(),
-    controller,
-    steps=5,
-    reward_aggregation="sum",
+
+gait = MicroDuckGaitActor()
+gait_task = MicroDuckEnv.tracking_task(0.03, **gait.config.task_kwargs())
+gait_env = MicroDuckEnv(
+    download=True, backend="mujoco", tasks=gait_task, diagnostics=True, seed=0
 )
-check_env_specs(training_env)
+gait_rollout = gait_env.rollout(rollout_steps, gait, break_when_any_done=True)
+gait_env.close()
+gait_metrics(gait_rollout).to_dict()
 
 # %%
-# The action spec now describes a skill index, rather than joint targets.
-# The adapter slices the original 56-value robot observation for the walker;
-# the high-level policy sees the six extra waypoint/orientation values too.
-# The controller owns the walker's GRU state and gait clock under ``_controller``.
-
-assert training_env.action_key == "skill"
-assert training_env.full_action_spec["skill"].n == 6
-assert training_env.observation_spec["observation"].shape[-1] == 62
-
-# %%
-# 4. Train the skill selector
-# ---------------------------
+# Inspect survival, forward speed and left/right swing phases. These diagnostics
+# help distinguish actual walking from staying upright or sliding. The controller
+# is useful for checking the simulator and reward design; the training tutorial
+# learns a broader task-conditioned skill library.
 #
-# ``make_navigation_models`` creates two ordinary 64–64 MLPs: an actor with
-# six categorical logits, and a critic with one value output. Their interfaces
-# are ``observation -> skill`` and ``observation -> state_value``.
+# Choose a backend
+# ----------------
 #
-# PPO sees only this actor. The walker belongs to the environment and is absent
-# from the high-level optimizer. Its inference is deterministic, with gradients
-# disabled. The new actor has no recurrent state, so we can shuffle individual
-# transitions. ``gamma=0.99`` discounts **one high-level decision**, whose reward
-# is the sum of the physical-step rewards executed during that decision.
-
-high_actor, high_critic = make_navigation_models(training_env)
-high_trainer = PPOTrainer.from_env(
-    training_env,
-    actor=high_actor,
-    critic=high_critic,
-    total_frames=high_frames,
-    frames_per_batch=32 if fast else 128,
-    minibatch_size=64,
-    loss_kwargs={"entropy_coeff": 0.01},
-    gamma=0.99,
-    num_epochs=epochs,
-    progress_bar=False,
-)
-high_trainer.train()
-
-# %%
-# 5. Roll out the composed policy
-# -------------------------------
-#
-# The short PPO update demonstrates training. For playback, load the paired
-# selector trained for one million decisions. It reached this fixed waypoint
-# in 26 of 32 evaluation episodes (81.25%), with a mean final distance of 9.3 cm.
-# This does not establish navigation to arbitrary goals. The
-# `model repository <https://huggingface.co/torchrl/microduck-skills>`_ includes
-# both final videos, evaluation metrics and training configuration.
-#
-# A selector depends on its walker. When using your own walker checkpoint,
-# keep the selector you just trained instead of loading this published pair.
-
-if not os.environ.get("MICRODUCK_WALKER_CHECKPOINT"):
-    navigation_path = hf_hub_download(
-        repo_id="torchrl/microduck-skills",
-        filename="navigation.ckpt",
-        revision="6330ae68b8cf00cda62feb661e50df327f12ebcd",
-    )
-    Checkpoint(policy=high_actor).load(navigation_path)
-
-# %%
-# Training closes its environment, so evaluation creates a fresh instance.
-# The rollout records high-level skill decisions; each decision invokes the
-# walker repeatedly inside the environment. Plot distance to the waypoint to
-# see what the composed policy actually did. Playback allows up to ten seconds
-# of simulated time, including during the short documentation build.
-
-evaluation_env = ClosedLoopMultiAction.from_env(
-    make_task_env(max_episode_steps=500),
-    controller,
-    steps=5,
-)
-with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
-    trajectory = evaluation_env.rollout(
-        100,
-        high_actor,
-        break_when_any_done=True,
-    )
-evaluation_env.close()
-distance = trajectory["next", "observation"][..., -6:-4].norm(dim=-1)
-fig, ax = plt.subplots()
-ax.plot(distance.flatten().cpu())
-ax.set(xlabel="High-level decision", ylabel="Distance to goal (m)")
-fig.tight_layout()
-plt.show()
-
-# %%
-# Run a full experiment locally
-# -----------------------------
-#
-# The companion launcher shares these task and model definitions. It trains a
-# larger GRU using parallel native MuJoCo workers, logs CSV metrics, saves
-# resumable trainer state, and evaluates every skill before deployment::
-#
-#    python -m examples.microduck.train_skills --num-envs 16 \
-#        --low-level-frames 10000000 --high-level-frames 1000000 \
-#        --output-dir ~/microduck-training
-#
-# Resume an interrupted low-level stage with ``--resume`` and the same worker
-# count. To reuse a walker (or resume its high-level stage), supply its checkpoint::
-#
-#    python -m examples.microduck.train_skills \
-#        --walker-checkpoint ~/microduck-training/walker.ckpt \
-#        --output-dir ~/microduck-training --resume
-#
-# ``walker.ckpt`` stores architecture, weights and the ordered task definitions.
-# ``skills.json`` measures survival and command tracking; ``navigation.json``
-# measures arrival rate and final distance. Use these evaluations to assess
-# learned behavior. Larger budgets alone do not establish that training succeeded.
-
-# %%
-# Reuse the deployment for 5-vs-5 football
-# ----------------------------------------
-#
-# Given a football environment exposing ten agents under ``"agents"``, the
-# same weights can control every player, with independent recurrent state:
+# The task and policy interfaces stay the same across backends. Use the native
+# CPU backend for this notebook. In a standalone training script, native workers
+# can run in parallel; MJX and ``mujoco-torch`` instead batch the physics on an
+# accelerator. These alternatives need their respective optional dependencies:
 #
 # .. code-block:: python
 #
-#    from torchrl.envs import microduck_skill_env
-#
-#    football_training_env = microduck_skill_env(
-#        football_env, walker, skill_tasks,
-#        group_key="agents", steps=5, control_period_s=0.02,
+#    # CPU worker processes (standalone script):
+#    MicroDuckEnv(download=True, backend="mujoco", num_envs=16, parallel=True)
+#    # Accelerator batches:
+#    MicroDuckEnv(download=True, backend="mjx", num_envs=1024, device="cuda")
+#    MicroDuckEnv(
+#        download=True, backend="mujoco-torch", num_envs=1024,
+#        device="cuda", compile_step=True,
 #    )
-#    # For 64 matches, 10 players each:
-#    # action: ("agents", "skill")                 [64, 10]
-#    # state:  ("agents", "_controller", ...)      [64, 10, ...]
 #
-# Each player's observation must begin with the MicroDuck observation layout;
-# ``fallen`` is its raw respawn signal. The preset resets that player's state
-# without resetting its neighbours and accumulates fall reports per decision.
-# The football environment provides physics, teams and rewards. Team policies,
-# critics and opponents are ordinary multi-agent training choices; see
-# :doc:`/tutorials/multiagent_ppo` for a complete PPO example.
-
-# %%
+# MicroDuck's upstream ``mjlab`` tasks can also run through
+# :class:`~torchrl.envs.MJLabWrapper`; those have their own task definitions.
+#
+# Record your own rollout (optional)
+# ----------------------------------
+#
+# The video at the top plays without rendering. To record a new experiment,
+# enable pixel observations and attach a :class:`~torchrl.record.VideoRecorder`.
+# Run this optional snippet in a notebook with local MuJoCo rendering available:
+#
+# .. code-block:: python
+#
+#    from IPython.display import HTML
+#    from torchrl.record import VideoRecorder
+#
+#    recorder = VideoRecorder(logger=None, tag="gait", skip=2, make_grid=False)
+#    video_env = TransformedEnv(
+#        MicroDuckEnv(
+#            download=True, backend="mujoco", tasks=gait_task,
+#            from_pixels=True, camera_id=-1, seed=0,
+#            render_width=480, render_height=360,
+#        ),
+#        recorder,
+#    )
+#    video_env.rollout(100, gait, break_when_any_done=True)
+#    animation = recorder.to_animation(interval=40, clear=True)
+#    video_env.close()
+#    HTML(animation.to_jshtml())
+#
+# With a logger, ``recorder.dump()`` can instead send video to W&B, TensorBoard
+# or disk through :class:`~torchrl.record.CSVLogger`.
+#
 # Conclusion
 # ----------
 #
-# A task-conditioned policy can become part of a new environment. The high-level
-# actor chooses skills, and the controller translates them into feedback-based
-# joint actions. Both levels use the same PPO trainer. For another robot, replace
-# the MicroDuck adapter with :class:`~torchrl.modules.LowLevelController` and an
-# adapter matching that policy's inputs; the execution transform stays the same.
+# Tasks are rows of data: a command, reward weights and parameters. Samplers
+# decide who runs each row; diagnostics show what happened. The same interface
+# supports the supplied gait, a learned policy, and batched simulators.
+# Continue to :doc:`microduck_skills` to train a walker with PPO, load a trained
+# checkpoint, and learn when to choose its skills for a new task.
 #
 # Further reading
 # ---------------
 #
-# - :class:`~torchrl.envs.MicroDuckEnv` and :class:`~torchrl.envs.MicroDuckTask`
-#   document task presets, reward terms and simulator backends.
-# - :class:`~torchrl.modules.LowLevelController` documents batching, routing and state.
-# - :meth:`~torchrl.trainers.algorithms.PPOTrainer.from_env` documents PPO options.
-# - :class:`~torchrl.objectives.value.GAE` documents task-wise advantage normalization.
+# - :class:`~torchrl.envs.MicroDuckTask` documents all task fields.
+# - :class:`~torchrl.envs.MicroDuckEnv` documents presets and reward terms.
+# - :class:`~torchrl.envs.MujocoEnv` documents simulator backends.
+# - :doc:`rlrender` covers rendering checkpoints outside training.

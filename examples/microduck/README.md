@@ -16,8 +16,12 @@ raises an error listing the options.
 | [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
 
-The [MicroDuck tutorial](../../tutorials/sphinx-tutorials/microduck.py) is a short,
-linear train → deploy → train example. It uses one CPU simulator and
+Start with [MicroDuck: tasks, rewards and simulation](../../tutorials/sphinx-tutorials/microduck.py)
+to explore task libraries, sampling, custom rewards, diagnostics and the supplied
+gait controller. It opens with a recorded skill grid that plays without simulation.
+
+[MicroDuck: train skills, then compose behaviors](../../tutorials/sphinx-tutorials/microduck_skills.py)
+is a separate, standalone train → deploy → train tutorial. It uses one CPU simulator and
 `PPOTrainer.from_env` at both levels: train a recurrent walker, deploy it with
 `MicroDuckController` and `ClosedLoopMultiAction`, then train a categorical
 skill selector for waypoint navigation. Script and notebook defaults are small
@@ -28,8 +32,11 @@ There are no multiprocessing guards in the tutorial.
 and owns the full CPU training recipe, including macOS parallel workers:
 
 ```bash
-# Read and run the tutorial end to end.
+# Explore the environment interface.
 python tutorials/sphinx-tutorials/microduck.py
+
+# Train skills, deploy the saved walker, then train a skill selector.
+python tutorials/sphinx-tutorials/microduck_skills.py
 
 # Full training: 10M physical transitions, then 1M decisions.
 python -m examples.microduck.train_skills --num-envs 16 \
@@ -58,18 +65,18 @@ restarting, so checkpoint continuation is not bit-exact.
 
 Evaluate survival, command tracking and arrival rate before claiming learned
 behavior. Short runs exercise the complete pipeline; they do not establish skill
-quality. Full training can take hours and is separate from the 10–20 minute tutorial.
+quality. Full training can take hours; each tutorial is a 10–15 minute read and run.
 
 ### Reuse and share a trained checkpoint
 
-The tutorial performs its small PPO update, then loads the evaluated
+The training tutorial performs its small PPO update, then loads the evaluated
 [10M-transition walker](https://huggingface.co/torchrl/microduck-skills) for
 high-level training. It pins a Hub revision and caches the download. This works
 in the generated notebook and in docs mode. To use your own trained walker:
 
 ```bash
 MICRODUCK_WALKER_CHECKPOINT=~/microduck-training/walker.ckpt \
-    python tutorials/sphinx-tutorials/microduck.py
+    python tutorials/sphinx-tutorials/microduck_skills.py
 ```
 
 The published checkpoint can also be downloaded directly:
