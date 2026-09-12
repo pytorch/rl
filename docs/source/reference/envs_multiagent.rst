@@ -226,18 +226,26 @@ Where each field lives
   combined:
 
   * **Shared (root).** ``"done"``, ``"terminated"`` and (if used)
-    ``"truncated"`` at the root, shape ``(*batch, 1)``. This is the signal
-    TorchRL uses to reset the environment. A native env must write at least
-    this shared flag (VMAS writes only this).
+    ``"truncated"`` at the root, shape ``(*batch, 1)``. This is the
+    convention used by the example below and by wrappers such as VMAS
+    (which writes only this). It is not required:
+    :class:`~torchrl.envs.EnvBase` also accepts environments whose done /
+    terminated / truncated / ``_reset`` keys live only in nested
+    tensordicts. Write a root flag when the episode ends for the whole
+    environment at once; do not add one just to create a second
+    termination hierarchy.
   * **Per-group / per-agent, stacked.** ``(group, "done")`` (and the
     ``terminated`` / ``truncated`` siblings) with shape
     ``(*batch, n_agents_in_group, 1)``. PettingZoo writes these *and*
     aggregates them into the root flag (``any`` or ``all``, controlled by
     ``done_on_any``).
-  * **One group per agent.** With
-    :attr:`~torchrl.envs.MarlGroupMapType.ONE_GROUP_PER_AGENT` each group
-    has a single agent, so ``(agent_name, "done")`` has shape
-    ``(*batch, 1)`` and there is no extra agent dimension.
+  * **One group per agent.**
+    :attr:`~torchrl.envs.MarlGroupMapType.ONE_GROUP_PER_AGENT` changes
+    group membership (each agent is its own group), not the group
+    TensorDict layout. Each group is still a nested tensordict with a
+    stacked agent dimension, so a one-agent group has Composite shape
+    ``(*batch, 1)`` and ``(agent_name, "done")`` has shape
+    ``(*batch, 1, 1)``.
 
 Specs must mirror the nesting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -303,7 +311,8 @@ root-level (shared) specs carry shape ``(*batch,)`` or ``(*batch, 1)``.
         ... )
 
 To also expose per-agent done flags, nest them in each group the same way
-as ``reward``, and keep the root flags as the reset signal:
+as ``reward``. If the environment also uses a shared root done (as in the
+example below), keep those root flags as the environment-wide reset signal:
 
 .. code-block::
 
