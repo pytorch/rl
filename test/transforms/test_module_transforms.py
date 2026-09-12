@@ -41,6 +41,29 @@ from torchrl.testing.modules import BiasModule
 from torchrl.weight_update import RayModuleTransformScheme
 
 
+class _CopyToWeightDeviceModule(nn.Module):
+    """Copies ``observation`` onto ``self.weight.device`` as ``copied``."""
+
+    def __init__(self):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(1))
+        self.in_keys = ["observation"]
+        self.out_keys = ["copied"]
+
+    def forward(self, tensordict: TensorDict) -> TensorDict:
+        observation = tensordict.get("observation")
+        tensordict["copied"] = observation.to(self.weight.device)
+        return tensordict
+
+
+def _tensor_devices(data: TensorDict) -> set[str]:
+    return {
+        value.device.type
+        for value in data.values(True, True)
+        if torch.is_tensor(value)
+    }
+
+
 class TestModuleTransform(TransformBase):
     @property
     def _module_factory_samespec(self):
@@ -145,26 +168,23 @@ class TestModuleTransform(TransformBase):
         env.check_env_specs()
 
     def test_to_meta_does_not_recast_to_constructor_device(self):
-        module = TensorDictModule(
-            nn.Linear(3, 3),
-            in_keys=["observation"],
-            out_keys=["observation"],
-        )
-        t = ModuleTransform(module=module, device="cpu")
+        t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="cpu")
         t.to("meta")
         td = TensorDict(
-            {"observation": torch.randn(2, 3)},
+            {
+                "observation": torch.randn(2, 3),
+                "leftover": torch.ones(2, 1),
+            },
             batch_size=[2],
             device="cpu",
         )
         out = t._call(td)
-        assert out["observation"].device.type == "meta"
-        devices = {
-            value.device.type
-            for value in out.values(True, True)
-            if torch.is_tensor(value)
-        }
-        assert devices == {"meta"}
+        assert out["copied"].device.type == "meta"
+        assert _tensor_devices(out) == {"meta"}
+        assert next(t.module.parameters()).device.type == "meta"
+
+    def test_construct_with_meta_places_wrapped_module(self):
+        t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="meta")
         assert next(t.module.parameters()).device.type == "meta"
 
     @pytest.mark.skipif(not _has_ray, reason="ray required")
