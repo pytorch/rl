@@ -146,9 +146,10 @@ class vLLMWrapper(LLMWrapperBase):
             is still prompt-length plus response-length so it stays aligned
             with :attr:`~torchrl.modules.llm.policies.common.Tokens.full` and
             with the assistant masks used by :class:`~torchrl.objectives.llm.GRPOLoss`
-            and KL transforms. The prompt slice of ``full`` is an alignment
-            pad, not engine scores. To score a prompt, call the wrapper with
-            ``generate=False``.
+            and KL transforms. The prompt slice of ``full`` is a non-finite
+            alignment pad, not a fabricated ``0.0`` score (``0.0`` is a
+            valid log-probability of 1). GRPO and KL skip those positions.
+            To score a prompt, call the wrapper with ``generate=False``.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
 
             **Standardized Parameters (cross-backend compatible):**
@@ -1926,6 +1927,7 @@ class vLLMWrapper(LLMWrapperBase):
                     # Leave LogProbs.prompt unset when the engine omitted
                     # scores. Still build a prompt+response `full` so
                     # GRPOLoss / KL see the same length as tokens.full.
+                    # The prompt slice is NaN: 0.0 would be log P=1.
                     log_probs_obj_flat.full = _assemble_generate_full_logprobs(
                         prompt_lp, response_lp, prompt_tokens
                     )
@@ -2336,18 +2338,19 @@ def _warn_missing_vllm_prompt_logprobs() -> None:
         "return usable prompt_logprobs on this generate path. "
         "LogProbs.prompt is left unset. LogProbs.full keeps prompt+response "
         "length so GRPO/KL consumers stay aligned with tokens.full; the "
-        "prompt slice is an alignment pad, not engine scores. "
+        "prompt slice is a non-finite alignment pad, not engine scores. "
         "To score a prompt, call the wrapper with generate=False."
     )
 
 
-def _zeros_like_prompt_tokens(
+def _nan_like_prompt_tokens(
     prompt_tokens: torch.Tensor | list[torch.Tensor],
     response_lp: torch.Tensor | list[torch.Tensor],
 ) -> torch.Tensor | list[torch.Tensor]:
-    """Zeros matching prompt token shapes for ``LogProbs.full`` alignment.
+    """NaNs matching prompt token shapes for ``LogProbs.full`` alignment.
 
-    These are not engine prompt scores. Callers must leave
+    These are not engine prompt scores. ``0.0`` is a valid log-prob of 1
+    and must not be used as a pad. Callers must leave
     :class:`~torchrl.modules.llm.policies.common.LogProbs.prompt` unset.
     """
     if isinstance(prompt_tokens, list):
@@ -2357,11 +2360,11 @@ def _zeros_like_prompt_tokens(
             else [response_lp] * len(prompt_tokens)
         )
         return [
-            torch.zeros(t.shape, dtype=r.dtype, device=r.device)
+            r.new_full(t.shape, float("nan"))
             for t, r in _zip_strict(prompt_tokens, refs)
         ]
     ref = response_lp[0] if isinstance(response_lp, list) else response_lp
-    return torch.zeros(prompt_tokens.shape, dtype=ref.dtype, device=ref.device)
+    return ref.new_full(prompt_tokens.shape, float("nan"))
 
 
 def _cat_prompt_response(
@@ -2386,11 +2389,12 @@ def _assemble_generate_full_logprobs(
     """Build generate-path ``LogProbs.full``.
 
     Engine prompt scores are concatenated with the response when present.
-    When they are missing, the prompt slice is padded so ``full`` has the
-    same length as ``tokens.full``. A response-only tensor is never
-    returned as ``full``: :class:`~torchrl.objectives.llm.GRPOLoss` and
-    KL transforms compare against full-sequence masks and training-policy
-    log-probs.
+    When they are missing, the prompt slice is filled with NaN so ``full``
+    has the same length as ``tokens.full`` without inventing ``0.0``
+    scores. A response-only tensor is never returned as ``full``:
+    :class:`~torchrl.objectives.llm.GRPOLoss` and KL transforms compare
+    against full-sequence masks and training-policy log-probs, and skip
+    non-finite positions.
 
     Args:
         prompt_lp (Tensor, list of Tensor or None): engine prompt scores,
@@ -2411,7 +2415,7 @@ def _assemble_generate_full_logprobs(
     if prompt_tokens is None:
         return None
     return _cat_prompt_response(
-        _zeros_like_prompt_tokens(prompt_tokens, response_lp),
+        _nan_like_prompt_tokens(prompt_tokens, response_lp),
         response_lp,
     )
 
