@@ -23,6 +23,7 @@ env:
   respawn_mode: in_place    # in_place: where the duck fell, facing its goal; kickoff: back on its kickoff slot
   respawn_delay_s: 1.0      # seconds a fallen duck lies down, actions ignored, before standing up
   approach_players: null    # ducks per team, the closest to the ball, that earn the approach_ball reward (null: every duck)
+  progress_players: null    # ducks per team, the closest to the ball, that earn the ball_progress reward (null: every duck)
   camera_id: 0              # rendering: 0 broadcast, 1 top-down
   render_width: 640
   render_height: 360
@@ -58,6 +59,7 @@ ppo:
   gae_lambda: 0.95
   max_grad_norm: 1.0
   train_team: both          # both | blue: update on the blue team's transitions only (opponent curriculum)
+  critic_warmup_iterations: 0  # iterations that update the critic alone before the actor trains (warm starts)
   opponent_refresh_interval: null  # iterations between copies of the actor into the frozen opponent (fictitious self-play); null: never
 
 evaluation:

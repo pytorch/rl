@@ -685,7 +685,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
 
     * ``goal`` (one-off): ``+w`` for the scoring team, ``-w`` for the other.
     * ``ball_progress``: the ball's velocity along the team's attacking
-      direction, so the two teams' shaping cancels out.
+      direction, so the two teams' shaping cancels out; with
+      ``progress_players`` only the closest ducks of each team earn it, which
+      credits the duck that is actually pushing.
     * ``approach_ball``: the agent's planar velocity toward the ball, capped
       at :attr:`APPROACH_SPEED_CAP` and off within a ball radius plus 5 cm;
       with ``approach_players`` only the closest ducks of each team earn it,
@@ -747,6 +749,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             actions ignored, before standing up. Defaults to ``1.0``.
         approach_players (int, optional): number of ducks per team, the
             closest to the ball, that earn the ``approach_ball`` term. ``None``
+            (default) pays every duck.
+        progress_players (int, optional): number of ducks per team, the
+            closest to the ball, that earn the ``ball_progress`` term. ``None``
             (default) pays every duck.
         spawn_noise (float, optional): uniform noise on the kickoff positions
             at reset, in meters. Defaults to ``0.1``.
@@ -839,6 +844,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         respawn_mode: Literal["in_place", "kickoff"] = "in_place",
         respawn_delay_s: float = 1.0,
         approach_players: int | None = None,
+        progress_players: int | None = None,
         spawn_noise: float = 0.1,
         yaw_noise: float = 0.3,
         joint_reset_noise_scale: float = 0.02,
@@ -889,6 +895,11 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             raise ValueError("approach_players must be positive or None.")
         self.approach_players = (
             None if approach_players is None else int(approach_players)
+        )
+        if progress_players is not None and progress_players < 1:
+            raise ValueError("progress_players must be positive or None.")
+        self.progress_players = (
+            None if progress_players is None else int(progress_players)
         )
         self.spawn_noise = float(spawn_noise)
         self.yaw_noise = float(yaw_noise)
@@ -1426,7 +1437,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         approach = toward * (
             distance > self.ball_radius + self.APPROACH_RADIUS_MARGIN
         ).to(self.dtype)
-        if self.approach_players is not None:
+        if self.approach_players is not None or self.progress_players is not None:
             # Rank every duck within its team by distance to the ball.
             team_rank = (
                 distance.view(-1, 2, self.players_per_team)
@@ -1434,7 +1445,10 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
                 .argsort(dim=-1)
                 .view_as(distance)
             )
-            approach = approach * (team_rank < self.approach_players).to(self.dtype)
+            if self.approach_players is not None:
+                approach = approach * (team_rank < self.approach_players).to(self.dtype)
+            if self.progress_players is not None:
+                progress = progress * (team_rank < self.progress_players).to(self.dtype)
         action_rate = (action - self._previous_action).square().sum(-1)
         xy = ducks_q[..., :2]
         spacing = (xy.unsqueeze(1) - xy.unsqueeze(2)).norm(dim=-1)

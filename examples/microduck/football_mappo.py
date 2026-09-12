@@ -263,6 +263,7 @@ def make_env(
         "respawn_mode": env_cfg["respawn_mode"],
         "respawn_delay_s": env_cfg["respawn_delay_s"],
         "approach_players": env_cfg["approach_players"],
+        "progress_players": env_cfg["progress_players"],
         "camera_id": env_cfg["camera_id"],
         "render_width": env_cfg["render_width"],
         "render_height": env_cfg["render_height"],
@@ -648,6 +649,7 @@ def train_mappo(
     config: Mapping[str, Any] | None = None,
     logger: Logger | None = None,
     train_team: Literal["both", "blue"] = "both",
+    critic_warmup_iterations: int = 0,
     collection_policy: TensorDictModuleBase | None = None,
     iteration_callback: Callable[[int], None] | None = None,
 ) -> list[dict[str, float]]:
@@ -666,6 +668,8 @@ def train_mappo(
     :func:`evaluation_score` and ``latest_checkpoint_path`` the current ones.
     ``iteration_callback`` runs with the iteration number at the end of every
     iteration, after its evaluation.
+    The first ``critic_warmup_iterations`` iterations update the critic alone,
+    so a warm-started actor is not wrecked by the advantages of a random critic.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -848,11 +852,14 @@ def train_mappo(
                     for _ in range(num_frames // minibatch_size):
                         sample = replay_buffer.sample().to(device)
                         losses = loss_module(sample)
-                        loss = (
-                            losses["loss_objective"]
-                            + losses["loss_critic"]
-                            + losses["loss_entropy"]
-                        )
+                        if iteration <= critic_warmup_iterations:
+                            loss = losses["loss_critic"]
+                        else:
+                            loss = (
+                                losses["loss_objective"]
+                                + losses["loss_critic"]
+                                + losses["loss_entropy"]
+                            )
                         optimizer.zero_grad(set_to_none=True)
                         loss.backward()
                         grad_norm = nn.utils.clip_grad_norm_(
@@ -875,7 +882,7 @@ def train_mappo(
                 # Entries such as the entropy carry the agent dimension.
                 for key, value in torch.stack(updates).mean(dim=0).items():
                     metrics[f"ppo/{key}"] = float(value.mean())
-                if scheduler is not None:
+                if scheduler is not None and iteration > critic_warmup_iterations:
                     scheduler.step(metrics["ppo/kl_approx"])
                 metrics["ppo/learning_rate"] = optimizer.param_groups[0]["lr"]
             replay_buffer.empty()

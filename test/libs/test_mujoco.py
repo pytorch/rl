@@ -1140,6 +1140,34 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_progress_pays_the_closest_ducks_only(self, tmp_path):
+        weights = {name: 0.0 for name in MicroDuckFootballEnv.REWARD_WEIGHTS}
+        weights["ball_progress"] = 1.0
+        env = self._football_env(
+            tmp_path, players_per_team=2, reward_weights=weights, progress_players=1
+        )
+        env.reset()
+        state = env.get_state()
+        qpos, qvel = state["qpos"].clone(), state["qvel"].clone()
+        nq = MicroDuckFootballEnv.DUCK_NQ
+        # The ball rolls along +x from the origin; blue1 and red0 are the
+        # closest ducks of their teams.
+        for index, (x, y) in enumerate(
+            [(-0.9, 0.0), (-0.4, 0.0), (0.4, 0.0), (0.9, 0.0)]
+        ):
+            qpos[0, index * nq] = x
+            qpos[0, index * nq + 1] = y
+        qpos[0, -MicroDuckFootballEnv.BALL_NQ : -MicroDuckFootballEnv.BALL_NQ + 2] = 0.0
+        qvel[0, -MicroDuckFootballEnv.BALL_NV] = 0.5
+        env.reset(TensorDict(qpos=qpos, qvel=qvel, batch_size=[1]), set_state=True)
+        reward = env.step(self._football_action(env))["next"]["agents", "reward"][
+            0, :, 0
+        ]
+        assert reward[0] == 0.0 and reward[3] == 0.0
+        assert reward[1] > 0.0 and reward[2] < 0.0
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_football_observation_is_team_symmetric(self, tmp_path):
         env = self._football_env(tmp_path, players_per_team=2)
         env.reset()
