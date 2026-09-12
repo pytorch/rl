@@ -129,7 +129,7 @@ observation, action, reward and termination definitions. A task is data:
 in body-frame m/s, the warm start and joint reset noise, the gait clock
 frequency, one weight per reward term, the term parameters, a sampling
 `weight` and a `name`. The presets `MicroDuckEnv.tracking_task(speed)`, `standing_task()`,
-`speed_range_task(low, high)`, `sidestep_task(speed)` and `jump_task()` fill
+`speed_range_task(low, high)`, `sidestep_task(speed)`, `turning_task(rate)` and `jump_task()` fill
 every field and take overrides by name (`reward_weights={"tracking": 4.0}`,
 `tracking_std=0.2`, `warm_start_fraction=0.5`). The env takes a library, one
 task, a list or a `torch.stack` of tasks, and every env of the batch holds one
