@@ -48,7 +48,9 @@ class SACLossConfig(LossConfig):
 
     Every kwarg accepted by ``SACLoss.__init__`` is exposed as a field here. The
     ``discrete``/``action_space``/``num_actions``/``target_entropy_weight`` fields
-    apply only when the discrete variant is selected.
+    apply only when the discrete variant is selected, and the
+    ``value_network``/``action_spec``/``delay_actor``/``delay_value`` fields only
+    when it is not.
     """
 
     actor_network: Any = None
@@ -101,8 +103,14 @@ def _make_sac_loss(*args, **kwargs) -> SACLoss:
         kwargs["value_network"] = value_network()
 
     if discrete_loss_type:
+        # DiscreteSACLoss has no value network, action spec or delayed actor/value.
+        for key in ("value_network", "action_spec", "delay_actor", "delay_value"):
+            kwargs.pop(key, None)
         loss = DiscreteSACLoss(*args, **kwargs)
     else:
+        # SACLoss has no `action_space`, `num_actions` or `target_entropy_weight` kwarg.
+        for key in ("action_space", "num_actions", "target_entropy_weight"):
+            kwargs.pop(key, None)
         loss = SACLoss(*args, **kwargs)
     if gamma is not None:
         loss.make_value_estimator(gamma=gamma)
