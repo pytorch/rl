@@ -550,6 +550,10 @@ class BatchedEnvBase(EnvBase):
         self.num_threads = num_threads
         self._cache_in_keys = None
         self._use_buffers = use_buffers
+        # Without shared buffers the parent holds no copy of the workers'
+        # state; the last output each worker sent stands in for it when a
+        # partial reset leaves some workers untouched.
+        self._last_worker_outputs: list[TensorDictBase | None] = [None] * num_workers
         self._metadata_from_workers = metadata_from_workers
         self.consolidate = consolidate
         self.daemon = daemon
@@ -2751,6 +2755,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             channel = self.parent_channels[i]
             td = channel.recv()
             out_tds.append(td)
+            # Lazy stacks can expose the received tensors directly to callers.
+            self._last_worker_outputs[self._worker_indices[i]] = td.clone()
 
         out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         if self.device is not None and out.device != self.device:
@@ -2962,7 +2968,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 tensordict = tensordict.to("cpu")
             if self.consolidate:
                 try:
-                    tensordict = tensordict.consolidate(
+                    # Consolidation locks non-tensor leaves too. Keep those
+                    # locks off the caller's data, which reset updates in place.
+                    tensordict = tensordict.clone().consolidate(
                         # share_memory=False: avoid resource_sharer which causes
                         # progressive slowdown with fork on Linux
                         share_memory=False,
@@ -2982,6 +2990,16 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 localtd = local_data
                 if localtd is not None:
                     localtd = localtd.exclude(*self.reset_keys)
+                last = self._last_worker_outputs[self._worker_indices[i]]
+                if last is not None:
+                    # Describe the worker's current state, not only the data the
+                    # caller passed (maybe_reset passes the reset signal alone).
+                    current = last.select(
+                        *self.observation_keys, *self.done_keys, strict=False
+                    ).clone()
+                    if localtd is not None:
+                        current.update(localtd)
+                    localtd = current
                 out_tds[i] = localtd
                 continue
             needs_resetting_int.append(i)
@@ -2994,6 +3012,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 continue
             td = channel.recv()
             out_tds[i] = td
+            self._last_worker_outputs[self._worker_indices[i]] = td.clone()
         result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         device = self.device
         if device is not None and result.device != device:
