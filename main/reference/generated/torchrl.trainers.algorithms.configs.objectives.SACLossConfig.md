@@ -6,4 +6,6 @@ Hydra configuration for [`SACLoss`](torchrl.objectives.SACLoss.html#torchrl.obje
 
 Every kwarg accepted by `SACLoss.__init__` is exposed as a field here. The
 `discrete`/`action_space`/`num_actions`/`target_entropy_weight` fields
-apply only when the discrete variant is selected.
+apply only when the discrete variant is selected, and the
+`value_network`/`action_spec`/`delay_actor`/`delay_value` fields only
+when it is not.
