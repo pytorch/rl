@@ -4638,17 +4638,16 @@ class TestTransformConfigs:
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_last_action_config(self):
         from hydra.utils import instantiate
+        from torchrl.envs import TransformedEnv
+        from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
         from torchrl.trainers.algorithms.configs.transforms import LastActionConfig
 
-        cfg = LastActionConfig(
-            in_keys=["action"],
-            out_keys=["last_action"],
-            default="zeros",
-        )
-        transform = instantiate(cfg)
-        assert transform.in_keys == ["action"]
-        assert transform.out_keys == ["last_action"]
-        assert transform.default == "zeros"
+        transform = instantiate(LastActionConfig(default=-1.0))
+        env = TransformedEnv(ContinuousActionVecMockEnv(), transform)
+        td = env.reset()
+        assert (td["last_action"] == -1).all()
+        rollout = env.rollout(3)
+        torch.testing.assert_close(rollout["next", "last_action"], rollout["action"])
 
 
 if __name__ == "__main__":

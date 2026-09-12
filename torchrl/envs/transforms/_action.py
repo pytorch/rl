@@ -2354,7 +2354,9 @@ class LastAction(Transform):
     :meth:`~torchrl.envs.EnvBase.step` the action at time ``t`` is written
     under ``out_keys`` in the ``"next"`` tensordict; on
     :meth:`~torchrl.envs.EnvBase.reset` the same keys are filled with a
-    default value (zeros, NaN, or a user-provided fill).
+    default value (zeros, NaN, or a user-provided fill). On a batch-unlocked
+    parent the default is expanded by the runtime reset batch, preserving
+    the action feature shape.
 
     ``out_keys`` are registered as :class:`~torchrl.data.Unbounded`
     observation specs with the action's shape, dtype and device, so reset
@@ -2489,7 +2491,9 @@ class LastAction(Transform):
             value = unravel_key(value)
         self._reset_key = value
 
-    def _make_default(self, in_key: NestedKey) -> torch.Tensor:
+    def _make_default(
+        self, in_key: NestedKey, batch_size: torch.Size | None = None
+    ) -> torch.Tensor:
         parent = self.parent
         if parent is None:
             raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self).__name__))
@@ -2500,7 +2504,11 @@ class LastAction(Transform):
                 f"{type(self).__name__} in_key {in_key!r} is not in the "
                 f"parent action spec {parent.full_action_spec}."
             ) from None
-        zeros = spec.zero()
+        # Unlocked parents can reset with a larger runtime batch than the spec.
+        extra_batch: torch.Size | tuple[()] = ()
+        if batch_size is not None and not parent.batch_locked:
+            extra_batch = batch_size
+        zeros = spec.zero(extra_batch)
         default = self.default
         if default == "zeros":
             return zeros
@@ -2528,7 +2536,8 @@ class LastAction(Transform):
                         f"{self}: '{in_key}' not found in tensordict {tensordict}"
                     )
                 continue
-            next_tensordict.set(out_key, action)
+            # Policies may reuse the action buffer in-place.
+            next_tensordict.set(out_key, action.clone())
         return next_tensordict
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
@@ -2539,7 +2548,7 @@ class LastAction(Transform):
     ) -> TensorDictBase:
         _reset = _get_reset(self.reset_key, tensordict)
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
-            fill = self._make_default(in_key)
+            fill = self._make_default(in_key, tensordict_reset.batch_size)
             existing = tensordict.get(out_key, default=None)
             if existing is None:
                 tensordict_reset.set(out_key, fill)

@@ -14,6 +14,7 @@ import torch
 from tensordict import set_capture_non_tensor_stack, TensorDict
 from torchrl.envs import (
     AsyncEnvPool,
+    LastAction,
     ParallelEnv,
     SerialEnv,
     step_mdp,
@@ -23,7 +24,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.libero import _has_libero, LiberoEnv
 from torchrl.envs.transforms.functional import cat_frames
-from torchrl.testing.mocking_classes import CountingEnv
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
 
 
 def make_simple_env():
@@ -509,6 +510,28 @@ def test_async_env_pool_multi_env_workers(benchmark, envs_per_worker):
             )
         finally:
             pool._maybe_shutdown()
+
+
+def _make_last_action_env():
+    env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
+    env.rollout(3, break_when_any_done=False)
+    return env
+
+
+def test_last_action_reset(benchmark):
+    env = _make_last_action_env()
+    benchmark(env.reset)
+
+
+def test_last_action_step(benchmark):
+    env = _make_last_action_env()
+    td = env.reset()
+    td = env.rand_action(td)
+
+    def _step():
+        return env.step(td.clone())
+
+    benchmark(_step)
 
 
 if __name__ == "__main__":

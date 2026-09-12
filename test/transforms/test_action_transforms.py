@@ -69,6 +69,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetMacroAction,
+    TicTacToeEnv,
     ToyVLAEnv,
     TransformedEnv,
     URScriptPrimitive,
@@ -3243,15 +3244,19 @@ class TestActionTokenizerTransform(TransformBase):
             ActionTokenizerTransform(tok, mode="invalid")
 
 
+def _make_last_action_env(
+    env_cls: type[EnvBase] = ContinuousActionVecMockEnv,
+) -> TransformedEnv:
+    return TransformedEnv(env_cls(), LastAction())
+
+
 class TestLastAction(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
         check_env_specs(env)
 
     def test_serial_trans_env_check(self):
-        env = SerialEnv(
-            2, lambda: TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
-        )
+        env = SerialEnv(2, partial(_make_last_action_env, ContinuousActionVecMockEnv))
         try:
             check_env_specs(env)
         finally:
@@ -3262,7 +3267,7 @@ class TestLastAction(TransformBase):
 
     def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
         env = maybe_fork_ParallelEnv(
-            2, lambda: TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
+            2, partial(_make_last_action_env, ContinuousActionVecMockEnv)
         )
         try:
             check_env_specs(env)
@@ -3405,6 +3410,26 @@ class TestLastAction(TransformBase):
         torch.testing.assert_close(
             rollout["next", "data", "last_action"], rollout["data", "action"]
         )
+
+    def test_reset_unlocked_runtime_batch(self):
+        env = TransformedEnv(TicTacToeEnv(), LastAction())
+        td = env.reset(TensorDict(batch_size=[2]))
+        action_feature = env.full_action_spec[env.action_key].shape
+        assert td["last_action"].shape == torch.Size([2, *action_feature])
+        assert (td["last_action"] == 0).all()
+        td = env.rand_step(td)
+        assert td["next", "last_action"].shape == torch.Size([2, *action_feature])
+
+    def test_step_does_not_alias_action(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
+        td = env.reset()
+        td = env.rand_action(td)
+        original = td["action"].clone()
+        td = env.step(td)
+        remembered = td["next", "last_action"]
+        assert remembered is not td["action"]
+        td["action"].fill_(123)
+        torch.testing.assert_close(remembered, original)
 
 
 if __name__ == "__main__":
