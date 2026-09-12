@@ -1971,23 +1971,27 @@ class TestGym:
     def test_looks_like_ale_env(self, env_name, expected):
         assert _looks_like_ale_env(env_name) is expected
 
+    @implement_for("gym")
     @pytest.mark.skipif(
         not _has_ale,
         reason="ALE not available (missing ale_py); skipping Atari gym test.",
     )
     @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "PongNoFrameskip-v4"])
     def test_gymenv_ale_constructor(self, env_name):
-        if not _has_atari_for_gym():
-            pytest.skip(
-                "Atari not available for current gym version; skipping Atari gym test."
-            )
-        try:
+        # Constructor ids are gymnasium-only; gym 0.13/0.19 jobs ship ale_py
+        # without registering ALE/Pong-v5.
+        return
+
+    @implement_for("gymnasium")
+    @pytest.mark.skipif(
+        not _has_ale,
+        reason="ALE not available (missing ale_py); skipping Atari gym test.",
+    )
+    @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "PongNoFrameskip-v4"])
+    def test_gymenv_ale_constructor(self, env_name):  # noqa: F811
+        # NameNotFound here is the regression: GymEnv must import ale_py first.
+        with set_gym_backend("gymnasium"):
             env = GymEnv(env_name)
-        except Exception as err:
-            # NameNotFound is the regression: GymEnv must import ale_py first.
-            if isinstance(err, AttributeError) and "ale_py" in str(err):
-                pytest.skip(f"ALE/gym version incompatibility: {err}")
-            raise
         try:
             assert env.env_name == env_name
         finally:
