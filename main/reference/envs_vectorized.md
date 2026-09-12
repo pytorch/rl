@@ -68,8 +68,9 @@ parent-side construction pass by setting `metadata_from_workers=True`.
 In this opt-in mode, the real worker environments report their metadata before
 normal initialization. The workers start eagerly, their tensor schemas are
 validated for compatibility, and no temporary environment is created in the
-parent. This mode currently requires pipe-based communication with
-`use_buffers=False`. All workers must expose the same tensor schema: specs
+parent. The shared buffers are allocated once the workers have reported
+their specs and handed to them, so `use_buffers` keeps its usual meaning
+and default. All workers must expose the same tensor schema: specs
 and example tensors may only differ in non-tensor payload values (such as
 language instructions). Environments with genuinely heterogeneous specs
 should keep the default metadata path. At shutdown, workers started in this
@@ -92,7 +93,6 @@ env = ParallelEnv(
  make_env,
  create_env_kwargs=[{"g": 9.0 + worker_idx} for worker_idx in range(4)],
  metadata_from_workers=True,
- use_buffers=False,
 )
 ```
 

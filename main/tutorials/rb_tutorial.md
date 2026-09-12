@@ -242,8 +242,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmpcgbi_s3z/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmpcgbi_s3z/b/c.memmap
+the 'a' tensor is stored in /tmp/tmp2u685dix/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmp2u685dix/b/c.memmap
 samples: a= tensor([[ 0, 1, 2, 3],
  [ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
@@ -1135,7 +1135,7 @@ gc.collect()
 episode are grouped tensor([4, 4, 2, 2, 1, 1, 3, 3], dtype=torch.int32)
 steps are successive tensor([0, 1, 0, 1, 0, 1, 0, 1])
 
-4293
+4294
 ```
 
 ### Sequence sampling and trajectory queries

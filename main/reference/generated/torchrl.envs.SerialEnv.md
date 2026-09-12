@@ -93,8 +93,9 @@ one of the environment has dynamic specs.
 - **metadata_from_workers** (*bool**,**optional*) - if `True`, each worker constructs
 its environment and sends its metadata to the parent during startup. This
 avoids constructing temporary environments in the parent process. The mode
-is only supported by [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv), starts its workers
-eagerly, and currently requires `use_buffers=False`. All workers must
+is only supported by [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) and starts its
+workers eagerly; the shared buffers (`use_buffers`) are allocated once
+the workers have reported their specs and handed to them. All workers must
 report the same tensor schema: specs and example tensors may only differ
 in non-tensor payload values (such as language instructions). In this
 mode workers are also closed one at a time at shutdown to bound teardown
