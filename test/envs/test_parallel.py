@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools as ft
 import gc
 import os
 import time
@@ -262,8 +263,8 @@ class TestParallel:
         )
         try:
             td = env.reset()
-            td = env.step(env.rand_action(td))
-            td = env.step(env.rand_action(td))
+            td = env.step(td.update(self._ones_action(env)))
+            td = env.step(td.update(self._ones_action(env)))
             kept = td["next", "observation"][1].clone()
             td["next", "done"][0] = True
             td["next", "terminated"][0] = True
@@ -272,6 +273,35 @@ class TestParallel:
             assert (out["observation"][0] == 0).all()
             assert (out["observation"][1] == kept).all()
             assert not out["done"].any()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("step", [False, True])
+    def test_no_buffers_partial_reset_cache_is_independent(
+        self, step, maybe_fork_ParallelEnv
+    ):
+        # Different observation shapes force a lazy stack that aliases its rows.
+        env = maybe_fork_ParallelEnv(
+            2,
+            [
+                CountingEnv,
+                ft.partial(
+                    TransformedEnv,
+                    CountingEnv(),
+                    CatFrames(N=2, dim=-1, in_keys=["observation"]),
+                ),
+            ],
+            use_buffers=False,
+        )
+        try:
+            td = env.reset()
+            if step:
+                td = env.step(td.update(self._ones_action(env)))["next"]
+            kept = td[1]["observation"].clone()
+            td[1]["observation"].fill_(99)
+            reset = TensorDict({"_reset": torch.tensor([[True], [False]])}, [2])
+            out = env._reset(reset)
+            torch.testing.assert_close(out[1]["observation"], kept)
         finally:
             env.close(raise_if_closed=False)
 
@@ -430,6 +460,26 @@ class TestParallel:
                     torch.testing.assert_close(
                         self._batched_count(indexed_env), expected[selected]
                     )
+                    if parallel and not use_buffers:
+                        # Mask-only resets must read the same worker state
+                        # through both an indexed view and its parent.
+                        for target, observation in (
+                            (indexed_env, expected[selected]),
+                            (env, expected),
+                        ):
+                            reset = TensorDict(
+                                {
+                                    "_reset": torch.zeros_like(
+                                        observation, dtype=torch.bool
+                                    )
+                                },
+                                target.batch_size,
+                            )
+                            # Inspect the data delivered to reset transforms,
+                            # before EnvBase merges it with the caller's input.
+                            torch.testing.assert_close(
+                                target._reset(reset)["observation"], observation
+                            )
                 finally:
                     indexed_env.close(raise_if_closed=False)
 

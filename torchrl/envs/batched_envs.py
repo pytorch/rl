@@ -2755,7 +2755,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             channel = self.parent_channels[i]
             td = channel.recv()
             out_tds.append(td)
-            self._last_worker_outputs[i] = td
+            # Lazy stacks can expose the received tensors directly to callers.
+            self._last_worker_outputs[self._worker_indices[i]] = td.clone()
 
         out = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         if self.device is not None and out.device != self.device:
@@ -2967,7 +2968,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 tensordict = tensordict.to("cpu")
             if self.consolidate:
                 try:
-                    tensordict = tensordict.consolidate(
+                    # Consolidation locks non-tensor leaves too. Keep those
+                    # locks off the caller's data, which reset updates in place.
+                    tensordict = tensordict.clone().consolidate(
                         # share_memory=False: avoid resource_sharer which causes
                         # progressive slowdown with fork on Linux
                         share_memory=False,
@@ -2987,7 +2990,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 localtd = local_data
                 if localtd is not None:
                     localtd = localtd.exclude(*self.reset_keys)
-                last = self._last_worker_outputs[i]
+                last = self._last_worker_outputs[self._worker_indices[i]]
                 if last is not None:
                     # Describe the worker's current state, not only the data the
                     # caller passed (maybe_reset passes the reset signal alone).
@@ -3009,7 +3012,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 continue
             td = channel.recv()
             out_tds[i] = td
-            self._last_worker_outputs[i] = td
+            self._last_worker_outputs[self._worker_indices[i]] = td.clone()
         result = LazyStackedTensorDict.maybe_dense_stack(out_tds)
         device = self.device
         if device is not None and result.device != device:
