@@ -28,6 +28,7 @@ from torchrl.envs import (
     BurnInTransform,
     Compose,
     DMControlEnv,
+    DoneTransform,
     EndOfLifeTransform,
     EnvBase,
     EnvCreator,
@@ -2255,6 +2256,126 @@ class TestExpandAs(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse method for ExpandAs")
+
+
+class TestDoneTransform:
+    def test_rollout_writes_group_done(self):
+        n_agents = 3
+        env = TransformedEnv(
+            NestedCountingEnv(
+                nest_done=False,
+                nest_reward=True,
+                nested_dim=n_agents,
+                max_steps=10,
+            ),
+            DoneTransform(
+                in_keys=["done", "terminated"],
+                reward_key=("data", "reward"),
+            ),
+        )
+        check_env_specs(env)
+        td = env.rollout(4)
+        reward = td.get(("next", "data", "reward"))
+        done = td.get(("next", "data", "done"))
+        terminated = td.get(("next", "data", "terminated"))
+        assert done.shape == reward.shape
+        assert terminated.shape == reward.shape
+        assert done.dtype == torch.bool
+        assert (done == td.get(("next", "done")).unsqueeze(-1)).all()
+        assert (terminated == td.get(("next", "terminated")).unsqueeze(-1)).all()
+
+    def test_nested_keys(self):
+        t = DoneTransform(
+            in_keys=[("root", "done")],
+            out_keys=[("agents", "done")],
+            reward_key=("agents", "reward"),
+        )
+        td = TensorDict(
+            {
+                "root": {"done": torch.tensor([[True], [False]])},
+                "agents": {"reward": torch.zeros(2, 4, 1)},
+            },
+            [2],
+        )
+        td = t(td)
+        assert td["agents", "done"].shape == torch.Size([2, 4, 1])
+        assert bool(td["agents", "done"][0].all())
+        assert bool((~td["agents", "done"][1]).all())
+
+    def test_forward_expands_under_next(self):
+        t = DoneTransform(
+            in_keys=["done", "terminated"],
+            reward_key=("agents", "reward"),
+        )
+        td = TensorDict(
+            {
+                "next": {
+                    "done": torch.tensor([[False], [True]]),
+                    "terminated": torch.tensor([[False], [True]]),
+                    "agents": {"reward": torch.zeros(2, 3, 1)},
+                }
+            },
+            [2],
+        )
+        td = t(td)
+        assert td["next", "agents", "done"].shape == torch.Size([2, 3, 1])
+        assert td["next", "agents", "terminated"].shape == torch.Size([2, 3, 1])
+        assert (td["next", "agents", "done"] == td["next", "done"].unsqueeze(-1)).all()
+
+    def test_done_keys_alias(self):
+        t = DoneTransform(
+            reward_key=("agents", "reward"),
+            done_keys=["done"],
+        )
+        td = TensorDict(
+            {
+                "next": {
+                    "done": torch.tensor([[True], [False]]),
+                    "agents": {"reward": torch.ones(2, 5, 1)},
+                }
+            },
+            [2],
+        )
+        td = t(td)
+        assert t.out_keys == [("agents", "done")]
+        assert td["next", "agents", "done"].shape == torch.Size([2, 5, 1])
+
+    def test_in_keys_and_done_keys_raise(self):
+        with pytest.raises(TypeError, match="in_keys or done_keys"):
+            DoneTransform(
+                in_keys=["done"],
+                done_keys=["terminated"],
+                reward_key="reward",
+            )
+
+    def test_gae_reads_expanded_done(self):
+        n_agents = 3
+        env = TransformedEnv(
+            NestedCountingEnv(
+                nest_done=False,
+                nest_reward=True,
+                nested_dim=n_agents,
+                max_steps=10,
+            ),
+            DoneTransform(
+                in_keys=["done", "terminated"],
+                reward_key=("data", "reward"),
+            ),
+        )
+        td = env.rollout(4)
+        value_shape = td.get(("next", "data", "reward")).shape
+        td.set(("data", "state_value"), torch.zeros(value_shape))
+        td.set(("next", "data", "state_value"), torch.zeros(value_shape))
+        gae = GAE(gamma=0.99, lmbda=0.95, value_network=None, differentiable=False)
+        gae.set_keys(
+            reward=("data", "reward"),
+            done=("data", "done"),
+            terminated=("data", "terminated"),
+            value=("data", "state_value"),
+        )
+        gae(td)
+        assert "advantage" in td.keys()
+        assert td["advantage"].shape == value_shape
 
 
 class TestTerminateTransform:
