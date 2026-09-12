@@ -64,6 +64,25 @@ def _tensor_devices(data: TensorDict) -> set[str]:
     }
 
 
+_CROSS_DEVICE_PARAMS = [
+    pytest.param(
+        "cuda",
+        marks=[
+            pytest.mark.gpu,
+            pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="needs CUDA"
+            ),
+        ],
+    ),
+    pytest.param(
+        "mps",
+        marks=pytest.mark.skipif(
+            not torch.backends.mps.is_available(), reason="needs MPS"
+        ),
+    ),
+]
+
+
 class TestModuleTransform(TransformBase):
     @property
     def _module_factory_samespec(self):
@@ -172,16 +191,37 @@ class TestModuleTransform(TransformBase):
         t.to("meta")
         td = TensorDict(
             {
-                "observation": torch.randn(2, 3),
-                "leftover": torch.ones(2, 1),
+                "observation": torch.randn(2, 3, device="meta"),
+                "leftover": torch.ones(2, 1, device="meta"),
             },
             batch_size=[2],
-            device="cpu",
+            device="meta",
         )
         out = t._call(td)
         assert out["copied"].device.type == "meta"
         assert _tensor_devices(out) == {"meta"}
         assert next(t.module.parameters()).device.type == "meta"
+
+    @pytest.mark.parametrize("module_device", _CROSS_DEVICE_PARAMS)
+    @pytest.mark.parametrize("inverse", [False, True])
+    def test_copies_module_output_back_to_input(self, module_device, inverse):
+        t = ModuleTransform(
+            module=_CopyToWeightDeviceModule(),
+            device=module_device,
+            inverse=inverse,
+        )
+        td = TensorDict(
+            {"observation": torch.randn(2, 3, device="cpu")},
+            batch_size=[2],
+            device="cpu",
+        )
+        call = t._inv_call if inverse else t._call
+        out = call(td)
+        assert "copied" in td.keys()
+        assert td["copied"].device.type == "cpu"
+        assert td["observation"].device.type == "cpu"
+        assert out["copied"].device.type == torch.device(module_device).type
+        assert out is not td
 
     def test_construct_with_meta_places_wrapped_module(self):
         t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="meta")

@@ -191,8 +191,9 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         device (torch.device): Device used to place the reference model at
             construction time. The value is not stored on the transform: at call
             time, incoming tensordicts are moved to the model's current parameter
-            or buffer device. When using Ray service, this device is forwarded to
-            the remote actor. Defaults to `None`.
+            or buffer device for computation, then results are restored to the
+            original tensordict device. When using Ray service, this device is
+            forwarded to the remote actor. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         use_ray_service (bool, optional): whether to use Ray service. Defaults to `False`.
         actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.
@@ -352,7 +353,9 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         device = _module_device(self.ref_model)
         if device is None:
             device = self.coef.device
+        original_device = None
         if device is not None:
+            original_device = tensordict.device
             tensordict = tensordict.to(device)
             next_tensordict = next_tensordict.to(device)
         # tensordict = self._get_text_response(tensordict, next_tensordict)
@@ -488,6 +491,8 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
             next_tensordict.set(self.out_keys[0], reward)
         next_tensordict.set(self.out_keys[1], kl)
         next_tensordict.set(self.out_keys[2], ref_log_prob)
+        if original_device is not None:
+            next_tensordict = next_tensordict.to(original_device)
         return next_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

@@ -762,6 +762,25 @@ def _tensor_devices(data: TensorDict) -> set[str]:
     }
 
 
+_CROSS_DEVICE_PARAMS = [
+    pytest.param(
+        "cuda",
+        marks=[
+            pytest.mark.gpu,
+            pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="needs CUDA"
+            ),
+        ],
+    ),
+    pytest.param(
+        "mps",
+        marks=pytest.mark.skipif(
+            not torch.backends.mps.is_available(), reason="needs MPS"
+        ),
+    ),
+]
+
+
 class _MockLLMModule(nn.Module):
     """Minimal stand-in for an LLM wrapper used by KL / log-prob transforms."""
 
@@ -812,25 +831,56 @@ class TestKLModuleDevice:
         transform.to("meta")
         # Transform.to() clears the parent cache; attach after the device move.
         transform.__dict__["_parent"] = _DummyTokensParent()
-        tokens = torch.ones(2, 4, dtype=torch.long)
         td = TensorDict(
             {
-                ("tokens", "full"): tokens,
-                ("log_probs", "full"): torch.zeros(2, 4),
-                ("masks", "all_assistant_mask"): torch.ones(2, 4, dtype=torch.bool),
+                ("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="meta"),
+                ("log_probs", "full"): torch.zeros(2, 4, device="meta"),
+                ("masks", "all_assistant_mask"): torch.ones(
+                    2, 4, dtype=torch.bool, device="meta"
+                ),
             },
             batch_size=[2],
-            device="cpu",
+            device="meta",
         )
         next_td = TensorDict(
-            {"reward": torch.zeros(2, 4, 1)},
+            {"reward": torch.zeros(2, 4, 1, device="meta")},
             batch_size=[2],
-            device="cpu",
+            device="meta",
         )
         out = transform._step(td, next_td)
         assert out["kl_penalty"].device.type == "meta"
         assert _tensor_devices(out) == {"meta"}
         assert next(transform.ref_model.parameters()).device.type == "meta"
+
+    @pytest.mark.parametrize("module_device", _CROSS_DEVICE_PARAMS)
+    def test_kl_reward_transform_restores_output_to_input_device(self, module_device):
+        model = _MockLLMModule()
+        transform = KLRewardTransform(model, device=module_device)
+        transform.__dict__["_parent"] = _DummyTokensParent()
+        td = TensorDict(
+            {
+                ("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="cpu"),
+                ("log_probs", "full"): torch.zeros(2, 4, device="cpu"),
+                ("masks", "all_assistant_mask"): torch.ones(
+                    2, 4, dtype=torch.bool, device="cpu"
+                ),
+            },
+            batch_size=[2],
+            device="cpu",
+        )
+        next_td = TensorDict(
+            {"reward": torch.zeros(2, 4, 1, device="cpu")},
+            batch_size=[2],
+            device="cpu",
+        )
+        out = transform._step(td, next_td)
+        assert out.device.type == "cpu"
+        assert out["kl_penalty"].device.type == "cpu"
+        assert out["ref_log_probs"].device.type == "cpu"
+        assert _tensor_devices(out) == {"cpu"}
+        assert next(transform.ref_model.parameters()).device.type == torch.device(
+            module_device
+        ).type
 
 
 if __name__ == "__main__":

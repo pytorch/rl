@@ -132,7 +132,8 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         device (torch.device, optional): Device used to place the wrapped module at
             construction time. The value is not stored on the transform: after
             construction, incoming tensordicts are moved to the module's current
-            parameter or buffer device. Defaults to `None` (the module is left
+            parameter or buffer device for the call, and results are copied back
+            onto the original tensordict. Defaults to `None` (the module is left
             where it is).
         use_ray_service (bool, optional): Whether to use Ray service. Default is `False`.
         num_gpus (int, optional): The number of GPUs to use if using Ray. Default is `None`.
@@ -264,19 +265,25 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         if self.inverse:
             return tensordict
         device = _module_device(self.module)
-        if device is not None:
-            tensordict = tensordict.to(device)
         with torch.no_grad() if self.no_grad else nullcontext():
-            return self.module(tensordict)
+            with (
+                tensordict.to(device)
+                if device is not None
+                else nullcontext(tensordict)
+            ) as td:
+                return self.module(td)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.inverse:
             return tensordict
         device = _module_device(self.module)
-        if device is not None:
-            tensordict = tensordict.to(device)
         with torch.no_grad() if self.no_grad else nullcontext():
-            return self.module(tensordict)
+            with (
+                tensordict.to(device)
+                if device is not None
+                else nullcontext(tensordict)
+            ) as td:
+                return self.module(td)
 
     def _update_weights_tensordict(self, params: TensorDictBase) -> None:
         params.to_module(self.module, preserve_module_state=False)
