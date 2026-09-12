@@ -415,7 +415,7 @@ class DoneTransform(Transform):
         *,
         reward_key: NestedKey | None = None,
         done_keys: Sequence[NestedKey] | NestedKey | None = None,
-    ) -> None:
+    ):
         if in_keys is not None and done_keys is not None:
             raise TypeError("Specify either in_keys or done_keys, not both.")
         if done_keys is not None:
@@ -450,7 +450,9 @@ class DoneTransform(Transform):
             _, ref_spec = ExpandAs._find_key_spec(parent.output_spec, self.reward_key)
         except KeyError:
             return None
-        return value.new_empty(ref_spec.shape)
+        # Reward is absent at reset; keep incoming batch dims (batch-unlocked envs).
+        event_shape = ref_spec.shape[len(parent.batch_size) :]
+        return value.new_empty((*tensordict.batch_size, *event_shape))
 
     def _expand_in_tensordict(self, tensordict: TensorDictBase) -> TensorDictBase:
         for in_key, out_key in zip(self.in_keys, self.out_keys):

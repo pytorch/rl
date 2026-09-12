@@ -401,6 +401,7 @@ Transform Configurations
     TensorDictPrimerConfig
     PinMemoryTransformConfig
     RewardSumConfig
+    DoneTransformConfig
     ExcludeTransformConfig
     SelectTransformConfig
     TimeMaxPoolConfig

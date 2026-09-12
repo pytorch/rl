@@ -43,6 +43,7 @@ from torchrl.envs import (
     StepCounter,
     TargetReturn,
     TerminateTransform,
+    TicTacToeEnv,
     TrajCounter,
     TransformedEnv,
 )
@@ -2381,6 +2382,17 @@ class TestDoneTransform:
         gae(td)
         assert "advantage" in td.keys()
         assert td["advantage"].shape == value_shape
+
+    def test_unlocked_batched_reset_expands_group_done(self):
+        env = TransformedEnv(
+            TicTacToeEnv(),
+            DoneTransform(reward_key=("player0", "reward")),
+        )
+        td = env.reset(TensorDict(batch_size=[2]))
+        assert td["player0", "done"].shape == torch.Size([2, 1])
+        assert td["player0", "terminated"].shape == torch.Size([2, 1])
+        assert (td["player0", "done"] == td["done"]).all()
+        assert (td["player0", "terminated"] == td["terminated"]).all()
 
 
 class TestTerminateTransform:
