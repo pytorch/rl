@@ -1,6 +1,6 @@
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f7e1d38a390>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fc2bd544c20>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
