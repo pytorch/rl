@@ -142,9 +142,12 @@ class vLLMWrapper(LLMWrapperBase):
             engine actually returned ``prompt_logprobs``. If it did not (common
             on the vLLM V1 generate path even when ``SamplingParams.prompt_logprobs``
             is set), :class:`~torchrl.modules.llm.policies.common.LogProbs.prompt`
-            is left unset and :attr:`~torchrl.modules.llm.policies.common.LogProbs.full`
-            is the response only. Missing prompt scores are **not** replaced
-            with zeros. To score a prompt, call the wrapper with
+            is left unset. :attr:`~torchrl.modules.llm.policies.common.LogProbs.full`
+            is still prompt-length plus response-length so it stays aligned
+            with :attr:`~torchrl.modules.llm.policies.common.Tokens.full` and
+            with the assistant masks used by :class:`~torchrl.objectives.llm.GRPOLoss`
+            and KL transforms. The prompt slice of ``full`` is an alignment
+            pad, not engine scores. To score a prompt, call the wrapper with
             ``generate=False``.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
 
@@ -1909,14 +1912,23 @@ class vLLMWrapper(LLMWrapperBase):
                     response_lp = (
                         log_probs_padded if self.pad_output else log_probs_list
                     )
-                    if prompt_lp is not None and response_lp is not None:
-                        log_probs_obj_flat.full = self._cat_tensors(
-                            prompt_lp, response_lp
+                    prompt_tokens = (
+                        out.get((self.tokens_key, "prompt"))
+                        if self.pad_output
+                        else out.get((self.tokens_key, "prompt"), as_list=True)
+                    )
+                    if prompt_tokens is None:
+                        prompt_tokens = (
+                            tokens_prompt_padded
+                            if self.pad_output
+                            else tokens_prompt_unpadded
                         )
-                    else:
-                        # Prompt scores were not returned. Do not invent
-                        # zeros (log-prob 0 == probability 1).
-                        log_probs_obj_flat.full = response_lp
+                    # Leave LogProbs.prompt unset when the engine omitted
+                    # scores. Still build a prompt+response `full` so
+                    # GRPOLoss / KL see the same length as tokens.full.
+                    log_probs_obj_flat.full = _assemble_generate_full_logprobs(
+                        prompt_lp, response_lp, prompt_tokens
+                    )
                 else:
                     log_probs_obj_flat.full = None
             log_probs_obj.padded = MetaData(self.pad_output)
@@ -2300,6 +2312,8 @@ def _has_usable_prompt_logprobs(
     Returns:
         bool: ``True`` if the values should be stored on
         :class:`~torchrl.modules.llm.policies.common.LogProbs.prompt`.
+        Unusable values are not written there. ``LogProbs.full`` is
+        assembled separately so it can stay prompt+response length.
     """
     if prompt_logprobs is None:
         return False
@@ -2320,9 +2334,85 @@ def _warn_missing_vllm_prompt_logprobs() -> None:
     torchrl_logger.warning(
         "vLLMWrapper requested prompt log-probabilities but vLLM did not "
         "return usable prompt_logprobs on this generate path. "
-        "LogProbs.prompt is left unset and LogProbs.full is the response "
-        "only. Missing prompt scores are not replaced with zeros. "
+        "LogProbs.prompt is left unset. LogProbs.full keeps prompt+response "
+        "length so GRPO/KL consumers stay aligned with tokens.full; the "
+        "prompt slice is an alignment pad, not engine scores. "
         "To score a prompt, call the wrapper with generate=False."
+    )
+
+
+def _zeros_like_prompt_tokens(
+    prompt_tokens: torch.Tensor | list[torch.Tensor],
+    response_lp: torch.Tensor | list[torch.Tensor],
+) -> torch.Tensor | list[torch.Tensor]:
+    """Zeros matching prompt token shapes for ``LogProbs.full`` alignment.
+
+    These are not engine prompt scores. Callers must leave
+    :class:`~torchrl.modules.llm.policies.common.LogProbs.prompt` unset.
+    """
+    if isinstance(prompt_tokens, list):
+        refs = (
+            response_lp
+            if isinstance(response_lp, list)
+            else [response_lp] * len(prompt_tokens)
+        )
+        return [
+            torch.zeros(t.shape, dtype=r.dtype, device=r.device)
+            for t, r in _zip_strict(prompt_tokens, refs)
+        ]
+    ref = response_lp[0] if isinstance(response_lp, list) else response_lp
+    return torch.zeros(prompt_tokens.shape, dtype=ref.dtype, device=ref.device)
+
+
+def _cat_prompt_response(
+    prompt: torch.Tensor | list[torch.Tensor] | None,
+    response: torch.Tensor | list[torch.Tensor] | None,
+) -> torch.Tensor | list[torch.Tensor] | None:
+    """Concatenate prompt and response tensors, including ragged lists."""
+    if prompt is None or response is None:
+        return None
+    if isinstance(prompt, list) or isinstance(response, list):
+        return [
+            _cat_prompt_response(p, r) for p, r in _zip_strict(prompt, response)
+        ]
+    return torch.cat([prompt, response], dim=-1)
+
+
+def _assemble_generate_full_logprobs(
+    prompt_lp: torch.Tensor | list[torch.Tensor] | None,
+    response_lp: torch.Tensor | list[torch.Tensor] | None,
+    prompt_tokens: torch.Tensor | list[torch.Tensor] | None,
+) -> torch.Tensor | list[torch.Tensor] | None:
+    """Build generate-path ``LogProbs.full``.
+
+    Engine prompt scores are concatenated with the response when present.
+    When they are missing, the prompt slice is padded so ``full`` has the
+    same length as ``tokens.full``. A response-only tensor is never
+    returned as ``full``: :class:`~torchrl.objectives.llm.GRPOLoss` and
+    KL transforms compare against full-sequence masks and training-policy
+    log-probs.
+
+    Args:
+        prompt_lp (Tensor, list of Tensor or None): engine prompt scores,
+            or ``None`` when :func:`_has_usable_prompt_logprobs` is false.
+        response_lp (Tensor, list of Tensor or None): response scores.
+        prompt_tokens (Tensor, list of Tensor or None): prompt token ids,
+            used only for the alignment-pad shape.
+
+    Returns:
+        Tensor, list of Tensor or None: prompt+response log-probs, or
+        ``None`` when ``full`` cannot be formed without relabeling the
+        response as a full sequence.
+    """
+    if response_lp is None:
+        return None
+    if prompt_lp is not None:
+        return _cat_prompt_response(prompt_lp, response_lp)
+    if prompt_tokens is None:
+        return None
+    return _cat_prompt_response(
+        _zeros_like_prompt_tokens(prompt_tokens, response_lp),
+        response_lp,
     )
 
 
