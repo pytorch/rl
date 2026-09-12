@@ -42,7 +42,7 @@ from IPython.display import Video
 
 Video(
     url="https://huggingface.co/torchrl/microduck-skills/resolve/"
-    "5824a856131009e1ecbc95713677a8363e5f169b/videos/navigation.mp4",
+    "43ffe3b725b6a6853ba8e4a54deb06ae17606e5e/videos/navigation.mp4",
     width=640,
     html_attributes='controls muted loop playsinline preload="metadata" '
     'style="max-width: 100%"',

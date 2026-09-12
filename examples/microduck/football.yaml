@@ -33,9 +33,9 @@ policy:
   # Trained MicroDuck locomotion policy (path or URL) that drives the joints while the
   # football policy picks one of its tasks per duck every `decision_period` steps.
   # null trains joint-level actions end to end at 50 Hz instead.
-  walker_checkpoint: https://huggingface.co/torchrl/microduck-skills/resolve/5824a856131009e1ecbc95713677a8363e5f169b/walker.ckpt
-  walker_sha256: e021d2cf79e89749567f05850d87e35ded295cdbdfcac07503de3d4c88ac4cbb  # null skips the check
-  skills: [0, 1, 2, 3, 4]   # library indices of the walker's tasks: stand, forward, backward, sidestep left, sidestep right (5 is jump)
+  walker_checkpoint: https://huggingface.co/torchrl/microduck-skills/resolve/43ffe3b725b6a6853ba8e4a54deb06ae17606e5e/walker.ckpt
+  walker_sha256: 855380a5692fc196768cfa9bc4d813f7995f0c814fa4646233e07e34248a3f76  # null skips the check
+  skills: [0, 1, 2, 3, 4]   # library indices of the walker's tasks: stand, forward, backward, sidestep left, sidestep right
   decision_period: 5        # walker steps per skill decision (10 Hz)
   hidden_size: 256
   depth: 2
