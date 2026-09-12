@@ -172,7 +172,7 @@ class TestGenesis:
         try:
             assert isinstance(env, ParallelEnv)
             assert env._metadata_from_workers
-            assert env._use_buffers is False
+            assert env._use_buffers == (not env.meta_data.has_dynamic_specs)
             assert not env.is_closed
             assert env.reset().batch_size == torch.Size([2])
         finally:

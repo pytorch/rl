@@ -1718,6 +1718,43 @@ def test_heterogeneous_non_tensor_workers(cls, maybe_fork_ParallelEnv):
         env.close(raise_if_closed=False)
 
 
+@pytest.mark.parametrize("use_buffers", [None, True, False])
+def test_parallel_env_metadata_from_workers_buffers(use_buffers):
+    # Workers that report their own metadata get the shared buffers once the
+    # parent has allocated them from that metadata, and behave like the
+    # default path with the same use_buffers setting.
+    env = ParallelEnv(
+        2,
+        ContinuousActionVecMockEnv,
+        metadata_from_workers=True,
+        use_buffers=use_buffers,
+    )
+    ref = ParallelEnv(2, ContinuousActionVecMockEnv, use_buffers=use_buffers)
+    try:
+        assert env._metadata_from_workers
+        assert env._use_buffers is (use_buffers is not False)
+        rollouts = []
+        for batched in (env, ref):
+            batched.set_seed(0)
+            torch.manual_seed(0)
+            rollouts.append(batched.rollout(5, break_when_any_done=False))
+        assert rollouts[0].shape == rollouts[1].shape == (2, 5)
+        if use_buffers is not False:
+            # The shared-memory workers reseed torch on set_seed, so the
+            # rollouts match the default path exactly.
+            assert_allclose_td(rollouts[0], rollouts[1])
+        # a partial reset goes through the same buffers
+        reset = rollouts[0][:, -1].select(*env.reset_keys, strict=False).clone()
+        reset["_reset"] = torch.tensor([True, False])
+        out = env.reset(reset)
+        assert out.shape == (2,)
+        torch.manual_seed(0)
+        assert env.rollout(3, break_when_any_done=False).shape == (2, 3)
+    finally:
+        env.close(raise_if_closed=False)
+        ref.close(raise_if_closed=False)
+
+
 def test_stackable():
     # Tests the _stackable util
     stack = [TensorDict({"a": 0}, []), TensorDict({"b": 1}, [])]

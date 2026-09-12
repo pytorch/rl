@@ -293,7 +293,7 @@ class TestLibero:
         try:
             assert env.num_workers == 2
             assert env._metadata_from_workers
-            assert env._use_buffers is False
+            assert env._use_buffers == (not env.meta_data.has_dynamic_specs)
             assert env.batch_size == torch.Size([2])
             assert env.full_observation_spec["observation", "image"].shape == (
                 2,
