@@ -20,16 +20,20 @@ import pytest
 import torch
 
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModuleBase
+from torchrl.data import Categorical, Composite, Unbounded
 from torchrl.envs import (
     AntEnv,
     Compose,
     CubeBowlEnv,
+    EnvBase,
     ExplorationType,
     HopperEnv,
     HumanoidEnv,
     InitTracker,
     MacroPrimitive,
     MacroPrimitiveTransform,
+    microduck_skill_env,
     MicroDuckEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
@@ -38,6 +42,8 @@ from torchrl.envs import (
     SatelliteEnv,
     SerialEnv,
     set_exploration_type,
+    StepCounter,
+    TensorDictPrimer,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
@@ -2931,6 +2937,163 @@ class TestMujoco:
         td = env.rollout(3)
         assert td.shape == torch.Size([num_envs, 3])
         assert torch.isfinite(td.get(("next", "observation"))).all()
+
+
+class _MicroDuckDeploymentEnv(EnvBase):
+    def __init__(self):
+        super().__init__(batch_size=(2,))
+        self.observation_spec = Composite(
+            agents=Composite(
+                observation=Unbounded((2, 3, MicroDuckEnv.OBSERVATION_DIM + 4)),
+                fallen=Categorical(2, shape=(2, 3, 1), dtype=torch.bool),
+                shape=(2, 3),
+            ),
+            shape=(2,),
+        )
+        self.action_spec = Composite(
+            agents=Composite(action=Unbounded((2, 3, 14)), shape=(2, 3)), shape=(2,)
+        )
+        self.reward_spec = Composite(
+            agents=Composite(reward=Unbounded((2, 3, 1)), shape=(2, 3)), shape=(2,)
+        )
+        self.done_spec = Categorical(2, shape=(2, 1), dtype=torch.bool)
+
+    def _set_seed(self, seed):
+        return seed
+
+    def _reset(self, tensordict=None, **kwargs):
+        return self.observation_spec.zero().update(self.full_done_spec.zero())
+
+    def _step(self, td):
+        result = td.select(*self.observation_spec.keys(True, True)).clone()
+        obs = result["agents", "observation"]
+        obs[..., 0] += 1
+        # Raw fall on step 2; step 3 must not reset this row again.
+        result["agents", "fallen"].zero_()
+        result["agents", "fallen"][:, 0, 0] = obs[:, 0, 0] == 2
+        result["agents", "reward"] = td["agents", "action"].sum(-1, keepdim=True)
+        result.update(self.full_done_spec.zero())
+        return result
+
+
+class _MicroDuckRecordingPolicy(TensorDictModuleBase):
+    in_keys = ["observation", "task_id", "memory", "is_init"]
+    out_keys = ["action", ("next", "memory")]
+
+    def make_tensordict_primer(self):
+        return TensorDictPrimer(memory=Unbounded((1,)), default_value=7)
+
+    def forward(self, td):
+        # Expose adapter values as actions so the independent reference can
+        # check task IDs, commands, phase, ramp, and nonzero reset defaults.
+        obs = td["observation"]
+        start = MicroDuckEnv.GAIT_PHASE_START
+        action = obs.new_zeros((*td.batch_size, 14))
+        action[..., :2] = obs[
+            ..., MicroDuckEnv.COMMAND_START : MicroDuckEnv.COMMAND_START + 2
+        ]
+        action[..., 2:3] = td["task_id"]
+        action[..., 3:6] = obs[..., start : start + 3]
+        action[..., 6:7] = td["memory"]
+        td["action"] = action
+        td["next", "memory"] = td["memory"] + 1
+        return td
+
+
+class TestMicroDuckController:
+    def test_terminal_transition_keeps_skill_observation(self):
+        env = microduck_skill_env(
+            TransformedEnv(_MicroDuckDeploymentEnv(), StepCounter(max_steps=2)),
+            _MicroDuckRecordingPolicy(),
+            [MicroDuckEnv.standing_task(), MicroDuckEnv.tracking_task(0.2)],
+            steps=3,
+        )
+        check_env_specs(env)
+        transition = env.rand_step(env.reset())
+        assert transition["next", "done"].all()
+        assert (
+            transition["next", "agents", "observation"].shape
+            == transition["agents", "observation"].shape
+        )
+        torch.testing.assert_close(
+            transition["next", "agents", "observation"][..., -2:].argmax(-1),
+            transition["agents", "skill"],
+        )
+        env.close()
+
+    @pytest.mark.parametrize("parameterized", [False, True])
+    def test_deployment_matches_commands_clocks_and_respawns(self, parameterized):
+        tasks = [
+            MicroDuckEnv.standing_task(),
+            MicroDuckEnv.speed_range_task(0.1, 0.3),
+            MicroDuckEnv.sidestep_task(-0.2),
+        ]
+        selected = [2, 1]
+        argument_key = ("command", "argument") if parameterized else None
+        env = microduck_skill_env(
+            _MicroDuckDeploymentEnv(),
+            _MicroDuckRecordingPolicy(),
+            tasks,
+            skills=selected,
+            steps=3,
+            argument_key=argument_key,
+        )
+        check_env_specs(env)
+        td = env.reset()
+        phase = torch.full((2, 3), MicroDuckEnv.GAIT_PHASE_OFFSET)
+        elapsed = torch.zeros(2, 3)
+        memory = torch.full((2, 3), 7.0)
+        task_rows = MicroDuckEnv.stack_tasks(tasks)
+        for decision in (0, 1):
+            td["agents", "skill"] = torch.full((2, 3), decision)
+            argument = torch.tensor([-0.5, 0.75]).expand(2, 3, 2)
+            if parameterized:
+                td[("agents", *argument_key)] = argument
+            transition = env.step(td)
+            reward = torch.zeros(2, 3)
+            row = task_rows[selected[decision]]
+            command = (
+                row.command_low
+                + 0.5 * (argument + 1) * (row.command_high - row.command_low)
+                if parameterized
+                else (row.command_low + row.command_high) / 2
+            )
+            frequency = (
+                row.gait_frequency_hz
+                + row.gait_frequency_per_mps * command.norm(dim=-1)
+            )
+            for step in range(3):
+                reward += (
+                    command.sum(-1) + selected[decision] + phase.sin() + phase.cos()
+                )
+                reward += (elapsed / MicroDuckEnv.GAIT_RAMP_DURATION_S).clamp(
+                    max=1
+                ) + memory
+                phase += 2 * math.pi * frequency * 0.02
+                elapsed += 0.02
+                memory += 1
+                if decision == 0 and step == 1:
+                    phase[:, 0] = MicroDuckEnv.GAIT_PHASE_OFFSET
+                    elapsed[:, 0] = 0
+                    memory[:, 0] = 7
+            next_td = transition["next"]
+            torch.testing.assert_close(next_td["agents", "reward"].squeeze(-1), reward)
+            torch.testing.assert_close(
+                next_td["agents", "_controller", "gait_phase"], phase
+            )
+            torch.testing.assert_close(
+                next_td["agents", "_controller", "gait_elapsed"], elapsed
+            )
+            torch.testing.assert_close(
+                next_td["agents", "_controller", "memory"].squeeze(-1), memory
+            )
+            assert (
+                next_td["agents", "observation"][..., -2:].argmax(-1) == decision
+            ).all()
+            assert next_td["agents", "fallen"][:, 0].all() == (decision == 0)
+            assert not next_td["agents", "fallen"][:, 1:].any()
+            td = env.step_mdp(transition)
+        env.close()
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import math
 from collections.abc import Sequence
+from contextlib import nullcontext
 from copy import copy
 from enum import IntEnum
 from textwrap import indent
@@ -16,6 +17,7 @@ from typing import Any, Literal, TYPE_CHECKING
 import torch
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 
@@ -33,6 +35,7 @@ from torchrl.data.tensor_specs import (
 
 if TYPE_CHECKING:
     from torchrl.data.vla import RobotDatasetMetadata
+    from torchrl.envs.common import EnvBase
 
 if TYPE_CHECKING:
     from typing import Self
@@ -46,8 +49,16 @@ from torchrl.data.vla.schema import (
     ACTION_TOKENS_KEY,
 )
 from torchrl.data.vla.tokenizers import ActionTokenizerBase
-from torchrl.envs.transforms._base import Compose, FORWARD_NOT_IMPLEMENTED, Transform
+from torchrl.envs.transforms._base import (
+    Compose,
+    FORWARD_NOT_IMPLEMENTED,
+    Transform,
+    TransformedEnv,
+)
 from torchrl.envs.transforms._observation import CatFrames, UnsqueezeTransform
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules.tensordict_module.controllers import LowLevelController
+from torchrl.modules.utils import get_env_transforms_from_module
 
 __all__ = [
     "ActionChunkTransform",
@@ -58,6 +69,7 @@ __all__ = [
     "DiscreteActionProjection",
     "FlattenAction",
     "MultiAction",
+    "ClosedLoopMultiAction",
 ]
 
 
@@ -717,6 +729,11 @@ class MultiAction(Transform):
             ``("vla_action", "chunk")`` when a chunk policy should act through
             :class:`MultiAction` without re-keying its output. See also
             :meth:`from_vla`.
+        reward_aggregation (str, optional): "last", "stack", "sum", or "mean".
+            An explicit value overrides stack_rewards. Sum and mean reduce
+            only executed steps without allocating a reward stack. Defaults
+            to None, preserving the stack_rewards behavior. See also
+            :class:`~torchrl.trainers.algorithms.configs.MultiActionConfig`.
 
     .. seealso:: :class:`~torchrl.envs.transforms.ActionChunkTransform` -- when
         the stacked actions are a chunk policy's *prediction* (overlapping
@@ -735,6 +752,7 @@ class MultiAction(Transform):
         stack_observations: bool = False,
         action_key: NestedKey | None = None,
         chunk_key: NestedKey | None = None,
+        reward_aggregation: Literal["last", "stack", "sum", "mean"] | None = None,
     ):
         if action_key is None and chunk_key is not None:
             action_key = "action"
@@ -743,7 +761,19 @@ class MultiAction(Transform):
         in_keys_inv = None if action_key is None else [action_key]
         out_keys_inv = None if chunk_key is None else [chunk_key]
         super().__init__(in_keys_inv=in_keys_inv, out_keys_inv=out_keys_inv)
-        self.stack_rewards = stack_rewards
+        if reward_aggregation not in (None, "last", "stack", "sum", "mean"):
+            raise ValueError(
+                "reward_aggregation must be last, stack, sum, mean, or None."
+            )
+        if isinstance(dim, bool) or not isinstance(dim, int) or dim < 1:
+            raise ValueError("dim must be a positive integer.")
+        self.reward_aggregation = reward_aggregation
+        self._reduce_rewards = reward_aggregation in ("sum", "mean", "last")
+        self.stack_rewards = (
+            stack_rewards
+            if reward_aggregation is None
+            else reward_aggregation == "stack"
+        )
         self.stack_observations = stack_observations
         self.dim = dim
 
@@ -777,6 +807,17 @@ class MultiAction(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if self._reduce_rewards:
+            if tensordict is not None:
+                self._accumulate_rewards(
+                    next_tensordict, self._final_active, self._final_global_idx
+                )
+            reward = self._reward_total
+            if self.reward_aggregation == "mean":
+                reward = reward / self._reward_count.clamp_min(1)
+            if tensordict is not None and self._final_global_idx is not None:
+                reward = reward[self._final_global_idx]
+            next_tensordict.update(reward)
         # Collect the stacks if needed
         if self.stack_rewards:
             reward_td = self.rewards
@@ -821,7 +862,50 @@ class MultiAction(Transform):
             actions.set(action_key, action)
         actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + self.dim)
         actions = actions.unbind(-1)
+        return self._execute_steps(
+            tensordict,
+            len(actions),
+            functools.partial(self._write_chunk_action, actions=actions),
+        )
+
+    def _write_chunk_action(self, td, index, global_idx, active, *, actions):
+        action = actions[index]
+        if global_idx is not None:
+            action = action[global_idx]
+        return td.replace(action)
+
+    def _accumulate_rewards(self, next_td, active, global_idx):
+        reward_td = next_td.select(*self.parent.reward_keys)
+        if self._reward_total is None:
+            self._reward_total = reward_td.new_zeros(self._reward_batch_size)
+            if self.reward_aggregation == "mean":
+                self._reward_count = self._reward_total.clone()
+        for key, reward in reward_td.items(True, True):
+            live = active.to(reward.device)
+            live = live.reshape(*live.shape, *([1] * (reward.ndim - live.ndim)))
+            updates = [(self._reward_total, torch.where(live, reward, 0))]
+            if self.reward_aggregation == "mean":
+                updates.append((self._reward_count, live.expand_as(reward)))
+            for accumulator, increment in updates:
+                old = accumulator.get(key)
+                selected = old if global_idx is None else old[global_idx]
+                value = (
+                    torch.where(live, reward, selected)
+                    if self.reward_aggregation == "last"
+                    else selected + increment
+                )
+                if global_idx is not None:
+                    updated = old.clone()
+                    updated[global_idx] = value
+                    value = updated
+                accumulator.set(key, value)
+
+    def _execute_steps(self, tensordict, steps, write_action):
+        parent = self.parent
         td = tensordict
+        if self._reduce_rewards:
+            self._reward_batch_size = td.batch_size
+            self._reward_total = self._reward_count = None
         idx = None
         global_idx = None
         reset = False
@@ -829,11 +913,14 @@ class MultiAction(Transform):
             self.rewards = rewards = []
         if self.stack_observations:
             self.obs = obs = []
-        for a in actions[:-1]:
-            if global_idx is not None:
-                a = a[global_idx]
-            td = td.replace(a)
+        for index in range(steps - 1):
+            active = td.get(
+                "_step", torch.ones(td.shape, dtype=torch.bool, device=td.device)
+            )
+            td = write_action(td, index, global_idx, active)
             td = parent.step(td)
+            if self._reduce_rewards:
+                self._accumulate_rewards(td["next"], active, global_idx)
 
             # Save rewards and done states
             if self.stack_rewards:
@@ -851,7 +938,11 @@ class MultiAction(Transform):
                 obs_td = td["next"].select(*self.parent.observation_keys)
                 # obs_td = td.select("next", *self.parent.observation_keys).set("next", obs_td)
                 if global_idx is not None:
-                    obs_td = torch.where(global_idx, obs_td, 0)
+                    expanded = obs_td.new_zeros(
+                        global_idx.shape + obs_td.shape[global_idx.ndim :]
+                    )
+                    expanded[global_idx] = obs_td
+                    obs_td = expanded
                 obs.append(obs_td)
 
             td = parent.step_mdp(td)
@@ -891,11 +982,16 @@ class MultiAction(Transform):
                     td = td[idx]
                     reset = reset[idx]  # Should be all False
 
+        active = td.get(
+            "_step", torch.ones(td.shape, dtype=torch.bool, device=td.device)
+        )
+        self._final_active = active
+        self._final_global_idx = global_idx
         if global_idx is None:
-            td_out = td.replace(actions[-1])
-            if (self.stack_rewards or self.stack_observations) and not td_out.get(
-                "_step", torch.ones((), dtype=torch.bool)
-            ).any():
+            td_out = write_action(td, steps - 1, None, active)
+            if (
+                self.stack_rewards or self.stack_observations or self._reduce_rewards
+            ) and not td_out.get("_step", torch.ones((), dtype=torch.bool)).any():
                 if self.stack_rewards:
                     # the final outer step is skipped for every env (done fired
                     # inside the chunk): its slot in the reward stack would
@@ -906,7 +1002,7 @@ class MultiAction(Transform):
                         td_out.set(key, torch.zeros_like(td_out.get(key)))
                 td_out = self._step(None, td_out)
         else:
-            td_out[global_idx] = td.replace(actions[-1][global_idx])
+            td_out[global_idx] = write_action(td, steps - 1, global_idx, active)
             if self.stack_rewards:
                 # zero the trailing reward slot of the envs that finished
                 # early: their final outer step is skipped, so it would
@@ -915,7 +1011,7 @@ class MultiAction(Transform):
                     reward = td_out.get(key).clone()
                     reward[~global_idx] = 0
                     td_out.set(key, reward)
-            if self.stack_rewards or self.stack_observations:
+            if self.stack_rewards or self.stack_observations or self._reduce_rewards:
                 td_out = self._step(None, td_out)
                 if self.stack_rewards:
                     self.rewards = list(
@@ -999,6 +1095,250 @@ class MultiAction(Transform):
             )
         )
         return observation_spec
+
+
+class ClosedLoopMultiAction(MultiAction):
+    """Execute a controller against fresh observations for one high-level decision.
+
+    Unlike an action chunk, the low-level action is recomputed at every physical
+    step. High-level decisions and their log probabilities remain on the outer
+    transition. Finished environments stop executing the controller.
+
+    Args:
+        controller (TensorDictModuleBase): low-level policy, typically
+            :class:`~torchrl.modules.LowLevelController`.
+
+    Keyword Args:
+        steps (int): positive number of physical steps per decision.
+        decision_spec (Composite, optional): complete policy-facing action spec,
+            including environment batch dimensions. Defaults to None, inferring
+            the spec from LowLevelController and preserving unrelated actions.
+        reward_aggregation (str, optional): "sum", "mean", "last", or "stack".
+            Defaults to "sum". Mean counts only executed steps; last returns
+            the last executed reward. Stack uses MultiAction's ragged convention.
+        exploration_type (ExplorationType, optional): controller sampling mode.
+            Defaults to DETERMINISTIC; the caller's exploration mode is restored.
+        no_grad (bool, optional): disable gradients during controller inference.
+            Defaults to True. This does not freeze the policy's parameters.
+        dim (int, optional): stack dimension relative to each leaf's containing
+            TensorDict batch dimensions. Defaults to 1, keeping agent dimensions
+            before the stack dimension.
+        stack_observations (bool, optional): return stacked inner observations.
+            Defaults to False (the final observation). Persistent state remains
+            unstacked. The controller uses the latest observation on its next call.
+
+    Use :meth:`from_env` to install controller primers before this transform.
+    The base environment must honor partial-step masks, as for MultiAction.
+    Discount factors on the resulting environment count high-level decisions.
+    See also :class:`~torchrl.trainers.algorithms.configs.ClosedLoopMultiActionConfig`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.data import Bounded, Composite
+        >>> from torchrl.modules import LowLevelController
+        >>> from torchrl.testing.mocking_classes import CountingEnv
+        >>> policy = TensorDictModule(
+        ...     torch.nn.Identity(), in_keys=["command"], out_keys=["action"])
+        >>> controller = LowLevelController(
+        ...     policy, Composite(command=Bounded(0, 1, shape=(1,))))
+        >>> env = ClosedLoopMultiAction.from_env(CountingEnv(), controller, steps=3)
+        >>> td = env.reset().set("command", torch.ones(1))
+        >>> env.step(td)["next", "observation"]
+        tensor([3], dtype=torch.int32)
+        >>> env.close()
+    """
+
+    def __init__(
+        self,
+        controller: TensorDictModuleBase,
+        *,
+        steps: int,
+        decision_spec: Composite | None = None,
+        reward_aggregation: Literal["last", "stack", "sum", "mean"] = "sum",
+        exploration_type: ExplorationType = ExplorationType.DETERMINISTIC,
+        no_grad: bool = True,
+        dim: int = 1,
+        stack_observations: bool = False,
+    ):
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError("steps must be a positive integer.")
+        super().__init__(
+            dim=dim,
+            reward_aggregation=reward_aggregation,
+            stack_observations=stack_observations,
+        )
+        if decision_spec is None and not isinstance(controller, LowLevelController):
+            raise ValueError(
+                "Pass decision_spec when controller is not a LowLevelController."
+            )
+        self.controller = controller
+        self.steps = steps
+        self.decision_spec = None if decision_spec is None else decision_spec.clone()
+        self.exploration_type = exploration_type
+        self.no_grad = no_grad
+        self._decision_keys = None
+
+    @classmethod
+    def from_env(
+        cls,
+        env: EnvBase,
+        controller: TensorDictModuleBase,
+        *,
+        steps: int,
+        init_key: str = "is_init",
+        **kwargs: Any,
+    ) -> TransformedEnv:
+        """Wrap an environment, automatically installing controller state.
+
+        Args:
+            env (EnvBase): physical environment.
+            controller (TensorDictModuleBase): controller to execute.
+
+        Keyword Args:
+            steps (int): positive number of controller steps per decision.
+            init_key (str, optional): episode-start marker. Defaults to "is_init".
+            **kwargs: additional ClosedLoopMultiAction constructor arguments.
+
+        Returns:
+            TransformedEnv: environment exposing high-level actions.
+        """
+        pending = [get_env_transforms_from_module(controller, init_key=init_key)]
+        transforms = []
+        while pending:
+            transform = pending.pop(0)
+            if isinstance(transform, Compose):
+                pending[0:0] = list(transform.transforms)
+            else:
+                transform.reset_parent()
+                transforms.append(transform)
+        transforms.append(cls(controller, steps=steps, **kwargs))
+        return TransformedEnv(env, Compose(*transforms))
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        input_spec = input_spec.clone()
+        if self.decision_spec is not None:
+            actions = self.decision_spec.clone()
+            if actions.shape != input_spec.shape:
+                raise ValueError(
+                    "decision_spec must include the environment batch dimensions."
+                )
+        else:
+            controller = self.controller
+            actions = input_spec["full_action_spec"].clone()
+            del actions[controller._action_path]
+            if controller.group_key is None:
+                actions.update(
+                    controller.decision_spec.to(actions.device).expand(actions.shape)
+                )
+            else:
+                group_spec = self.parent.full_observation_spec[controller.group_key]
+                decisions = controller.decision_spec.to(group_spec.device).expand(
+                    group_spec.shape
+                )
+                if controller.group_key in actions.keys(True):
+                    actions[controller.group_key].update(decisions)
+                else:
+                    actions[controller.group_key] = decisions
+        input_spec["full_action_spec"] = actions
+        self._decision_keys = list(actions.keys(True, True))
+        return input_spec
+
+    def _write_controller_action(self, td, index, global_idx, active, *, decisions):
+        if not active.any():
+            return td
+        if global_idx is not None:
+            decisions = decisions[global_idx]
+        all_active = active.all()
+        active_td = td if all_active else td[active]
+        active_td.update(decisions if all_active else decisions[active])
+        with (
+            torch.no_grad() if self.no_grad else nullcontext(),
+            set_exploration_type(self.exploration_type),
+        ):
+            result = self.controller(active_td)
+        if all_active:
+            return result
+        # Indexed assignment allocates zero-filled tensors for new keys.
+        # Seed next-state entries from their current values so stopped rows
+        # retain their controller state when only live rows produce outputs.
+        next_state = result.get("next", None)
+        if next_state is not None:
+            for key in next_state.keys(True, True):
+                path = ("next", key) if isinstance(key, str) else ("next", *key)
+                current = td.get(key, None)
+                if current is not None and td.get(path, None) is None:
+                    td.set(path, current.clone())
+        # active can be td["_step"], which indexed assignment also writes.
+        # Keep the indexing mask independent of the destination tensors.
+        td[active.clone()] = result
+        return td
+
+    def _stack_tds(self, td_list, next_tensordict, keys):
+        # Keep group batch dimensions stable: rewards can be reduced while
+        # observations are stacked in the same agent TensorDict.
+        result = next_tensordict.select(*keys).clone(recurse=False)
+        state_keys = self.parent.full_state_spec.keys(True, True)
+        for key, value in result.items(True, True):
+            if key in state_keys:
+                continue
+            node = result if isinstance(key, str) else result[key[:-1]]
+            result.set(
+                key,
+                torch.stack(
+                    [td.get(key) for td in td_list] + [value], node.ndim + self.dim - 1
+                ),
+            )
+        return result
+
+    def _stack_spec(self, spec):
+        state_keys = self.parent.full_state_spec.keys(True, True)
+        for key, leaf in list(spec.items(True, True)):
+            if key in state_keys:
+                continue
+            node = spec if isinstance(key, str) else spec[key[:-1]]
+            dim = node.ndim + self.dim - 1
+            leaf = leaf.unsqueeze(dim)
+            shape = list(leaf.shape)
+            shape[dim] = -1
+            spec[key] = leaf.expand(shape)
+        return spec
+
+    def _transform_reward_spec(self, reward_spec, ndim):
+        return self._stack_spec(reward_spec) if self.stack_rewards else reward_spec
+
+    def _transform_observation_spec(self, observation_spec, ndim):
+        return (
+            self._stack_spec(observation_spec)
+            if self.stack_observations
+            else observation_spec
+        )
+
+    def _reset(self, tensordict, tensordict_reset):
+        if self.stack_observations:
+            tensordict_reset.update(
+                self._stack_tds([], tensordict_reset, self.parent.observation_keys)
+            )
+        return tensordict_reset
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.stack_observations:
+            for key, leaf in self.parent.observation_spec.items(True, True):
+                value = tensordict.get(key, None)
+                if value is None:
+                    continue
+                extra_batch_dims = tensordict.ndim - self.parent.ndim
+                if value.ndim == leaf.ndim + extra_batch_dims + 1:
+                    node = tensordict if isinstance(key, str) else tensordict[key[:-1]]
+                    tensordict.set(key, value.select(node.ndim + self.dim - 1, -1))
+        if self._decision_keys is None:
+            self.transform_input_spec(self.parent.input_spec)
+        decisions = tensordict.select(*self._decision_keys).clone()
+        return self._execute_steps(
+            tensordict,
+            self.steps,
+            functools.partial(self._write_controller_action, decisions=decisions),
+        )
 
 
 class ActionScaling(Transform):

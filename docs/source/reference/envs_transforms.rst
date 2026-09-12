@@ -293,6 +293,7 @@ Available Transforms
     MeanActionSelector
     ModuleTransform
     MultiAction
+    ClosedLoopMultiAction
     NextObservationDelta
     NextStateReconstructor
     PolicyAgeFilter

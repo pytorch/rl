@@ -15,6 +15,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl.modules import (
     AdditiveGaussianModule,
     DreamerV3DiscreteActor,
+    LowLevelController,
     QValueActor,
     RSSMStateEstimatorV3,
     TanhModule,
@@ -67,6 +68,45 @@ class NetworkConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for network configurations."""
+
+
+@dataclass
+class LowLevelControllerConfig(NetworkConfig):
+    """Hydra configuration for :class:`~torchrl.modules.LowLevelController`.
+
+    Pass the pretrained policy to Hydra's instantiate and declare the unbatched
+    Composite decision spec with a Hydra target. Adapter and nested keys can
+    also be configured in YAML.
+    """
+
+    policy: Any = MISSING
+    decision_spec: Any = MISSING
+    adapter: Any = None
+    group_key: Any = None
+    state_key: Any = "_controller"
+    policy_action_key: Any = "action"
+    action_key: Any = "action"
+    reset_key: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_low_level_controller"
+    )
+
+
+def _make_low_level_controller(**kwargs: Any) -> LowLevelController:
+    """Convert Hydra lists to nested TensorDict keys before construction."""
+    return LowLevelController(
+        policy=kwargs.pop("policy"),
+        decision_spec=kwargs.pop("decision_spec"),
+        adapter=kwargs.pop("adapter", None),
+        group_key=_normalize_hydra_key(kwargs.pop("group_key", None)),
+        state_key=_normalize_hydra_key(kwargs.pop("state_key", "_controller")),
+        policy_action_key=_normalize_hydra_key(
+            kwargs.pop("policy_action_key", "action")
+        ),
+        action_key=_normalize_hydra_key(kwargs.pop("action_key", "action")),
+        reset_key=_normalize_hydra_key(kwargs.pop("reset_key", None)),
+        **kwargs,
+    )
 
 
 @dataclass

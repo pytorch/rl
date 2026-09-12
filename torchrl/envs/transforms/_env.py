@@ -694,6 +694,139 @@ class gSDENoise(TensorDictPrimer):
         super().__init__(primers=primers, random=random, **kwargs)
 
 
+class _ControllerPrimer(TensorDictPrimer):
+    """Namespace a policy primer, expanding only at environment attachment."""
+
+    def __init__(self, prototype, *, group_key, state_key, reset_signal):
+        super().__init__(Composite(), expand_specs=False)
+        self.prototype = prototype.clone()
+        self.group_key = group_key
+        self.state_key = state_key
+        self.reset_signal = reset_signal
+        group_path = (
+            ()
+            if group_key is None
+            else ((group_key,) if isinstance(group_key, str) else group_key)
+        )
+        state_path = (state_key,) if isinstance(state_key, str) else state_key
+        self._state_path = unravel_key((*group_path, *state_path))
+        self.primers[self._state_path] = prototype.primers.clone()
+
+    def transform_observation_spec(self, observation_spec):
+        group_spec = (
+            observation_spec
+            if self.group_key is None
+            else observation_spec.get(
+                self.group_key, self.parent.full_observation_spec[self.group_key]
+            )
+        )
+        # Move supplied primer metadata to the environment's chosen device.
+        local = self.prototype.primers.to(group_spec.device).expand(group_spec.shape)
+        self.primers = Composite(
+            shape=observation_spec.shape, device=observation_spec.device
+        )
+        if self.group_key is not None:
+            self.primers[self.group_key] = Composite(
+                shape=group_spec.shape, device=group_spec.device
+            )
+        self.primers[self._state_path] = local
+        if self._reset_key is None and self.parent is not None:
+            group_path = (
+                ()
+                if self.group_key is None
+                else (
+                    (self.group_key,)
+                    if isinstance(self.group_key, str)
+                    else self.group_key
+                )
+            )
+            candidates = []
+            for key in self.parent.reset_keys:
+                path = (key,) if isinstance(key, str) else key
+                if group_path[: len(path) - 1] == path[:-1]:
+                    candidates.append(path)
+            if candidates:
+                self.reset_key = unravel_key(max(candidates, key=len))
+        observation_spec.update(self.primers)
+        return observation_spec
+
+    def _initialize(self, current, output, mask):
+        group = output if self.group_key is None else output.get(self.group_key)
+        previous_group = (
+            current if self.group_key is None else current.get(self.group_key, None)
+        )
+        previous = (
+            None if previous_group is None else previous_group.get(self.state_key, None)
+        )
+        state = group.get(self.state_key, None)
+        if state is None:
+            state = TensorDict({}, batch_size=group.batch_size, device=group.device)
+        mask = mask.bool()
+        while mask.ndim > group.ndim and mask.shape[-1] == 1:
+            mask = mask.squeeze(-1)
+        mask = mask.reshape((*mask.shape, *([1] * (group.ndim - mask.ndim)))).expand(
+            group.batch_size
+        )
+        prototype = self.prototype
+        defaults = None
+        if prototype.single_default_value:
+            # A shared initializer receives the same flattened controller rows
+            # as the policy, and returns one value per resetting row.
+            defaults = prototype.default_value(reset=mask.reshape(-1))
+        for key, spec in prototype.primers.items(True, True):
+            # Input state and the environment specify placement, not a module cache.
+            spec = spec.to(group.device or self.parent.device or spec.device)
+            if prototype.random:
+                value = spec.rand(group.batch_size)
+            elif defaults is not None:
+                old = None if previous is None else previous.get(key, None)
+                value = spec.zero(group.batch_size) if old is None else old.clone()
+                value.reshape(-1, *spec.shape)[mask.reshape(-1)] = defaults.get(key).to(
+                    spec.device
+                )
+            else:
+                default = prototype.default_value[key]
+                if callable(default):
+                    default = default()
+                if isinstance(default, torch.Tensor):
+                    value = default.to(spec.device).expand(
+                        *group.batch_size, *spec.shape
+                    )
+                else:
+                    value = torch.full(
+                        (*group.batch_size, *spec.shape),
+                        default,
+                        dtype=spec.dtype,
+                        device=spec.device,
+                    )
+            old = None if previous is None else previous.get(key, None)
+            if old is None:
+                old = torch.zeros_like(value)
+            state.set(key, torch.where(expand_as_right(mask, value), value, old))
+        group.set(self.state_key, state)
+        return output
+
+    def _reset(self, tensordict, tensordict_reset):
+        return self._initialize(
+            tensordict, tensordict_reset, _get_reset(self.reset_key, tensordict)
+        )
+
+    def _step(self, tensordict, next_tensordict):
+        next_tensordict = super()._step(tensordict, next_tensordict)
+        if self.reset_signal is not None:
+            group = (
+                next_tensordict
+                if self.group_key is None
+                else next_tensordict.get(self.group_key)
+            )
+            signal = group.get(self.reset_signal)
+            if signal.any():
+                next_tensordict = self._initialize(
+                    next_tensordict, next_tensordict, signal
+                )
+        return next_tensordict
+
+
 class StepCounter(Transform):
     """Counts the steps from a reset and optionally sets the truncated state to ``True`` after a certain number of steps.
 
@@ -1575,7 +1708,10 @@ class InitTracker(Transform):
                 device = next_tensordict.device
                 if device is None:
                     device = torch.device("cpu")
-                shape = self.parent.full_done_spec[done_key].shape
+                shape = (
+                    next_tensordict.batch_size
+                    + self.parent.full_done_spec[done_key].shape[self.parent.ndim :]
+                )
                 if native_autoreset and done_key in next_tensordict.keys(True, True):
                     init = next_tensordict.get(done_key).clone()
                 else:
@@ -1596,7 +1732,12 @@ class InitTracker(Transform):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
                 done_key = _replace_last(init_key, "done")
-                shape = self.parent.full_done_spec[done_key]._safe_shape
+                shape = (
+                    tensordict_reset.batch_size
+                    + self.parent.full_done_spec[done_key]._safe_shape[
+                        self.parent.ndim :
+                    ]
+                )
                 tensordict_reset.set(
                     init_key,
                     torch.ones(

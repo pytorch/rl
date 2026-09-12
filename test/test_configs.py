@@ -73,6 +73,7 @@ from torchrl.record.loggers import (
 )
 from torchrl.record.loggers.trackio import TrackioLogger
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.testing.mocking_classes import CountingEnv
 from torchrl.trainers import Trainer
 from torchrl.trainers.trainers import CountFramesLog
 
@@ -167,6 +168,9 @@ _CONFIG_PARITY_SIGNATURE_OVERRIDES = {
 _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
     {
         "CollectorConfig",
+        "ClosedLoopMultiActionConfig",
+        "LowLevelControllerConfig",
+        "MultiActionConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
     }
@@ -1211,6 +1215,47 @@ class TestDataConfigs:
 )
 class TestModuleConfigs:
     """Test cases for modules.py configuration classes."""
+
+    @pytest.mark.skipif(not _configs_available, reason="Hydra is not installed")
+    def test_controller_deployment_from_config(self):
+        policy = TensorDictModule(
+            torch.nn.Identity(),
+            in_keys=[("decision", "command")],
+            out_keys=[("motor", "output")],
+        )
+        controller = instantiate_config(
+            algorithm_configs.LowLevelControllerConfig(
+                state_key=["state", "low"],
+                policy_action_key=["motor", "output"],
+                decision_spec={
+                    "_target_": "torchrl.data.Composite",
+                    "decision": {
+                        "_target_": "torchrl.data.Composite",
+                        "command": {
+                            "_target_": "torchrl.data.Bounded",
+                            "low": 0,
+                            "high": 1,
+                            "shape": [1],
+                        },
+                    },
+                },
+            ),
+            policy=policy,
+        )
+        env = instantiate_config(
+            algorithm_configs.ClosedLoopMultiActionConfig(
+                steps=2,
+                _target_="torchrl.envs.transforms.ClosedLoopMultiAction.from_env",
+            ),
+            env=CountingEnv(),
+            controller=controller,
+        )
+        td = env.reset().set(("decision", "command"), torch.ones(1))
+        transition = env.step(td)
+        assert transition["next", "observation"].item() == 2
+        assert not transition["next", "state", "low", "is_init"].any()
+        assert env.action_key == ("decision", "command")
+        env.close()
 
     def test_network_config(self):
         """Test basic NetworkConfig."""

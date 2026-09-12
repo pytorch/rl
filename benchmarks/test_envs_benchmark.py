@@ -12,8 +12,12 @@ import pytest
 import torch
 
 from tensordict import set_capture_non_tensor_stack, TensorDict
+from tensordict.nn import TensorDictModule, WrapModule
+from torchrl.data import Bounded, Composite
 from torchrl.envs import (
     AsyncEnvPool,
+    ClosedLoopMultiAction,
+    MultiAction,
     ParallelEnv,
     SerialEnv,
     step_mdp,
@@ -23,7 +27,44 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.libero import _has_libero, LiberoEnv
 from torchrl.envs.transforms.functional import cat_frames
+from torchrl.modules import LowLevelController
 from torchrl.testing.mocking_classes import CountingEnv
+
+
+def _deployment_action(td, *, steps):
+    observation = td["observation"]
+    if steps is None:
+        td["command"] = torch.ones_like(observation)
+    else:
+        td["action"] = observation.new_ones((*td.batch_size, steps, 1))
+    return td
+
+
+@pytest.mark.parametrize("steps", [1, 5])
+@pytest.mark.parametrize("closed_loop", [False, True])
+def test_controller_deployment(benchmark, steps, closed_loop):
+    base = CountingEnv(max_steps=100000)
+    if closed_loop:
+        controller = LowLevelController(
+            TensorDictModule(
+                torch.nn.Identity(), in_keys=["command"], out_keys=["action"]
+            ),
+            Composite(command=Bounded(0, 1, shape=(1,))),
+        )
+        env = ClosedLoopMultiAction.from_env(base, controller, steps=steps)
+    else:
+        env = TransformedEnv(base, MultiAction(reward_aggregation="sum"))
+    policy = WrapModule(
+        partial(_deployment_action, steps=None if closed_loop else steps),
+        in_keys=["observation"],
+        out_keys=["command" if closed_loop else "action"],
+    )
+    try:
+        benchmark.pedantic(
+            env.rollout, args=(25,), kwargs={"policy": policy}, iterations=1, rounds=10
+        )
+    finally:
+        env.close()
 
 
 def make_simple_env():
