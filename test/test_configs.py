@@ -52,7 +52,7 @@ from torchrl.data.replay_buffers.writers import (
     TensorDictRoundRobinWriter,
     WriterEnsemble,
 )
-from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
+from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.modules import (
     ConvNet,
@@ -73,6 +73,7 @@ from torchrl.record.loggers import (
 )
 from torchrl.record.loggers.trackio import TrackioLogger
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.trainers import Trainer
 from torchrl.trainers.trainers import CountFramesLog
 
@@ -4638,8 +4639,6 @@ class TestTransformConfigs:
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_last_action_config(self):
         from hydra.utils import instantiate
-        from torchrl.envs import TransformedEnv
-        from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
         from torchrl.trainers.algorithms.configs.transforms import LastActionConfig
 
         transform = instantiate(LastActionConfig(default=-1.0))
