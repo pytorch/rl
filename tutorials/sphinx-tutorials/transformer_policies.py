@@ -156,8 +156,10 @@ collector = Collector(
     total_frames=64,
     auto_register_policy_transforms=True,
 )
-for rollout in collector:
-    pass  # Use the second window, which can begin in the middle of an episode.
+rollouts = iter(collector)
+next(rollouts)
+# Use the second window, which can begin in the middle of an episode.
+rollout = next(rollouts)
 collector.shutdown()
 assert rollout.batch_size == torch.Size([2, 16])
 assert isinstance(rollout["state"], GTrXLState)

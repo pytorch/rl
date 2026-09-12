@@ -45,14 +45,14 @@ def main():
         observation = torch.randn(batch, length, 7)
         is_init = torch.zeros(batch, length, 1, dtype=torch.bool)
         compact = TensorDict(
-            dict(observation=observation, is_init=is_init, state=state), [batch]
+            {"observation": observation, "is_init": is_init, "state": state}, [batch]
         )
         dense = TensorDict(
-            dict(
-                observation=observation,
-                is_init=is_init,
-                state=state.unsqueeze(-1).expand(batch, length),
-            ),
+            {
+                "observation": observation,
+                "is_init": is_init,
+                "state": state.unsqueeze(-1).expand(batch, length),
+            },
             [batch, length],
         )
         with set_recurrent_mode(True):
@@ -67,28 +67,28 @@ def main():
             ).blocked_autorange(min_run_time=1)
             memory_bytes = batch * 2 * memory_len * width * observation.element_size()
             results.append(
-                dict(
-                    layout=layout,
-                    batch=batch,
-                    window_length=length,
-                    memory_len=memory_len,
-                    hidden_size=width,
-                    latency_ms=measurement.median * 1000,
-                    transitions_per_second=batch * length / measurement.median,
-                    carry_payload_bytes=memory_bytes
+                {
+                    "layout": layout,
+                    "batch": batch,
+                    "window_length": length,
+                    "memory_len": memory_len,
+                    "hidden_size": width,
+                    "latency_ms": measurement.median * 1000,
+                    "transitions_per_second": batch * length / measurement.median,
+                    "carry_payload_bytes": memory_bytes
                     * (length if layout == "per_step" else 1),
-                )
+                }
             )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(
-            dict(
-                platform=platform.platform(),
-                torch_version=torch.__version__,
-                num_threads=1,
-                description="Clone input, forward and backward with identical weights/tensors; no optimizer or collection. Plain TensorDict in both paths.",
-                results=results,
-            ),
+            {
+                "platform": platform.platform(),
+                "torch_version": torch.__version__,
+                "num_threads": 1,
+                "description": "Clone input, forward and backward with identical weights/tensors; no optimizer or collection. Plain TensorDict in both paths.",
+                "results": results,
+            },
             indent=2,
         )
         + "\n"

@@ -251,7 +251,7 @@ the cache object is opaque to the module, so an adapter over an inference
 engine can keep it in the engine's own representation.
 
 Explicit GTrXL memory and compact windows
-------------------------------------------
+-----------------------------------------
 
 :class:`GTrXL` uses the same :class:`TransformerModule` wrapper and recurrent-mode
 selection, with caller-owned state. Register ``InitTracker`` and
