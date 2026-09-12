@@ -48,18 +48,24 @@ class NoisyLinear(nn.Linear):
         ``True``, the exploration type is used. When set to ``False``, the legacy behavior
         of using ``self.training`` (i.e., ``model.train()``/``model.eval()``) is used instead.
 
-    .. note:: Factorized noise is sampled only in :meth:`~torchrl.modules.NoisyLinear.reset_noise`,
-        which is called from :meth:`~torchrl.modules.NoisyLinear.__init__`. The
+    .. note:: Factorized noise is sampled only in
+        :meth:`~torchrl.modules.NoisyLinear.reset_noise`. The
         forward pass does not resample. The same ``weight_epsilon`` /
-        ``bias_epsilon`` buffers are reused until the caller resamples them.
+        ``bias_epsilon`` buffers are reused until the caller resamples them
+        with ``layer.reset_noise()`` or ``module.apply(reset_noise)``.
 
         The paper samples a new set of parameters after every optimization
-        step (section 3.1). Do that with :func:`~torchrl.modules.reset_noise`::
+        step (section 3.1). Callers that want that cadence should apply
+        :func:`~torchrl.modules.reset_noise` after each optimizer step::
 
             module.apply(reset_noise)
 
-        :func:`~torchrl.trainers.helpers.make_trainer` already registers this
-        on the trainer's ``pre_optim_steps`` hook when ``cfg.noisy`` is set.
+        :func:`~torchrl.trainers.helpers.make_trainer` uses a coarser
+        cadence: when ``cfg.noisy`` is set it registers
+        ``loss_module.apply(reset_noise)`` on the trainer's
+        ``pre_optim_steps`` hook, which runs once per
+        :meth:`~torchrl.trainers.Trainer.optim_steps` call, not after
+        every inner optimizer step, and only on ``loss_module``.
         Do not resample on every forward: that would change the behavior of
         every NoisyNet user, including data collection, where a fixed sample
         of the noisy weights is intended.
