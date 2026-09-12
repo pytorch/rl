@@ -267,6 +267,7 @@ Available Transforms
     DecodeVideoTransform
     DeviceCastTransform
     DiscreteActionProjection
+    DoneTransform
     DoubleToFloat
     EndOfLifeTransform
     ExcludeTransform

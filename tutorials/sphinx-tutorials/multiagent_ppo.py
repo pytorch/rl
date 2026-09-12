@@ -126,7 +126,7 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 
 # Env
-from torchrl.envs import RewardSum, TransformedEnv
+from torchrl.envs import Compose, DoneTransform, RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs
 
@@ -302,6 +302,10 @@ print("done_keys:", env.done_keys)
 #
 # For example, in this case, we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
 # We will tell this transform where to find the reward key and where to write the summed episode reward.
+# We also append a :class:`~torchrl.envs.transforms.DoneTransform` that expands the
+# shared environment-level done flags to the per-agent reward shape, writing
+# ``("agents", "done")`` and ``("agents", "terminated")``. The value estimator
+# expects this expanded shape.
 # The transformed environment will inherit
 # the device and meta-data of the wrapped environment, and transform these depending on the sequence
 # of transforms it contains.
@@ -310,7 +314,10 @@ print("done_keys:", env.done_keys)
 
 env = TransformedEnv(
     env,
-    RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
+    Compose(
+        RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
+        DoneTransform(in_keys=env.done_keys, reward_key=env.reward_key),
+    ),
 )
 
 
@@ -609,7 +616,7 @@ loss_module.set_keys(  # We have to tell the loss where to find the keys
     reward=env.reward_key,
     action=env.action_key,
     value=("agents", "state_value"),
-    # These last 2 keys will be expanded to match the reward shape
+    # Written by DoneTransform to match the per-agent reward shape
     done=("agents", "done"),
     terminated=("agents", "terminated"),
 )
@@ -645,20 +652,6 @@ pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 
 episode_reward_mean_list = []
 for tensordict_data in collector:
-    tensordict_data.set(
-        ("next", "agents", "done"),
-        tensordict_data.get(("next", "done"))
-        .unsqueeze(-1)
-        .expand(tensordict_data.get_item_shape(("next", env.reward_key))),
-    )
-    tensordict_data.set(
-        ("next", "agents", "terminated"),
-        tensordict_data.get(("next", "terminated"))
-        .unsqueeze(-1)
-        .expand(tensordict_data.get_item_shape(("next", env.reward_key))),
-    )
-    # We need to expand the done and terminated to match the reward shape (this is expected by the value estimator)
-
     with torch.no_grad():
         GAE(
             tensordict_data,
