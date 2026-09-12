@@ -16,6 +16,7 @@ from torchrl._utils import _RayServiceMetaClass, logger as torchrl_logger
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Transform
+from torchrl.envs.transforms.utils import _module_device
 
 if TYPE_CHECKING:
     from torchrl.weight_update import WeightSyncScheme
@@ -128,7 +129,11 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         module_factory (Callable[[], TensorDictModuleBase]): The factory to create the module. Exclusive with `module`. At least one of `module` or `module_factory` must be provided.
         no_grad (bool, optional): Whether to use gradient computation. Default is `False`.
         inverse (bool, optional): Whether to use the inverse of the module. Default is `False`.
-        device (torch.device, optional): The device to use. Default is `None`.
+        device (torch.device, optional): Device used to place the wrapped module at
+            construction time. The value is not stored on the transform: after
+            construction, incoming tensordicts are moved to the module's current
+            parameter or buffer device. Defaults to `None` (the module is left
+            where it is).
         use_ray_service (bool, optional): Whether to use Ray service. Default is `False`.
         num_gpus (int, optional): The number of GPUs to use if using Ray. Default is `None`.
         num_cpus (int, optional): The number of CPUs to use if using Ray. Default is `None`.
@@ -191,9 +196,11 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
                 "Only one of `module` or `module_factory` must be provided."
             )
         self.module = module if module is not None else module_factory()
+        if device is not None:
+            # User-supplied / factory-built module: place it, then drop the ctor device.
+            self.module = self.module.to(device)
         self.no_grad = no_grad
         self.inverse = inverse
-        self.device = device
         self.observation_spec_transform = observation_spec_transform
         self.action_spec_transform = action_spec_transform
         self.reward_spec_transform = reward_spec_transform
@@ -256,24 +263,20 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.inverse:
             return tensordict
+        device = _module_device(self.module)
+        if device is not None:
+            tensordict = tensordict.to(device)
         with torch.no_grad() if self.no_grad else nullcontext():
-            with (
-                tensordict.to(self.device)
-                if self.device is not None
-                else nullcontext(tensordict)
-            ) as td:
-                return self.module(td)
+            return self.module(tensordict)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.inverse:
             return tensordict
+        device = _module_device(self.module)
+        if device is not None:
+            tensordict = tensordict.to(device)
         with torch.no_grad() if self.no_grad else nullcontext():
-            with (
-                tensordict.to(self.device)
-                if self.device is not None
-                else nullcontext(tensordict)
-            ) as td:
-                return self.module(td)
+            return self.module(tensordict)
 
     def _update_weights_tensordict(self, params: TensorDictBase) -> None:
         params.to_module(self.module, preserve_module_state=False)
