@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -23,6 +25,10 @@ from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
 FIRST_REWARD = 1.25
 LATER_REWARD = 50.0
 PLANNING_HORIZON = 4
+DIE_REWARD = 1.0
+LIVE_REWARD = 5.0
+JACKPOT_REWARD = 50.0
+TWO_SEQ_HORIZON = 3
 
 
 class _DoneAfterOneStepEnv(EnvBase):
@@ -154,6 +160,150 @@ class _SurviveIfPositiveEnv(EnvBase):
         pass
 
 
+class _TwoSequenceEnv(EnvBase):
+    """Reward equals the action when it is non-negative; a negative action dies.
+
+    Dying pays ``DIE_REWARD`` and sets ``done``. After a non-breaking rollout
+    auto-reset, later non-negative actions still pay their face value, so a
+    die-then-jackpot sequence can beat a steady live sequence on the unmasked
+    sum while losing once rewards after the first ``("next", "done")`` are
+    dropped. ``terminated`` follows ``done`` only when ``terminate_on_done``.
+    """
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls, *args, _batch_locked=False, **kwargs)
+
+    def __init__(self, device="cpu", *, terminate_on_done: bool = True):
+        super().__init__(device=device)
+        self.observation_spec = Composite(
+            observation=Unbounded((1,), device=device),
+            device=device,
+        )
+        self.action_spec = Unbounded((1,), device=device)
+        self.reward_spec = Unbounded((1,), device=device)
+        self.terminate_on_done = terminate_on_done
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        if tensordict is None:
+            batch_size = self.batch_size
+            device = self.device
+        else:
+            batch_size = tensordict.batch_size
+            device = tensordict.device if tensordict.device is not None else self.device
+        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
+        return TensorDict(
+            {
+                "observation": torch.zeros(
+                    *batch_size, 1, device=device, dtype=torch.get_default_dtype()
+                ),
+                "done": done,
+                "terminated": done.clone(),
+            },
+            batch_size=batch_size,
+            device=device,
+        )
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action = tensordict.get("action")
+        device = action.device
+        die = action[..., :1] < 0
+        reward = torch.where(
+            die,
+            torch.full_like(action[..., :1], DIE_REWARD),
+            action[..., :1],
+        )
+        terminated = die if self.terminate_on_done else torch.zeros_like(die)
+        return TensorDict(
+            {
+                "observation": tensordict.get("observation") + 1,
+                "reward": reward,
+                "done": die,
+                "terminated": terminated,
+            },
+            batch_size=tensordict.batch_size,
+            device=device,
+        )
+
+    def _set_seed(self, seed: int | None) -> None:
+        pass
+
+
+def _die_then_jackpot_sequence(device) -> torch.Tensor:
+    return torch.tensor(
+        [[-1.0], [JACKPOT_REWARD], [JACKPOT_REWARD]],
+        device=device,
+        dtype=torch.get_default_dtype(),
+    )
+
+
+def _steady_live_sequence(device) -> torch.Tensor:
+    return torch.full(
+        (TWO_SEQ_HORIZON, 1),
+        LIVE_REWARD,
+        device=device,
+        dtype=torch.get_default_dtype(),
+    )
+
+
+def _rollout_action_sequence(env, actions):
+    t = 0
+
+    def policy(tensordict):
+        nonlocal t
+        tensordict.set(
+            "action",
+            actions[t].expand(*tensordict.batch_size, *actions.shape[1:]),
+        )
+        t += 1
+        return tensordict
+
+    td = env.reset(TensorDict(batch_size=(), device=actions.device))
+    return env.rollout(
+        max_steps=actions.shape[0],
+        policy=policy,
+        auto_reset=False,
+        tensordict=td,
+        break_when_any_done=False,
+    )
+
+
+def _sum_until_first_done(rollout):
+    """Sum rewards through the first ``("next", "done")``; unmasked total."""
+    reward = rollout.get(("next", "reward")).reshape(rollout.shape[-1])
+    done = rollout.get(("next", "done")).reshape(rollout.shape[-1])
+    unmasked = reward.sum()
+    hits = done.nonzero(as_tuple=False)
+    if hits.numel():
+        return reward[: int(hits[0, 0]) + 1].sum(), unmasked
+    return unmasked, unmasked
+
+
+@contextmanager
+def _fixed_planner_candidates(planner_name, *sequences):
+    """Make CEM/MPPI's first (and only) sample the given action sequences."""
+    stacked = torch.stack(sequences, dim=0)
+
+    def fake_randn(*size, device=None, dtype=None, **kwargs):
+        if len(size) == 1 and not isinstance(size[0], int):
+            shape = tuple(size[0])
+        else:
+            shape = tuple(size)
+        actions = stacked.to(device=device, dtype=dtype)
+        if shape[-stacked.ndim :] != tuple(actions.shape):
+            raise ValueError(
+                f"planner randn shape {shape} does not end with {tuple(actions.shape)}"
+            )
+        return actions.expand(shape).clone()
+
+    module = {
+        "cem": "torchrl.modules.planners.cem",
+        "mppi": "torchrl.modules.planners.mppi",
+    }[planner_name]
+    with patch(f"{module}.torch.randn", fake_randn):
+        yield
+
+
 class _SumRewardAdvantage(nn.Module):
     """Advantage equal to the trajectory return, written at every time step."""
 
@@ -164,14 +314,21 @@ class _SumRewardAdvantage(nn.Module):
         return tensordict
 
 
-def _make_planner(name, env, *, planning_horizon=PLANNING_HORIZON):
+def _make_planner(
+    name,
+    env,
+    *,
+    planning_horizon=PLANNING_HORIZON,
+    num_candidates=8,
+    top_k=2,
+):
     if name == "cem":
         return CEMPlanner(
             env,
             planning_horizon=planning_horizon,
             optim_steps=1,
-            num_candidates=8,
-            top_k=2,
+            num_candidates=num_candidates,
+            top_k=top_k,
             reward_key=("next", "reward"),
         )
     return MPPIPlanner(
@@ -180,8 +337,8 @@ def _make_planner(name, env, *, planning_horizon=PLANNING_HORIZON):
         temperature=1.0,
         planning_horizon=planning_horizon,
         optim_steps=1,
-        num_candidates=8,
-        top_k=2,
+        num_candidates=num_candidates,
+        top_k=top_k,
         reward_key=("next", "reward"),
     )
 
@@ -388,6 +545,56 @@ class TestPlannerDoneMask:
         out = planner(td)
         # Surviving (non-negative) first actions score 4; dying at step 0 scores 1.
         assert out.get("action").item() > 0
+
+    @pytest.mark.parametrize("planner_name", ["cem", "mppi"])
+    @pytest.mark.parametrize("terminate_on_done", [True, False])
+    def test_planner_picks_higher_masked_sequence(
+        self, device, planner_name, terminate_on_done
+    ):
+        env = _TwoSequenceEnv(device=device, terminate_on_done=terminate_on_done)
+        die_seq = _die_then_jackpot_sequence(device)
+        live_seq = _steady_live_sequence(device)
+
+        die_rollout = _rollout_action_sequence(env, die_seq)
+        live_rollout = _rollout_action_sequence(env, live_seq)
+        die_done = die_rollout.get(("next", "done"))
+        die_terminated = die_rollout.get(("next", "terminated"))
+        assert die_done[0].all()
+        assert not live_rollout.get(("next", "done")).any()
+        if terminate_on_done:
+            torch.testing.assert_close(die_terminated, die_done)
+        else:
+            assert not die_terminated.any()
+
+        die_masked, die_unmasked = _sum_until_first_done(die_rollout)
+        live_masked, live_unmasked = _sum_until_first_done(live_rollout)
+        torch.testing.assert_close(
+            die_masked, die_masked.new_tensor(DIE_REWARD)
+        )
+        torch.testing.assert_close(
+            die_unmasked,
+            die_unmasked.new_tensor(DIE_REWARD + 2 * JACKPOT_REWARD),
+        )
+        torch.testing.assert_close(
+            live_masked, live_masked.new_tensor(TWO_SEQ_HORIZON * LIVE_REWARD)
+        )
+        torch.testing.assert_close(live_unmasked, live_masked)
+        assert live_masked > die_masked
+        assert die_unmasked > live_unmasked
+
+        planner = _make_planner(
+            planner_name,
+            env,
+            planning_horizon=TWO_SEQ_HORIZON,
+            num_candidates=4,
+            top_k=2,
+        )
+        td = env.reset(TensorDict(batch_size=(), device=device))
+        with _fixed_planner_candidates(
+            planner_name, die_seq, live_seq, die_seq, live_seq
+        ):
+            out = planner(td)
+        torch.testing.assert_close(out.get("action"), live_seq[0])
 
 
 if __name__ == "__main__":
