@@ -17,7 +17,13 @@ import pytest
 import tensordict
 import torch
 
-from tensordict import lazy_stack, set_list_to_stack, TensorDict
+from tensordict import (
+    lazy_stack,
+    NonTensorData,
+    NonTensorStack,
+    set_list_to_stack,
+    TensorDict,
+)
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.base import LLMCollector
@@ -56,7 +62,7 @@ _has_ifeval = (
     and (importlib.util.find_spec("immutabledict") is not None)
 )
 
-pytestmark = pytest.mark.skipif(
+_requires_llm_stack = pytest.mark.skipif(
     not (_has_datasets & _has_transformers & _has_vllm & _has_ray),
     reason="requires datasets, transformers, vllm, and ray",
 )
@@ -95,6 +101,7 @@ class TestChatEnv:
 
         return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
 
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
     @pytest.mark.parametrize("input_mode", ["text", "tokens", "history"])
     def test_chat_env(self, tokenizer, input_mode):
         # Set list to stack for tensordict
@@ -181,7 +188,135 @@ class TestChatEnv:
             expected_text = "<|im_start|>system\nI'm system, do what I want.<|im_end|>\n<|im_start|>user\nI'm the user. I'm going to tell you a little about something.<|im_end|>\n<|im_start|>assistant\nThis is the action from the assistant!<|im_end|>"
             assert td_next["next", "text"][0].prompt == expected_text
 
+    @pytest.mark.parametrize(
+        "query_kind",
+        [
+            "history_system_user",
+            "history_user_assistant",
+            "nontensor_history",
+            "messages",
+            "string",
+        ],
+    )
+    @pytest.mark.parametrize("system_prompt", [None, "Be brief."])
+    def test_chat_env_reset_query_formats(self, query_kind, system_prompt):
+        env = ChatEnv(
+            batch_size=(1,),
+            input_mode="history",
+            system_prompt=system_prompt,
+            device="cpu",
+        )
+        if query_kind == "history_system_user":
+            query = History.from_chats(
+                [
+                    [
+                        {"role": "system", "content": "You are helpful."},
+                        {"role": "user", "content": "Hello"},
+                    ]
+                ]
+            )
+            expected_roles = ["system", "user"]
+            expected_contents = ["You are helpful.", "Hello"]
+        elif query_kind == "history_user_assistant":
+            query = History.from_chats(
+                [
+                    [
+                        {"role": "user", "content": "Hello"},
+                        {"role": "assistant", "content": "Hi"},
+                    ]
+                ]
+            )
+            expected_roles = ["user", "assistant"]
+            expected_contents = ["Hello", "Hi"]
+        elif query_kind == "nontensor_history":
+            query = NonTensorData(
+                History.from_chats(
+                    [
+                        [
+                            {"role": "user", "content": "Hello"},
+                            {"role": "assistant", "content": "Hi"},
+                        ]
+                    ]
+                )
+            )
+            expected_roles = ["user", "assistant"]
+            expected_contents = ["Hello", "Hi"]
+        elif query_kind == "messages":
+            query = [
+                [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi"},
+                ]
+            ]
+            expected_roles = ["user", "assistant"]
+            expected_contents = ["Hello", "Hi"]
+        else:
+            query = ["Just a string query"]
+            expected_roles = ["user"]
+            expected_contents = ["Just a string query"]
 
+        if system_prompt is not None:
+            expected_roles = ["system", *expected_roles]
+            expected_contents = [system_prompt, *expected_contents]
+
+        td_reset = env.reset(
+            TensorDict(query=query, batch_size=(1,), device=env.device)
+        )
+        prompt = td_reset["history"][0].prompt
+        assert prompt.role == expected_roles
+        assert list(prompt.content) == expected_contents
+
+    def test_chat_env_reset_nontensor_stack_history(self):
+        env = ChatEnv(batch_size=(2,), input_mode="history", device="cpu")
+        query = NonTensorStack(
+            NonTensorData(
+                History.from_chats(
+                    [
+                        {"role": "user", "content": "Hello"},
+                        {"role": "assistant", "content": "Hi"},
+                    ]
+                )
+            ),
+            NonTensorData(
+                History.from_chats(
+                    [
+                        {"role": "user", "content": "Bye"},
+                        {"role": "assistant", "content": "See ya"},
+                    ]
+                )
+            ),
+        )
+        td_reset = env.reset(
+            TensorDict(query=query, batch_size=(2,), device=env.device)
+        )
+        prompt = td_reset["history"].prompt
+        assert list(prompt[0].role) == ["user", "assistant"]
+        assert list(prompt[0].content) == ["Hello", "Hi"]
+        assert list(prompt[1].role) == ["user", "assistant"]
+        assert list(prompt[1].content) == ["Bye", "See ya"]
+
+    @pytest.mark.parametrize("n_envs", [2, 3])
+    def test_chat_env_reset_broadcasts_time_only_history(self, n_envs):
+        env = ChatEnv(batch_size=(n_envs,), input_mode="history", device="cpu")
+        query = NonTensorData(
+            History.from_chats(
+                [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi"},
+                ]
+            )
+        )
+        td_reset = env.reset(
+            TensorDict(query=query, batch_size=(n_envs,), device=env.device)
+        )
+        prompt = td_reset["history"].prompt
+        assert prompt.batch_size == (n_envs, 2)
+        for i in range(n_envs):
+            assert list(prompt[i].role) == ["user", "assistant"]
+            assert list(prompt[i].content) == ["Hello", "Hi"]
+
+
+@_requires_llm_stack
 @pytest.mark.skipif(not _has_datasets, reason="requires datasets")
 class TestGSM8K:
     @pytest.fixture(scope="class")
@@ -346,6 +481,7 @@ class TestGSM8KRewardParser:
         assert td_format["reward"] == 0.5
 
 
+@_requires_llm_stack
 @pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
 class TestIFEvalEnv:
     def test_ifeval(self):
@@ -548,6 +684,7 @@ class TestIFEvalRewardAggregator:
         assert 0.0 <= reward.item() <= 1.2
 
 
+@_requires_llm_stack
 class TestTools:
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
     def test_python_interpreter_single_batch(self):
@@ -1139,6 +1276,7 @@ result
         assert "15.141592653589793" in tool_content or "Result: 15.14" in tool_content
 
 
+@_requires_llm_stack
 class TestThinkingPrompt:
     @pytest.fixture(autouse=True, scope="class")
     def base_env(self):
@@ -1265,6 +1403,7 @@ class TestThinkingPrompt:
         assert len(s[0]["next", "history"].prompt) == 3
 
 
+@_requires_llm_stack
 class TestChatEnvIntegration:
     @pytest.fixture(scope="module")
     def transformers_instance(self):
