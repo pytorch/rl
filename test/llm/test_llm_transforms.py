@@ -760,6 +760,25 @@ class TestIncrementalTokenizer:
         out = transform._step(td, next_td)
         assert torch.equal(out["tokens"], tokens_full)
 
+    def test_step_one_tuple_tokens_full_key(self):
+        """A 1-tuple tokens_key looks up ('tokens', 'full'), not ('full',)."""
+        tokens_full = torch.tensor([7, 8, 9])
+        decoy = torch.tensor([9, 9, 9])
+        transform = IncrementalTokenizer(
+            self.DummyTokenizer(), tokens_key=("tokens",)
+        )
+        td = TensorDict(
+            {
+                ("tokens", "full"): tokens_full,
+                # Old bug used (*tokens_key[:-1], "full") -> ("full",)
+                "full": decoy,
+            },
+            batch_size=(),
+        )
+        next_td = TensorDict(batch_size=())
+        out = transform._step(td, next_td)
+        assert torch.equal(out["tokens"], tokens_full)
+
 
 class TestPolicyVersion:
     def test_int_version_dtype_and_device(self):
