@@ -18,19 +18,9 @@ if TYPE_CHECKING:
     from torchrl.envs.common import EnvBase
 
 
-def _planning_done_keys(env: EnvBase) -> list[NestedKey]:
-    """Return rollout ``done`` keys used to mask post-done planning rewards.
-
-    Only keys that end with ``"done"`` are used, so a truncated episode
-    (``done`` and not ``terminated``) still stops contributing. Keys are
-    taken from the environment and prefixed with ``"next"``; a root
-    ``"done"`` is not invented when the env only exposes a nested group.
-    """
-    return [
-        unravel_key(("next", key))
-        for key in env.done_keys
-        if _ends_with(key, "done")
-    ]
+def _is_root_planning_done_key(key: NestedKey) -> bool:
+    key = unravel_key(key)
+    return key == "done" or key == ("next", "done")
 
 
 def _normalize_done_keys(
@@ -41,6 +31,34 @@ def _normalize_done_keys(
     if isinstance(done_key, tuple) and (not done_key or isinstance(done_key[0], str)):
         return (unravel_key(done_key),)
     return tuple(unravel_key(key) for key in done_key)
+
+
+def _effective_planning_done_keys(
+    done_key: NestedKey | Sequence[NestedKey],
+) -> tuple[NestedKey, ...]:
+    keys = _normalize_done_keys(done_key)
+    # EnvBase lets a root done group take precedence over nested groups.
+    root_keys = tuple(key for key in keys if _is_root_planning_done_key(key))
+    return root_keys if root_keys else keys
+
+
+def _planning_done_keys(env: EnvBase) -> list[NestedKey]:
+    """Return rollout ``done`` keys used to mask post-done planning rewards.
+
+    Only keys that end with ``"done"`` are used, so a truncated episode
+    (``done`` and not ``terminated``) still stops contributing. Keys are
+    taken from the environment and prefixed with ``"next"``; a root
+    ``"done"`` is not invented when the env only exposes a nested group.
+
+    If a root-level ``done`` is present (``"done"`` / ``("done",)``, or
+    ``("next", "done")`` after the rollout prefix), it takes precedence
+    over nested groups, matching
+    :func:`~torchrl.envs.utils._terminated_or_truncated`.
+    """
+    keys = [
+        unravel_key(("next", key)) for key in env.done_keys if _ends_with(key, "done")
+    ]
+    return list(_effective_planning_done_keys(keys))
 
 
 def _mask_post_done_reward(
@@ -54,11 +72,13 @@ def _mask_post_done_reward(
 
     The reward at the first ``done`` step is kept. ``done`` is used (not
     ``terminated``) so a truncated episode also stops contributing to the
-    planning score. Several ``done`` keys are combined with a logical or.
+    planning score. If a root-level ``done`` is among the provided keys,
+    it takes precedence over nested groups; otherwise several ``done``
+    keys are combined with a logical or.
     """
     reward = tensordict.get(reward_key)
     done = None
-    for key in _normalize_done_keys(done_key):
+    for key in _effective_planning_done_keys(done_key):
         flag = tensordict.get(key)
         if flag is None:
             raise KeyError(f"Done key {key!r} not found in tensordict.")
@@ -86,8 +106,10 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
 
     Imagined rollouts keep a full planning horizon even after a candidate
     hits ``done``. Rewards after the first environment ``done`` flag
-    (termination or truncation, including nested done keys) are ignored
-    when scoring those trajectories.
+    (termination or truncation) are ignored when scoring those
+    trajectories. A root-level ``done`` takes precedence over nested
+    groups, so a finished agent does not mask a still-running environment
+    return. Nested-only environments use the nested ``done`` key(s).
 
     Args:
         env (EnvBase): The environment to perform the planning step on (Can be :obj:`ModelBasedEnvBase` or :obj:`EnvBase`).

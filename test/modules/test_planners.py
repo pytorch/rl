@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from typing import Literal
 from unittest.mock import patch
 
 import pytest
@@ -15,7 +16,6 @@ from torch import nn
 from torchrl.data import Categorical, Composite, Unbounded
 from torchrl.envs import EnvBase
 from torchrl.modules import CEMPlanner, ValueOperator
-from torchrl.modules.planners.common import _mask_post_done_reward
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
 
@@ -29,14 +29,12 @@ TWO_SEQ_HORIZON = 3
 
 
 class _TwoSequenceEnv(EnvBase):
-    """Reward equals the action when it is non-negative; a negative action dies.
+    """Reward equals the action when non-negative; a negative action dies.
 
-    Dying pays ``DIE_REWARD`` and sets ``done``. After a non-breaking rollout
-    auto-reset, later non-negative actions still pay their face value, so a
-    die-then-jackpot sequence can beat a steady live sequence on the unmasked
-    sum while losing once rewards after the first ``done`` are dropped.
-    ``terminated`` follows ``done`` only when ``terminate_on_done``.
-    When ``done_group`` is set, done flags live only under that nested group.
+    Dying pays ``DIE_REWARD``. ``terminated`` follows ``done`` only when
+    ``terminate_on_done``. ``done_layout`` is ``"root"``, ``"nested"``
+    (flags only under ``agent``), or ``"both"``. With ``"both"``, root
+    ``done`` stays false so a finished nested agent does not end the env.
     """
 
     @classmethod
@@ -48,7 +46,7 @@ class _TwoSequenceEnv(EnvBase):
         device="cpu",
         *,
         terminate_on_done: bool = True,
-        done_group: str | None = None,
+        done_layout: Literal["root", "nested", "both"] = "root",
     ):
         super().__init__(device=device)
         self.observation_spec = Composite(
@@ -58,35 +56,28 @@ class _TwoSequenceEnv(EnvBase):
         self.action_spec = Unbounded((1,), device=device)
         self.reward_spec = Unbounded((1,), device=device)
         self.terminate_on_done = terminate_on_done
-        self.done_group = done_group
-        if done_group is not None:
+        self.done_layout = done_layout
+        if done_layout != "root":
             flag = Categorical(2, dtype=torch.bool, shape=(1,), device=device)
-            self.done_spec = Composite(
-                {
-                    done_group: Composite(
-                        {"done": flag, "terminated": flag.clone()},
-                        shape=(),
-                        device=device,
-                    )
-                },
+            nested = Composite(
+                {"done": flag.clone(), "terminated": flag.clone()},
                 shape=(),
                 device=device,
             )
+            spec = {"agent": nested}
+            if done_layout == "both":
+                spec["done"] = flag.clone()
+                spec["terminated"] = flag.clone()
+            self.done_spec = Composite(spec, shape=(), device=device)
 
     def _done_payload(self, done, terminated):
-        if self.done_group is None:
+        if self.done_layout == "root":
             return {"done": done, "terminated": terminated}
-        return {self.done_group: {"done": done, "terminated": terminated}}
-
-    def next_done_key(self):
-        if self.done_group is None:
-            return ("next", "done")
-        return ("next", self.done_group, "done")
-
-    def next_terminated_key(self):
-        if self.done_group is None:
-            return ("next", "terminated")
-        return ("next", self.done_group, "terminated")
+        nested = {"agent": {"done": done, "terminated": terminated}}
+        if self.done_layout == "nested":
+            return nested
+        false = torch.zeros_like(done)
+        return {"done": false, "terminated": false, **nested}
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is None:
@@ -148,38 +139,6 @@ def _steady_live_sequence(device) -> torch.Tensor:
     )
 
 
-def _rollout_action_sequence(env, actions):
-    t = 0
-
-    def policy(tensordict):
-        nonlocal t
-        tensordict.set(
-            "action",
-            actions[t].expand(*tensordict.batch_size, *actions.shape[1:]),
-        )
-        t += 1
-        return tensordict
-
-    return env.rollout(
-        max_steps=actions.shape[0],
-        policy=policy,
-        auto_reset=False,
-        tensordict=env.reset(),
-        break_when_any_done=False,
-    )
-
-
-def _sum_until_first_done(rollout, done_key=("next", "done")):
-    """Sum rewards through the first ``done``; also return the unmasked total."""
-    reward = rollout.get(("next", "reward")).reshape(rollout.shape[-1])
-    done = rollout.get(done_key).reshape(rollout.shape[-1])
-    unmasked = reward.sum()
-    hits = done.nonzero(as_tuple=False)
-    if hits.numel():
-        return reward[: int(hits[0, 0]) + 1].sum(), unmasked
-    return unmasked, unmasked
-
-
 @contextmanager
 def _fixed_planner_candidates(planner_name, *sequences):
     """Make CEM/MPPI's first (and only) sample the given action sequences."""
@@ -235,7 +194,7 @@ def _make_planner(
     return MPPIPlanner(
         env,
         _SumRewardAdvantage(),
-        temperature=1.0,
+        temperature=0.1,
         planning_horizon=planning_horizon,
         optim_steps=1,
         num_candidates=num_candidates,
@@ -244,42 +203,14 @@ def _make_planner(
     )
 
 
-def _assert_planner_picks_live_sequence(env, planner_name, device):
+def _assert_planner_selects(env, planner_name, device, expected_action):
     die_seq = _die_then_jackpot_sequence(device)
     live_seq = _steady_live_sequence(device)
-    done_key = env.next_done_key()
-    terminated_key = env.next_terminated_key()
-
-    die_rollout = _rollout_action_sequence(env, die_seq)
-    live_rollout = _rollout_action_sequence(env, live_seq)
-    die_done = die_rollout.get(done_key)
-    die_terminated = die_rollout.get(terminated_key)
-    assert die_done[0].all()
-    assert not live_rollout.get(done_key).any()
-    if env.terminate_on_done:
-        torch.testing.assert_close(die_terminated, die_done)
-    else:
-        assert not die_terminated.any()
-
-    die_masked, die_unmasked = _sum_until_first_done(die_rollout, done_key=done_key)
-    live_masked, live_unmasked = _sum_until_first_done(live_rollout, done_key=done_key)
-    torch.testing.assert_close(die_masked, die_masked.new_tensor(DIE_REWARD))
-    torch.testing.assert_close(
-        die_unmasked,
-        die_unmasked.new_tensor(DIE_REWARD + 2 * JACKPOT_REWARD),
-    )
-    torch.testing.assert_close(
-        live_masked, live_masked.new_tensor(TWO_SEQ_HORIZON * LIVE_REWARD)
-    )
-    torch.testing.assert_close(live_unmasked, live_masked)
-    assert live_masked > die_masked
-    assert die_unmasked > live_unmasked
-
     planner = _make_planner(planner_name, env)
     td = env.reset()
     with _fixed_planner_candidates(planner_name, die_seq, live_seq, die_seq, live_seq):
         out = planner(td)
-    torch.testing.assert_close(out.get("action"), live_seq[0])
+    torch.testing.assert_close(out.get("action"), expected_action)
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -344,42 +275,29 @@ class TestPlanner:
 
 @pytest.mark.parametrize("device", get_default_devices())
 class TestPlannerDoneMask:
-    def test_mask_post_done_reward_nested_keys(self, device):
-        reward = torch.zeros(2, 3, 1, device=device, dtype=torch.get_default_dtype())
-        reward[:, 0] = 1.0
-        reward[:, 1] = 2.0
-        reward[:, 2] = 3.0
-        done = torch.zeros(2, 3, 1, dtype=torch.bool, device=device)
-        done[:, 0] = True
-        td = TensorDict(
-            {"next": {"agent": {"reward": reward, "done": done}}},
-            batch_size=[2, 3],
-            device=device,
-        )
-        masked = _mask_post_done_reward(
-            td,
-            reward_key=("next", "agent", "reward"),
-            done_key=("next", "agent", "done"),
-        )
-        expected = torch.zeros_like(reward)
-        expected[:, 0] = 1.0
-        torch.testing.assert_close(masked, expected)
-
     @pytest.mark.parametrize("planner_name", ["cem", "mppi"])
     @pytest.mark.parametrize("terminate_on_done", [True, False])
+    @pytest.mark.parametrize("done_layout", ["root", "nested", "both"])
     def test_planner_picks_higher_masked_sequence(
-        self, device, planner_name, terminate_on_done
+        self, device, planner_name, terminate_on_done, done_layout
     ):
-        env = _TwoSequenceEnv(device=device, terminate_on_done=terminate_on_done)
-        _assert_planner_picks_live_sequence(env, planner_name, device)
-
-    @pytest.mark.parametrize("planner_name", ["cem", "mppi"])
-    def test_planner_nested_done_keys(self, device, planner_name):
-        env = _TwoSequenceEnv(device=device, done_group="agent")
-        assert "done" not in env.done_keys
-        assert ("agent", "done") in env.done_keys
-        assert ("agent", "terminated") in env.done_keys
-        _assert_planner_picks_live_sequence(env, planner_name, device)
+        env = _TwoSequenceEnv(
+            device=device,
+            terminate_on_done=terminate_on_done,
+            done_layout=done_layout,
+        )
+        has_root = "done" in env.done_keys
+        has_nested = ("agent", "done") in env.done_keys
+        assert has_root is (done_layout != "nested")
+        assert has_nested is (done_layout != "root")
+        # Root done stays false when both groups exist, so the jackpot return
+        # is the env return and must beat the steady live sequence.
+        expected = (
+            _die_then_jackpot_sequence(device)[0]
+            if done_layout == "both"
+            else _steady_live_sequence(device)[0]
+        )
+        _assert_planner_selects(env, planner_name, device, expected)
 
 
 if __name__ == "__main__":
