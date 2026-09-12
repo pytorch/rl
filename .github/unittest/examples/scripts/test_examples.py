@@ -342,6 +342,7 @@ EXCLUDED_EXAMPLES = {
     "examples/microduck/heuristic_gait.py": "requires the external MicroDuck MJCF assets",
     "examples/microduck/ppo_mujoco.py": "requires the external MicroDuck MJCF assets",
     "examples/microduck/train_skills.py": "requires the external MicroDuck MJCF assets; smoke-tested in tutorial CI",
+    "examples/microduck/football_mappo.py": "requires the external MicroDuck MJCF assets",
     "examples/mujoco_macros/_viewer.py": "viewer helper module",
     "examples/replay-buffers/compressed_replay_buffer.py": "requires nvCOMP and Atari assets",
     "examples/replay-buffers/compressed_replay_buffer_checkpoint.py": "requires nvCOMP",

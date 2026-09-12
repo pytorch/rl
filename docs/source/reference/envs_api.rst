@@ -359,6 +359,17 @@ the tasks' weights or from a ``task_id`` in the reset TensorDict;
 :class:`~torchrl.envs.MicroDuckTaskSampler` writes that id from a mixture of
 its own. The reward is a registry of terms over shared step features that
 :meth:`~torchrl.envs.MicroDuckEnv.register_reward` extends.
+:class:`~torchrl.envs.MicroDuckFootballEnv` plays football with two teams of
+MicroDucks: :func:`~torchrl.envs.build_football_scene` attaches one copy of
+the robot per player onto a procedural pitch with walls, goals, a ball and
+cameras (the MJCF is cached as text and can be exported), and the env exposes
+one action, observation and reward per duck along an ``agents`` dimension,
+with every quantity expressed in the duck's own frame and its team's frame so
+that one set of parameters plays both sides. A goal ends the match, fallen
+ducks are put back on their kickoff slot. :func:`~torchrl.envs.microduck_skill_env`
+wraps it so that a policy picks one locomotion task of a trained
+:class:`~torchrl.envs.MicroDuckEnv` controller per duck and per decision
+period, and the controller drives the joints.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -378,10 +389,17 @@ state into the parent batch. Boolean masks are not supported.
     MicroDuckEnv
     MicroDuckController
     microduck_skill_env
+    MicroDuckFootballEnv
     MicroDuckTask
     MicroDuckTaskSampler
     SatelliteEnv
     Walker2dEnv
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    build_football_scene
 
 Domain-specific
 ---------------

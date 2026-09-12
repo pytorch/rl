@@ -1,0 +1,86 @@
+# Hydra configuration of examples/microduck/football_mappo.py.
+# Every field is an override, e.g. `python football_mappo.py env.download=true smoke=true`.
+
+env:
+  microduck_root: null      # microduck_rl checkout; MICRODUCK_RL_ROOT or `download` otherwise
+  root: null                # cache directory for downloads, built scenes and walker checkpoints (~/.cache/torchrl/microduck)
+  download: false
+  backend: mujoco           # native MuJoCo, one worker process per match; mjx vectorizes on an accelerator
+  num_envs: 16              # matches simulated in parallel
+  parallel: true            # mujoco only: ParallelEnv (false: SerialEnv)
+  device: cpu               # MuJoCo state is float64, which MPS does not support: CPU or CUDA
+  seed: 0
+  players_per_team: 5
+  pitch: {}                 # build_football_scene arguments, e.g. {pitch_length: 2.0, goal_width: 0.5}
+  max_episode_steps: 1500   # match length in control steps at 50 Hz (30 s)
+  action_scale: 1.0         # radians of actuator target per unit action; the walker checkpoint was trained with 1.0
+  reward_weights: {}        # overrides of MicroDuckFootballEnv.REWARD_WEIGHTS, e.g. {approach_ball: 0.0}
+  spawn_noise: 0.1          # uniform noise on the kickoff positions at reset, in meters
+  yaw_noise: 0.3            # uniform noise on the kickoff heading, in radians
+  joint_reset_noise_scale: 0.02  # uniform noise on the joint positions at reset, in radians
+  ball_noise: 0.1           # uniform noise on the ball's kickoff position, in meters (a large value spreads kickoffs over the pitch)
+  respawn: true             # stand fallen ducks up again after respawn_delay_s; false: a fallen duck stays down for the rest of the match
+  knockout: false           # end the match as a win for the other team when every duck of a team is down
+  respawn_mode: in_place    # in_place: where the duck fell, facing its goal; kickoff: back on its kickoff slot
+  respawn_delay_s: 1.0      # seconds a fallen duck lies down, actions ignored, before standing up
+  approach_players: null    # ducks per team, the closest to the ball, that earn the approach_ball reward (null: every duck)
+  progress_players: null    # ducks per team, the closest to the ball, that earn the ball_progress reward (null: every duck)
+  camera_id: 0              # rendering: 0 broadcast, 1 top-down
+  render_width: 640
+  render_height: 360
+
+policy:
+  # Trained MicroDuck locomotion policy (path or URL) that drives the joints while the
+  # football policy picks one of its tasks per duck every `decision_period` steps.
+  # null trains joint-level actions end to end at 50 Hz instead.
+  walker_checkpoint: https://huggingface.co/torchrl/microduck-skills/resolve/8c31e2696520c402980a723b37d025e594197d9d/walker.ckpt
+  walker_sha256: cbb5023d70bac278b3d066914289698c4ca53c6c8502ee39f5285fe51cf62c31  # null skips the check
+  skills: [0, 1, 2, 3, 4, 5, 6]  # library indices of the walker's tasks: stand, forward, backward, sidestep left, sidestep right, turn left, turn right
+  decision_period: 5        # walker steps per skill decision (10 Hz)
+  hidden_size: 256
+  depth: 2
+  centralized_critic: false # true: one value from every duck's observation (identical across ducks); false: per-duck value from its own observation
+  initial_policy_scale: 1.0 # exploration std of the joint-level Gaussian policy (end-to-end mode)
+  init_from: null           # checkpoint whose actor and critic parameters initialize the models
+  opponent_skill: null      # index into policy.skills that the red team executes instead of the policy (0: standing statues); null: self-play
+  opponent_checkpoint: null # checkpoint of a frozen copy of the actor that drives the red team (self: the initial parameters); null: self-play
+
+ppo:
+  total_frames: 5_000_000   # env steps summed over matches (skill decisions, or control steps end to end)
+  frames_per_batch: 4800    # env steps per iteration; a multiple of env.num_envs (16 matches x 300 decisions = 30 s each)
+  epochs: 4
+  minibatch_size: 1200      # env steps per minibatch, every duck of a step included
+  learning_rate: 3e-4
+  target_kl: 0.02           # null disables the KL-adaptive learning rate
+  max_learning_rate: 1e-3   # ceiling of the KL-adaptive learning rate
+  clip_epsilon: 0.2
+  entropy_coeff: 0.01
+  critic_coeff: 0.5
+  gamma: 0.99
+  gae_lambda: 0.95
+  max_grad_norm: 1.0
+  train_team: both          # both | blue: update on the blue team's transitions only (opponent curriculum)
+  critic_warmup_iterations: 0  # iterations that update the critic alone before the actor trains (warm starts)
+  reference_kl_coeff: 0.0   # weight of the KL from a frozen copy of the initial actor (kickstarting a warm start); 0 disables it
+  opponent_refresh_interval: null  # iterations between copies of the actor into the frozen opponent (fictitious self-play); null: never
+
+evaluation:
+  interval: 10              # iterations between deterministic evaluations; null disables them
+  num_matches: 4            # complete matches per evaluation, one env at a time
+  steps: 300                # decisions per match (300 x 5 walker steps = 30 s)
+  best_checkpoint_path: microduck_football_best.ckpt
+  latest_checkpoint_path: null
+  video:                    # one match filmed by the broadcast camera, logged with the evaluation metrics
+    interval: null          # log at every N-th evaluation; null disables it (video storage is not free)
+    steps: 300
+    width: 640
+    height: 360
+
+logger:
+  backend: wandb            # wandb | csv | tensorboard | null
+  project: torchrl-microduck-football
+  entity: null              # required for wandb so runs never land in a default workspace
+  exp_name: null
+  mode: online              # wandb mode: online | offline | disabled
+
+smoke: false                # tiny pipeline check, with a short video written by a CSV logger

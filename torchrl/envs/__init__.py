@@ -8,6 +8,7 @@ from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import (
     AntEnv,
+    build_football_scene,
     ChessEnv,
     CubeBowlEnv,
     FinancialRegimeEnv,
@@ -17,6 +18,7 @@ from .custom import (
     microduck_skill_env,
     MicroDuckController,
     MicroDuckEnv,
+    MicroDuckFootballEnv,
     MicroDuckTask,
     MicroDuckTaskSampler,
     MujocoEnv,
@@ -287,7 +289,9 @@ __all__ = [
     "ModelBasedEnvBase",
     "MicroDuckController",
     "microduck_skill_env",
+    "build_football_scene",
     "MicroDuckEnv",
+    "MicroDuckFootballEnv",
     "MicroDuckTask",
     "MicroDuckTaskSampler",
     "MujocoEnv",

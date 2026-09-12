@@ -328,7 +328,8 @@ class MicroDuckTask:
     with the presets
     (:meth:`MicroDuckEnv.tracking_task`, :meth:`MicroDuckEnv.standing_task`,
     :meth:`MicroDuckEnv.speed_range_task`, :meth:`MicroDuckEnv.sidestep_task`,
-    :meth:`MicroDuckEnv.jump_task`), which fill every field and accept
+    :meth:`MicroDuckEnv.turning_task`, :meth:`MicroDuckEnv.jump_task`), which
+    fill every field and accept
     overrides, and stack them with :func:`torch.stack` or by handing a
     sequence to the env. Stacking is the structural validation: every task
     must carry the full reward weight vector and every parameter key.
@@ -622,6 +623,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         "right_foot_collision",
     )
     FOOT_SITES: ClassVar[tuple[str, str]] = ("left_foot", "right_foot")
+    HEAD_SITES: ClassVar[tuple[str, str]] = ("head_imu", "mouth_tip")
+    """Sites at the back of the head and at the beak tip; their difference is the gaze."""
     BODY_VELOCITY_START: ClassVar[int] = 6
     """Index of the body-frame linear velocity ``(vx, vy, vz)`` in the observation."""
     COMMAND_START: ClassVar[int] = 9
@@ -643,6 +646,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     HOP_RHYTHM_WEIGHT: ClassVar[float] = 1.0
     HOP_FREQUENCY_HZ: ClassVar[float] = 2.0
     DRIFT_WEIGHT: ClassVar[float] = -5.0
+    TURN_WEIGHT: ClassVar[float] = 2.0
     GAIT_TERMS: ClassVar[tuple[str, ...]] = (
         "air_time",
         "swing_height",
@@ -873,7 +877,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         ``angular_velocity`` (3), ``upright`` (cosine of the tilt), ``base_height``,
         ``standing_height``, ``joint_error`` (14), ``joint_velocity`` (14),
         ``action`` (14), ``previous_action`` (14), ``contacts`` (bool, 2),
-        ``foot_heights`` (2), ``touchdown_air_time`` (2), ``gait_phase``
+        ``foot_heights`` (2), ``head_pitch`` (gaze pitch above the horizontal,
+        radians), ``touchdown_air_time`` (2), ``gait_phase``
         (radians), ``command`` (2) and ``fallen`` (bool). ``params`` is the
         per-env TensorDict of task parameters, each of shape ``(num_envs,)``.
 
@@ -1104,6 +1109,32 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         )
 
     @classmethod
+    def turning_task(
+        cls, rate: float = 1.0, *, weight: float = 1.0, **overrides: Any
+    ) -> MicroDuckTask:
+        """Turn in place at ``rate`` rad/s, to the left (positive) or the right.
+
+        The command is zero, so the task is told apart from standing by its
+        row alone; the ``turn`` term tracks the yaw rate and replaces the
+        ``yaw_rate`` cost, and the gait terms stay on so the robot steps
+        around instead of twisting on planted feet.
+        """
+        reward_weights = {"turn": cls.TURN_WEIGHT, "yaw_rate": 0.0}
+        reward_weights.update(overrides.pop("reward_weights", None) or {})
+        return cls.make_task(
+            (0.0, 0.0),
+            (0.0, 0.0),
+            weight=weight,
+            reward_weights=reward_weights,
+            **{
+                "name": f"turn{float(rate):+.2f}",
+                "turn_rate": float(rate),
+                "pose_std": cls.POSE_STD_MOVING,
+                **overrides,
+            },
+        )
+
+    @classmethod
     def jump_task(cls, *, weight: float = 1.0, **overrides: Any) -> MicroDuckTask:
         """Hop in place under a zero command.
 
@@ -1281,6 +1312,16 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     def foot_heights(self) -> torch.Tensor:
         """Return a ``(num_envs, 2)`` tensor with the left/right foot site heights."""
         return self.site_positions(self.FOOT_SITES)[..., 2]
+
+    def head_pitch(self) -> torch.Tensor:
+        """Return the ``(num_envs,)`` pitch of the gaze above the horizontal, in radians.
+
+        The gaze runs from the :attr:`HEAD_SITES` at the back of the head to the
+        beak tip, so it follows the trunk and the neck and head joints together.
+        """
+        back, tip = self.site_positions(self.HEAD_SITES).unbind(-2)
+        gaze = tip - back
+        return torch.atan2(gaze[..., 2], gaze[..., :2].norm(dim=-1))
 
     # ------------------------------------------------------------------
     # Specs and observations
@@ -1574,6 +1615,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 "previous_action": self._previous_action,
                 "contacts": self._contacts,
                 "foot_heights": self._foot_heights,
+                "head_pitch": self.head_pitch().to(self.dtype),
                 "touchdown_air_time": self._touchdown_air_time,
                 "gait_phase": phase,
                 "command": self._command,
@@ -1810,6 +1852,22 @@ def _yaw_rate(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     return torch.exp(
         -features["angular_velocity"][..., 2].square() / params["yaw_rate_std"].square()
     )
+
+
+@MicroDuckEnv.register_reward("turn", weight=0.0, turn_rate=0.0, turn_rate_std=0.5)
+def _turn(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    error = features["angular_velocity"][..., 2] - params["turn_rate"]
+    return torch.exp(-error.square() / params["turn_rate_std"].square())
+
+
+@MicroDuckEnv.register_reward(
+    "head_level", weight=1.0, head_pitch_target=0.0, head_level_std=0.3
+)
+def _head_level(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
+    # Keeps the gaze on the horizon: the head carries the camera, and a
+    # policy left free to move the four head joints stares at its feet.
+    error = features["head_pitch"] - params["head_pitch_target"]
+    return torch.exp(-error.square() / params["head_level_std"].square())
 
 
 @MicroDuckEnv.register_reward("upright", weight=2.0, upright_std=0.05**0.5)
