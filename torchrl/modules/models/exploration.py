@@ -29,7 +29,8 @@ from torchrl.modules.utils import inv_softplus
 class NoisyLinear(nn.Linear):
     """Noisy Linear Layer.
 
-    Presented in "Noisy Networks for Exploration", https://arxiv.org/abs/1706.10295v3
+    Presented in "Noisy Networks for Exploration" (Fortunato et al., 2017),
+    https://arxiv.org/abs/1706.10295v3
 
     A Noisy Linear Layer is a linear layer with parametric noise added to the weights. This induced stochasticity can
     be used in RL networks for the agent's policy to aid efficient exploration. The parameters of the noise are learned
@@ -47,6 +48,22 @@ class NoisyLinear(nn.Linear):
         ``True``, the exploration type is used. When set to ``False``, the legacy behavior
         of using ``self.training`` (i.e., ``model.train()``/``model.eval()``) is used instead.
 
+    .. note:: Factorized noise is sampled only in :meth:`~torchrl.modules.NoisyLinear.reset_noise`,
+        which is called from :meth:`~torchrl.modules.NoisyLinear.__init__`. The
+        forward pass does not resample. The same ``weight_epsilon`` /
+        ``bias_epsilon`` buffers are reused until the caller resamples them.
+
+        The paper samples a new set of parameters after every optimization
+        step (section 3.1). Do that with :func:`~torchrl.modules.reset_noise`::
+
+            module.apply(reset_noise)
+
+        :func:`~torchrl.trainers.helpers.make_trainer` already registers this
+        on the trainer's ``pre_optim_steps`` hook when ``cfg.noisy`` is set.
+        Do not resample on every forward: that would change the behavior of
+        every NoisyNet user, including data collection, where a fixed sample
+        of the noisy weights is intended.
+
     Args:
         in_features (int): input features dimension
         out_features (int): out features dimension
@@ -62,6 +79,27 @@ class NoisyLinear(nn.Linear):
             :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled
             by ``self.training`` (legacy behavior). If ``None``, it is treated as ``True``.
             Defaults to ``True``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.envs import ExplorationType, set_exploration_type
+        >>> from torchrl.modules import NoisyLinear, reset_noise
+        >>> _ = torch.manual_seed(0)
+        >>> layer = NoisyLinear(4, 2)
+        >>> x = torch.ones(4)
+        >>> with set_exploration_type(ExplorationType.RANDOM):
+        ...     y0 = layer(x)
+        ...     y1 = layer(x)
+        >>> torch.equal(y0, y1)
+        True
+        >>> with set_exploration_type(ExplorationType.RANDOM):
+        ...     layer.reset_noise()
+        ...     y2 = layer(x)
+        >>> torch.equal(y0, y2)
+        False
+        >>> net = nn.Sequential(NoisyLinear(4, 8), nn.ReLU(), NoisyLinear(8, 2))
+        >>> _ = net.apply(reset_noise)
 
     """
 
@@ -141,6 +179,12 @@ class NoisyLinear(nn.Linear):
             self.bias_sigma.data.fill_(self.std_init / math.sqrt(self.out_features))
 
     def reset_noise(self) -> None:
+        """Resample the factorized Gaussian noise buffers.
+
+        Called from :meth:`~torchrl.modules.NoisyLinear.__init__`. The forward
+        pass does not call this method; apply it after each optimization step
+        (for example ``module.apply(reset_noise)``).
+        """
         epsilon_in = self._scale_noise(self.in_features)
         epsilon_out = self._scale_noise(self.out_features)
         self.weight_epsilon.copy_(epsilon_out.outer(epsilon_in))
@@ -185,6 +229,9 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
     initialization (but is inferred after the first call to the layer).
 
     For more context on noisy layers, see the NoisyLinear class.
+    Like :class:`~torchrl.modules.NoisyLinear`, noise is sampled only by
+    :meth:`~torchrl.modules.NoisyLinear.reset_noise` (at materialization)
+    and must be reapplied by the caller.
 
     Args:
         out_features (int): out features dimension
@@ -272,7 +319,20 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
 
 def reset_noise(layer: nn.Module) -> None:
-    """Resets the noise of noisy layers."""
+    """Resets the noise of noisy layers.
+
+    Designed to be passed to :meth:`~torch.nn.Module.apply`::
+
+        module.apply(reset_noise)
+
+    :class:`~torchrl.modules.NoisyLinear` samples its factorized noise only
+    here and at construction. The forward pass does not resample.
+
+    Args:
+        layer (nn.Module): a module. If it implements ``reset_noise``, that
+            method is called; otherwise this is a no-op.
+
+    """
     if hasattr(layer, "reset_noise"):
         layer.reset_noise()
 
