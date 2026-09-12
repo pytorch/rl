@@ -60,6 +60,7 @@ ppo:
   max_grad_norm: 1.0
   train_team: both          # both | blue: update on the blue team's transitions only (opponent curriculum)
   critic_warmup_iterations: 0  # iterations that update the critic alone before the actor trains (warm starts)
+  reference_kl_coeff: 0.0   # weight of the KL from a frozen copy of the initial actor (kickstarting a warm start); 0 disables it
   opponent_refresh_interval: null  # iterations between copies of the actor into the frozen opponent (fictitious self-play); null: never
 
 evaluation:

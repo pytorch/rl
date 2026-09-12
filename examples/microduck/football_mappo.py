@@ -650,6 +650,7 @@ def train_mappo(
     logger: Logger | None = None,
     train_team: Literal["both", "blue"] = "both",
     critic_warmup_iterations: int = 0,
+    reference_kl_coeff: float = 0.0,
     collection_policy: TensorDictModuleBase | None = None,
     iteration_callback: Callable[[int], None] | None = None,
 ) -> list[dict[str, float]]:
@@ -670,6 +671,9 @@ def train_mappo(
     iteration, after its evaluation.
     The first ``critic_warmup_iterations`` iterations update the critic alone,
     so a warm-started actor is not wrecked by the advantages of a random critic.
+    With ``reference_kl_coeff > 0`` the loss adds that weight times the KL
+    divergence from a frozen copy of the initial actor (kickstarting), which
+    keeps a warm-started policy from drifting away from its prior.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -704,6 +708,9 @@ def train_mappo(
     device = next(actor.parameters()).device
     if collection_policy is None:
         collection_policy = actor
+    reference = (
+        deepcopy(actor).requires_grad_(False) if reference_kl_coeff > 0 else None
+    )
     collector = Collector(
         env,
         collection_policy,
@@ -860,6 +867,18 @@ def train_mappo(
                                 + losses["loss_critic"]
                                 + losses["loss_entropy"]
                             )
+                            if reference is not None:
+                                with torch.no_grad():
+                                    prior = reference.get_dist(sample)
+                                reference_kl = torch.distributions.kl_divergence(
+                                    prior, actor.get_dist(sample)
+                                )
+                                if train_team == "blue":
+                                    players = reference_kl.shape[-1] // 2
+                                    reference_kl = reference_kl[..., :players]
+                                reference_kl = reference_kl.mean()
+                                loss = loss + reference_kl_coeff * reference_kl
+                                losses.set("reference_kl", reference_kl.detach())
                         optimizer.zero_grad(set_to_none=True)
                         loss.backward()
                         grad_norm = nn.utils.clip_grad_norm_(
@@ -875,6 +894,8 @@ def train_mappo(
                                 "kl_approx",
                                 "clip_fraction",
                                 "ESS",
+                                "reference_kl",
+                                strict=False,
                             )
                             .detach()
                             .set("grad_norm", grad_norm)
