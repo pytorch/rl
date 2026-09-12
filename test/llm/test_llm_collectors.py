@@ -524,8 +524,11 @@ class _DummyAssistantPolicy(TensorDictModuleBase):
     def forward(self, tensordict):
         prompt = tensordict.get(("history", "prompt"))
         response = History(content="ok", role="assistant")
-        for _ in prompt.batch_size[:-1]:
+        env_batch = prompt.batch_size[:-1]
+        for _ in env_batch:
             response = response.unsqueeze(0)
+        if env_batch:
+            response = response.expand(*env_batch)
         response = response.unsqueeze(-1)
         tensordict.set(("history", "full"), prompt.extend(response, dim=-1))
         return tensordict
@@ -553,6 +556,41 @@ class TestLLMCollectorLastStepFrames:
             AsyncEnvPool([env_maker], backend="threading", stack="lazy")
             if use_async
             else env_maker()
+        )
+        collector = LLMCollector(
+            env=env,
+            policy=_DummyAssistantPolicy(),
+            dialog_turns_per_batch=1,
+            total_dialog_turns=max_turns,
+            yield_only_last_steps=True,
+        )
+
+        batches = list(collector)
+
+        assert len(batches) == 1
+        last_step = batches[0]
+        assert last_step.numel() == 1
+        assert last_step["next", "done"].any()
+        assert int(last_step["next", "step_count"].max()) == max_turns
+        assert collector._frames == max_turns
+
+    def test_async_multi_env_does_not_overshoot_last_step_budget(self):
+        # In-progress (not-yet-done) queues must count toward the remaining
+        # budget so a second env cannot complete another 3-turn dialog.
+        max_turns = 3
+        num_envs = 2
+
+        def env_maker():
+            env = ChatEnv.from_dataloader(
+                dataloader=DummyStrDataLoader(1),
+                input_mode="history",
+                batch_size=1,
+                group_repeats=True,
+            )
+            return env.append_transform(StepCounter(max_steps=max_turns))
+
+        env = AsyncEnvPool(
+            [env_maker] * num_envs, backend="threading", stack="lazy"
         )
         collector = LLMCollector(
             env=env,
