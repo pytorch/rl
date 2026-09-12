@@ -10,6 +10,7 @@ import importlib.util
 import json
 
 import pytest
+import torch
 from tensordict import set_list_to_stack, TensorDict
 
 from torchrl.data.llm import History
@@ -462,6 +463,9 @@ class TestToolCall:
 class TestIncrementalTokenizer:
     """Tests for the IncrementalTokenizer transform."""
 
+    class DummyTokenizer:
+        vocab_size = 32
+
     def test_reset_tokenizes_history(self, tokenizer):
         """Test that reset produces correct tokens from history."""
         system_prompt = "You are a helpful assistant."
@@ -719,6 +723,42 @@ class TestIncrementalTokenizer:
         assert ("tokens", "prompt") in result.keys(True, True)
         tokens = result.get(("tokens", "prompt"), as_list=True)
         assert tokens[0].numel() > 0
+
+    def test_step_nested_tokens_full_key(self):
+        """Nested tokens_key looks up (*prefix, 'full'), not (first, 'full')."""
+        tokens_full = torch.tensor([1, 2, 3])
+        decoy = torch.tensor([9, 9, 9])
+        transform = IncrementalTokenizer(
+            self.DummyTokenizer(),
+            tokens_key=("obs", "tok", "prompt"),
+        )
+        td = TensorDict(
+            {
+                ("obs", "tok", "full"): tokens_full,
+                # Old bug used (tokens_key[0], "full")
+                ("obs", "full"): decoy,
+            },
+            batch_size=(),
+        )
+        next_td = TensorDict(batch_size=())
+        out = transform._step(td, next_td)
+        assert torch.equal(out[("obs", "tok", "prompt")], tokens_full)
+
+    def test_step_string_tokens_full_key(self):
+        """String tokens_key looks up ('tokens', 'full'), not 'tokens_full'."""
+        tokens_full = torch.tensor([4, 5, 6])
+        decoy = torch.tensor([9, 9, 9])
+        transform = IncrementalTokenizer(self.DummyTokenizer(), tokens_key="tokens")
+        td = TensorDict(
+            {
+                ("tokens", "full"): tokens_full,
+                "tokens_full": decoy,
+            },
+            batch_size=(),
+        )
+        next_td = TensorDict(batch_size=())
+        out = transform._step(td, next_td)
+        assert torch.equal(out["tokens"], tokens_full)
 
 
 class TestPolicyVersion:
