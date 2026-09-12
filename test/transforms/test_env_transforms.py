@@ -500,6 +500,89 @@ class TestStepCounter(TransformBase):
         ].any(), "Root done should be False before max_steps"
 
 
+class _AgentNestedCountingEnv(EnvBase):
+    """Counting env whose done keys live under the ``agent`` nest."""
+
+    def __init__(self, max_steps: int = 100, **kwargs):
+        super().__init__(**kwargs)
+        self.max_steps = max_steps
+        self.observation_spec = Composite(
+            observation=Unbounded(
+                (*self.batch_size, 1),
+                dtype=torch.int32,
+                device=self.device,
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
+        self.reward_spec = Unbounded((*self.batch_size, 1), device=self.device)
+        self.action_spec = Categorical(
+            2, shape=(*self.batch_size, 1), device=self.device
+        )
+        self.done_spec = Composite(
+            {
+                "agent": Composite(
+                    {
+                        "done": Categorical(
+                            2,
+                            dtype=torch.bool,
+                            shape=(*self.batch_size, 1),
+                            device=self.device,
+                        ),
+                        "terminated": Categorical(
+                            2,
+                            dtype=torch.bool,
+                            shape=(*self.batch_size, 1),
+                            device=self.device,
+                        ),
+                    },
+                    shape=self.batch_size,
+                    device=self.device,
+                )
+            },
+            shape=self.batch_size,
+            device=self.device,
+        )
+        self.register_buffer(
+            "count",
+            torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
+        )
+
+    def _set_seed(self, seed: int | None) -> None:
+        torch.manual_seed(seed)
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        self.count[:] = 0
+        done = self.count > self.max_steps
+        return TensorDict(
+            {
+                "observation": self.count.clone(),
+                "agent": {
+                    "done": done,
+                    "terminated": done,
+                },
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        self.count += 1
+        done = self.count > self.max_steps
+        return TensorDict(
+            {
+                "observation": self.count.clone(),
+                "agent": {
+                    "done": done,
+                    "terminated": done,
+                },
+                "reward": torch.zeros_like(self.count, dtype=torch.get_default_dtype()),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
+
 class TestRandomTruncationTransform(TransformBase):
     def _make_transform(self):
         return Compose(
@@ -710,6 +793,56 @@ class TestRandomTruncationTransform(TransformBase):
                 CountingEnv(max_steps=100),
                 RandomTruncationTransform(min_horizon=1, max_horizon=5),
             )
+
+    def test_nested_done_and_step_count(self):
+        """Nested step_count is read and nested truncated/done flip at the horizon."""
+        torch.manual_seed(0)
+        max_horizon = 5
+        env = TransformedEnv(
+            _AgentNestedCountingEnv(max_steps=100),
+            Compose(
+                StepCounter(),
+                RandomTruncationTransform(
+                    prob=1.0, min_horizon=1, max_horizon=max_horizon
+                ),
+            ),
+        )
+        check_env_specs(env)
+        assert ("agent", "step_count") in env.observation_spec.keys(True, True)
+        assert "step_count" not in env.observation_spec.keys()
+        rollout = env.rollout(20, break_when_any_done=False)
+        step_count = rollout["next", "agent", "step_count"]
+        truncated = rollout["next", "agent", "truncated"]
+        done = rollout["next", "agent", "done"]
+        assert step_count.max() <= max_horizon
+        assert truncated.any(), "nested truncated should flip True by the horizon"
+        assert done[truncated].all()
+        assert (step_count[truncated] >= 1).all()
+        assert (step_count[truncated] <= max_horizon).all()
+
+    def test_custom_step_count_key(self):
+        """A custom StepCounter step_count_key is honored when passed through."""
+        torch.manual_seed(0)
+        max_horizon = 5
+        env = TransformedEnv(
+            CountingEnv(max_steps=100),
+            Compose(
+                StepCounter(step_count_key="my_steps"),
+                RandomTruncationTransform(
+                    prob=1.0,
+                    min_horizon=1,
+                    max_horizon=max_horizon,
+                    step_count_key="my_steps",
+                ),
+            ),
+        )
+        check_env_specs(env)
+        rollout = env.rollout(20, break_when_any_done=False)
+        assert ("next", "my_steps") in rollout.keys(True, True)
+        assert "step_count" not in rollout.keys()
+        assert rollout["next", "my_steps"].max() <= max_horizon
+        assert rollout["next", "truncated"].any()
+        assert rollout["next", "done"][rollout["next", "truncated"]].all()
 
     def test_validation(self):
         """Invalid parameters raise ValueError."""
