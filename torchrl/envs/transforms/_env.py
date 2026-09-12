@@ -1277,7 +1277,14 @@ class RandomTruncationTransform(Transform):
     decorrelation when batch sizes are large relative to ``max_horizon``.
 
     .. note:: This transform must be placed **after** :class:`~torchrl.envs.StepCounter`
-        in the transform chain, as it relies on the ``"step_count"`` key.
+        in the transform chain. It reads the same step-count
+        :class:`~tensordict.NestedKey` that the validator accepts -- a key
+        whose last component equals ``step_count_key`` (default
+        ``"step_count"``), not only a root-level ``"step_count"``. Truncation
+        flags are written next to that counter (e.g. ``("agent", "step_count")``
+        produces ``("agent", "truncated")`` / ``("agent", "done")``), matching
+        :class:`~torchrl.envs.StepCounter`. Pass the same ``step_count_key``
+        used by :class:`~torchrl.envs.StepCounter` when that key is customized.
 
     Args:
         min_horizon (int): minimum horizon for random truncation
@@ -1294,6 +1301,23 @@ class RandomTruncationTransform(Transform):
         first_episode_prob (float, optional): truncation probability for each
             environment's first episode after the initial spread. Defaults to
             ``prob`` when omitted.
+
+    Keyword Args:
+        step_count_key (NestedKey, optional): key of the step counter written
+            by :class:`~torchrl.envs.StepCounter`. A string is matched against
+            the last component of any nested key (so ``"step_count"`` finds
+            ``("agent", "step_count")``). A tuple is used as an exact
+            :class:`~tensordict.NestedKey`. Must match
+            :class:`~torchrl.envs.StepCounter`'s ``step_count_key`` when that
+            is customized. Defaults to ``"step_count"``.
+        truncated_key (NestedKey, optional): key where the truncation flag is
+            written. A string is placed next to the resolved step-count key
+            via last-component replacement, matching
+            :class:`~torchrl.envs.StepCounter`. A tuple is used as an exact
+            key. Defaults to ``"truncated"``.
+        done_key (NestedKey, optional): key of the done flag that is OR-ed
+            with the truncation signal, resolved like ``truncated_key``.
+            Defaults to ``"done"``.
 
     Examples:
         >>> from torchrl.envs import GymEnv, TransformedEnv, StepCounter
@@ -1321,6 +1345,10 @@ class RandomTruncationTransform(Transform):
         max_horizon: int,
         prob: float = 0.0,
         first_episode_prob: float | None = None,
+        *,
+        step_count_key: NestedKey = "step_count",
+        truncated_key: NestedKey = "truncated",
+        done_key: NestedKey = "done",
     ):
         super().__init__()
         if first_episode_prob is None:
@@ -1343,13 +1371,60 @@ class RandomTruncationTransform(Transform):
         self.first_episode_prob = first_episode_prob
         self.min_horizon = min_horizon
         self.max_horizon = max_horizon
+        self.step_count_key: NestedKey = unravel_key(step_count_key)
+        self.truncated_key: NestedKey = unravel_key(truncated_key)
+        self.done_key: NestedKey = unravel_key(done_key)
         self._horizons: torch.Tensor | None = None
         self._first_episode: torch.Tensor | None = None
         self._initialized = False
 
     def set_container(self, container: Transform | EnvBase) -> None:
+        self.__dict__.pop("_located_step_count_key", None)
         super().set_container(container)
         self._validate_step_counter_registration()
+
+    @staticmethod
+    def _match_nested_key(
+        keys: Sequence[NestedKey], target: NestedKey
+    ) -> NestedKey | None:
+        """Return ``target`` if present, else a key whose last component matches a leaf ``target``."""
+        target = unravel_key(target)
+        leaf_match = None
+        for key in keys:
+            if key == target:
+                return key
+            if (
+                leaf_match is None
+                and isinstance(target, str)
+                and _ends_with(key, target)
+            ):
+                leaf_match = key
+        return leaf_match
+
+    def _companion_key(
+        self, step_count_key: NestedKey, companion: NestedKey
+    ) -> NestedKey:
+        companion = unravel_key(companion)
+        if isinstance(companion, tuple):
+            return companion
+        return _replace_last(step_count_key, companion)
+
+    def _locate_step_count_key(self, tensordict: TensorDictBase) -> NestedKey | None:
+        cached = self.__dict__.get("_located_step_count_key")
+        if cached is not None:
+            return cached
+        located = self._match_nested_key(
+            tensordict.keys(True, True), self.step_count_key
+        )
+        if located is not None:
+            self.__dict__["_located_step_count_key"] = located
+        return located
+
+    def _done_keys_for(self, step_count_key: NestedKey) -> tuple[NestedKey, NestedKey]:
+        return (
+            self._companion_key(step_count_key, self.truncated_key),
+            self._companion_key(step_count_key, self.done_key),
+        )
 
     def _validate_step_counter_registration(self) -> None:
         parent = self.parent
@@ -1358,46 +1433,58 @@ class RandomTruncationTransform(Transform):
         observation_spec = getattr(parent, "observation_spec", None)
         if observation_spec is None:
             return
-        keys = observation_spec.keys(True, True)
-        has_step_count = any(
-            key == "step_count" or (isinstance(key, tuple) and key[-1] == "step_count")
-            for key in keys
+        has_step_count = (
+            self._match_nested_key(
+                observation_spec.keys(True, True), self.step_count_key
+            )
+            is not None
         )
         if not has_step_count:
             raise RuntimeError(
                 "RandomTruncationTransform requires a StepCounter earlier in the "
-                "transform chain. Use:\n"
+                "transform chain that writes the "
+                f"{self.step_count_key!r} step-count key. Use:\n"
                 "  Compose(StepCounter(), RandomTruncationTransform(...))\n"
                 "or add StepCounter() before RandomTruncationTransform in your "
-                "transform pipeline."
+                "transform pipeline. If StepCounter uses a custom "
+                "step_count_key, pass the same key to RandomTruncationTransform."
             )
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        step_count = next_tensordict.get("step_count", None)
-        if step_count is None or self._horizons is None:
+        step_count_key = self._locate_step_count_key(next_tensordict)
+        if step_count_key is None or self._horizons is None:
             return next_tensordict
 
+        step_count = next_tensordict.get(step_count_key)
         should_truncate = step_count >= self._horizons
-        truncated = next_tensordict.get("truncated", torch.zeros_like(should_truncate))
-        done = next_tensordict.get("done", torch.zeros_like(should_truncate))
-        next_tensordict.set("truncated", truncated | should_truncate)
-        next_tensordict.set("done", done | should_truncate)
+        truncated_key, done_key = self._done_keys_for(step_count_key)
+        truncated = next_tensordict.get(truncated_key, None)
+        if truncated is None:
+            truncated = torch.zeros_like(should_truncate)
+        done = next_tensordict.get(done_key, None)
+        if done is None:
+            done = torch.zeros_like(should_truncate)
+        next_tensordict.set(truncated_key, truncated | should_truncate)
+        next_tensordict.set(done_key, done | should_truncate)
         return next_tensordict
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        step_count = tensordict_reset.get("step_count", None)
-        if step_count is None:
+        step_count_key = self._locate_step_count_key(tensordict_reset)
+        if step_count_key is None:
             return tensordict_reset
 
+        step_count = tensordict_reset.get(step_count_key)
+        truncated_key, done_key = self._done_keys_for(step_count_key)
+
         # Ensure truncated is False after reset
-        done = tensordict_reset.get("done", None)
+        done = tensordict_reset.get(done_key, None)
         if done is not None:
             tensordict_reset.set(
-                "truncated",
+                truncated_key,
                 torch.zeros_like(done),
             )
 
@@ -1416,7 +1503,10 @@ class RandomTruncationTransform(Transform):
             return tensordict_reset
 
         # Resample horizons for envs that just reset
-        reset_mask = tensordict.get("_reset", None)
+        reset_key = _replace_last(step_count_key, "_reset")
+        reset_mask = tensordict.get(reset_key, None)
+        if reset_mask is None and reset_key != "_reset":
+            reset_mask = tensordict.get("_reset", None)
         if reset_mask is not None:
             mask = reset_mask.view_as(self._horizons).bool()
             if is_compiling():
@@ -1483,12 +1573,39 @@ class RandomTruncationTransform(Transform):
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         full_done_spec = output_spec["full_done_spec"]
-        # Ensure truncated and done keys exist in the spec
-        if "truncated" not in full_done_spec.keys():
-            done_shape = full_done_spec["done"].shape
-            full_done_spec["truncated"] = Categorical(
-                2, dtype=torch.bool, device=output_spec.device, shape=done_shape
+        full_obs_spec = output_spec.get("full_observation_spec", None)
+        step_count_key = None
+        if full_obs_spec is not None:
+            step_count_key = self._match_nested_key(
+                full_obs_spec.keys(True, True), self.step_count_key
             )
+        if step_count_key is not None:
+            truncated_key, done_key = self._done_keys_for(step_count_key)
+        else:
+            done_key = self._match_nested_key(
+                full_done_spec.keys(True, True), self.done_key
+            )
+            if done_key is None:
+                done_key = unravel_key(self.done_key)
+            if isinstance(self.truncated_key, tuple):
+                truncated_key = self.truncated_key
+            else:
+                truncated_key = _replace_last(done_key, self.truncated_key)
+
+        if full_done_spec.get(truncated_key, None) is None:
+            done_spec = full_done_spec.get(done_key, None)
+            if done_spec is None:
+                for key in full_done_spec.keys(True, True):
+                    if _ends_with(key, "done"):
+                        done_spec = full_done_spec[key]
+                        break
+            if done_spec is not None:
+                full_done_spec[truncated_key] = Categorical(
+                    2,
+                    dtype=torch.bool,
+                    device=output_spec.device,
+                    shape=done_spec.shape,
+                )
         return super().transform_output_spec(output_spec)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1770,7 +1887,6 @@ class BurnInTransform(Transform):
         raise RuntimeError("BurnInTransform can only be appended to a ReplayBuffer.")
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-
         if self.burn_in == 0:
             return tensordict
 
@@ -2442,7 +2558,7 @@ class TrajCounter(Transform):
                 device=tensordict_reset.device,
                 dtype=torch.bool,
             )
-        with (self._traj_count):
+        with self._traj_count:
             tc = int(self._traj_count.value)
             self._traj_count.value = self._traj_count.value + reset.sum().item()
             episodes = torch.arange(tc, tc + reset.sum(), device=self.parent.device)
