@@ -262,6 +262,7 @@ def make_env(
         "respawn": env_cfg["respawn"],
         "respawn_mode": env_cfg["respawn_mode"],
         "respawn_delay_s": env_cfg["respawn_delay_s"],
+        "approach_players": env_cfg["approach_players"],
         "camera_id": env_cfg["camera_id"],
         "render_width": env_cfg["render_width"],
         "render_height": env_cfg["render_height"],

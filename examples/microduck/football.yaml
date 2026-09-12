@@ -22,6 +22,7 @@ env:
   respawn: true             # stand fallen ducks up again after respawn_delay_s
   respawn_mode: in_place    # in_place: where the duck fell, facing its goal; kickoff: back on its kickoff slot
   respawn_delay_s: 1.0      # seconds a fallen duck lies down, actions ignored, before standing up
+  approach_players: null    # ducks per team, the closest to the ball, that earn the approach_ball reward (null: every duck)
   camera_id: 0              # rendering: 0 broadcast, 1 top-down
   render_width: 640
   render_height: 360
