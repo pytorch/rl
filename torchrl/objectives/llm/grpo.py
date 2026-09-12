@@ -667,10 +667,9 @@ class GRPOLoss(LossModule):
             raise ValueError(
                 f"Advantage key {self.tensor_keys.advantage} not in tensordict."
             )
-        log_weight, dist, kl_approx = self._log_weight(
+        log_weight, dist, kl_approx, mask = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
-        mask = dist.mask
 
         # Optional per-token trust-region filtering (KL-Mask) vs reference policy
         if self.kl_mask_threshold is not None and self.kl_mask_threshold > 0:
@@ -906,7 +905,7 @@ class GRPOLoss(LossModule):
 
     def _log_weight(
         self, tensordict: TensorDictBase, adv_shape: torch.Size
-    ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
+    ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor, torch.Tensor]:
 
         cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
 
@@ -946,8 +945,8 @@ class GRPOLoss(LossModule):
         # 0.0 is a valid log-prob (log 1). Alignment pads in generate-path
         # LogProbs.full are NaN so earlier assistant turns inside the
         # prompt cannot enter the importance ratio as fabricated scores.
+        # LLMMaskedCategorical.mask is read-only; keep the effective mask local.
         attention_mask = dist.mask & torch.isfinite(prev_log_prob)
-        dist.mask = attention_mask
         cur_log_prob = torch.where(
             expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0
         )
@@ -968,7 +967,7 @@ class GRPOLoss(LossModule):
 
         tensordict.set("_cur_log_prob", cur_log_prob)
 
-        return log_weight, dist, kl_approx
+        return log_weight, dist, kl_approx, attention_mask
 
 
 class DAPO(GRPOLoss):

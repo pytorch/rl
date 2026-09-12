@@ -8,6 +8,7 @@ import argparse
 import dataclasses
 import gc
 import importlib.util
+import math
 import sys
 import threading
 import time
@@ -29,6 +30,7 @@ from torchrl.data import ListStorage, ReplayBuffer
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
+from torchrl.modules.distributions import LLMMaskedCategorical
 from torchrl.modules.llm import AsyncVLLM
 from torchrl.modules.llm.backends.vllm import vllm_async
 from torchrl.modules.llm.policies import RemoteTransformersWrapper
@@ -4008,13 +4010,37 @@ class TestVLLMPromptLogprobsConsumers:
             batch_size=[1],
         )
         loss_mod = GRPOLoss(_PromptLogprobsFixedPolicy(), entropy_bonus=False)
-        log_weight, dist, _ = loss_mod._log_weight(data, adv_shape=torch.Size([1, 5]))
+        log_weight, dist, _, mask = loss_mod._log_weight(
+            data, adv_shape=torch.Size([1, 5])
+        )
         ratio = log_weight.squeeze(-1).exp()
         torch.testing.assert_close(ratio[assistant_mask], torch.ones(3))
-        assert not dist.mask[0, 1]
-        assert dist.mask[0, 3] and dist.mask[0, 4]
+        # Position 1 is an earlier assistant turn with a NaN old score.
+        assert not mask[0, 1]
+        assert mask[0, 3] and mask[0, 4]
+        assert dist.mask[0, 1]
         loss = loss_mod(data)
         assert torch.isfinite(loss.loss_objective)
+        torch.testing.assert_close(loss.loss_objective, torch.tensor(-1.0))
+
+    def test_grpo_loss_with_llm_masked_categorical(self):
+        # Wrappers return LLMMaskedCategorical; its mask has no setter.
+        class Actor(torch.nn.Module):
+            def get_dist(self, td, **kwargs):
+                return LLMMaskedCategorical(
+                    logits=torch.zeros(1, 5, 4),
+                    mask=torch.ones(1, 5, dtype=torch.bool),
+                )
+
+        td = TensorDict(
+            {
+                ("tokens", "full"): torch.ones(1, 5, dtype=torch.long),
+                ("log_probs", "full"): torch.full((1, 5), -math.log(4)),
+                "advantage": torch.ones(1, 5, 1),
+            },
+            batch_size=[1],
+        )
+        loss = GRPOLoss(Actor(), entropy_bonus=False)(td)
         torch.testing.assert_close(loss.loss_objective, torch.tensor(-1.0))
 
     def test_response_only_full_breaks_grpo_shape(self):
@@ -4049,6 +4075,18 @@ class TestVLLMPromptLogprobsConsumers:
         assert kl[0].shape == (5,)
         torch.testing.assert_close(kl[0][:3], torch.zeros(3))
         torch.testing.assert_close(kl[0][3:], gen_full[0][3:] - ref_full[0][3:])
+
+    def test_kl_preserves_infinite_ref_and_zeros_nan_pads(self):
+        data = TensorDict(
+            {
+                ("log_probs", "full"): torch.tensor([[-0.5, float("nan")]]),
+                ("ref_log_probs", "full"): torch.tensor([[float("-inf"), -0.7]]),
+            },
+            batch_size=[1],
+        )
+        result = KLComputation(add_to_reward=False)(data)
+        kl = result.get("kl_penalty", as_list=True)
+        torch.testing.assert_close(kl[0], torch.tensor([float("inf"), 0.0]))
 
 
 class TestTRLInterop:
