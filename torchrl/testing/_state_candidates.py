@@ -11,8 +11,7 @@ from tensordict.nn import TensorDictModuleBase
 
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import TensorDictPrimer
-from torchrl.modules import GRUModule, LSTMModule, TransformerModule
-from torchrl.modules.models._gtrxl import _GTrXL
+from torchrl.modules import GRUModule, GTrXL, LSTMModule, TransformerModule
 
 
 class _GRUTC(TensorClass):
@@ -118,7 +117,7 @@ def _make_candidate(
     state_cls = _STATE_CLASSES[kind][container]
     if kind == "gtrxl":
         return TransformerModule(
-            transformer=_GTrXL(
+            transformer=GTrXL(
                 input_size,
                 hidden_size,
                 num_layers,

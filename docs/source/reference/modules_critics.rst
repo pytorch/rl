@@ -30,6 +30,7 @@ Value networks estimate the value of states or state-action pairs.
     set_recurrent_mode
     TransformerModule
     CausalTransformer
+    GTrXL
     positions_from_is_init
     segment_causal_mask_from_is_init
     OnlineDTActor
