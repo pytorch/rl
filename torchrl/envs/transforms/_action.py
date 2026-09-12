@@ -16,9 +16,10 @@ from typing import Any, Literal, TYPE_CHECKING
 import torch
 
 from tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey, unravel_key
+from tensordict.utils import _zip_strict, expand_as_right, NestedKey, unravel_key
 from torch import nn
 
+from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import (
     Bounded,
     Categorical,
@@ -48,6 +49,7 @@ from torchrl.data.vla.schema import (
 from torchrl.data.vla.tokenizers import ActionTokenizerBase
 from torchrl.envs.transforms._base import Compose, FORWARD_NOT_IMPLEMENTED, Transform
 from torchrl.envs.transforms._observation import CatFrames, UnsqueezeTransform
+from torchrl.envs.transforms.utils import _get_reset
 
 __all__ = [
     "ActionChunkTransform",
@@ -57,6 +59,7 @@ __all__ = [
     "ActionTokenizerTransform",
     "DiscreteActionProjection",
     "FlattenAction",
+    "LastAction",
     "MultiAction",
 ]
 
@@ -2340,3 +2343,254 @@ class ActionTokenizerTransform(Transform):
         if self.mode == "decode":
             return output_spec
         return super().transform_output_spec(output_spec)
+
+
+class LastAction(Transform):
+    """Copies the last action into the next observation.
+
+    This is the action analogue of :class:`~torchrl.envs.transforms.CatFrames`:
+    the policy can condition on the action taken at the previous step (delayed
+    control, recurrent policies, residual action heads). On each
+    :meth:`~torchrl.envs.EnvBase.step` the action at time ``t`` is written
+    under ``out_keys`` in the ``"next"`` tensordict; on
+    :meth:`~torchrl.envs.EnvBase.reset` the same keys are filled with a
+    default value (zeros, NaN, or a user-provided fill). On a batch-unlocked
+    parent the default is expanded by the runtime reset batch, preserving
+    the action feature shape.
+
+    ``out_keys`` are registered as :class:`~torchrl.data.Unbounded`
+    observation specs with the action's shape, dtype and device, so reset
+    fills (zeros on a one-hot action, NaN on a bounded action) remain
+    in-spec.
+
+    Args:
+        in_keys (NestedKey or sequence of NestedKey, optional): keys pointing
+            to the actions to remember. Defaults to the parent environment's
+            :attr:`~torchrl.envs.EnvBase.action_keys` when the transform is
+            attached, or ``["action"]`` otherwise.
+        out_keys (NestedKey or sequence of NestedKey, optional): destination
+            keys written into the observation. Defaults to each ``in_keys``
+            entry with its last component replaced by ``"last_action"``
+            (e.g. ``"action"`` -> ``"last_action"``,
+            ``("agents", "action")`` -> ``("agents", "last_action")``).
+
+    Keyword Args:
+        default (str, number or torch.Tensor, optional): value used to fill
+            ``out_keys`` on :meth:`~torchrl.envs.EnvBase.reset`. ``"zeros"``
+            (default) writes zeros matching the action spec; ``"nan"`` writes
+            NaNs (floating-point action specs only); a scalar is broadcast
+            with :meth:`~torch.Tensor.fill_`; a tensor is broadcast to the
+            action spec shape on the spec's device and dtype. Defaults to
+            ``"zeros"``.
+        reset_key (NestedKey, optional): the reset key to be used as a
+            partial-reset indicator. Must be unique. If not provided, defaults
+            to the only reset key of the parent environment (if it has only
+            one) and raises an exception otherwise.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> from torchrl.envs.transforms import LastAction
+        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), LastAction())
+        >>> td = env.reset()
+        >>> td["last_action"]
+        tensor([0.])
+        >>> rollout = env.rollout(3)
+        >>> (rollout["next", "last_action"] == rollout["action"]).all()
+        tensor(True)
+
+    .. seealso:: :class:`~torchrl.envs.transforms.CatFrames` for stacking past
+        observations, :class:`~torchrl.envs.transforms.InitTracker` for
+        marking episode starts, and
+        :class:`~torchrl.trainers.algorithms.configs.LastActionConfig` for the
+        Hydra configuration.
+    """
+
+    invertible = False
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey] | NestedKey | None = None,
+        out_keys: Sequence[NestedKey] | NestedKey | None = None,
+        *,
+        default: Literal["zeros", "nan"] | float | int | torch.Tensor = "zeros",
+        reset_key: NestedKey | None = None,
+    ):
+        if isinstance(default, str) and default not in ("zeros", "nan"):
+            raise ValueError(
+                f"{type(self).__name__} default must be 'zeros', 'nan', a "
+                f"number or a tensor, got {default!r}."
+            )
+        if isinstance(default, float) and math.isnan(default):
+            default = "nan"
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        if isinstance(default, torch.Tensor):
+            self.register_buffer("_default_value", default.clone())
+            self.default: Literal["zeros", "nan", "tensor"] | float | int = "tensor"
+        else:
+            self.default = default
+        self.reset_key = reset_key
+
+    @property
+    def in_keys(self) -> Sequence[NestedKey]:
+        in_keys = self.__dict__.get("_in_keys", None)
+        if in_keys is not None:
+            return in_keys
+        parent = self.parent
+        if parent is None:
+            return ["action"]
+        in_keys = list(parent.action_keys)
+        self._in_keys = in_keys
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, value: Sequence[NestedKey] | NestedKey | None) -> None:
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
+        self._in_keys = value
+
+    @property
+    def out_keys(self) -> Sequence[NestedKey]:
+        out_keys = self.__dict__.get("_out_keys", None)
+        if out_keys is not None:
+            return out_keys
+        derived = [_replace_last(key, "last_action") for key in self.in_keys]
+        if self.__dict__.get("_in_keys", None) is not None:
+            self._out_keys = derived
+        return derived
+
+    @out_keys.setter
+    def out_keys(self, value: Sequence[NestedKey] | NestedKey | None) -> None:
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
+        self._out_keys = value
+
+    @property
+    def reset_key(self) -> NestedKey:
+        reset_key = self.__dict__.get("_reset_key", None)
+        if reset_key is not None:
+            return reset_key
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self).__name__))
+        reset_keys = parent.reset_keys
+        if len(reset_keys) > 1:
+            raise RuntimeError(
+                f"Got more than one reset key in env {self.container}, cannot "
+                f"infer which one to use. Consider providing the reset key in "
+                f"the {type(self)} constructor."
+            )
+        return reset_keys[0]
+
+    @reset_key.setter
+    def reset_key(self, value: NestedKey | None) -> None:
+        if value is not None:
+            value = unravel_key(value)
+        self._reset_key = value
+
+    def _make_default(
+        self, in_key: NestedKey, batch_size: torch.Size | None = None
+    ) -> torch.Tensor:
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self).__name__))
+        try:
+            spec = parent.full_action_spec[in_key]
+        except KeyError:
+            raise KeyError(
+                f"{type(self).__name__} in_key {in_key!r} is not in the "
+                f"parent action spec {parent.full_action_spec}."
+            ) from None
+        # Unlocked parents can reset with a larger runtime batch than the spec.
+        extra_batch: torch.Size | tuple[()] = ()
+        if batch_size is not None and not parent.batch_locked:
+            extra_batch = batch_size
+        zeros = spec.zero(extra_batch)
+        default = self.default
+        if default == "zeros":
+            return zeros
+        if default == "nan":
+            if not zeros.dtype.is_floating_point:
+                raise ValueError(
+                    f"{type(self).__name__} default='nan' requires a "
+                    f"floating-point action spec, got dtype={zeros.dtype} "
+                    f"for key {in_key!r}."
+                )
+            return zeros.fill_(float("nan"))
+        if default == "tensor":
+            fill = self._default_value.to(device=zeros.device, dtype=zeros.dtype)
+            return zeros.copy_(fill.expand_as(zeros))
+        return zeros.fill_(default)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            action = tensordict.get(in_key, default=None)
+            if action is None:
+                if not self.missing_tolerance:
+                    raise KeyError(
+                        f"{self}: '{in_key}' not found in tensordict {tensordict}"
+                    )
+                continue
+            # Policies may reuse the action buffer in-place.
+            next_tensordict.set(out_key, action.clone())
+        return next_tensordict
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        _reset = _get_reset(self.reset_key, tensordict)
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            fill = self._make_default(in_key, tensordict_reset.batch_size)
+            existing = tensordict.get(out_key, default=None)
+            if existing is None:
+                tensordict_reset.set(out_key, fill)
+                continue
+            tensordict_reset.set(
+                out_key,
+                torch.where(expand_as_right(_reset, existing), fill, existing),
+            )
+        return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self).__name__))
+        if not isinstance(observation_spec, Composite):
+            observation_spec = Composite(
+                observation=observation_spec, shape=parent.batch_size
+            )
+        action_spec = parent.full_action_spec
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            try:
+                spec = action_spec[in_key]
+            except KeyError:
+                raise KeyError(
+                    f"{type(self).__name__} in_key {in_key!r} is not in the "
+                    f"parent action spec {action_spec}."
+                ) from None
+            # Reset fills (zeros on OneHot, nan on Bounded) are not in the
+            # action domain; advertise a permissive observation leaf.
+            observation_spec[out_key] = Unbounded(
+                shape=spec.shape,
+                dtype=spec.dtype,
+                device=spec.device,
+            )
+        return observation_spec
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError(
+            FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
+        )

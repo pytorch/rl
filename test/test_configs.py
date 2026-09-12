@@ -53,7 +53,7 @@ from torchrl.data.replay_buffers.writers import (
     TensorDictRoundRobinWriter,
     WriterEnsemble,
 )
-from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
+from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.modules import (
     ConvNet,
@@ -74,6 +74,7 @@ from torchrl.record.loggers import (
 )
 from torchrl.record.loggers.trackio import TrackioLogger
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.trainers import Trainer
 from torchrl.trainers.trainers import CountFramesLog
 
@@ -4701,6 +4702,18 @@ class TestTransformConfigs:
         cfg = InitTrackerConfig(init_key="is_test_init")
         assert cfg.init_key == "is_test_init"
         instantiate(cfg)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_last_action_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.transforms import LastActionConfig
+
+        transform = instantiate(LastActionConfig(default=-1.0))
+        env = TransformedEnv(ContinuousActionVecMockEnv(), transform)
+        td = env.reset()
+        assert (td["last_action"] == -1).all()
+        rollout = env.rollout(3)
+        torch.testing.assert_close(rollout["next", "last_action"], rollout["action"])
 
 
 if __name__ == "__main__":

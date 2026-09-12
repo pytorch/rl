@@ -58,6 +58,7 @@ from torchrl.envs import (
     FlattenAction,
     GymWrapper,
     HumanoidMacroAction,
+    LastAction,
     MacroPrimitive,
     MacroPrimitiveTransform,
     MultiAction,
@@ -68,6 +69,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetMacroAction,
+    TicTacToeEnv,
     ToyVLAEnv,
     TransformedEnv,
     URScriptPrimitive,
@@ -95,7 +97,9 @@ from torchrl.testing import (  # noqa
 from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
     EnvWithScalarAction,
     NestedCountingEnv,
     StateLessCountingEnv,
@@ -3238,6 +3242,194 @@ class TestActionTokenizerTransform(TransformBase):
         tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
         with pytest.raises(ValueError, match="mode"):
             ActionTokenizerTransform(tok, mode="invalid")
+
+
+def _make_last_action_env(
+    env_cls: type[EnvBase] = ContinuousActionVecMockEnv,
+) -> TransformedEnv:
+    return TransformedEnv(env_cls(), LastAction())
+
+
+class TestLastAction(TransformBase):
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, partial(_make_last_action_env, ContinuousActionVecMockEnv))
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(
+            2, partial(_make_last_action_env, ContinuousActionVecMockEnv)
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), LastAction())
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv), LastAction()
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
+        t = LastAction(in_keys="action", out_keys="last_action")
+        next_td = TensorDict({}, [])
+        td = TensorDict({"action": torch.ones(3), "next": next_td}, [])
+        out = t._step(td, next_td)
+        assert (out["last_action"] == 1).all()
+
+    def test_transform_compose(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), Compose(LastAction()))
+        check_env_specs(env)
+        with pytest.raises(
+            NotImplementedError, match="LastAction cannot be executed without a parent"
+        ):
+            Compose(LastAction())(TensorDict({"action": torch.zeros(3)}, []))
+
+    def test_transform_env(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
+        td = env.reset()
+        assert (td["last_action"] == 0).all()
+        last_action_spec = env.observation_spec["last_action"]
+        assert last_action_spec.shape == env.action_spec.shape
+        assert isinstance(last_action_spec, Unbounded)
+        last_action_spec.assert_is_in(td["last_action"])
+        rollout = env.rollout(5)
+        torch.testing.assert_close(rollout["next", "last_action"], rollout["action"])
+
+    def test_transform_model(self):
+        t = LastAction()
+        with pytest.raises(
+            NotImplementedError, match="LastAction cannot be executed without a parent"
+        ):
+            nn.Sequential(t)(TensorDict({"action": torch.zeros(3)}, []))
+
+    def test_transform_rb(self):
+        t = LastAction()
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.append_transform(t)
+        rb.extend(TensorDict({"action": torch.zeros(3, 1)}, [3]))
+        with pytest.raises(
+            NotImplementedError, match="LastAction cannot be executed without a parent"
+        ):
+            rb.sample(2)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for LastAction")
+
+    def test_reset_default_nan(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction(default="nan"))
+        td = env.reset()
+        assert td["last_action"].isnan().all()
+        env.observation_spec["last_action"].assert_is_in(td["last_action"])
+
+    def test_onehot_reset_in_observation_spec(self):
+        env = TransformedEnv(DiscreteActionVecMockEnv(), LastAction())
+        td = env.reset()
+        assert (td["last_action"] == 0).all()
+        last_action_spec = env.observation_spec["last_action"]
+        assert isinstance(last_action_spec, Unbounded)
+        last_action_spec.assert_is_in(td["last_action"])
+        check_env_specs(env)
+
+    def test_reset_default_value(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction(default=-1.0))
+        td = env.reset()
+        assert (td["last_action"] == -1).all()
+
+    def test_reset_default_tensor(self):
+        fill = torch.full((7,), 0.5)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction(default=fill))
+        td = env.reset()
+        torch.testing.assert_close(td["last_action"], fill)
+
+    def test_invalid_default(self):
+        with pytest.raises(ValueError, match="default must be"):
+            LastAction(default="ones")
+
+    def test_nested_keys(self):
+        base_env = NestedCountingEnv()
+        env = TransformedEnv(
+            base_env,
+            LastAction(
+                in_keys=("data", "action"),
+                out_keys=("data", "last_action"),
+            ),
+        )
+        assert env.transform.in_keys == [("data", "action")]
+        assert env.transform.out_keys == [("data", "last_action")]
+        td = env.reset()
+        assert (td["data", "last_action"] == 0).all()
+        policy = CountingEnvCountPolicy(
+            action_spec=env.full_action_spec[env.action_key],
+            action_key=env.action_key,
+        )
+        rollout = env.rollout(4, policy=policy, break_when_any_done=False)
+        torch.testing.assert_close(
+            rollout["next", "data", "last_action"], rollout["data", "action"]
+        )
+
+    def test_nested_keys_inferred(self):
+        env = TransformedEnv(NestedCountingEnv(), LastAction())
+        assert env.transform.in_keys == [("data", "action")]
+        assert env.transform.out_keys == [("data", "last_action")]
+        check_env_specs(env)
+        policy = CountingEnvCountPolicy(
+            action_spec=env.full_action_spec[env.action_key],
+            action_key=env.action_key,
+        )
+        rollout = env.rollout(4, policy=policy, break_when_any_done=False)
+        torch.testing.assert_close(
+            rollout["next", "data", "last_action"], rollout["data", "action"]
+        )
+
+    def test_reset_unlocked_runtime_batch(self):
+        env = TransformedEnv(TicTacToeEnv(), LastAction())
+        td = env.reset(TensorDict(batch_size=[2]))
+        action_feature = env.full_action_spec[env.action_key].shape
+        assert td["last_action"].shape == torch.Size([2, *action_feature])
+        assert (td["last_action"] == 0).all()
+        td = env.rand_step(td)
+        assert td["next", "last_action"].shape == torch.Size([2, *action_feature])
+
+    def test_step_does_not_alias_action(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
+        td = env.reset()
+        td = env.rand_action(td)
+        original = td["action"].clone()
+        td = env.step(td)
+        remembered = td["next", "last_action"]
+        assert remembered is not td["action"]
+        td["action"].fill_(123)
+        torch.testing.assert_close(remembered, original)
 
 
 if __name__ == "__main__":
