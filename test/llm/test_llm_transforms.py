@@ -724,60 +724,47 @@ class TestIncrementalTokenizer:
         tokens = result.get(("tokens", "prompt"), as_list=True)
         assert tokens[0].numel() > 0
 
-    def test_step_nested_tokens_full_key(self):
-        """Nested tokens_key looks up (*prefix, 'full'), not (first, 'full')."""
+    @pytest.mark.parametrize(
+        "tokens_key, expected_full_key, decoy_key",
+        [
+            pytest.param(
+                ("obs", "tok", "prompt"),
+                ("obs", "tok", "full"),
+                ("obs", "full"),
+                id="nested",
+            ),
+            pytest.param(
+                "tokens",
+                ("tokens", "full"),
+                "tokens_full",
+                id="string",
+            ),
+            pytest.param(
+                ("tokens",),
+                ("tokens", "full"),
+                "full",
+                id="one_tuple",
+            ),
+        ],
+    )
+    def test_step_tokens_full_key(self, tokens_key, expected_full_key, decoy_key):
+        """Reuse tokens.full under the last NestedKey component; decoys fail the old lookups."""
         tokens_full = torch.tensor([1, 2, 3])
         decoy = torch.tensor([9, 9, 9])
         transform = IncrementalTokenizer(
             self.DummyTokenizer(),
-            tokens_key=("obs", "tok", "prompt"),
+            tokens_key=tokens_key,
         )
         td = TensorDict(
             {
-                ("obs", "tok", "full"): tokens_full,
-                # Old bug used (tokens_key[0], "full")
-                ("obs", "full"): decoy,
+                expected_full_key: tokens_full,
+                decoy_key: decoy,
             },
             batch_size=(),
         )
         next_td = TensorDict(batch_size=())
         out = transform._step(td, next_td)
-        assert torch.equal(out[("obs", "tok", "prompt")], tokens_full)
-
-    def test_step_string_tokens_full_key(self):
-        """String tokens_key looks up ('tokens', 'full'), not 'tokens_full'."""
-        tokens_full = torch.tensor([4, 5, 6])
-        decoy = torch.tensor([9, 9, 9])
-        transform = IncrementalTokenizer(self.DummyTokenizer(), tokens_key="tokens")
-        td = TensorDict(
-            {
-                ("tokens", "full"): tokens_full,
-                "tokens_full": decoy,
-            },
-            batch_size=(),
-        )
-        next_td = TensorDict(batch_size=())
-        out = transform._step(td, next_td)
-        assert torch.equal(out["tokens"], tokens_full)
-
-    def test_step_one_tuple_tokens_full_key(self):
-        """A 1-tuple tokens_key looks up ('tokens', 'full'), not ('full',)."""
-        tokens_full = torch.tensor([7, 8, 9])
-        decoy = torch.tensor([9, 9, 9])
-        transform = IncrementalTokenizer(
-            self.DummyTokenizer(), tokens_key=("tokens",)
-        )
-        td = TensorDict(
-            {
-                ("tokens", "full"): tokens_full,
-                # Old bug used (*tokens_key[:-1], "full") -> ("full",)
-                "full": decoy,
-            },
-            batch_size=(),
-        )
-        next_td = TensorDict(batch_size=())
-        out = transform._step(td, next_td)
-        assert torch.equal(out["tokens"], tokens_full)
+        assert torch.equal(out[tokens_key], tokens_full)
 
 
 class TestPolicyVersion:
