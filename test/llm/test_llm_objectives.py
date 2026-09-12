@@ -28,6 +28,7 @@ from torchrl.objectives.llm.distillation import (
 )
 from torchrl.objectives.llm.grpo import (
     CISPOLoss,
+    DAPO,
     GRPOLoss,
     GRPOLossOutput,
     MCAdvantage,
@@ -1442,6 +1443,124 @@ class TestDistillation:
         loss_vals = loss_fn(td)
         assert loss_vals.loss_distill.device.type == "cuda"
         assert torch.isfinite(loss_vals.loss_distill)
+
+
+class TestGRPOLossRefactorBehavior:
+    """Regression tests covering the _kl_to_ref refactor and the DAPO bug fix.
+
+    Each test is written so that it *fails* if the specific bug it covers is
+    reintroduced, by asserting externally observable behavior rather than
+    implementation details.
+    """
+
+    def test_set_keys_ref_log_probs_is_respected_by_kl_to_ref(self):
+        """Before the fix, forward() pre-fetched ref_log_probs with a hardcoded
+        call to tensordict.get(self.tensor_keys.ref_log_probs, ...) and passed
+        the result directly to _kl_to_ref, bypassing the key parameter entirely.
+        This meant that set_keys(ref_log_probs=custom_key) was silently ignored
+        for the kl_to_ref path -- the loss would either raise KeyError (wrong key)
+        or use stale data.
+
+        After the fix, forward() calls _kl_to_ref(key=self.tensor_keys.ref_log_probs)
+        so that the configured key is actually used.
+
+        If the bug is reintroduced, this test raises KeyError because the data
+        does NOT contain the default ("next", "ref_log_probs", "full") key -- only
+        the custom nested key -- and the hardcoded pre-fetch would fail.
+        """
+        policy = _FixedLogProbPolicy()
+        # cur_log_prob = log(0.5), ref_log_prob = log(0.5) => KL = 0.
+        cur_lp = torch.log(torch.tensor([0.5]))
+        ref_lp = cur_lp.clone()
+
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+        # Store ref log-probs ONLY under a non-default nested key.
+        # The default ("next", "ref_log_probs", "full") is intentionally absent.
+        custom_key = ("custom_ref", "log_probs")
+        data[custom_key] = ref_lp.unsqueeze(-1)
+
+        loss_fn = GRPOLoss(
+            policy,
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=0.1,
+        )
+        loss_fn.set_keys(ref_log_probs=custom_key)
+
+        # If the FIXME pre-fetch is reintroduced, this line raises KeyError
+        # because the hardcoded tensordict.get(self.tensor_keys.ref_log_probs, ...)
+        # would read the key BEFORE set_keys changes it in the fetch path.
+        out = loss_fn(data)
+
+        # cur == ref => KL is 0; loss_kl_to_ref = coeff * 0 = 0.
+        torch.testing.assert_close(out.kl_to_ref, torch.tensor(0.0))
+
+    def test_kl_to_ref_hand_calculated_value(self):
+        """Verify the KL formula (k3 estimator) is computed correctly end-to-end.
+
+        This exercises the full path through forward() -> _kl_to_ref() with a
+        precisely known ref_log_prob, so any regression in how ref_log_prob is
+        fetched or used would produce a different numeric result.
+        """
+        cur_lp = torch.log(torch.tensor([0.5]))  # log(0.5) = -0.693...
+        ref_lp = torch.log(torch.tensor([0.25]))  # log(0.25) = -1.386...
+        # k3 KL estimator: (exp(ref - cur) - 1) - (ref - cur)
+        diff = ref_lp - cur_lp  # log(0.25) - log(0.5) = log(0.5) = -0.693...
+        expected_kl = (diff.expm1() - diff).mean()  # (0.5 - 1) - (-0.693) = 0.193...
+
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=cur_lp.tolist(),
+            advantage=[1.0],
+        )
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+
+        kl_coeff = 0.5
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=kl_coeff,
+        )
+        out = loss_fn(data)
+
+        torch.testing.assert_close(out.kl_to_ref, expected_kl)
+        torch.testing.assert_close(out.loss_kl_to_ref, kl_coeff * expected_kl)
+
+    def test_dapo_can_be_instantiated_with_actor_network(self):
+        """Before the fix, DAPO.__init__ took tensordict as its first positional
+        argument (a copy-paste of _kl_to_ref body). Calling
+        DAPO(actor_network, clip_epsilon=...) raised TypeError because 'clip_epsilon'
+        was not in the bogus __init__ signature.
+
+        This test will fail (TypeError) if the bogus __init__ is reintroduced.
+        It further verifies that the resulting loss is numerically identical to
+        GRPOLoss with the same asymmetric epsilon, confirming that DAPO actually
+        runs its inherited _compute_policy_objective correctly.
+        """
+        cur_lp = torch.log(torch.tensor([1.25]))  # ratio > 1, within clip range
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+
+        # Both DAPO and GRPOLoss share _compute_policy_objective; with the same
+        # asymmetric epsilon the numeric output must be identical.
+        eps = (0.20, 0.28)
+        dapo_out = DAPO(_FixedLogProbPolicy(), clip_epsilon=eps, entropy_bonus=False)(
+            data
+        )
+        grpo_out = GRPOLoss(
+            _FixedLogProbPolicy(), clip_epsilon=eps, entropy_bonus=False
+        )(data)
+
+        torch.testing.assert_close(dapo_out.loss_objective, grpo_out.loss_objective)
+        torch.testing.assert_close(dapo_out.clip_fraction, grpo_out.clip_fraction)
 
 
 @pytest.mark.slow
