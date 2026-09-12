@@ -759,14 +759,10 @@ class Tokenizer(UnaryTransform):
 
     @property
     def device(self) -> torch.device | None:
-        if "_device" in self.__dict__:
-            return self._device
         parent = self.parent
         if parent is None:
             return None
-        device = parent.device
-        self._device = device
-        return device
+        return parent.device
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         # Specialized for attention mask

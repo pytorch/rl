@@ -1645,3 +1645,27 @@ class TestTokenizer(TransformBase):
         )[0]
         torch.testing.assert_close(td_out["tokens"], expected)
         assert "attention_mask" not in td_out.keys()
+
+
+class TestTokenizerDevice:
+    def test_device_follows_env_to(self):
+        # Cached parent.device goes stale after env.to (issue #4345).
+        class DummyTokenizer:
+            def __call__(self, value, return_tensors="pt", **kwargs):
+                batch = 1 if isinstance(value, str) else len(value)
+                return {
+                    "input_ids": torch.ones(batch, 2, dtype=torch.long),
+                    "attention_mask": torch.ones(batch, 2, dtype=torch.long),
+                }
+
+        t = Tokenizer(
+            in_keys=["text"],
+            out_keys=["input_ids"],
+            tokenizer=DummyTokenizer(),
+        )
+        env = TransformedEnv(CountingEnv(), t)
+        td = TensorDict({"text": "hello"})
+        t(td.clone())
+        env.to("meta")
+        out = t(td.clone())
+        assert out["input_ids"].device == torch.device("meta")

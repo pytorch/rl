@@ -10,6 +10,7 @@ import importlib.util
 import json
 
 import pytest
+import torch
 from tensordict import set_list_to_stack, TensorDict
 
 from torchrl.data.llm import History
@@ -19,11 +20,13 @@ from torchrl.envs.llm.transforms import (
     IncrementalTokenizer,
     JSONCallParser,
     PolicyVersion,
+    Tokenizer,
     ToolCall,
     ToolRegistry,
     XMLBlockParser,
 )
 from torchrl.envs.transforms import TransformedEnv
+from torchrl.testing.mocking_classes import CountingEnv
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
@@ -719,6 +722,30 @@ class TestIncrementalTokenizer:
         assert ("tokens", "prompt") in result.keys(True, True)
         tokens = result.get(("tokens", "prompt"), as_list=True)
         assert tokens[0].numel() > 0
+
+
+class TestTokenizer:
+    def test_device_follows_env_to(self):
+        # Cached parent.device goes stale after env.to (issue #4345).
+        class DummyTokenizer:
+            def __call__(self, value, return_tensors="pt", **kwargs):
+                batch = 1 if isinstance(value, str) else len(value)
+                return {
+                    "input_ids": torch.ones(batch, 2, dtype=torch.long),
+                    "attention_mask": torch.ones(batch, 2, dtype=torch.long),
+                }
+
+        t = Tokenizer(
+            in_keys=["text"],
+            out_keys=["input_ids"],
+            tokenizer=DummyTokenizer(),
+        )
+        env = TransformedEnv(CountingEnv(), t)
+        td = TensorDict({"text": "hello"})
+        t(td.clone())
+        env.to("meta")
+        out = t(td.clone())
+        assert out["input_ids"].device == torch.device("meta")
 
 
 class TestPolicyVersion:

@@ -95,15 +95,11 @@ class Tokenizer(UnaryTransform):
         self._missing_tolerance = missing_tolerance
 
     @property
-    def device(self):
-        if "_device" in self.__dict__:
-            return self._device
+    def device(self) -> torch.device | None:
         parent = self.parent
         if parent is None:
             return None
-        device = parent.device
-        self._device = device
-        return device
+        return parent.device
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         # Specialized for attention mask
