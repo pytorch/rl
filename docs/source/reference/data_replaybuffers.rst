@@ -677,9 +677,17 @@ before extending; the sampler uses them to keep each slice inside one
 episode.
 
 The same ``extend`` / ``sample`` pairing without the helper looks like
-this. The extra ``SliceSampler(slice_len=N)`` is not optional: without
-it, :meth:`~torchrl.envs.transforms.CatFrames.unfolding` has no time
-dimension.
+this. Three extra steps are not optional:
+
+- ``SliceSampler(slice_len=N)``: without it,
+  :meth:`~torchrl.envs.transforms.CatFrames.unfolding` has no time
+  dimension.
+- ``reshape(-1, N)``: ``SliceSampler`` returns the ``B`` windows
+  flattened as ``[B * N]``. Leaving that rank-1 batch as the time
+  axis makes later windows inherit the last frames of the previous
+  window.
+- ``[:, -1]``: after unfolding, each window is an ``N``-step
+  tensordict; the last step is the completed stack.
 
 .. code-block:: python
 
@@ -700,21 +708,25 @@ dimension.
             ),
             GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
             Resize(84, 84, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+            # SliceSampler returns [B * N]; CatFrames needs a time axis
+            # per window, then only the completed stack is kept.
+            lambda td: td.reshape(-1, frame_stack),
             CatFrames(
                 N=frame_stack,
                 dim=-3,
                 in_keys=["pixels_trsf", ("next", "pixels_trsf")],
                 out_keys=["pixels_trsf", ("next", "pixels_trsf")],
             ),
+            lambda td: td[:, -1],
             ExcludeTransform("pixels_trsf", ("next", "pixels_trsf"), inverse=True),
         ),
     )  # doctest: +SKIP
     rb.extend(data)          # stores raw "pixels" only
-    batch = rb.sample()      # rebuilds the N-frame stack
+    batch = rb.sample()      # [32, 4, 84, 84] grayscale stacks
 
 The helper is the preferred form: it multiplies the requested
-``batch_size`` by ``N`` internally, reshapes to ``[B, N]``, and keeps
-``batch[:, -1]``, so ``rb.sample()`` returns ``batch_size`` stacked
+``batch_size`` by ``N`` internally and inserts the reshape / last-step
+selection, so ``rb.sample()`` returns ``batch_size`` stacked
 transitions rather than a flat ``batch_size * N`` window.
 
 Common pitfalls
@@ -739,6 +751,12 @@ Common pitfalls
   the buffer transform with a
   :class:`~torchrl.data.replay_buffers.SliceSampler` (or
   :meth:`~torchrl.envs.transforms.CatFrames.make_rb_transform_and_sampler`).
+- **Flattened slices.** ``SliceSampler`` returns ``[B * N]``, not
+  ``[B, N]``. :class:`~torchrl.envs.transforms.CatFrames` then treats
+  the whole sample as one sequence and the first ``N - 1`` rows of each
+  later window mix frames from the previous window. Reshape to
+  ``[-1, N]`` before the transform and keep ``[:, -1]`` after it
+  (the helper does both).
 - **Missing ``("next", ...)`` keys.** A buffer transform does not walk
   into ``"next"`` on its own. List both ``"pixels"`` and
   ``("next", "pixels")`` on every sample-path transform that should
