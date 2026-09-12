@@ -531,6 +531,14 @@ camera at every second evaluation (10 frames per second with a decision
 period of 5, 50 without a walker). `smoke=true` runs a pipeline check with a
 short clip written by a CSV logger.
 
+For a warm-started policy, `ppo.reference_kl_coeff` anchors the actor to its
+initial distribution. `ppo.reference_kl_final_coeff` optionally changes this
+weight linearly after `ppo.critic_warmup_iterations`; leaving it `null` keeps
+the anchor fixed. Annealing is an experiment option, not an established
+improvement over a fixed anchor. With `ppo.train_team=blue`, checkpoint
+selection uses blue's wins minus losses against the configured opponent,
+including knockouts, so a policy is not promoted for conceding more goals.
+
 Native MuJoCo steps a 5-a-side scene at about 500 control steps per second
 per worker process on an Apple-silicon CPU, so 16 workers give a few
 thousand duck-steps per second; the default batch is one 30 s match per

@@ -410,7 +410,7 @@ class OpponentPolicy(TensorDictModuleBase):
         *,
         skill: int | None = None,
         opponent: ProbabilisticActor | None = None,
-    ) -> None:
+    ):
         super().__init__()
         if (skill is None) == (opponent is None):
             raise ValueError("Pass exactly one of skill and opponent.")
@@ -612,14 +612,27 @@ def _collection_metrics(data: TensorDictBase) -> dict[str, float]:
     }
 
 
-def evaluation_score(metrics: Mapping[str, float]) -> tuple[float, ...]:
-    """Rank checkpoints by goals per match, then ball progress, then fewer falls.
+def evaluation_score(
+    metrics: Mapping[str, float], *, train_team: Literal["both", "blue"] = "both"
+) -> tuple[float, ...]:
+    """Rank checkpoints by match outcomes, then ball progress, then fewer falls.
 
-    Both teams play the same policy, so more goals means the policy scores
-    faster against itself, which is the quantity self-play improves.
+    Symmetric self-play rewards goals by either team. Against a separate
+    opponent, rank blue's wins minus losses instead: conceding goals or
+    losing by knockout must not promote a checkpoint.
     """
+    blue = metrics["evaluation/goals_blue"]
+    red = metrics["evaluation/goals_red"]
+    outcomes = blue + red
+    if train_team == "blue":
+        outcomes = (
+            blue
+            - red
+            + metrics.get("evaluation/knockouts_blue", 0.0)
+            - metrics.get("evaluation/knockouts_red", 0.0)
+        )
     return (
-        metrics["evaluation/goals_blue"] + metrics["evaluation/goals_red"],
+        outcomes,
         metrics["evaluation/ball_progress_blue"],
         -metrics["evaluation/falls_per_duck"],
     )
@@ -660,6 +673,7 @@ def train_mappo(
     train_team: Literal["both", "blue"] = "both",
     critic_warmup_iterations: int = 0,
     reference_kl_coeff: float = 0.0,
+    reference_kl_final_coeff: float | None = None,
     collection_policy: TensorDictModuleBase | None = None,
     iteration_callback: Callable[[int], None] | None = None,
 ) -> list[dict[str, float]]:
@@ -683,6 +697,9 @@ def train_mappo(
     With ``reference_kl_coeff > 0`` the loss adds that weight times the KL
     divergence from a frozen copy of the initial actor (kickstarting), which
     keeps a warm-started policy from drifting away from its prior.
+    ``reference_kl_final_coeff`` optionally decreases or increases that weight
+    linearly over the actor-training iterations, after critic warmup. With
+    only one actor update the initial weight is used; ``None`` keeps it fixed.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -690,6 +707,13 @@ def train_mappo(
     """
     if min(total_frames, frames_per_batch, epochs, minibatch_size) < 1:
         raise ValueError("PPO frame, epoch and minibatch sizes must be positive.")
+    if reference_kl_final_coeff is None:
+        reference_kl_final_coeff = reference_kl_coeff
+    if any(
+        not math.isfinite(coeff) or coeff < 0
+        for coeff in (reference_kl_coeff, reference_kl_final_coeff)
+    ):
+        raise ValueError("Reference KL coefficients must be finite and non-negative.")
     num_envs = env.batch_size.numel()
     if frames_per_batch % num_envs:
         raise ValueError(
@@ -718,7 +742,9 @@ def train_mappo(
     if collection_policy is None:
         collection_policy = actor
     reference = (
-        deepcopy(actor).requires_grad_(False) if reference_kl_coeff > 0 else None
+        deepcopy(actor).requires_grad_(False)
+        if max(reference_kl_coeff, reference_kl_final_coeff) > 0
+        else None
     )
     collector = Collector(
         env,
@@ -792,7 +818,7 @@ def train_mappo(
             with timeit("video"):
                 video_recorder(step)
         evaluations += 1
-        score = evaluation_score(metrics)
+        score = evaluation_score(metrics, train_team=train_team)
         checkpoint(latest_checkpoint_path, step, metrics, score)
         if best_score is None or score > best_score:
             best_score = score
@@ -824,6 +850,20 @@ def train_mappo(
     try:
         while collected < total_frames:
             iteration += 1
+            actor_iterations = (
+                math.ceil(total_frames / frames_per_batch) - critic_warmup_iterations
+            )
+            anneal_fraction = min(
+                1.0,
+                max(
+                    0.0,
+                    (iteration - critic_warmup_iterations - 1)
+                    / max(actor_iterations - 1, 1),
+                ),
+            )
+            reference_weight = reference_kl_coeff + anneal_fraction * (
+                reference_kl_final_coeff - reference_kl_coeff
+            )
             timeit.reset()
             with timeit("collect"):
                 data = next(collector_iterator)
@@ -886,7 +926,7 @@ def train_mappo(
                                     players = reference_kl.shape[-1] // 2
                                     reference_kl = reference_kl[..., :players]
                                 reference_kl = reference_kl.mean()
-                                loss = loss + reference_kl_coeff * reference_kl
+                                loss = loss + reference_weight * reference_kl
                                 losses.set("reference_kl", reference_kl.detach())
                         optimizer.zero_grad(set_to_none=True)
                         loss.backward()
@@ -915,6 +955,7 @@ def train_mappo(
                 if scheduler is not None and iteration > critic_warmup_iterations:
                     scheduler.step(metrics["ppo/kl_approx"])
                 metrics["ppo/learning_rate"] = optimizer.param_groups[0]["lr"]
+                metrics["ppo/reference_kl_coeff"] = reference_weight
             replay_buffer.empty()
             collector.update_policy_weights_()
 

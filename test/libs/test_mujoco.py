@@ -8,6 +8,7 @@ satellite) across the three physics backends."""
 from __future__ import annotations
 
 import argparse
+import functools as ft
 import importlib.util
 import math
 import os
@@ -1407,7 +1408,10 @@ class TestMujoco:
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_microduck_football_skill_training(self, tmp_path):
+    @pytest.mark.parametrize(
+        "train_team, final_coeff", [("both", None), ("blue", 0.05)]
+    )
+    def test_microduck_football_skill_training(self, tmp_path, train_team, final_coeff):
         low = TensorDictModule(
             nn.Linear(MicroDuckEnv.OBSERVATION_DIM, MicroDuckEnv.NUM_JOINTS),
             in_keys=["observation"],
@@ -1424,18 +1428,37 @@ class TestMujoco:
         )
         actor, critic = football_mappo.make_models(env, hidden_size=8, depth=1)
         before = [p.detach().clone() for p in actor.parameters()]
+        critic_before = [p.detach().clone() for p in critic.parameters()]
         low_before = [p.detach().clone() for p in low.parameters()]
+
+        def check_warmup(iteration):
+            if iteration == 1:
+                for old, new in zip(before, actor.parameters()):
+                    torch.testing.assert_close(old, new, rtol=0, atol=0)
+                assert any(
+                    not torch.equal(old, new)
+                    for old, new in zip(critic_before, critic.parameters())
+                )
+
         metrics = football_mappo.train_mappo(
             env,
             actor,
             critic,
-            total_frames=8,
+            total_frames=24,
             frames_per_batch=8,
             epochs=1,
             minibatch_size=4,
             target_kl=None,
+            train_team=train_team,
+            critic_warmup_iterations=1,
+            reference_kl_coeff=0.5,
+            reference_kl_final_coeff=final_coeff,
+            iteration_callback=check_warmup,
         )
-        assert metrics
+        assert [row["ppo/reference_kl_coeff"] for row in metrics] == pytest.approx(
+            [0.5, 0.5, 0.5 if final_coeff is None else final_coeff]
+        )
+        assert metrics[-1]["ppo/reference_kl"] > 0
         assert any(
             not torch.equal(old, new) for old, new in zip(before, actor.parameters())
         )
@@ -1443,6 +1466,25 @@ class TestMujoco:
             torch.testing.assert_close(old, new)
             assert new.grad is None
         env.close(raise_if_closed=False)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_football_checkpoint_ranking_against_opponent(self):
+        draw = {
+            "evaluation/goals_blue": 0.0,
+            "evaluation/goals_red": 0.0,
+            "evaluation/ball_progress_blue": 0.0,
+            "evaluation/falls_per_duck": 0.0,
+        }
+        loss = {**draw, "evaluation/goals_red": 1.0}
+        win = {**draw, "evaluation/goals_blue": 1.0}
+        knockout = {**draw, "evaluation/knockouts_red": 1.0}
+        score = ft.partial(football_mappo.evaluation_score, train_team="blue")
+        assert score(win) > score(draw) > score(loss)
+        assert score(knockout) == score(loss)
+        # Symmetric self-play still rewards scoring on either side.
+        assert football_mappo.evaluation_score(win) == football_mappo.evaluation_score(
+            loss
+        )
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_football_skip_keeps_physics_state(self, tmp_path):
