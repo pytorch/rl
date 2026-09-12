@@ -2106,21 +2106,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             func = _run_worker_pipe_shared_mem
         else:
             func = _run_worker_pipe_direct
-        # We look for cuda tensors through the leaves
-        # because the shared tensordict could be partially on cuda
-        # and some leaves may be inaccessible through get (e.g., LazyStacked)
-        has_cuda = [False]
-
-        def look_for_cuda(tensor, has_cuda=has_cuda):
-            has_cuda[0] = has_cuda[0] or tensor.is_cuda
-
-        if self._use_buffers and not self._metadata_from_workers:
-            self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
-        has_cuda = has_cuda[0]
-        if has_cuda:
-            self.event = torch.cuda.Event()
-        else:
-            self.event = None
         self._events = [ctx.Event() for _ in range(_num_workers)]
 
         # Shared-memory done flags: workers write 1 when done, parent spin-polls.
@@ -2196,6 +2181,18 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     # use msg as sync point
                     parent_pipe.recv()
 
+            # We look for cuda tensors through the leaves
+            # because the shared tensordict could be partially on cuda
+            # and some leaves may be inaccessible through get (e.g., LazyStacked)
+            has_cuda = [False]
+
+            def look_for_cuda(tensor, has_cuda=has_cuda):
+                has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+            if self._use_buffers:
+                self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
+            self.event = torch.cuda.Event() if has_cuda[0] else None
+
             for channel in self.parent_channels:
                 channel.send(("init", None))
         except Exception:
@@ -2208,13 +2205,6 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     def _send_worker_buffers(self) -> None:
         """Hand the freshly allocated shared buffers to workers started for their metadata."""
-        has_cuda = [False]
-
-        def look_for_cuda(tensor, has_cuda=has_cuda):
-            has_cuda[0] = has_cuda[0] or tensor.is_cuda
-
-        self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
-        self.event = torch.cuda.Event() if has_cuda[0] else None
         for idx, channel in enumerate(self.parent_channels):
             channel.send(
                 (
@@ -3398,58 +3388,12 @@ def _run_worker_pipe_shared_mem(
     worker_idx: int | None = None,
     shm_done_flags=None,
 ) -> None:
+    pid = os.getpid()
     # Handle warning filtering (moved from _ProcessNoWarn)
     if filter_warnings:
         warnings.filterwarnings("ignore")
     if num_threads is not None:
         torch.set_num_threads(num_threads)
-    parent_pipe.close()
-    if not isinstance(env_fun, EnvBase):
-        env = env_fun(**env_fun_kwargs)
-    else:
-        if env_fun_kwargs:
-            raise RuntimeError(
-                "env_fun_kwargs must be empty if an environment is passed to a process."
-            )
-        env = env_fun
-    del env_fun
-    env.set_spec_lock_()
-
-    _shared_mem_worker_loop(
-        child_pipe,
-        env,
-        mp_event=mp_event,
-        shared_tensordict=shared_tensordict,
-        _selected_input_keys=_selected_input_keys,
-        _selected_reset_keys=_selected_reset_keys,
-        _selected_step_keys=_selected_step_keys,
-        _non_tensor_keys=_non_tensor_keys,
-        non_blocking=non_blocking,
-        has_lazy_inputs=has_lazy_inputs,
-        verbose=verbose,
-        worker_idx=worker_idx,
-        shm_done_flags=shm_done_flags,
-    )
-
-
-def _shared_mem_worker_loop(
-    child_pipe: connection.Connection,
-    env: EnvBase,
-    *,
-    mp_event: mp.Event = None,
-    shared_tensordict: TensorDictBase = None,
-    _selected_input_keys=None,
-    _selected_reset_keys=None,
-    _selected_step_keys=None,
-    _non_tensor_keys=None,
-    non_blocking: bool = False,
-    has_lazy_inputs: bool = False,
-    verbose: bool = False,
-    worker_idx: int | None = None,
-    shm_done_flags=None,
-) -> None:
-    """Serve ``env`` through the shared ``shared_tensordict`` until the parent closes it."""
-    pid = os.getpid()
     device = shared_tensordict.device
     if device is None or device.type != "cuda":
         # Check if some tensors are shared on cuda
@@ -3466,6 +3410,18 @@ def _shared_mem_worker_loop(
         event = torch.cuda.Event()
     else:
         event = None
+    parent_pipe.close()
+    if not isinstance(env_fun, EnvBase):
+        env = env_fun(**env_fun_kwargs)
+    else:
+        if env_fun_kwargs:
+            raise RuntimeError(
+                "env_fun_kwargs must be empty if an environment is passed to a process."
+            )
+        env = env_fun
+    del env_fun
+    env.set_spec_lock_()
+
     i = -1
     import torchrl
 
@@ -3699,9 +3655,7 @@ def _shared_mem_worker_loop(
 
         elif cmd == "load_state_dict":
             env.load_state_dict(data)
-            _signal_done()
-            # Also set mp_event so the parent's load_state_dict (which waits
-            # on events) can detect completion.
+            # The parent consumes only this event, not the shared completion flag.
             mp_event.set()
 
         elif cmd == "state_dict":
@@ -3862,9 +3816,11 @@ def _run_worker_pipe_direct(
             # worker reported: serve the env through them from now on.
             if initialized:
                 raise RuntimeError("worker already initialized")
-            _shared_mem_worker_loop(
+            _run_worker_pipe_shared_mem(
+                parent_pipe,
                 child_pipe,
                 env,
+                {},
                 mp_event=mp_event,
                 non_blocking=non_blocking,
                 has_lazy_inputs=has_lazy_inputs,
