@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789195003968,
+  "lastUpdate": 1789195011359,
   "repoUrl": "https://github.com/pytorch/rl",
   "entries": {
     "Async CPU (v1)": [
@@ -10267,6 +10267,275 @@ window.BENCHMARK_DATA = {
             "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_step_latency_jitter[pinned]",
             "value": 2259.885060568089,
             "range": "2256.9-2261.7",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "vincentmoens@gmail.com",
+            "name": "Vincent Moens",
+            "username": "vmoens"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "44c871df8915eb8d2959c14828e88e2658478c9a",
+          "message": "[BugFix] ParallelEnv without buffers keeps the state of workers it does not reset (#4339)",
+          "timestamp": "2026-09-12T06:28:14+01:00",
+          "tree_id": "0af9eb3dc30224936ea1921eeddd075bc233704f",
+          "url": "https://github.com/pytorch/rl/commit/44c871df8915eb8d2959c14828e88e2658478c9a"
+        },
+        "date": 1789195007319,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-chunked-slow-reset]",
+            "value": 4157.830920676267,
+            "range": "4055.2-4511.3",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker; process acting; 64 transitions/message. Batch p95: 118.82 ms; process-tree RSS: 25429.77 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-chunked-uniform]",
+            "value": 4690.613973337401,
+            "range": "4386.5-6244.8",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker; process acting; 64 transitions/message. Batch p95: 221.24 ms; process-tree RSS: 25481.00 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-integrated-slow-reset]",
+            "value": 4492.181141571,
+            "range": "4224.5-5184.8",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 1 envs/worker; process acting; 64 transitions/message. Batch p95: 92.14 ms; process-tree RSS: 25546.16 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-integrated-uniform]",
+            "value": 5219.333254443856,
+            "range": "5184.6-5313.4",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 1 envs/worker; process acting; 64 transitions/message. Batch p95: 83.09 ms; process-tree RSS: 25536.90 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-slow-reset]",
+            "value": 980.6517233034068,
+            "range": "979.6-989.7",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker; process acting. Batch p95: 363.31 ms; process-tree RSS: 25089.99 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-static-slow-reset]",
+            "value": 977.8679929757454,
+            "range": "971.8-985.1",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 1 envs/worker; process acting. Batch p95: 360.89 ms; process-tree RSS: 25166.96 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-static-uniform]",
+            "value": 996.657501755491,
+            "range": "977.8-1066.3",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 1 envs/worker; process acting. Batch p95: 359.22 ms; process-tree RSS: 25162.07 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-process-slots-uniform]",
+            "value": 1079.0211827093126,
+            "range": "1061.6-1118.8",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker; process acting. Batch p95: 349.25 ms; process-tree RSS: 25093.10 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-queue-slow-reset]",
+            "value": 76.78954339701859,
+            "range": "76.3-77.7",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker. Batch p95: 3473.89 ms; process-tree RSS: 23767.95 MiB; CUDA peak: 27.58 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-queue-uniform]",
+            "value": 77.86186035638283,
+            "range": "77.7-78.3",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker. Batch p95: 3426.27 ms; process-tree RSS: 23757.76 MiB; CUDA peak: 27.58 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-grouped-slow-reset]",
+            "value": 885.4703070948583,
+            "range": "862.8-891.7",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 4 envs/worker. Batch p95: 332.69 ms; process-tree RSS: 7458.54 MiB; CUDA peak: 48.37 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-grouped-uniform]",
+            "value": 880.9184814649301,
+            "range": "875.2-888.6",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 4 envs/worker. Batch p95: 331.75 ms; process-tree RSS: 7459.90 MiB; CUDA peak: 48.37 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-integrated-slow-reset]",
+            "value": 775.6277080623234,
+            "range": "765.1-788.0",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 4 envs/worker. Batch p95: 370.91 ms; process-tree RSS: 7452.74 MiB; CUDA peak: 53.41 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-integrated-uniform]",
+            "value": 780.041041722389,
+            "range": "777.0-793.2",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 4 envs/worker. Batch p95: 371.22 ms; process-tree RSS: 7446.59 MiB; CUDA peak: 45.31 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-slow-reset]",
+            "value": 875.1423219430363,
+            "range": "865.8-885.6",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker. Batch p95: 339.84 ms; process-tree RSS: 23841.69 MiB; CUDA peak: 32.12 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-static-slow-reset]",
+            "value": 782.2401683327805,
+            "range": "779.0-786.6",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 1 envs/worker. Batch p95: 370.55 ms; process-tree RSS: 23913.36 MiB; CUDA peak: 69.68 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-static-uniform]",
+            "value": 792.0696409595222,
+            "range": "784.9-808.8",
+            "unit": "frames/s",
+            "extra": "Execution: graph; 1 envs/worker. Batch p95: 371.66 ms; process-tree RSS: 23906.37 MiB; CUDA peak: 61.56 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[async-shm-uniform]",
+            "value": 873.99949942193,
+            "range": "864.9-877.7",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker. Batch p95: 331.57 ms; process-tree RSS: 23836.81 MiB; CUDA peak: 32.12 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[parallel-slow-reset]",
+            "value": 1659.349349253463,
+            "range": "1656.9-1666.3",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker. Batch p95: 255.73 ms; process-tree RSS: 23703.36 MiB; CUDA peak: 24.83 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels[parallel-uniform]",
+            "value": 4732.9277944474325,
+            "range": "4677.1-4749.3",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker. Batch p95: 57.49 ms; process-tree RSS: 23696.12 MiB; CUDA peak: 24.83 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels_64_envs[async-process-slots]",
+            "value": 1041.5274159854634,
+            "range": "1030.2-1070.1",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker; process acting. Batch p95: 368.28 ms; process-tree RSS: 47117.63 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_collectors_benchmark.py::test_async_collection_pixels_64_envs[async-shm]",
+            "value": 1120.78449678605,
+            "range": "1085.3-1151.4",
+            "unit": "frames/s",
+            "extra": "Execution: eager; 1 envs/worker. Batch p95: 276.03 ms; process-tree RSS: 45869.40 MiB; CUDA peak: 71.07 MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_dreamer_v3_benchmark.py::test_dreamer_v3_async_training[process-ratio16]",
+            "value": 120.4446555657358,
+            "range": "118.2-120.6",
+            "unit": "frames/s",
+            "extra": "Execution: eager learner on cuda:0; process inference; train ratio 16; 8 envs; inference batch <= 1. Batch p95: - ms; process-tree RSS: 9618.00 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_dreamer_v3_benchmark.py::test_dreamer_v3_async_training[process-ratio2]",
+            "value": 190.2617302568134,
+            "range": "179.9-190.4",
+            "unit": "frames/s",
+            "extra": "Execution: eager learner on cuda:0; process inference; train ratio 2; 8 envs; inference batch <= 1. Batch p95: - ms; process-tree RSS: 9596.78 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_dreamer_v3_benchmark.py::test_dreamer_v3_async_training[thread-ratio16]",
+            "value": 52.55441847776755,
+            "range": "52.5-52.7",
+            "unit": "frames/s",
+            "extra": "Execution: eager learner on cuda:0; thread inference; train ratio 16; 8 envs; inference batch <= 1. Batch p95: - ms; process-tree RSS: 8065.73 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_dreamer_v3_benchmark.py::test_dreamer_v3_async_training[thread-ratio2]",
+            "value": 84.20099892428988,
+            "range": "84.2-84.8",
+            "unit": "frames/s",
+            "extra": "Execution: eager learner on cuda:0; thread inference; train ratio 2; 8 envs; inference batch <= 1. Batch p95: - ms; process-tree RSS: 8075.71 MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_dispatch[queue]",
+            "value": 188.92243223072725,
+            "range": "188.7-189.6",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_dispatch[shm]",
+            "value": 2220.4626742080723,
+            "range": "2202.4-2228.3",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_fast_step_slow_reset[shm]",
+            "value": 2631.40465197507,
+            "range": "2611.9-2643.2",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_multi_env_workers[16-processes-of-4]",
+            "value": 1230.3738312092328,
+            "range": "1225.6-1232.3",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_multi_env_workers[64-processes]",
+            "value": 1224.0474858132113,
+            "range": "1220.3-1226.7",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_per_env_dispatch[queue]",
+            "value": 194.09505979481668,
+            "range": "186.9-202.5",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_per_env_dispatch[shm]",
+            "value": 1948.0129929801342,
+            "range": "1811.0-1999.2",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_step_latency_jitter[default]",
+            "value": 2391.04734526147,
+            "range": "2385.6-2408.6",
+            "unit": "frames/s",
+            "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
+          },
+          {
+            "name": "benchmarks/test_envs_benchmark.py::test_async_env_pool_step_latency_jitter[pinned]",
+            "value": 2240.6862917519934,
+            "range": "2237.8-2249.2",
             "unit": "frames/s",
             "extra": "Execution: pool. Batch p95: - ms; process-tree RSS: - MiB; CUDA peak: - MiB. Three independent run medians."
           }
