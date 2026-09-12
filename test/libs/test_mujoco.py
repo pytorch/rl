@@ -1140,6 +1140,39 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_approach_skips_ducks_that_are_down(self, tmp_path):
+        weights = {name: 0.0 for name in MicroDuckFootballEnv.REWARD_WEIGHTS}
+        weights["approach_ball"] = 1.0
+        env = self._football_env(
+            tmp_path,
+            players_per_team=2,
+            reward_weights=weights,
+            approach_players=1,
+            respawn=False,
+        )
+        env.reset()
+        state = env.get_state()
+        qpos, qvel = state["qpos"].clone(), state["qvel"].clone()
+        nq, nv = MicroDuckFootballEnv.DUCK_NQ, MicroDuckFootballEnv.DUCK_NV
+        # blue0 lies on its side next to the ball; blue1 stands farther away
+        # and walks toward it, so blue1 is the team's closest standing duck.
+        for index, x in enumerate([-0.2, -0.6, 0.6, 0.9]):
+            qpos[0, index * nq] = x
+            qpos[0, index * nq + 1] = 0.0
+            qvel[0, index * nv] = 0.3 if x < 0 else -0.3
+        qpos[0, 2] = 0.05
+        qpos[0, 3:7] = torch.tensor(
+            [math.cos(math.pi / 4), math.sin(math.pi / 4), 0.0, 0.0], dtype=qpos.dtype
+        )
+        qpos[0, -MicroDuckFootballEnv.BALL_NQ : -MicroDuckFootballEnv.BALL_NQ + 2] = 0.0
+        env.reset(TensorDict(qpos=qpos, qvel=qvel, batch_size=[1]), set_state=True)
+        step = env.step(self._football_action(env))["next"]
+        assert bool(step["agents", "fallen"][0, 0, 0])
+        reward = step["agents", "reward"][0, :, 0]
+        assert reward[1] > 0.0
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_football_progress_pays_the_closest_ducks_only(self, tmp_path):
         weights = {name: 0.0 for name in MicroDuckFootballEnv.REWARD_WEIGHTS}
         weights["ball_progress"] = 1.0

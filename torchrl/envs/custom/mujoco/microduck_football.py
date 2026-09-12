@@ -757,8 +757,8 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         respawn_delay_s (float, optional): seconds a fallen duck stays down,
             actions ignored, before standing up. Defaults to ``1.0``.
         approach_players (int, optional): number of ducks per team, the
-            closest to the ball, that earn the ``approach_ball`` term. ``None``
-            (default) pays every duck.
+            closest to the ball among those standing, that earn the
+            ``approach_ball`` term. ``None`` (default) pays every duck.
         progress_players (int, optional): number of ducks per team, the
             closest to the ball, that earn the ``ball_progress`` term. ``None``
             (default) pays every duck.
@@ -1445,6 +1445,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         fell: torch.Tensor,
         goal: torch.Tensor,
         knockout: torch.Tensor,
+        down: torch.Tensor,
     ) -> torch.Tensor:
         weights = self.reward_weights
         dt = self.frame_skip * self._backend.timestep
@@ -1462,9 +1463,13 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             distance > self.ball_radius + self.APPROACH_RADIUS_MARGIN
         ).to(self.dtype)
         if self.approach_players is not None or self.progress_players is not None:
-            # Rank every duck within its team by distance to the ball.
+            # Rank the standing ducks of each team by distance to the ball; a
+            # duck lying next to it must not take a slot from a teammate.
+            standing_distance = torch.where(
+                down, torch.full_like(distance, float("inf")), distance
+            )
             team_rank = (
-                distance.view(-1, 2, self.players_per_team)
+                standing_distance.view(-1, 2, self.players_per_team)
                 .argsort(dim=-1)
                 .argsort(dim=-1)
                 .view_as(distance)
@@ -1602,7 +1607,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             ).long()
             knocked = team_down.any(-1, keepdim=True)
         reward = self._rewards(
-            ducks_q, ducks_v, ball_q, ball_v, action, fell, goal, knockout
+            ducks_q, ducks_v, ball_q, ball_v, action, fell, goal, knockout, down
         )
         if self.respawn:
             # A duck that just fell waits the whole delay, the others count down.
