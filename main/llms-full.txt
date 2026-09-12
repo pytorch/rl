@@ -34237,7 +34237,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fb6584e0ea0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7facc4e683b0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47554,7 +47554,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fb65b3bcfe0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7facc7f60fe0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -211873,7 +211873,7 @@ dropout);
 default: True;
 - **single_bias_last_layer** (*bool*) - if `True`, the bias of the last layer is
 shared across its output features. This option is incompatible with
-`NoisyLinear`. Defaults to `False`.
+[`NoisyLinear`](torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear). Defaults to `False`.
 - **layer_class** (*Type**[**nn.Module**] or**callable**,**optional*) - class to be used
 for the linear layers;
 - **layer_kwargs** (*dict**or**list**of**dicts**,**optional*) - kwargs for the linear
@@ -212053,6 +212053,169 @@ sample(*sample_shape: [Size](https://docs.pytorch.org/docs/stable/size.html#torc
 
 Generates a sample_shape shaped sample or sample_shape shaped batch of
 samples if the distribution parameters are batched.
+
+---
+
+# NoisyLazyLinear
+
+*class*torchrl.modules.NoisyLazyLinear(*out_features: int*, *bias: bool = True*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *std_init: float = 0.5*, *use_exploration_type: bool | None = True*)[[source]](../../_modules/torchrl/modules/models/exploration.html#NoisyLazyLinear)
+
+Noisy Lazy Linear Layer.
+
+This class makes the Noisy Linear layer lazy, in that the in_feature argument does not need to be passed at
+initialization (but is inferred after the first call to the layer).
+
+For more context on noisy layers, see the NoisyLinear class.
+Like [`NoisyLinear`](torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear), noise is sampled only by
+[`reset_noise()`](torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear.reset_noise) (at materialization)
+and must be reapplied by the caller.
+
+Parameters:
+
+- **out_features** (*int*) - out features dimension
+- **bias** (*bool**,**optional*) - if `True`, a bias term will be added to the matrix multiplication: Ax + b.
+Defaults to `True`.
+- **device** (*DEVICE_TYPING**,**optional*) - device of the layer.
+Defaults to `"cpu"`.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - dtype of the parameters.
+Defaults to the default PyTorch dtype.
+- **std_init** (*scalar*) - initial value of the Gaussian standard deviation before optimization.
+Defaults to `0.5` as per the original paper.
+- **use_exploration_type** (*bool**or**None**,**optional*) - if `True`, noise is controlled by
+`exploration_type()`. If `False`, noise is controlled
+by `self.training` (legacy behavior). If `None`, it is treated as `True`.
+Defaults to `True`.
+
+cls_to_become
+
+alias of [`NoisyLinear`](torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear)
+
+initialize_parameters(*input: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → None[[source]](../../_modules/torchrl/modules/models/exploration.html#NoisyLazyLinear.initialize_parameters)
+
+Initialize parameters according to the input batch properties.
+
+This adds an interface to isolate parameter initialization from the
+forward pass when doing parameter shape inference.
+
+reset_noise() → None[[source]](../../_modules/torchrl/modules/models/exploration.html#NoisyLazyLinear.reset_noise)
+
+Resample the factorized Gaussian noise buffers.
+
+Called from `__init__()`. The forward
+pass does not call this method; apply it after each optimization step
+(for example `module.apply(reset_noise)`).
+
+reset_parameters() → None[[source]](../../_modules/torchrl/modules/models/exploration.html#NoisyLazyLinear.reset_parameters)
+
+Resets parameters based on their initialization used in `__init__`.
+
+---
+
+# NoisyLinear
+
+*class*torchrl.modules.NoisyLinear(*in_features: int*, *out_features: int*, *bias: bool = True*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *std_init: float = 0.5*, *use_exploration_type: bool | None = True*)[[source]](../../_modules/torchrl/modules/models/exploration.html#NoisyLinear)
+
+Noisy Linear Layer.
+
+Presented in "Noisy Networks for Exploration" (Fortunato et al., 2017),
+[https://arxiv.org/abs/1706.10295v3](https://arxiv.org/abs/1706.10295v3)
+
+A Noisy Linear Layer is a linear layer with parametric noise added to the weights. This induced stochasticity can
+be used in RL networks for the agent's policy to aid efficient exploration. The parameters of the noise are learned
+with gradient descent along with any other remaining network weights. Factorized Gaussian
+noise is the type of noise usually employed.
+
+Note
+
+The noise is controlled by the exploration mode set via
+`set_exploration_type()`. When exploration type is
+`RANDOM`, noise is added to the weights.
+When exploration type is `DETERMINISTIC`,
+`MODE`, or
+`MEAN`, only the mean weights are used.
+
+This behavior is controlled by the `use_exploration_type` argument. When set to
+`True`, the exploration type is used. When set to `False`, the legacy behavior
+of using `self.training` (i.e., `model.train()`/`model.eval()`) is used instead.
+
+Note
+
+Factorized noise is sampled only in
+`reset_noise()`. The
+forward pass does not resample. The same `weight_epsilon` /
+`bias_epsilon` buffers are reused until the caller resamples them
+with `layer.reset_noise()` or `module.apply(reset_noise)`.
+
+The paper samples a new set of parameters after every optimization
+step (section 3.1). Callers that want that cadence should apply
+[`reset_noise()`](torchrl.modules.reset_noise.html#torchrl.modules.reset_noise) after each optimizer step:
+
+```
+module.apply(reset_noise)
+```
+
+[`make_trainer()`](torchrl.trainers.helpers.make_trainer.html#torchrl.trainers.helpers.make_trainer) uses a coarser
+cadence: when `cfg.noisy` is set it registers
+`loss_module.apply(reset_noise)` on the trainer's
+`pre_optim_steps` hook, which runs once per
+`optim_steps()` call, not after
+every inner optimizer step, and only on `loss_module`.
+Do not resample on every forward: that would change the behavior of
+every NoisyNet user, including data collection, where a fixed sample
+of the noisy weights is intended.
+
+Parameters:
+
+- **in_features** (*int*) - input features dimension
+- **out_features** (*int*) - out features dimension
+- **bias** (*bool**,**optional*) - if `True`, a bias term will be added to the matrix multiplication: Ax + b.
+Defaults to `True`
+- **device** (*DEVICE_TYPING**,**optional*) - device of the layer.
+Defaults to `"cpu"`
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - dtype of the parameters.
+Defaults to `None` (default pytorch dtype)
+- **std_init** (*scalar**,**optional*) - initial value of the Gaussian standard deviation before optimization.
+Defaults to `0.5` as per the original paper.
+- **use_exploration_type** (*bool**or**None**,**optional*) - if `True`, noise is controlled by
+`exploration_type()`. If `False`, noise is controlled
+by `self.training` (legacy behavior). If `None`, it is treated as `True`.
+Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from torch import nn
+>>> from torchrl.envs import ExplorationType, set_exploration_type
+>>> from torchrl.modules import NoisyLinear, reset_noise
+>>> _ = torch.manual_seed(0)
+>>> layer = NoisyLinear(4, 2)
+>>> x = torch.ones(4)
+>>> with set_exploration_type(ExplorationType.RANDOM):
+... y0 = layer(x)
+... y1 = layer(x)
+>>> torch.equal(y0, y1)
+True
+>>> with set_exploration_type(ExplorationType.RANDOM):
+... layer.reset_noise()
+... y2 = layer(x)
+>>> torch.equal(y0, y2)
+False
+>>> net = nn.Sequential(NoisyLinear(4, 8), nn.ReLU(), NoisyLinear(8, 2))
+>>> _ = net.apply(reset_noise)
+```
+
+reset_noise() → None[[source]](../../_modules/torchrl/modules/models/exploration.html#NoisyLinear.reset_noise)
+
+Resample the factorized Gaussian noise buffers.
+
+Called from `__init__()`. The forward
+pass does not call this method; apply it after each optimization step
+(for example `module.apply(reset_noise)`).
+
+reset_parameters() → None[[source]](../../_modules/torchrl/modules/models/exploration.html#NoisyLinear.reset_parameters)
+
+Resets parameters based on their initialization used in `__init__`.
 
 ---
 
@@ -232500,6 +232663,28 @@ Examples
 >>> positions_from_is_init(is_init)
 tensor([[0, 1, 0, 1]])
 ```
+
+---
+
+# reset_noise
+
+*class*torchrl.modules.reset_noise(*layer: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*)[[source]](../../_modules/torchrl/modules/models/exploration.html#reset_noise)
+
+Resets the noise of noisy layers.
+
+Designed to be passed to [`apply()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.apply):
+
+```
+module.apply(reset_noise)
+```
+
+[`NoisyLinear`](torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear) samples its factorized noise only
+here and at construction. The forward pass does not resample.
+
+Parameters:
+
+**layer** (*nn.Module*) - a module. If it implements `reset_noise`, that
+method is called; otherwise this is a no-op.
 
 ---
 
@@ -275452,6 +275637,8 @@ actor = ProbabilisticActor(
 - [AdditiveGaussianModule](generated/torchrl.modules.AdditiveGaussianModule.html)
 - [ConsistentDropoutModule](generated/torchrl.modules.ConsistentDropoutModule.html)
 - [EGreedyModule](generated/torchrl.modules.EGreedyModule.html)
+- [NoisyLazyLinear](generated/torchrl.modules.NoisyLazyLinear.html)
+- [NoisyLinear](generated/torchrl.modules.NoisyLinear.html)
 - [OrnsteinUhlenbeckProcessModule](generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html)
 - [Helpers](modules_exploration.html#helpers)
 - [Value Networks and Critics](modules_critics.html)
@@ -275688,17 +275875,26 @@ Custom distribution classes for RL, extending PyTorch distributions.
 # Exploration Strategies
 
 Exploration modules add noise to actions to enable exploration during training.
+[`NoisyLinear`](generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear) instead injects learnable noise in
+parameter space. The forward pass does not resample; callers must call
+[`reset_noise()`](generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear.reset_noise) or
+`module.apply(reset_noise)`.
+[`make_trainer()`](generated/torchrl.trainers.helpers.make_trainer.html#torchrl.trainers.helpers.make_trainer) registers such a resample on
+the `pre_optim_steps` hook when `cfg.noisy` is set.
 
 | [`AdditiveGaussianModule`](generated/torchrl.modules.AdditiveGaussianModule.html#torchrl.modules.AdditiveGaussianModule)(*args, **kwargs) | Additive Gaussian PO module. |
 | --- | --- |
 | [`ConsistentDropoutModule`](generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule)(*args, **kwargs) | A TensorDictModule wrapper for `ConsistentDropout`. |
 | [`EGreedyModule`](generated/torchrl.modules.EGreedyModule.html#torchrl.modules.EGreedyModule)(*args, **kwargs) | Epsilon-Greedy exploration module. |
+| [`NoisyLazyLinear`](generated/torchrl.modules.NoisyLazyLinear.html#torchrl.modules.NoisyLazyLinear)(out_features[, bias, ...]) | Noisy Lazy Linear Layer. |
+| [`NoisyLinear`](generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear)(in_features, out_features[, ...]) | Noisy Linear Layer. |
 | [`OrnsteinUhlenbeckProcessModule`](generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html#torchrl.modules.OrnsteinUhlenbeckProcessModule)(*args, **kwargs) | Ornstein-Uhlenbeck exploration policy module. |
 
 ## Helpers
 
-| [`set_exploration_modules_spec_from_env`](generated/torchrl.modules.set_exploration_modules_spec_from_env.html#torchrl.modules.set_exploration_modules_spec_from_env)(...) | Sets exploration module specs from an environment action spec. |
+| [`reset_noise`](generated/torchrl.modules.reset_noise.html#torchrl.modules.reset_noise)(layer) | Resets the noise of noisy layers. |
 | --- | --- |
+| [`set_exploration_modules_spec_from_env`](generated/torchrl.modules.set_exploration_modules_spec_from_env.html#torchrl.modules.set_exploration_modules_spec_from_env)(...) | Sets exploration module specs from an environment action spec. |
 
 ---
 
@@ -281962,7 +282158,7 @@ Learn more on the
 of the documentation.
 - A distributional loss (see [`DistributionalDQNLoss`](../reference/generated/torchrl.objectives.DistributionalDQNLoss.html#torchrl.objectives.DistributionalDQNLoss)
 for more information).
-- More fancy exploration techniques, such as `NoisyLinear` layers and such.
+- More fancy exploration techniques, such as [`NoisyLinear`](../reference/generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear) layers and such.
 
 **Total running time of the script:** (1 minutes 22.705 seconds)
 

@@ -1909,7 +1909,10 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.AdditiveGaussianModule.html">AdditiveGaussianModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.ConsistentDropoutModule.html">ConsistentDropoutModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.EGreedyModule.html">EGreedyModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.NoisyLazyLinear.html">NoisyLazyLinear</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.NoisyLinear.html">NoisyLinear</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html">OrnsteinUhlenbeckProcessModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.reset_noise.html">reset_noise</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.set_exploration_modules_spec_from_env.html">set_exploration_modules_spec_from_env</a></li>
 </ul>
 </details></li>
@@ -2572,7 +2575,13 @@ document.write(`
                   
   <section id="exploration-strategies">
 <h1>Exploration Strategies<a class="headerlink" href="#exploration-strategies" title="Link to this heading">#</a></h1>
-<p>Exploration modules add noise to actions to enable exploration during training.</p>
+<p>Exploration modules add noise to actions to enable exploration during training.
+<a class="reference internal" href="generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear" title="torchrl.modules.NoisyLinear"><code class="xref py py-class docutils literal notranslate"><span class="pre">NoisyLinear</span></code></a> instead injects learnable noise in
+parameter space. The forward pass does not resample; callers must call
+<a class="reference internal" href="generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear.reset_noise" title="torchrl.modules.NoisyLinear.reset_noise"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset_noise()</span></code></a> or
+<code class="docutils literal notranslate"><span class="pre">module.apply(reset_noise)</span></code>.
+<a class="reference internal" href="generated/torchrl.trainers.helpers.make_trainer.html#torchrl.trainers.helpers.make_trainer" title="torchrl.trainers.helpers.make_trainer"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_trainer()</span></code></a> registers such a resample on
+the <code class="docutils literal notranslate"><span class="pre">pre_optim_steps</span></code> hook when <code class="docutils literal notranslate"><span class="pre">cfg.noisy</span></code> is set.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.AdditiveGaussianModule.html#torchrl.modules.AdditiveGaussianModule" title="torchrl.modules.AdditiveGaussianModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdditiveGaussianModule</span></code></a>(*args, **kwargs)</p></td>
@@ -2584,6 +2593,12 @@ document.write(`
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.EGreedyModule.html#torchrl.modules.EGreedyModule" title="torchrl.modules.EGreedyModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EGreedyModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Epsilon-Greedy exploration module.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.NoisyLazyLinear.html#torchrl.modules.NoisyLazyLinear" title="torchrl.modules.NoisyLazyLinear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoisyLazyLinear</span></code></a>(out_features[, bias, ...])</p></td>
+<td><p>Noisy Lazy Linear Layer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear" title="torchrl.modules.NoisyLinear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NoisyLinear</span></code></a>(in_features, out_features[, ...])</p></td>
+<td><p>Noisy Linear Layer.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html#torchrl.modules.OrnsteinUhlenbeckProcessModule" title="torchrl.modules.OrnsteinUhlenbeckProcessModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OrnsteinUhlenbeckProcessModule</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Ornstein-Uhlenbeck exploration policy module.</p></td>
 </tr>
@@ -2594,7 +2609,10 @@ document.write(`
 <h2>Helpers<a class="headerlink" href="#helpers" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.set_exploration_modules_spec_from_env.html#torchrl.modules.set_exploration_modules_spec_from_env" title="torchrl.modules.set_exploration_modules_spec_from_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_exploration_modules_spec_from_env</span></code></a>(...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.reset_noise.html#torchrl.modules.reset_noise" title="torchrl.modules.reset_noise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset_noise</span></code></a>(layer)</p></td>
+<td><p>Resets the noise of noisy layers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.set_exploration_modules_spec_from_env.html#torchrl.modules.set_exploration_modules_spec_from_env" title="torchrl.modules.set_exploration_modules_spec_from_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_exploration_modules_spec_from_env</span></code></a>(...)</p></td>
 <td><p>Sets exploration module specs from an environment action spec.</p></td>
 </tr>
 </tbody>
@@ -2973,7 +2991,7 @@ document.write(`
        "headline": "Exploration Strategies",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules_exploration.html",
-       "articleBody": "Exploration Strategies# Exploration modules add noise to actions to enable exploration during training. AdditiveGaussianModule(*args, **kwargs) Additive Gaussian PO module. ConsistentDropoutModule(*args, **kwargs) A TensorDictModule wrapper for ConsistentDropout. EGreedyModule(*args, **kwargs) Epsilon-Greedy exploration module. OrnsteinUhlenbeckProcessModule(*args, **kwargs) Ornstein-Uhlenbeck exploration policy module. Helpers# set_exploration_modules_spec_from_env(...) Sets exploration module specs from an environment action spec.",
+       "articleBody": "Exploration Strategies# Exploration modules add noise to actions to enable exploration during training. NoisyLinear instead injects learnable noise in parameter space. The forward pass does not resample; callers must call reset_noise() or module.apply(reset_noise). make_trainer() registers such a resample on the pre_optim_steps hook when cfg.noisy is set. AdditiveGaussianModule(*args, **kwargs) Additive Gaussian PO module. ConsistentDropoutModule(*args, **kwargs) A TensorDictModule wrapper for ConsistentDropout. EGreedyModule(*args, **kwargs) Epsilon-Greedy exploration module. NoisyLazyLinear(out_features[, bias, ...]) Noisy Lazy Linear Layer. NoisyLinear(in_features, out_features[, ...]) Noisy Linear Layer. OrnsteinUhlenbeckProcessModule(*args, **kwargs) Ornstein-Uhlenbeck exploration policy module. Helpers# reset_noise(layer) Resets the noise of noisy layers. set_exploration_modules_spec_from_env(...) Sets exploration module specs from an environment action spec.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

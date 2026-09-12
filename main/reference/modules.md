@@ -48,6 +48,8 @@ actor = ProbabilisticActor(
 - [AdditiveGaussianModule](generated/torchrl.modules.AdditiveGaussianModule.html)
 - [ConsistentDropoutModule](generated/torchrl.modules.ConsistentDropoutModule.html)
 - [EGreedyModule](generated/torchrl.modules.EGreedyModule.html)
+- [NoisyLazyLinear](generated/torchrl.modules.NoisyLazyLinear.html)
+- [NoisyLinear](generated/torchrl.modules.NoisyLinear.html)
 - [OrnsteinUhlenbeckProcessModule](generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html)
 - [Helpers](modules_exploration.html#helpers)
 - [Value Networks and Critics](modules_critics.html)

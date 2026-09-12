@@ -1158,7 +1158,7 @@ Learn more on the
 of the documentation.
 - A distributional loss (see [`DistributionalDQNLoss`](../reference/generated/torchrl.objectives.DistributionalDQNLoss.html#torchrl.objectives.DistributionalDQNLoss)
 for more information).
-- More fancy exploration techniques, such as `NoisyLinear` layers and such.
+- More fancy exploration techniques, such as [`NoisyLinear`](../reference/generated/torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear) layers and such.
 
 **Total running time of the script:** (1 minutes 22.705 seconds)
 

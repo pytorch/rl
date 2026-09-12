@@ -1909,7 +1909,10 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.AdditiveGaussianModule.html">AdditiveGaussianModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.ConsistentDropoutModule.html">ConsistentDropoutModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.EGreedyModule.html">EGreedyModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.NoisyLazyLinear.html">NoisyLazyLinear</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.NoisyLinear.html">NoisyLinear</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.OrnsteinUhlenbeckProcessModule.html">OrnsteinUhlenbeckProcessModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.reset_noise.html">reset_noise</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.set_exploration_modules_spec_from_env.html">set_exploration_modules_spec_from_env</a></li>
 </ul>
 </details></li>
@@ -2631,7 +2634,7 @@ dropout);</p></li>
 default: True;</p></li>
 <li><p><strong>single_bias_last_layer</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the bias of the last layer is
 shared across its output features. This option is incompatible with
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NoisyLinear</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<a class="reference internal" href="torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear" title="torchrl.modules.NoisyLinear"><code class="xref py py-class docutils literal notranslate"><span class="pre">NoisyLinear</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>layer_class</strong> (<em>Type</em><em>[</em><em>nn.Module</em><em>] or </em><em>callable</em><em>, </em><em>optional</em>) – class to be used
 for the linear layers;</p></li>
 <li><p><strong>layer_kwargs</strong> (<em>dict</em><em> or </em><em>list</em><em> of </em><em>dicts</em><em>, </em><em>optional</em>) – kwargs for the linear

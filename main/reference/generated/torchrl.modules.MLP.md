@@ -50,7 +50,7 @@ dropout);
 default: True;
 - **single_bias_last_layer** (*bool*) - if `True`, the bias of the last layer is
 shared across its output features. This option is incompatible with
-`NoisyLinear`. Defaults to `False`.
+[`NoisyLinear`](torchrl.modules.NoisyLinear.html#torchrl.modules.NoisyLinear). Defaults to `False`.
 - **layer_class** (*Type**[**nn.Module**] or**callable**,**optional*) - class to be used
 for the linear layers;
 - **layer_kwargs** (*dict**or**list**of**dicts**,**optional*) - kwargs for the linear
