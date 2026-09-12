@@ -56,6 +56,24 @@ class _CopyToWeightDeviceModule(nn.Module):
         return tensordict
 
 
+class _SplitModule(nn.Module):
+    """CPU first-parameter plus an accelerator branch; inputs stay put."""
+
+    in_keys = ["cpu_input", "accelerator_input"]
+    out_keys = ["result"]
+
+    def __init__(self, accelerator: str):
+        super().__init__()
+        self.cpu_branch = nn.Linear(2, 2, device="cpu")
+        self.accelerator_branch = nn.Linear(2, 2, device=accelerator)
+
+    def forward(self, tensordict: TensorDict) -> TensorDict:
+        tensordict["result"] = self.cpu_branch(tensordict["cpu_input"]) + (
+            self.accelerator_branch(tensordict["accelerator_input"]).to("cpu")
+        )
+        return tensordict
+
+
 def _tensor_devices(data: TensorDict) -> set[str]:
     return {
         value.device.type
@@ -210,6 +228,8 @@ class TestModuleTransform(TransformBase):
             device=module_device,
             inverse=inverse,
         )
+        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+            t.device = module_device
         td = TensorDict(
             {"observation": torch.randn(2, 3, device="cpu")},
             batch_size=[2],
@@ -222,6 +242,36 @@ class TestModuleTransform(TransformBase):
         assert td["observation"].device.type == "cpu"
         assert out["copied"].device.type == torch.device(module_device).type
         assert out is not td
+
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_does_not_move_split_module_inputs(self, accelerator):
+        module = _SplitModule(accelerator)
+        td = TensorDict(
+            {
+                "cpu_input": torch.ones(1, 2, device="cpu"),
+                "accelerator_input": torch.ones(1, 2, device=accelerator),
+            },
+            batch_size=[1],
+        )
+        assert td.device is None
+        assert torch.isfinite(module(td.clone())["result"]).all()
+
+        out = ModuleTransform(module=module, device=None)(td.clone())
+        assert torch.isfinite(out["result"]).all()
+        assert out["cpu_input"].device.type == "cpu"
+        assert out["accelerator_input"].device.type == torch.device(accelerator).type
+        assert out["result"].device.type == "cpu"
+
+    def test_device_attr_is_deprecated_io_policy(self):
+        t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="cpu")
+        param_device = next(t.module.parameters()).device
+        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+            assert t.device is None
+        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+            t.device = "meta"
+        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+            assert t.device == torch.device("meta")
+        assert next(t.module.parameters()).device == param_device
 
     def test_construct_with_meta_places_wrapped_module(self):
         t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="meta")
