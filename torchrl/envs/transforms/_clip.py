@@ -331,6 +331,7 @@ class DoneTransform(Transform):
     to the reward shape and writes the result under the reward group
     (for example ``("agents", "done")`` when the reward key is
     ``("agents", "reward")``).
+    Remapped dones are observations and are not added to ``env.done_keys``.
 
     The transform can be appended to a :class:`~torchrl.envs.TransformedEnv`,
     a collector (as ``postproc``), or a replay buffer. When used as a collector

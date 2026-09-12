@@ -2274,6 +2274,11 @@ class TestDoneTransform:
             ),
         )
         check_env_specs(env)
+        obs_keys = set(env.observation_spec.keys(True, True))
+        assert ("data", "done") in obs_keys
+        assert ("data", "terminated") in obs_keys
+        assert ("data", "done") not in env.done_keys
+        assert ("data", "terminated") not in env.done_keys
         td = env.rollout(4)
         reward = td.get(("next", "data", "reward"))
         done = td.get(("next", "data", "done"))
