@@ -386,35 +386,59 @@ def make_models(
     return actor, critic
 
 
-class OpponentSkill(TensorDictModuleBase):
-    """Run the actor for every duck, then make the red team execute one skill.
+class OpponentPolicy(TensorDictModuleBase):
+    """Run the actor for every duck, then hand the red team to its opponent.
 
-    The opponent curriculum: blue learns to attack a team of statues
-    (``skill`` 0, standing) or of ducks running one fixed skill while red's
-    transitions are dropped from the update (``ppo.train_team=blue``). The
-    actor's own parameters are shared, so the loss keeps training the actor.
+    The opponent curriculum: blue learns against a team of statues (``skill``
+    0, standing), of ducks running one fixed skill, or of ducks driven by a
+    frozen copy of the actor (``opponent``, refreshed with :meth:`refresh`
+    for fictitious self-play) while red's transitions carry no learning
+    signal (``ppo.train_team=blue``). The actor's own parameters are shared,
+    so the loss keeps training it. The executed actions' log-probabilities
+    are recomputed under the actor, so every duck's importance ratio starts
+    at one.
     """
 
     def __init__(
         self,
         actor: ProbabilisticActor,
         players_per_team: int,
-        skill: int,
         action_key: NestedKey,
+        *,
+        skill: int | None = None,
+        opponent: ProbabilisticActor | None = None,
     ) -> None:
         super().__init__()
+        if (skill is None) == (opponent is None):
+            raise ValueError("Pass exactly one of skill and opponent.")
         self.actor = actor
+        self.opponent = opponent
         self.players_per_team = int(players_per_team)
-        self.skill = int(skill)
+        self.skill = None if skill is None else int(skill)
         self.action_key = action_key
         self.in_keys = list(actor.in_keys)
         self.out_keys = list(actor.out_keys)
 
+    def refresh(self) -> None:
+        """Copy the actor's current parameters into the frozen opponent."""
+        if self.opponent is not None:
+            self.opponent.load_state_dict(self.actor.state_dict())
+
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.actor(tensordict)
         action = tensordict.get(self.action_key).clone()
-        action[..., self.players_per_team :] = self.skill
-        return tensordict.set(self.action_key, action)
+        if self.skill is not None:
+            action[..., self.players_per_team :] = self.skill
+        else:
+            with torch.no_grad():
+                red = self.opponent(tensordict.select(*self.opponent.in_keys))
+            action[..., self.players_per_team :] = red.get(self.action_key)[
+                ..., self.players_per_team :
+            ]
+        tensordict.set(self.action_key, action)
+        with torch.no_grad():
+            log_prob = self.actor.get_dist(tensordict).log_prob(action)
+        return tensordict.set(self.actor.log_prob_keys[0], log_prob)
 
 
 def make_render_policy(
@@ -624,6 +648,7 @@ def train_mappo(
     logger: Logger | None = None,
     train_team: Literal["both", "blue"] = "both",
     collection_policy: TensorDictModuleBase | None = None,
+    iteration_callback: Callable[[int], None] | None = None,
 ) -> list[dict[str, float]]:
     """Train the shared policy with multi-agent PPO and a centralized critic.
 
@@ -638,6 +663,7 @@ def train_mappo(
     ``video_interval`` evaluations ``video_recorder`` films one.
     ``best_checkpoint_path`` receives the parameters that rank best under
     :func:`evaluation_score` and ``latest_checkpoint_path`` the current ones.
+    ``iteration_callback`` runs with the iteration number after every update.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -851,6 +877,8 @@ def train_mappo(
                     scheduler.step(metrics["ppo/kl_approx"])
                 metrics["ppo/learning_rate"] = optimizer.param_groups[0]["lr"]
             replay_buffer.empty()
+            if iteration_callback is not None:
+                iteration_callback(iteration)
             collector.update_policy_weights_()
 
             timings = timeit.todict(prefix="time")
@@ -973,13 +1001,42 @@ def main(cfg: DictConfig) -> None:
                 trained,
             )
         policy = actor
+        iteration_callback = None
+        if cfg.policy.opponent_skill is not None and cfg.policy.opponent_checkpoint:
+            raise ValueError(
+                "policy.opponent_skill and policy.opponent_checkpoint are exclusive."
+            )
         if cfg.policy.opponent_skill is not None:
-            policy = OpponentSkill(
+            policy = OpponentPolicy(
                 actor,
                 cfg.env.players_per_team,
-                cfg.policy.opponent_skill,
                 env.action_key,
+                skill=cfg.policy.opponent_skill,
             )
+        elif cfg.policy.opponent_checkpoint:
+            # Fictitious self-play: red runs a frozen copy of the actor, taken
+            # from the checkpoint (``self``: the actor's initial parameters)
+            # and refreshed every ``ppo.opponent_refresh_interval`` iterations.
+            opponent = deepcopy(actor).requires_grad_(False)
+            if cfg.policy.opponent_checkpoint != "self":
+                opponent_critic = deepcopy(critic)
+                load_parameters(
+                    cfg.policy.opponent_checkpoint, opponent, opponent_critic
+                )
+            policy = OpponentPolicy(
+                actor, cfg.env.players_per_team, env.action_key, opponent=opponent
+            )
+            refresh_interval = cfg.ppo.opponent_refresh_interval
+            if refresh_interval is not None:
+
+                def refresh_opponent(iteration: int) -> None:
+                    if iteration % refresh_interval == 0:
+                        policy.refresh()
+                        torchrl_logger.info(
+                            "Opponent refreshed at iteration %d.", iteration
+                        )
+
+                iteration_callback = refresh_opponent
         if cfg.evaluation.interval is not None:
             evaluator = Evaluator(
                 make_env(cfg, num_envs=1, parallel=False),
@@ -1034,11 +1091,13 @@ def main(cfg: DictConfig) -> None:
 
             video_callback = _video_callback
 
+        ppo_kwargs = dict(config["ppo"])
+        ppo_kwargs.pop("opponent_refresh_interval")
         train_mappo(
             env,
             actor,
             critic,
-            **config["ppo"],
+            **ppo_kwargs,
             evaluator=evaluator,
             evaluation_interval=cfg.evaluation.interval,
             video_recorder=video_callback,
@@ -1049,6 +1108,7 @@ def main(cfg: DictConfig) -> None:
             config=config,
             logger=logger,
             collection_policy=policy,
+            iteration_callback=iteration_callback,
         )
     finally:
         if logger is not None and hasattr(logger.experiment, "finish"):
