@@ -57,17 +57,20 @@ def _default_collate_fn(batch):
     return batch
 
 
-def _is_chat_message(obj: Any) -> bool:
-    return isinstance(obj, dict) and "role" in obj and "content" in obj
-
-
 def _is_chat_payload(obj: Any) -> bool:
-    if _is_chat_message(obj):
+    if isinstance(obj, dict) and "role" in obj and "content" in obj:
         return True
     if isinstance(obj, (list, tuple)) and obj:
-        if _is_chat_message(obj[0]):
+        first = obj[0]
+        if isinstance(first, dict) and "role" in first and "content" in first:
             return True
-        if isinstance(obj[0], (list, tuple)) and obj[0] and _is_chat_message(obj[0][0]):
+        if (
+            isinstance(first, (list, tuple))
+            and first
+            and isinstance(first[0], dict)
+            and "role" in first[0]
+            and "content" in first[0]
+        ):
             return True
     return False
 
@@ -508,7 +511,10 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
 
     def _align_history_batch(self, history: History) -> History:
         env_bs = torch.Size(self.batch_size)
-        if history.batch_size[: len(env_bs)] == env_bs:
+        # Already batched only when env dims are a prefix *and* a conversation
+        # axis remains. A time-only History is never an env batch, even if its
+        # length equals the env size.
+        if history.ndim > len(env_bs) and history.batch_size[: len(env_bs)] == env_bs:
             return history
         # Scalar message or time-only conversation: expand over the env batch.
         if history.ndim <= 1:
@@ -533,7 +539,10 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
         ):
             return self._align_history_batch(lazy_stack(list(payload)))
         if _is_chat_payload(payload):
-            chats = [payload] if _is_chat_message(payload) else payload
+            if isinstance(payload, dict) and "role" in payload and "content" in payload:
+                chats = [payload]
+            else:
+                chats = payload
             return self._align_history_batch(History.from_chats(chats))
 
         if getattr(content, "batch_size", ()) != self.batch_size:

@@ -295,6 +295,26 @@ class TestChatEnv:
         assert list(prompt[1].role) == ["user", "assistant"]
         assert list(prompt[1].content) == ["Bye", "See ya"]
 
+    @pytest.mark.parametrize("n_envs", [2, 3])
+    def test_chat_env_reset_broadcasts_time_only_history(self, n_envs):
+        env = ChatEnv(batch_size=(n_envs,), input_mode="history", device="cpu")
+        query = NonTensorData(
+            History.from_chats(
+                [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi"},
+                ]
+            )
+        )
+        td_reset = env.reset(
+            TensorDict(query=query, batch_size=(n_envs,), device=env.device)
+        )
+        prompt = td_reset["history"].prompt
+        assert prompt.batch_size == (n_envs, 2)
+        for i in range(n_envs):
+            assert list(prompt[i].role) == ["user", "assistant"]
+            assert list(prompt[i].content) == ["Hello", "Hi"]
+
 
 @_requires_llm_stack
 @pytest.mark.skipif(not _has_datasets, reason="requires datasets")
