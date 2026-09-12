@@ -98,6 +98,7 @@ from torchrl.testing.mocking_classes import (
     CountingEnv,
     CountingEnvCountPolicy,
     DiscreteActionConvMockEnvNumpy,
+    DiscreteActionVecMockEnv,
     EnvWithScalarAction,
     NestedCountingEnv,
     StateLessCountingEnv,
@@ -3312,7 +3313,10 @@ class TestLastAction(TransformBase):
         env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction())
         td = env.reset()
         assert (td["last_action"] == 0).all()
-        assert env.observation_spec["last_action"].shape == env.action_spec.shape
+        last_action_spec = env.observation_spec["last_action"]
+        assert last_action_spec.shape == env.action_spec.shape
+        assert isinstance(last_action_spec, Unbounded)
+        last_action_spec.assert_is_in(td["last_action"])
         rollout = env.rollout(5)
         torch.testing.assert_close(rollout["next", "last_action"], rollout["action"])
 
@@ -3340,6 +3344,16 @@ class TestLastAction(TransformBase):
         env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction(default="nan"))
         td = env.reset()
         assert td["last_action"].isnan().all()
+        env.observation_spec["last_action"].assert_is_in(td["last_action"])
+
+    def test_onehot_reset_in_observation_spec(self):
+        env = TransformedEnv(DiscreteActionVecMockEnv(), LastAction())
+        td = env.reset()
+        assert (td["last_action"] == 0).all()
+        last_action_spec = env.observation_spec["last_action"]
+        assert isinstance(last_action_spec, Unbounded)
+        last_action_spec.assert_is_in(td["last_action"])
+        check_env_specs(env)
 
     def test_reset_default_value(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), LastAction(default=-1.0))

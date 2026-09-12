@@ -2356,6 +2356,11 @@ class LastAction(Transform):
     :meth:`~torchrl.envs.EnvBase.reset` the same keys are filled with a
     default value (zeros, NaN, or a user-provided fill).
 
+    ``out_keys`` are registered as :class:`~torchrl.data.Unbounded`
+    observation specs with the action's shape, dtype and device, so reset
+    fills (zeros on a one-hot action, NaN on a bounded action) remain
+    in-spec.
+
     Args:
         in_keys (NestedKey or sequence of NestedKey, optional): keys pointing
             to the actions to remember. Defaults to the parent environment's
@@ -2567,7 +2572,13 @@ class LastAction(Transform):
                     f"{type(self).__name__} in_key {in_key!r} is not in the "
                     f"parent action spec {action_spec}."
                 ) from None
-            observation_spec[out_key] = spec.clone()
+            # Reset fills (zeros on OneHot, nan on Bounded) are not in the
+            # action domain; advertise a permissive observation leaf.
+            observation_spec[out_key] = Unbounded(
+                shape=spec.shape,
+                dtype=spec.dtype,
+                device=spec.device,
+            )
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
