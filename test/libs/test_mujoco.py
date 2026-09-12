@@ -156,6 +156,8 @@ class TestMujoco:
             '  <worldbody><geom type="plane" size="1 1 0.1" contype="1" conaffinity="1"/>',
             '    <body name="torso" pos="0 0 0.12"><freejoint name="root"/>',
             '      <geom type="sphere" size="0.02" mass="0.1"/>',
+            '      <site name="head_imu" pos="0 0 0.02"/>',
+            '      <site name="mouth_tip" pos="0.03 0 0.02"/>',
         ]
         for side, y in (("left", 0.03), ("right", -0.03)):
             lines.extend(
@@ -889,6 +891,76 @@ class TestMujoco:
         assert torch.equal(first_sample, second_sample)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_head_level_and_turn_terms(self, tmp_path):
+        scene = self._write_microduck_fixture(tmp_path)
+        env = MicroDuckEnv(
+            scene,
+            backend="mujoco",
+            tasks=[
+                MicroDuckEnv.standing_task(),
+                MicroDuckEnv.turning_task(1.0),
+                MicroDuckEnv.turning_task(-1.0),
+            ],
+            seed=0,
+            diagnostics=True,
+        )
+        action = torch.zeros_like(env.action_spec.rand())
+        env.reset(TensorDict({"task_id": torch.tensor([[0]])}, batch_size=(1,)))
+        level = env.get_state()
+        # Pitch the whole robot 45 degrees nose down: the fixture's gaze runs
+        # along +x, so it drops below the horizon and head_level pays less.
+        nose_down = level.clone()
+        nose_down["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 8), 0.0, math.sin(math.pi / 8), 0.0]
+        )
+        head_level = "diagnostic_reward_head_level"
+        env.reset(
+            TensorDict(qpos=level["qpos"], qvel=level["qvel"], batch_size=[1]),
+            set_state=True,
+        )
+        torch.testing.assert_close(env.head_pitch(), torch.zeros(1), atol=1e-4, rtol=0)
+        paid_level = env._reward_components(level, action)[head_level]
+        env.reset(
+            TensorDict(qpos=nose_down["qpos"], qvel=nose_down["qvel"], batch_size=[1]),
+            set_state=True,
+        )
+        torch.testing.assert_close(
+            env.head_pitch(), torch.full((1,), -math.pi / 4), atol=1e-3, rtol=0
+        )
+        assert (
+            env._reward_components(nose_down, action)[head_level] < paid_level
+        ).all()
+        # Every preset keeps the head level by default.
+        assert (
+            MicroDuckEnv.standing_task().reward_weights[
+                list(MicroDuckEnv.REWARD_TERMS).index("head_level")
+            ]
+            == 1.0
+        )
+
+        # The turning task tracks its yaw rate in place of the yaw_rate cost.
+        turn = "diagnostic_reward_turn"
+        left = MicroDuckEnv.turning_task(1.0)
+        assert left.params["turn_rate"] == 1.0
+        assert (
+            left.reward_weights[list(MicroDuckEnv.REWARD_TERMS).index("yaw_rate")]
+            == 0.0
+        )
+        env.reset(TensorDict({"task_id": torch.tensor([[1]])}, batch_size=(1,)))
+        spinning_left, spinning_right = level.clone(), level.clone()
+        spinning_left["qvel"][..., 5] = 1.0
+        spinning_right["qvel"][..., 5] = -1.0
+        components = env._reward_components(spinning_left, action)
+        assert (
+            components[turn] > env._reward_components(spinning_right, action)[turn]
+        ).all()
+        env.reset(TensorDict({"task_id": torch.tensor([[2]])}, batch_size=(1,)))
+        assert (
+            env._reward_components(spinning_right, action)[turn]
+            > env._reward_components(spinning_left, action)[turn]
+        ).all()
+        env.close()
+
     def test_microduck_register_reward_adds_a_weighted_term(
         self, tmp_path, monkeypatch
     ):
