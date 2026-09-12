@@ -497,16 +497,18 @@ plain self-play with a shared policy and a centralized critic
 The ducks do not learn to walk again. `policy.walker_checkpoint` names a
 `ppo_mujoco.py` checkpoint (by default the published walker of the
 [`torchrl/microduck-skills`](https://huggingface.co/torchrl/microduck-skills)
-Hugging Face repository, a five-skill walker trained with a football task
-library and without the tutorial's jump skill, downloaded once and checked
-against `policy.walker_sha256`)
+Hugging Face repository, a seven-skill walker trained with a football task
+library: standing, straight forward and backward gaits, both sidesteps and
+turning in place either way, every task keeping the head level so the camera
+looks at the horizon, without the tutorial's jump skill, downloaded once and
+checked against `policy.walker_sha256`)
 and `torchrl.envs.microduck_skill_env` builds the training env using the generic
 `ClosedLoopMultiAction` deployment: the football
 policy picks one of the walker's tasks per duck every `policy.decision_period`
-control steps (stand, walk forward or backward, sidestep left or right, the
-library indices in `policy.skills`), and the frozen walker drives the joints
-at 50 Hz in between, fed the task's command and gait clock in its
-observation. `policy.walker_checkpoint=null` trains joint-level actions end
+control steps (stand, walk forward or backward, sidestep left or right, turn
+left or right, the library indices in `policy.skills`), and the frozen walker
+drives the joints at 50 Hz in between, fed the task's command and gait clock
+in its observation. `policy.walker_checkpoint=null` trains joint-level actions end
 to end at 50 Hz instead, the comparison the skill-based run should beat.
 
 ```bash
