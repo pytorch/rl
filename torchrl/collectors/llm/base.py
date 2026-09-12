@@ -39,7 +39,11 @@ class LLMCollector(Collector):
         dialog_turns_per_batch (int, optional): A keyword-only argument representing the total
             number of elements in a batch. It is always required except when `yield_completed_trajectories=True`.
         total_dialog_turns (int): A keyword-only argument representing the total
-            number of steps returned by the collector during its lifespan. -1 is never ending (until shutdown).
+            number of environment dialog turns (steps that actually ran) during
+            the collector's lifespan. When ``yield_only_last_steps=True``,
+            dropped intermediate turns still count toward this budget so a
+            3-turn dialog with ``total_dialog_turns=3`` completes one
+            trajectory, not three. -1 is never ending (until shutdown).
             Defaults to -1.
         yield_completed_trajectories (bool, optional): whether to yield batches of rollouts with a given number of steps
             (`yield_completed_trajectories=False`, default) or single, completed trajectories
@@ -52,6 +56,7 @@ class LLMCollector(Collector):
         yield_only_last_steps (bool, optional): whether to yield every step of a trajectory, or only the
             last (done) steps.
             If `True`, a single trajectory is yielded (or written in the buffer) at a time.
+            Dropped intermediate turns still count toward :attr:`total_dialog_turns`.
 
             .. warning:: If the `done` state of the environment is not properly set, this may lead to a collector
                 that never leads any data.
@@ -229,6 +234,7 @@ class LLMCollector(Collector):
                 )
             self._yield_queues = [deque() for _ in range(self.env.batch_size[0])]
             self._trajectory_queue = deque()
+            self._async_outstanding = 0
         self.async_envs = bool(async_envs) | isinstance(self.env, AsyncEnvPool)
         if self.async_envs and not isinstance(self.env, AsyncEnvPool):
             # This basically means that `async_envs` is automatically set and passing is it useless as of today,
@@ -302,6 +308,62 @@ class LLMCollector(Collector):
         else:
             return self._rollout_all
 
+    def _enqueue_completed_traj(self, idx: int) -> TensorDictBase:
+        """Queue a finished dialog and count any turns that will not be yielded.
+
+        When ``yield_only_last_steps=True``, only the last (done) row is
+        returned, so :meth:`iterator` would otherwise increment
+        :attr:`_frames` by that row's ``numel`` alone. Intermediate env
+        turns are added to ``_frames`` here so ``total_dialog_turns``
+        counts steps that ran, not only yielded last-step rows.
+        """
+        queue = self._yield_queues[idx]
+        if not self.yield_only_last_steps:
+            result = lazy_stack(queue, -1)
+        else:
+            # deque has no slice; subtract the last row so batched env
+            # slots (numel != 1) are counted as the turns they actually ran.
+            dropped = sum(td.numel() for td in queue) - queue[-1].numel()
+            if dropped:
+                self._frames += dropped
+            # lazy-stack (not unsqueeze) so string fields stay nested in lists
+            result = lazy_stack([queue[-1]])
+        self._trajectory_queue.append(result)
+        queue.clear()
+        return result
+
+    def _in_flight_dialog_turns(self) -> int:
+        """Turns collected but not yet charged by :meth:`iterator`."""
+        pending = sum(td.numel() for td in self._trajectory_queue)
+        in_progress = sum(
+            td.numel() for queue in self._yield_queues for td in queue
+        )
+        return pending + in_progress
+
+    def _async_send(self, next_output: TensorDictBase) -> None:
+        env_input = self.policy(next_output)
+        self.env.async_step_and_maybe_reset_send(env_input)
+        self._async_outstanding += (
+            next_output.batch_size[0] if next_output.batch_dims else 1
+        )
+
+    def _maybe_async_prefetch(self, next_output: TensorDictBase) -> None:
+        """Launch another async step only while the remaining budget allows.
+
+        In-progress ``_yield_queues`` count toward the budget so ``num_envs>1``
+        cannot complete extra dialogs past ``total_dialog_turns``. If those
+        queues already fill the budget but no dialog is done, step a single
+        env so we can yield without launching the rest of the pool.
+        """
+        remaining = self._frames + self._in_flight_dialog_turns() < self.total_frames
+        if remaining:
+            prefetch = next_output
+        elif not self._trajectory_queue and self._async_outstanding == 0:
+            prefetch = next_output[0]
+        else:
+            return
+        self._async_send(prefetch)
+
     def _rollout_all(self) -> TensorDictBase:  # A simplified version of rollout
         if self.reset_at_each_iter or self._shuttle is None:
             self._shuttle = self.env.reset()
@@ -367,17 +429,8 @@ class LLMCollector(Collector):
                 dones[i] = _data["next", "done"].any()
             if dones.any():
                 for idx in dones.nonzero(as_tuple=True)[0].tolist():
-                    if not self.yield_only_last_steps:
-                        _result = lazy_stack(self._yield_queues[idx], -1)
-                        self._trajectory_queue.append(_result)
-                    else:
-                        # FIXME: We need to increment the step count here because iterator() won't
-                        #  see the extra steps
-                        # We use lazy-stack because unsqueeze doesn't nest the strings in lists
-                        _result = lazy_stack([self._yield_queues[idx][-1]])
-                        self._trajectory_queue.append(_result)
+                    _result = self._enqueue_completed_traj(idx)
                     self._result_numel += _result.numel()
-                    self._yield_queues[idx].clear()
         result = [self._trajectory_queue.popleft()]
         elt = result[0].numel()
         self._result_numel -= result[0].numel()
@@ -401,8 +454,7 @@ class LLMCollector(Collector):
             if self._shuttle is None:
                 self._shuttle = self.env.reset()
             next_output = self._shuttle
-            env_input = self.policy(next_output)
-            self.env.async_step_and_maybe_reset_send(env_input)
+            self._async_send(next_output)
         self.started = True
 
         collected_steps = 0
@@ -413,6 +465,7 @@ class LLMCollector(Collector):
                 break
 
             cur_output, next_output = self.env.async_step_and_maybe_reset_recv()
+            self._async_outstanding -= cur_output.batch_size[0]
 
             # Get the env ids - flatten to handle multi-dimensional batch sizes
             # (e.g., AsyncEnvPool with batch_size=[4, 1] gives [[0], [1], [2], [3]])
@@ -438,24 +491,9 @@ class LLMCollector(Collector):
                 dones[i] = _data["next", "done"].any()
             if dones.any():
                 for idx in dones.nonzero(as_tuple=True)[0].tolist():
-                    if not self.yield_only_last_steps:
-                        self._trajectory_queue.append(
-                            lazy_stack(self._yield_queues[idx], -1)
-                        )
-                    else:
-                        # FIXME: We need to increment the step count here because iterator() won't
-                        #  see the extra steps
-                        # We use lazy-stack because unsqueeze doesn't nest the strings in lists
-                        self._trajectory_queue.append(
-                            lazy_stack([self._yield_queues[idx][-1]])
-                        )
-                    self._yield_queues[idx].clear()
+                    self._enqueue_completed_traj(idx)
 
-            # Launch the next batch:
-            # FIXME: Add a condition RE number of frames here
-            if True:
-                env_input = self.policy(next_output)
-                self.env.async_step_and_maybe_reset_send(env_input)
+            self._maybe_async_prefetch(next_output)
 
         result = self._trajectory_queue.popleft()
         # Flatten the result - AsyncEnvPool child envs with batch_size=(1,) produce
