@@ -376,11 +376,15 @@ def build_football_scene(
             type=mujoco.mjtLightType.mjLIGHT_DIRECTIONAL,
             diffuse=[0.7, 0.7, 0.7],
         )
+        # The robot's body boxes live in collision class 2 (its feet in class
+        # 1), so the pitch accepts both: a fallen duck lies on the grass and
+        # against the walls instead of sinking through them.
         world.add_geom(
             name="floor",
             type=mujoco.mjtGeom.mjGEOM_PLANE,
             size=[half_length + goal_depth + 1.0, half_width + 1.0, 0.05],
             material="grass",
+            conaffinity=3,
         )
 
         def marking(name: str, pos: Sequence[float], size: Sequence[float]) -> None:
@@ -430,6 +434,7 @@ def build_football_scene(
                 pos=list(pos),
                 size=list(size),
                 rgba=list(rgba),
+                conaffinity=3,
             )
 
         wall_rgba = (0.85, 0.85, 0.85, 0.5)
@@ -499,6 +504,7 @@ def build_football_scene(
                         goal_height,
                     ],
                     rgba=[1.0, 1.0, 1.0, 1.0],
+                    conaffinity=3,
                 )
             world.add_geom(
                 name=f"{team}_crossbar",
@@ -513,6 +519,7 @@ def build_football_scene(
                     goal_height,
                 ],
                 rgba=[1.0, 1.0, 1.0, 1.0],
+                conaffinity=3,
             )
             world.add_site(
                 name=f"{team}_goal",

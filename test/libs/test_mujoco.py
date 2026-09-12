@@ -1257,6 +1257,23 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_pitch_collides_with_the_robot_body(self, tmp_path):
+        # The robot's body boxes are collision class 2 (its feet class 1):
+        # every pitch geom must accept both, or a fallen duck sinks through
+        # the grass and the walls.
+        env = self._football_env(tmp_path, players_per_team=1)
+        model = env._backend._m
+        pitch = [
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, i)
+            for i in range(model.ngeom)
+            if model.geom_bodyid[i] == 0 and model.geom_contype[i]
+        ]
+        assert "floor" in pitch and any("wall" in name for name in pitch)
+        for name in pitch:
+            assert model.geom(name).conaffinity[0] & 3 == 3, name
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_football_observation_is_team_symmetric(self, tmp_path):
         env = self._football_env(tmp_path, players_per_team=2)
         env.reset()
