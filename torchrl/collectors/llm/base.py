@@ -39,7 +39,11 @@ class LLMCollector(Collector):
         dialog_turns_per_batch (int, optional): A keyword-only argument representing the total
             number of elements in a batch. It is always required except when `yield_completed_trajectories=True`.
         total_dialog_turns (int): A keyword-only argument representing the total
-            number of steps returned by the collector during its lifespan. -1 is never ending (until shutdown).
+            number of environment dialog turns (steps that actually ran) during
+            the collector's lifespan. When ``yield_only_last_steps=True``,
+            dropped intermediate turns still count toward this budget so a
+            3-turn dialog with ``total_dialog_turns=3`` completes one
+            trajectory, not three. -1 is never ending (until shutdown).
             Defaults to -1.
         yield_completed_trajectories (bool, optional): whether to yield batches of rollouts with a given number of steps
             (`yield_completed_trajectories=False`, default) or single, completed trajectories
@@ -52,6 +56,7 @@ class LLMCollector(Collector):
         yield_only_last_steps (bool, optional): whether to yield every step of a trajectory, or only the
             last (done) steps.
             If `True`, a single trajectory is yielded (or written in the buffer) at a time.
+            Dropped intermediate turns still count toward :attr:`total_dialog_turns`.
 
             .. warning:: If the `done` state of the environment is not properly set, this may lead to a collector
                 that never leads any data.
@@ -302,6 +307,28 @@ class LLMCollector(Collector):
         else:
             return self._rollout_all
 
+    def _enqueue_completed_traj(self, idx: int) -> TensorDictBase:
+        """Queue a finished dialog and count any turns that will not be yielded.
+
+        When ``yield_only_last_steps=True``, only the last (done) row is
+        returned, so :meth:`iterator` would otherwise increment
+        :attr:`_frames` by that row's ``numel`` alone. Intermediate env
+        turns are added to ``_frames`` here so ``total_dialog_turns``
+        counts steps that ran, not only yielded last-step rows.
+        """
+        queue = self._yield_queues[idx]
+        if not self.yield_only_last_steps:
+            result = lazy_stack(queue, -1)
+        else:
+            dropped = len(queue) - 1
+            if dropped:
+                self._frames += dropped
+            # lazy-stack (not unsqueeze) so string fields stay nested in lists
+            result = lazy_stack([queue[-1]])
+        self._trajectory_queue.append(result)
+        queue.clear()
+        return result
+
     def _rollout_all(self) -> TensorDictBase:  # A simplified version of rollout
         if self.reset_at_each_iter or self._shuttle is None:
             self._shuttle = self.env.reset()
@@ -367,17 +394,8 @@ class LLMCollector(Collector):
                 dones[i] = _data["next", "done"].any()
             if dones.any():
                 for idx in dones.nonzero(as_tuple=True)[0].tolist():
-                    if not self.yield_only_last_steps:
-                        _result = lazy_stack(self._yield_queues[idx], -1)
-                        self._trajectory_queue.append(_result)
-                    else:
-                        # FIXME: We need to increment the step count here because iterator() won't
-                        #  see the extra steps
-                        # We use lazy-stack because unsqueeze doesn't nest the strings in lists
-                        _result = lazy_stack([self._yield_queues[idx][-1]])
-                        self._trajectory_queue.append(_result)
+                    _result = self._enqueue_completed_traj(idx)
                     self._result_numel += _result.numel()
-                    self._yield_queues[idx].clear()
         result = [self._trajectory_queue.popleft()]
         elt = result[0].numel()
         self._result_numel -= result[0].numel()
@@ -438,22 +456,12 @@ class LLMCollector(Collector):
                 dones[i] = _data["next", "done"].any()
             if dones.any():
                 for idx in dones.nonzero(as_tuple=True)[0].tolist():
-                    if not self.yield_only_last_steps:
-                        self._trajectory_queue.append(
-                            lazy_stack(self._yield_queues[idx], -1)
-                        )
-                    else:
-                        # FIXME: We need to increment the step count here because iterator() won't
-                        #  see the extra steps
-                        # We use lazy-stack because unsqueeze doesn't nest the strings in lists
-                        self._trajectory_queue.append(
-                            lazy_stack([self._yield_queues[idx][-1]])
-                        )
-                    self._yield_queues[idx].clear()
+                    self._enqueue_completed_traj(idx)
 
-            # Launch the next batch:
-            # FIXME: Add a condition RE number of frames here
-            if True:
+            # Prefetch only while counted env turns plus queued yields
+            # are still below total_dialog_turns.
+            pending = sum(td.numel() for td in self._trajectory_queue)
+            if self._frames + pending < self.total_frames:
                 env_input = self.policy(next_output)
                 self.env.async_step_and_maybe_reset_send(env_input)
 
