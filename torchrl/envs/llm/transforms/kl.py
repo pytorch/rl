@@ -21,7 +21,11 @@ from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.envs import EnvBase, Transform
 from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Compose
-from torchrl.envs.transforms.utils import _set_missing_tolerance
+from torchrl.envs.transforms.utils import (
+    _DeprecatedIODevice,
+    _in_out_device,
+    _set_missing_tolerance,
+)
 from torchrl.modules.llm.policies.common import LLMWrapperBase
 
 if TYPE_CHECKING:
@@ -188,13 +192,22 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         assistant_only (bool): whether to only compute KL on assistant tokens. Defaults to `True`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to use. Defaults to `None`.
         detach (bool): whether to detach the KL from the computation graph. Defaults to `True`.
-        device (torch.device): the device to cast the tensors to. This is not the device of the specs, but the device
-            onto which the tensors will be moved. It allows to keep the model on a different device
-            than the upcoming data. When using Ray service, this device will be used on the remote actor.
-            Defaults to `None`.
+        device (torch.device): Device used to place the reference model at
+            construction time. The value is not retained as module state and is
+            not an input/output placement policy: after construction the model
+            owns device routing. When using Ray service, this device is
+            forwarded to the remote actor. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         use_ray_service (bool, optional): whether to use Ray service. Defaults to `False`.
         actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.
+
+    .. warning::
+        :attr:`KLRewardTransform.device` is deprecated and will be removed in v0.17.
+        It is an explicit input/output tensordict placement policy, not the
+        location of the reference model. Setting it moves incoming tensordicts
+        to that device for the call and restores results to the original
+        tensordict device. The constructor ``device=`` argument only places the
+        model at initialization.
 
     Examples:
         >>> # Legacy usage (not recommended for new code)
@@ -212,6 +225,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
 
     DEFAULT_IN_KEYS = ["reward"]
     _RayServiceClass = RayKLRewardTransform
+    device = _DeprecatedIODevice()
 
     def __init__(
         self,
@@ -274,12 +288,11 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         self.in_keys = [unravel_key(in_key) for in_key in self.in_keys]
 
         self.add_to_reward = add_to_reward
-        # check that the model has parameters
-        self.__dict__["ref_model"] = ref_model
-
-        # self._buffers["actor_params"] = params.clone().detach()
-
-        self.device = device
+        if device is not None:
+            # User-supplied model: place it, then drop the constructor device.
+            ref_model = ref_model.to(device)
+        # Register as a submodule so module.to(...) moves the reference model.
+        self.ref_model = ref_model
 
         # find the sample log-prob key
         self.log_prob_full_key = log_prob_key
@@ -349,11 +362,12 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        io_device = _in_out_device(self)
         original_device = None
-        if self.device is not None:
+        if io_device is not None:
             original_device = tensordict.device
-            tensordict = tensordict.to(self.device)
-            next_tensordict = next_tensordict.to(self.device)
+            tensordict = tensordict.to(io_device)
+            next_tensordict = next_tensordict.to(io_device)
         # tensordict = self._get_text_response(tensordict, next_tensordict)
         response = tensordict.get(self.action_key, None)
         if response is None:
@@ -367,7 +381,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
             return next_tensordict
 
         # We use the ("tokens", "full") key to get the log-probs of the reference model
-        with torch.device(self.device) if self.device is not None else nullcontext():
+        with torch.device(io_device) if io_device is not None else nullcontext():
             td_input = tensordict.copy()
             ref_log_prob_td = self.ref_model(td_input)
         if self.pad_output:
@@ -588,8 +602,19 @@ class RetrieveLogProb(Transform):
             Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_dict": True, "padding": False, "add_generation_prompt": False}`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
-        device (torch.device): the device to use for tensor creation. Defaults to `None`.
+        device (torch.device): Device used to place the model at construction time.
+            The value is not retained as module state and is not an input/output
+            placement policy: after construction the model owns device routing
+            and newly created tensors follow the relevant input or output
+            tensor. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
+
+    .. warning::
+        :attr:`RetrieveLogProb.device` is deprecated and will be removed in v0.17.
+        It is an explicit input/output tensordict placement policy, not the
+        location of the wrapped model. Setting it moves incoming tensordicts to
+        that device for the call. The constructor ``device=`` argument only
+        places the model at initialization.
 
     Examples:
         >>> from torchrl.data.llm import History
@@ -668,6 +693,8 @@ class RetrieveLogProb(Transform):
         :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`: A legacy transform for KL reward computation (use `RetrieveKL` instead).
     """
 
+    device = _DeprecatedIODevice()
+
     def __init__(
         self,
         model: LLMWrapperBase,
@@ -700,10 +727,12 @@ class RetrieveLogProb(Transform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
         # Store model and configuration
+        if device is not None:
+            # User-supplied model: place it, then drop the constructor device.
+            model = model.to(device)
         self.model = model
         self.assistant_only = assistant_only
         self.detach = detach
-        self.device = device
         self.tokenizer = tokenizer
         self.padding_side = padding_side
 
@@ -763,7 +792,8 @@ class RetrieveLogProb(Transform):
         Returns:
             Masked log-probs tensor
         """
-        with torch.device(self.device) if self.device is not None else nullcontext():
+        io_device = _in_out_device(self)
+        with torch.device(io_device) if io_device is not None else nullcontext():
             # Get assistant mask
             assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)  # type: ignore[misc]
             log_probs = td.get(lp_key, as_list=True)  # type: ignore[misc]
@@ -788,6 +818,12 @@ class RetrieveLogProb(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        io_device = _in_out_device(self)
+        original_device = None
+        if io_device is not None:
+            original_device = tensordict.device
+            tensordict = tensordict.to(io_device)
+            next_tensordict = next_tensordict.to(io_device)
         # Compute log-probs using the model
         # Use tensordict since we want to process the "full" entry
         ref_td = self.model(tensordict.copy())
@@ -802,6 +838,8 @@ class RetrieveLogProb(Transform):
         if tmp_log_probs_key != self.log_probs_full_key:
             ref_td.rename_key_(tmp_log_probs_key, self.log_probs_full_key)
         next_tensordict.update(ref_td, keys_to_update=(self.log_probs_full_key,))
+        if original_device is not None:
+            next_tensordict = next_tensordict.to(original_device)
 
         return next_tensordict
 
@@ -994,10 +1032,11 @@ class RetrieveKL(Compose, metaclass=_RayServiceMetaClass):
             To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
             Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_tensors": "pt", "padding": True, "add_generation_prompt": False}`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
-        device (torch.device): the device to cast the tensors to. This is not the device of the specs, but the device
-            onto which the tensors will be moved. It allows to keep the model on a different device
-            than the upcoming data itself. When using Ray service, this device will be used on the remote actor.
-            Defaults to `None`.
+        device (torch.device): Device used to place the wrapped models at
+            construction time. The value is not stored on the transform: at call
+            time, incoming tensordicts follow each model's current parameter or
+            buffer device. When using Ray service, this device is forwarded to
+            the remote actor. Defaults to `None`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `actor`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl_penalty"`.

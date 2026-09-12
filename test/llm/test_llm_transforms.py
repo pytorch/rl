@@ -5,12 +5,15 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 
 import json
 
 import pytest
+import torch
 from tensordict import set_list_to_stack, TensorDict
+from torch import nn
 
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
@@ -18,7 +21,9 @@ from torchrl.envs.llm.transforms import (
     ExecuteToolsInOrder,
     IncrementalTokenizer,
     JSONCallParser,
+    KLRewardTransform,
     PolicyVersion,
+    RetrieveLogProb,
     ToolCall,
     ToolRegistry,
     XMLBlockParser,
@@ -747,3 +752,161 @@ class TestPolicyVersion:
             version_cuda = out_cuda.get("policy_version")
             assert version_cuda.dtype == torch.int64
             assert version_cuda.device.type == "cuda"
+
+
+def _tensor_devices(data: TensorDict) -> set[str]:
+    return {
+        value.device.type
+        for value in data.values(True, True)
+        if torch.is_tensor(value)
+    }
+
+
+_CROSS_DEVICE_PARAMS = [
+    pytest.param(
+        "cuda",
+        marks=[
+            pytest.mark.gpu,
+            pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="needs CUDA"
+            ),
+        ],
+    ),
+    pytest.param(
+        "mps",
+        marks=pytest.mark.skipif(
+            not torch.backends.mps.is_available(), reason="needs MPS"
+        ),
+    ),
+]
+
+
+class _MockLLMModule(nn.Module):
+    """Minimal stand-in for an LLM wrapper used by KL / log-prob transforms."""
+
+    def __init__(self, input_mode: str = "tokens"):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(1))
+        self.generate = False
+        self.return_log_probs = True
+        self.input_mode = input_mode
+        self.in_keys = [("tokens", "full")]
+        self.log_probs_key = "log_probs"
+        self.pad_output = True
+
+    def forward(self, tensordict: TensorDict) -> TensorDict:
+        tokens = tensordict.get(("tokens", "full"))
+        tensordict[("log_probs", "full")] = torch.zeros(
+            tokens.shape,
+            dtype=torch.float32,
+            device=self.weight.device,
+        )
+        return tensordict
+
+
+class _DummyTokensParent:
+    class base_env:
+        input_mode = "tokens"
+
+
+class TestKLModuleDevice:
+    def test_retrieve_log_prob_to_meta_does_not_recast_to_constructor_device(self):
+        model = _MockLLMModule()
+        transform = RetrieveLogProb(model, assistant_only=False, device="cpu")
+        transform.to("meta")
+        td = TensorDict(
+            {("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="meta")},
+            batch_size=[2],
+            device="meta",
+        )
+        out = transform._step(td, td.copy())
+        log_probs = out.get(("log_probs", "full"))
+        assert log_probs.device.type == "meta"
+        assert _tensor_devices(out) == {"meta"}
+        assert next(transform.model.parameters()).device.type == "meta"
+
+    def test_kl_reward_transform_to_meta_does_not_recast_to_constructor_device(self):
+        model = _MockLLMModule()
+        transform = KLRewardTransform(model, device="cpu")
+        transform.to("meta")
+        # Transform.to() clears the parent cache; attach after the device move.
+        transform.__dict__["_parent"] = _DummyTokensParent()
+        td = TensorDict(
+            {
+                ("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="meta"),
+                ("log_probs", "full"): torch.zeros(2, 4, device="meta"),
+                ("masks", "all_assistant_mask"): torch.ones(
+                    2, 4, dtype=torch.bool, device="meta"
+                ),
+            },
+            batch_size=[2],
+            device="meta",
+        )
+        next_td = TensorDict(
+            {"reward": torch.zeros(2, 4, 1, device="meta")},
+            batch_size=[2],
+            device="meta",
+        )
+        out = transform._step(td, next_td)
+        assert out["kl_penalty"].device.type == "meta"
+        assert _tensor_devices(out) == {"meta"}
+        assert next(transform.ref_model.parameters()).device.type == "meta"
+
+    @pytest.mark.parametrize("module_device", _CROSS_DEVICE_PARAMS)
+    def test_kl_reward_transform_restores_output_to_input_device(self, module_device):
+        model = _MockLLMModule()
+        transform = KLRewardTransform(model, device=module_device)
+        transform.__dict__["_parent"] = _DummyTokensParent()
+        td = TensorDict(
+            {
+                ("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="cpu"),
+                ("log_probs", "full"): torch.zeros(2, 4, device="cpu"),
+                ("masks", "all_assistant_mask"): torch.ones(
+                    2, 4, dtype=torch.bool, device="cpu"
+                ),
+            },
+            batch_size=[2],
+            device="cpu",
+        )
+        next_td = TensorDict(
+            {"reward": torch.zeros(2, 4, 1, device="cpu")},
+            batch_size=[2],
+            device="cpu",
+        )
+        out = transform._step(td, next_td)
+        assert out.device.type == "cpu"
+        assert out["kl_penalty"].device.type == "cpu"
+        assert out["ref_log_probs"].device.type == "cpu"
+        assert _tensor_devices(out) == {"cpu"}
+        assert next(transform.ref_model.parameters()).device.type == torch.device(
+            module_device
+        ).type
+
+    def test_device_attr_is_deprecated_io_policy(self):
+        model = _MockLLMModule()
+        for cls, kwargs in (
+            (RetrieveLogProb, {"assistant_only": False}),
+            (KLRewardTransform, {}),
+        ):
+            transform = cls(model, device="cpu", **kwargs)
+            param = next(
+                transform.model.parameters()
+                if cls is RetrieveLogProb
+                else transform.ref_model.parameters()
+            )
+            with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+                assert transform.device is None
+            with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+                transform.device = "meta"
+            with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+                assert transform.device == torch.device("meta")
+            assert next(
+                transform.model.parameters()
+                if cls is RetrieveLogProb
+                else transform.ref_model.parameters()
+            ).device == param.device
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
