@@ -5,21 +5,48 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import torch
-from tensordict import NestedKey, TensorDictBase
+from tensordict import NestedKey, TensorDictBase, unravel_key
 
+from torchrl._utils import _ends_with
 from torchrl.modules import SafeModule
 
 if TYPE_CHECKING:
     from torchrl.envs.common import EnvBase
 
 
+def _planning_done_keys(env: EnvBase) -> list[NestedKey]:
+    """Return rollout ``done`` keys used to mask post-done planning rewards.
+
+    Only keys that end with ``"done"`` are used, so a truncated episode
+    (``done`` and not ``terminated``) still stops contributing. Keys are
+    taken from the environment and prefixed with ``"next"``; a root
+    ``"done"`` is not invented when the env only exposes a nested group.
+    """
+    return [
+        unravel_key(("next", key))
+        for key in env.done_keys
+        if _ends_with(key, "done")
+    ]
+
+
+def _normalize_done_keys(
+    done_key: NestedKey | Sequence[NestedKey],
+) -> tuple[NestedKey, ...]:
+    if isinstance(done_key, str):
+        return (done_key,)
+    if isinstance(done_key, tuple) and (not done_key or isinstance(done_key[0], str)):
+        return (unravel_key(done_key),)
+    return tuple(unravel_key(key) for key in done_key)
+
+
 def _mask_post_done_reward(
     tensordict: TensorDictBase,
     reward_key: NestedKey = ("next", "reward"),
-    done_key: NestedKey = ("next", "done"),
+    done_key: NestedKey | Sequence[NestedKey] = ("next", "done"),
     *,
     time_dim: int | None = None,
 ) -> torch.Tensor:
@@ -27,18 +54,25 @@ def _mask_post_done_reward(
 
     The reward at the first ``done`` step is kept. ``done`` is used (not
     ``terminated``) so a truncated episode also stops contributing to the
-    planning score.
+    planning score. Several ``done`` keys are combined with a logical or.
     """
     reward = tensordict.get(reward_key)
-    done = tensordict.get(done_key)
+    done = None
+    for key in _normalize_done_keys(done_key):
+        flag = tensordict.get(key)
+        if flag is None:
+            raise KeyError(f"Done key {key!r} not found in tensordict.")
+        if flag.shape != reward.shape:
+            flag = flag.expand_as(reward)
+        done = flag if done is None else torch.logical_or(done, flag)
+    if done is None:
+        return reward
     if time_dim is None:
         names = tensordict.names
         if names is not None and "time" in names:
             time_dim = names.index("time")
         else:
             time_dim = -2
-    if done.shape != reward.shape:
-        done = done.expand_as(reward)
     done_int = done.to(dtype=torch.int64)
     already_done = done_int.cumsum(dim=time_dim) > done_int
     return torch.where(already_done, torch.zeros_like(reward), reward)
@@ -51,7 +85,8 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
     At the end of the planning step, the :obj:`MPCPlanner` will return a proposed action.
 
     Imagined rollouts keep a full planning horizon even after a candidate
-    hits ``done``. Rewards after the first :obj:`("next", "done")` are ignored
+    hits ``done``. Rewards after the first environment ``done`` flag
+    (termination or truncation, including nested done keys) are ignored
     when scoring those trajectories.
 
     Args:

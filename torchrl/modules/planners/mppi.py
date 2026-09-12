@@ -10,7 +10,11 @@ import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
 from torch import nn
 
-from torchrl.modules.planners.common import _mask_post_done_reward, MPCPlannerBase
+from torchrl.modules.planners.common import (
+    _mask_post_done_reward,
+    _planning_done_keys,
+    MPCPlannerBase,
+)
 
 if TYPE_CHECKING:
     from torchrl.envs.common import EnvBase
@@ -29,8 +33,8 @@ class MPPIPlanner(MPCPlannerBase):
     This module will perform a MPPI planning step when given a TensorDict
     containing initial states.
     Imagined rollouts always run for the full planning horizon. Rewards after
-    the first :obj:`("next", "done")` are zeroed before the advantage is
-    computed.
+    the first environment ``done`` (termination or truncation) are zeroed
+    before the advantage is computed.
 
     A call to the module returns the actions that empirically maximised the
     returns given a planning horizon
@@ -232,6 +236,7 @@ class MPPIPlanner(MPCPlannerBase):
                 _mask_post_done_reward(
                     optim_tensordict,
                     reward_key=self.reward_key,
+                    done_key=_planning_done_keys(self.env),
                 ),
             )
             # compute advantage

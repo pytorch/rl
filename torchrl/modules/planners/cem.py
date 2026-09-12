@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
-from torchrl.modules.planners.common import _mask_post_done_reward, MPCPlannerBase
+from torchrl.modules.planners.common import (
+    _mask_post_done_reward,
+    _planning_done_keys,
+    MPCPlannerBase,
+)
 
 if TYPE_CHECKING:
     from torchrl.envs.common import EnvBase
@@ -25,8 +29,8 @@ class CEMPlanner(MPCPlannerBase):
     distribution with zero mean and unit variance.
     The sampled actions are then used to perform a rollout in the environment.
     Rollouts always run for the full planning horizon. Rewards after the
-    first :obj:`("next", "done")` are ignored, and the remaining return is
-    ranked. We select the top-k episodes and use their actions to update the
+    first environment ``done`` (termination or truncation) are ignored, and
+    the remaining return is ranked. We select the top-k episodes and use their actions to update the
     mean and standard deviation of the actions distribution.
     The CEM planning step is repeated for a specified number of steps.
 
@@ -204,6 +208,7 @@ class CEMPlanner(MPCPlannerBase):
             sum_rewards = _mask_post_done_reward(
                 optim_tensordict,
                 reward_key=self.reward_key,
+                done_key=_planning_done_keys(self.env),
                 time_dim=TIME_DIM,
             ).sum(dim=TIME_DIM, keepdim=True)
             _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
