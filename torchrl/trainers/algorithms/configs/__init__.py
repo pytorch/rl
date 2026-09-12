@@ -181,6 +181,7 @@ from torchrl.trainers.algorithms.configs.transforms import (
     HashConfig,
     InitTrackerConfig,
     KLRewardTransformConfig,
+    LastActionConfig,
     LineariseRewardsConfig,
     ModuleTransformConfig,
     MultiActionConfig,
@@ -357,6 +358,7 @@ __all__ = [
     "HashConfig",
     "InitTrackerConfig",
     "KLRewardTransformConfig",
+    "LastActionConfig",
     "LineariseRewardsConfig",
     "ModuleTransformConfig",
     "MultiActionConfig",
@@ -631,6 +633,7 @@ def _register_configs():
         node=RandomCropTensorDictConfig,
     )
     cs.store(group="transform", name="init_tracker", node=InitTrackerConfig)
+    cs.store(group="transform", name="last_action", node=LastActionConfig)
     cs.store(group="transform", name="rename", node=RenameTransformConfig)
     cs.store(group="transform", name="reward2go", node=Reward2GoTransformConfig)
     cs.store(group="transform", name="action_mask", node=ActionMaskConfig)

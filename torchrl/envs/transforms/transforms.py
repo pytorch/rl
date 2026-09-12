@@ -19,6 +19,7 @@ from torchrl.envs.transforms._action import (
     ActionTokenizerTransform,
     DiscreteActionProjection,
     FlattenAction,
+    LastAction,
     MultiAction,
 )
 
@@ -145,6 +146,7 @@ __all__ = [
     "GrayScale",
     "Hash",
     "InitTracker",
+    "LastAction",
     "LineariseRewards",
     "MacroPrimitive",
     "MacroPrimitiveTransform",

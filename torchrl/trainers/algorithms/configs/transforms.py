@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from torchrl.envs.transforms import ExpandAs, RewardSum
+from torchrl.envs.transforms import ExpandAs, LastAction, RewardSum
 
 from torchrl.trainers.algorithms.configs.common import (
     _normalize_hydra_key,
@@ -610,6 +610,23 @@ class InitTrackerConfig(TransformConfig):
 
 
 @dataclass
+class LastActionConfig(TransformConfig):
+    """Hydra configuration for :class:`~torchrl.envs.transforms.LastAction`."""
+
+    in_keys: list[Any] | None = None
+    out_keys: list[Any] | None = None
+    default: Any = "zeros"
+    reset_key: Any | None = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.transforms._make_last_action_transform"
+    )
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for LastAction configuration."""
+        super().__post_init__()
+
+
+@dataclass
 class RenameTransformConfig(TransformConfig):
     """Configuration for RenameTransform."""
 
@@ -1001,6 +1018,18 @@ class ExpandAsConfig(TransformConfig):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+
+
+def _make_last_action_transform(*args, **kwargs) -> LastAction:
+    in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", None))
+    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", None))
+    reset_key = _normalize_hydra_key(kwargs.pop("reset_key", None))
+    return LastAction(
+        in_keys=in_keys,
+        out_keys=out_keys,
+        reset_key=reset_key,
+        **kwargs,
+    )
 
 
 def _make_reward_sum_transform(*args, **kwargs) -> RewardSum:

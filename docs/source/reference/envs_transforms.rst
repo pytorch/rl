@@ -279,6 +279,7 @@ Available Transforms
     Hash
     HumanoidMacroAction
     InitTracker
+    LastAction
     LineariseRewards
     MacroAction
     MacroPrimitive

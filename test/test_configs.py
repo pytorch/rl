@@ -4635,6 +4635,21 @@ class TestTransformConfigs:
         assert cfg.init_key == "is_test_init"
         instantiate(cfg)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_last_action_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.transforms import LastActionConfig
+
+        cfg = LastActionConfig(
+            in_keys=["action"],
+            out_keys=["last_action"],
+            default="zeros",
+        )
+        transform = instantiate(cfg)
+        assert transform.in_keys == ["action"]
+        assert transform.out_keys == ["last_action"]
+        assert transform.default == "zeros"
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

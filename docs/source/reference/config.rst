@@ -406,6 +406,7 @@ Transform Configurations
     TimeMaxPoolConfig
     RandomCropTensorDictConfig
     InitTrackerConfig
+    LastActionConfig
     RenameTransformConfig
     Reward2GoTransformConfig
     ActionMaskConfig
