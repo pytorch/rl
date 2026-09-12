@@ -21,11 +21,13 @@ Reset Operation
 
 During reset, the environment:
 
-> 1. Takes input text from the data_key (default: "query") in the tensordict
-> 2. Creates a [`History`](torchrl.data.llm.History.html#torchrl.data.llm.History) object with the user's message
-> 3. Optionally prepends a system prompt if provided
-> 4. Formats the conversation according to the selected input mode (history, text, or tokens)
-> 5. Returns the formatted prompt ready for the LLM
+> 1. Takes input from the data_key (default: "query") in the tensordict.
+> The value may be a raw string (wrapped as a user message), a
+> [`History`](torchrl.data.llm.History.html#torchrl.data.llm.History) (used as-is), or a list of chat
+> messages (dicts with `role` / `content`).
+> 2. Optionally prepends a system prompt if provided
+> 3. Formats the conversation according to the selected input mode (history, text, or tokens)
+> 4. Returns the formatted prompt ready for the LLM
 
 Step Operation
 
@@ -65,6 +67,9 @@ Defaults to None.
 - **user_role** (*str**,**optional*) - The role of the user (at reset time). Defaults to "user".
 - **policy_role** (*str**,**optional*) - The role of the policy/assistant. Defaults to "assistant".
 - **data_key** (*str**,**optional*) - The key of the data input to the env at reset time (from dataloader). Defaults to "query".
+The value may be a raw string (wrapped as a user utterance), a
+[`History`](torchrl.data.llm.History.html#torchrl.data.llm.History), or a list of chat messages. A
+`system_prompt`, if set, is prepended in all cases.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device to use for computations. Defaults to None.
 - **with_tokenizer** (*bool**,**optional*) - If `True`, the environment is automatically wrapped with
 [`IncrementalTokenizer`](torchrl.envs.llm.transforms.IncrementalTokenizer.html#torchrl.envs.llm.transforms.IncrementalTokenizer) to maintain `tokens.prompt` synchronized
@@ -76,6 +81,7 @@ reset(*TensorDict*)
 
 Resets the state of the environment. A tensordict or equivalent with a "query" entry
 (originating from the dataloader) must be passed. This key name is defined as a class attribute data_key.
+`query` may be a raw string, a [`History`](torchrl.data.llm.History.html#torchrl.data.llm.History), or a list of messages.
 
 step(*TensorDict*)
 
@@ -104,6 +110,16 @@ Examples
 >>> reset_data = TensorDict({"query": "Hello, how are you?"}, batch_size=(1,))
 >>> obs = env.reset(reset_data)
 >>> print(obs["history"].prompt) # History with system prompt + user message
+>>>
+>>> # Reset with an already-formatted conversation (roles are preserved)
+>>> reset_data = TensorDict({
+... "query": History.from_chats([[
+... {"role": "user", "content": "Hello, how are you?"},
+... {"role": "assistant", "content": "I'm well, thanks."},
+... ]])
+... }, batch_size=(1,))
+>>> obs = env.reset(reset_data)
+>>> print(obs["history"].prompt.role) # [['system', 'user', 'assistant']]
 >>>
 >>> # Simulate LLM response and step
 >>> response_data = TensorDict({
