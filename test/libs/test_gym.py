@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import builtins
 import functools
 import gc
 import importlib.util
@@ -34,6 +35,7 @@ from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import (
     _gym_to_torchrl_spec_transform,
     _has_gym,
+    _import_ale_py_if_needed,
     _is_from_pixels,
     _torchrl_to_gym_spec_transform,
     gym_backend,
@@ -1955,6 +1957,51 @@ class TestGym:
         check_env_specs(env)
         td = env.rand_step(env.reset())
         assert td["next", "reward"].shape == expected_reward_shape
+
+    @pytest.mark.parametrize(
+        "env_name,should_import",
+        [
+            ("PongNoFrameskip-v4", True),
+            ("CartPole-v1", False),
+        ],
+    )
+    def test_import_ale_py_if_needed(self, env_name, should_import, monkeypatch):
+        # Track the import statement itself so this stays valid if ale_py is
+        # already in sys.modules from an earlier test.
+        imported = []
+        real_import = builtins.__import__
+
+        def tracking_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "ale_py":
+                imported.append(name)
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", tracking_import)
+        _import_ale_py_if_needed(env_name)
+        assert ("ale_py" in imported) is should_import
+
+    @pytest.mark.skipif(
+        not _has_ale,
+        reason="ALE not available (missing ale_py); skipping Atari gym test.",
+    )
+    @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "PongNoFrameskip-v4"])
+    def test_gymenv_ale_constructor(self, env_name):
+        # NameNotFound here is the regression: GymEnv must import ale_py first.
+        self._test_gymenv_ale_constructor(env_name)
+
+    @implement_for("gym")
+    def _test_gymenv_ale_constructor(self, env_name):
+        # gym 0.13/0.19 ship ale_py without registering ALE/Pong-v5.
+        return
+
+    @implement_for("gymnasium")
+    def _test_gymenv_ale_constructor(self, env_name):  # noqa: F811
+        with set_gym_backend("gymnasium"):
+            env = GymEnv(env_name)
+        try:
+            assert env.env_name == env_name
+        finally:
+            env.close()
 
 
 @pytest.mark.skipif(
