@@ -192,7 +192,107 @@ transform has an inverse transform that subtracts 1 from the action tensor:
 Using a Transform with a Replay Buffer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can use a transform with a replay buffer by passing it to the ReplayBuffer constructor:
+A transform passed to :class:`~torchrl.data.ReplayBuffer` (the ``transform=``
+argument, or :meth:`~torchrl.data.ReplayBuffer.append_transform`) runs on the
+**sample** path: ``rb.sample()`` applies it after the storage is indexed.
+If the transform implements an inverse, that inverse runs when data is
+**written** (``rb.add`` / ``rb.extend``). This is how you store cheap raw
+observations and reconstruct a processed view only at training time.
+
+The most common instance of this pattern is frame stacking. The env-side
+recipe is below; the collector + replay-buffer recipe (including
+``extend`` / ``sample``) lives in
+:ref:`Frame stacking images with CatFrames <catframes-collector-replay>`.
+
+.. _catframes-images:
+
+CatFrames for visual RL
+~~~~~~~~~~~~~~~~~~~~~~~
+
+:class:`CatFrames` concatenates the last ``N`` observations along one
+existing dimension so a feed-forward policy can see motion. There are two
+legitimate placements; they solve different problems and must not be
+stacked on top of each other.
+
+1. **On the env** (this section). The policy sees a stacked observation
+   at every step. The transform is stateful: it keeps a rolling buffer
+   that is flushed on reset.
+2. **On the replay buffer, at sample time**
+   (:ref:`catframes-collector-replay`). Raw unstacked frames are stored;
+   the stack is rebuilt when you call ``rb.sample()``. This is the
+   memory-efficient path for image off-policy training.
+
+For CHW images (the layout produced by :class:`ToTensorImage`) the stack
+dimension is ``dim=-3`` (the channel axis). That is the DQN convention:
+a grayscale frame of shape ``[1, H, W]`` becomes ``[N, H, W]``; an RGB
+frame of shape ``[3, H, W]`` becomes ``[3 * N, H, W]``. Vector
+observations use ``dim=-1`` instead. Using the vector default on pixels,
+or stacking along ``-4`` without first inserting that axis, silently
+produces the wrong layout.
+
+Env-side stacking (policy input)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Put :class:`CatFrames` on the env so the observation spec the policy
+reads is already stacked. Write the stack to a **different** key than
+the raw pixels: the collector can then persist the cheap uint8 frame
+and drop the float stack (see :ref:`catframes-collector-replay`).
+
+:class:`CatFrames` is stateful. ``env.reset()`` (or a ``"_reset"`` flag
+in the tensordict) flushes the rolling buffer and pads the new stack.
+With the default ``padding="same"`` the missing history is a repeat of
+the first post-reset frame; ``padding="constant"`` fills with
+``padding_value`` (0 by default). :class:`InitTracker` is not required
+for that flush -- :class:`CatFrames` listens to the env ``_reset`` key
+-- but it should sit in the same :class:`Compose` so ``"is_init"`` marks
+the steps where the stack was re-initialized. Collectors, recurrent
+policies and advantage estimators all read that flag.
+
+.. code-block:: python
+
+    from torchrl.envs import (
+        CatFrames,
+        Compose,
+        GrayScale,
+        GymEnv,
+        InitTracker,
+        Resize,
+        StepCounter,
+        ToTensorImage,
+        TransformedEnv,
+    )
+
+    env = TransformedEnv(
+        GymEnv("CartPole-v1", from_pixels=True, pixels_only=True),
+        Compose(
+            InitTracker(),
+            ToTensorImage(in_keys=["pixels"], out_keys=["pixels_trsf"]),
+            GrayScale(in_keys=["pixels_trsf"]),
+            Resize(84, 84, in_keys=["pixels_trsf"]),
+            CatFrames(N=4, dim=-3, in_keys=["pixels_trsf"], out_keys=["pixels_trsf"]),
+            StepCounter(),
+        ),
+    )  # doctest: +SKIP
+    # "pixels": raw uint8 frame from the env
+    # "pixels_trsf": float stack of shape [4, 84, 84] (grayscale, dim=-3)
+    # "is_init": True on the first step after every reset
+
+A rollout or a :class:`~torchrl.collectors.Collector` then feeds
+``pixels_trsf`` to the policy. Do **not** also attach a second
+:class:`CatFrames` on the replay buffer that reads the same stacked
+key -- that stacks twice (``[N, H, W]`` stored, ``[N * N, H, W]``
+sampled). Either:
+
+- store the already-stacked ``pixels_trsf`` and leave the buffer
+  transform-free (``N`` times more RAM), or
+- exclude ``pixels_trsf`` on ``extend`` and rebuild the stack from
+  raw ``"pixels"`` at sample time (recommended; see
+  :ref:`catframes-collector-replay`).
+
+If you want a separate stack axis ``[N, C, H, W]`` rather than channel
+concatenation, unsqueeze first and pass ``dim=-4`` (that is the variant
+in ``examples/replay-buffers/catframes-in-buffer.py``). For a standard
+visual-RL CNN the ``dim=-3`` layout above is the one to use.
 
 Cloning transforms
 ~~~~~~~~~~~~~~~~~~
