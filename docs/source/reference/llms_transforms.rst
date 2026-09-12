@@ -7,6 +7,11 @@ LLM Transforms
 
 Transforms for LLM environments, including tools and utilities.
 
+:attr:`Tokenizer.out_device` describes the destination of token tensors and
+attention masks. It follows the current parent environment device; ``None``
+leaves outputs on the tokenizer's chosen device. ``Tokenizer.device`` is a
+deprecated alias and will be removed in TorchRL v0.17.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
