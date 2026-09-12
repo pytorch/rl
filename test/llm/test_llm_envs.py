@@ -17,7 +17,13 @@ import pytest
 import tensordict
 import torch
 
-from tensordict import lazy_stack, set_list_to_stack, TensorDict
+from tensordict import (
+    lazy_stack,
+    NonTensorData,
+    NonTensorStack,
+    set_list_to_stack,
+    TensorDict,
+)
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.base import LLMCollector
@@ -184,7 +190,13 @@ class TestChatEnv:
 
     @pytest.mark.parametrize(
         "query_kind",
-        ["history_system_user", "history_user_assistant", "messages", "string"],
+        [
+            "history_system_user",
+            "history_user_assistant",
+            "nontensor_history",
+            "messages",
+            "string",
+        ],
     )
     @pytest.mark.parametrize("system_prompt", [None, "Be brief."])
     def test_chat_env_reset_query_formats(self, query_kind, system_prompt):
@@ -216,6 +228,19 @@ class TestChatEnv:
             )
             expected_roles = ["user", "assistant"]
             expected_contents = ["Hello", "Hi"]
+        elif query_kind == "nontensor_history":
+            query = NonTensorData(
+                History.from_chats(
+                    [
+                        [
+                            {"role": "user", "content": "Hello"},
+                            {"role": "assistant", "content": "Hi"},
+                        ]
+                    ]
+                )
+            )
+            expected_roles = ["user", "assistant"]
+            expected_contents = ["Hello", "Hi"]
         elif query_kind == "messages":
             query = [
                 [
@@ -240,6 +265,35 @@ class TestChatEnv:
         prompt = td_reset["history"][0].prompt
         assert prompt.role == expected_roles
         assert list(prompt.content) == expected_contents
+
+    def test_chat_env_reset_nontensor_stack_history(self):
+        env = ChatEnv(batch_size=(2,), input_mode="history", device="cpu")
+        query = NonTensorStack(
+            NonTensorData(
+                History.from_chats(
+                    [
+                        {"role": "user", "content": "Hello"},
+                        {"role": "assistant", "content": "Hi"},
+                    ]
+                )
+            ),
+            NonTensorData(
+                History.from_chats(
+                    [
+                        {"role": "user", "content": "Bye"},
+                        {"role": "assistant", "content": "See ya"},
+                    ]
+                )
+            ),
+        )
+        td_reset = env.reset(
+            TensorDict(query=query, batch_size=(2,), device=env.device)
+        )
+        prompt = td_reset["history"].prompt
+        assert list(prompt[0].role) == ["user", "assistant"]
+        assert list(prompt[0].content) == ["Hello", "Hi"]
+        assert list(prompt[1].role) == ["user", "assistant"]
+        assert list(prompt[1].content) == ["Bye", "See ya"]
 
 
 @_requires_llm_stack

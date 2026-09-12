@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
-from tensordict import lazy_stack, TensorDictBase
+from tensordict import lazy_stack, NonTensorData, NonTensorStack, TensorDictBase
 from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
 from torchrl.data import Composite, NonTensor
@@ -75,15 +75,23 @@ def _is_chat_payload(obj: Any) -> bool:
 def _reset_query_payload(content: Any) -> Any:
     if isinstance(content, History):
         return content
-    # NonTensorStack.data is the first element; prefer tolist() for stacks.
-    data = getattr(content, "data", None)
-    if isinstance(data, History):
-        return data
+    # NonTensorData.data is the payload. NonTensorStack.data is only the first
+    # env -- unwrap stacks with tolist() / unbind so every History is kept.
+    if isinstance(content, NonTensorData):
+        data = content.data
+        return data if isinstance(data, History) else _reset_query_payload(data)
+    if isinstance(content, NonTensorStack):
+        try:
+            items = content.tolist()
+        except Exception:
+            items = content.unbind(0)
+        return [_reset_query_payload(item) for item in items]
     if hasattr(content, "tolist") and not isinstance(content, (str, bytes)):
         try:
             return content.tolist()
         except Exception:
             pass
+    data = getattr(content, "data", None)
     if data is not None:
         return data
     return content
@@ -518,6 +526,12 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
         payload = _reset_query_payload(content)
         if isinstance(payload, History):
             return self._align_history_batch(payload)
+        if (
+            isinstance(payload, (list, tuple))
+            and payload
+            and all(isinstance(item, History) for item in payload)
+        ):
+            return self._align_history_batch(lazy_stack(list(payload)))
         if _is_chat_payload(payload):
             chats = [payload] if _is_chat_message(payload) else payload
             return self._align_history_batch(History.from_chats(chats))
