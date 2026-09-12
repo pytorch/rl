@@ -657,8 +657,12 @@ class TestNonTensorEnv:
             time.sleep(0.1)
             gc.collect()
 
-    @pytest.mark.parametrize("use_buffers", [False, True])
-    def test_parallel_partial_reset(self, use_buffers, maybe_fork_ParallelEnv):
+    @pytest.mark.parametrize(
+        "use_buffers,consolidate", [(False, False), (False, True), (True, True)]
+    )
+    def test_parallel_partial_reset(
+        self, use_buffers, consolidate, maybe_fork_ParallelEnv
+    ):
         """Regression: a *partial* reset (subset of workers) with NonTensor data.
 
         ``out`` carries no NonTensor leaf (NonTensor is not shared-memory
@@ -666,7 +670,9 @@ class TestNonTensorEnv:
         ``IndexError: list index out of range``. The reset workers must get the
         fresh value while the untouched worker keeps its current value.
         """
-        env = maybe_fork_ParallelEnv(3, EnvWithMetadata, use_buffers=use_buffers)
+        env = maybe_fork_ParallelEnv(
+            3, EnvWithMetadata, use_buffers=use_buffers, consolidate=consolidate
+        )
         try:
             env.set_seed(0)
             td = env.reset()
@@ -679,16 +685,14 @@ class TestNonTensorEnv:
             reset.set("_reset", torch.tensor([True, False, True]).reshape(3, 1))
             out = env.reset(reset)
             assert out.get("non_tensor").tolist() == [0, 4, 0]
-            if use_buffers:
-                # maybe_reset can call reset with only the reset mask;
-                # NonTensor values for workers that are not reset must come
-                # from the shared-buffer cache.
-                reset = TensorDict(
-                    {"_reset": torch.tensor([False, True, False]).reshape(3, 1)},
-                    batch_size=[3],
-                )
-                out = env.reset(reset)
-                assert out.get("non_tensor").tolist() == [0, 0, 0]
+            # maybe_reset can call reset with only the reset mask;
+            # untouched workers must retain their most recent reset output.
+            reset = TensorDict(
+                {"_reset": torch.tensor([False, True, False]).reshape(3, 1)},
+                batch_size=[3],
+            )
+            out = env.reset(reset)
+            assert out.get("non_tensor").tolist() == [0, 0, 0]
         finally:
             env.close(raise_if_closed=False)
             del env
