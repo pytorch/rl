@@ -13,10 +13,12 @@ import time
 import pytest
 import torch
 from tensordict import set_list_to_stack
+from tensordict.nn import TensorDictModuleBase
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.data import LazyStackStorage, ReplayBuffer
+from torchrl.data.llm.history import History
 from torchrl.envs import AsyncEnvPool, StepCounter
 from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
@@ -511,6 +513,101 @@ class TestAsyncEnvPoolSpecs:
         assert td_next.shape == torch.Size([4])
 
         env.close()
+
+
+class _DummyAssistantPolicy(TensorDictModuleBase):
+    """Appends a fixed assistant turn so ChatEnv can step without an LLM."""
+
+    in_keys = [("history", "prompt")]
+    out_keys = [("history", "full")]
+
+    def forward(self, tensordict):
+        prompt = tensordict.get(("history", "prompt"))
+        response = History(content="ok", role="assistant")
+        env_batch = prompt.batch_size[:-1]
+        for _ in env_batch:
+            response = response.unsqueeze(0)
+        if env_batch:
+            response = response.expand(*env_batch)
+        response = response.unsqueeze(-1)
+        tensordict.set(("history", "full"), prompt.extend(response, dim=-1))
+        return tensordict
+
+
+class TestLLMCollectorLastStepFrames:
+    """CPU-only frame accounting for yield_only_last_steps."""
+
+    @pytest.mark.parametrize("use_async", [False, True], ids=["sync", "async"])
+    def test_yield_only_last_steps_counts_env_turns(self, use_async):
+        # A 3-turn dialog with total_dialog_turns=3 must complete one
+        # trajectory (one last-step row), not three last-steps.
+        max_turns = 3
+
+        def env_maker():
+            env = ChatEnv.from_dataloader(
+                dataloader=DummyStrDataLoader(1),
+                input_mode="history",
+                batch_size=1,
+                group_repeats=True,
+            )
+            return env.append_transform(StepCounter(max_steps=max_turns))
+
+        env = (
+            AsyncEnvPool([env_maker], backend="threading", stack="lazy")
+            if use_async
+            else env_maker()
+        )
+        collector = LLMCollector(
+            env=env,
+            policy=_DummyAssistantPolicy(),
+            dialog_turns_per_batch=1,
+            total_dialog_turns=max_turns,
+            yield_only_last_steps=True,
+        )
+
+        batches = list(collector)
+
+        assert len(batches) == 1
+        last_step = batches[0]
+        assert last_step.numel() == 1
+        assert last_step["next", "done"].any()
+        assert int(last_step["next", "step_count"].max()) == max_turns
+        assert collector._frames == max_turns
+
+    def test_async_multi_env_does_not_overshoot_last_step_budget(self):
+        # In-progress (not-yet-done) queues must count toward the remaining
+        # budget so a second env cannot complete another 3-turn dialog.
+        max_turns = 3
+        num_envs = 2
+
+        def env_maker():
+            env = ChatEnv.from_dataloader(
+                dataloader=DummyStrDataLoader(1),
+                input_mode="history",
+                batch_size=1,
+                group_repeats=True,
+            )
+            return env.append_transform(StepCounter(max_steps=max_turns))
+
+        env = AsyncEnvPool(
+            [env_maker] * num_envs, backend="threading", stack="lazy"
+        )
+        collector = LLMCollector(
+            env=env,
+            policy=_DummyAssistantPolicy(),
+            dialog_turns_per_batch=1,
+            total_dialog_turns=max_turns,
+            yield_only_last_steps=True,
+        )
+
+        batches = list(collector)
+
+        assert len(batches) == 1
+        last_step = batches[0]
+        assert last_step.numel() == 1
+        assert last_step["next", "done"].any()
+        assert int(last_step["next", "step_count"].max()) == max_turns
+        assert collector._frames == max_turns
 
 
 class TestUpdate:

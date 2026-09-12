@@ -42,7 +42,9 @@ class RayLLMCollector(LLMCollector):
         dialog_turns_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_dialog_turns (int): A keyword-only argument representing the total
-            number of dialog turns returned by the collector during its lifespan.
+            number of environment dialog turns (steps that actually ran) during
+            the collector's lifespan. When ``yield_only_last_steps=True``,
+            dropped intermediate turns still count.
         yield_only_last_steps (bool, optional): whether to yield every step of a trajectory, or only the
             last (done) steps.
         yield_completed_trajectories (bool, optional): whether to yield batches of rollouts with a given number of steps
