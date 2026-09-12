@@ -35,6 +35,7 @@ from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
+    LogProbDistribution,
     LogProbs,
     Masks,
     Text,
@@ -3937,29 +3938,21 @@ class TestVLLMPromptLogprobsContract:
 
 
 class _PromptLogprobsFixedPolicy(torch.nn.Module):
-    """Return stored current log-probs so GRPOLoss can compare shapes."""
+    """Return stored current log-probs via :class:`LogProbDistribution`."""
 
     in_keys = ()
 
     def get_dist(self, tensordict, **kwargs):
-        class _Dist:
-            def __init__(self, log_prob, mask):
-                self.log_prob_value = log_prob
-                self.mask = mask
-
-            def log_prob(self, value):
-                return self.log_prob_value
-
-        return _Dist(tensordict["current_log_prob"], tensordict["mask"])
+        return LogProbDistribution(tensordict["current_log_prob"], tensordict["mask"])
 
 
 class TestVLLMPromptLogprobsConsumers:
-    """Generate-path LogProbs.full must stay aligned with tokens.full (#4255)."""
+    """Generate-path LogProbs.full must stay aligned without inventing scores (#4255)."""
 
     @staticmethod
     def _three_plus_two_tokens(*, pad_output: bool):
         prompt_tokens = torch.tensor([1, 2, 3], dtype=torch.long)
-        response_lp = torch.tensor([-0.4, -0.5], dtype=torch.float32)
+        response_lp = torch.tensor([-0.5, -0.6], dtype=torch.float32)
         if pad_output:
             return prompt_tokens.unsqueeze(0), response_lp.unsqueeze(0)
         return [prompt_tokens], [response_lp]
@@ -3968,7 +3961,7 @@ class TestVLLMPromptLogprobsConsumers:
         prompt_tokens, response_lp = self._three_plus_two_tokens(pad_output=True)
         full = _assemble_generate_full_logprobs(None, response_lp, prompt_tokens)
         assert full.shape == (1, 5)
-        torch.testing.assert_close(full[..., :3], torch.zeros(1, 3))
+        assert not torch.isfinite(full[..., :3]).any()
         torch.testing.assert_close(full[..., 3:], response_lp)
 
     def test_missing_prompt_full_matches_tokens_unpadded(self):
@@ -3976,7 +3969,7 @@ class TestVLLMPromptLogprobsConsumers:
         full = _assemble_generate_full_logprobs(None, response_lp, prompt_tokens)
         assert isinstance(full, list) and len(full) == 1
         assert full[0].shape == (5,)
-        torch.testing.assert_close(full[0][:3], torch.zeros(3))
+        assert not torch.isfinite(full[0][:3]).any()
         torch.testing.assert_close(full[0][3:], response_lp[0])
 
     def test_engine_prompt_scores_are_concatenated(self):
@@ -3991,27 +3984,38 @@ class TestVLLMPromptLogprobsConsumers:
         assert _assemble_generate_full_logprobs(None, response_lp, None) is None
 
     def test_generate_output_to_grpo_loss(self):
-        prompt_tokens, response_lp = self._three_plus_two_tokens(pad_output=True)
+        # Prompt has three tokens; token 1 is an earlier assistant turn.
+        # An unchanged policy must keep a unit ratio there even though
+        # generate-path LogProbs.full has no engine score for the prompt.
+        prompt_tokens = torch.tensor([[1, 2, 3]], dtype=torch.long)
+        response_lp = torch.tensor([[-0.5, -0.6]], dtype=torch.float32)
         sample_log_prob = _assemble_generate_full_logprobs(
             None, response_lp, prompt_tokens
         )
         tokens_full = torch.cat(
             [prompt_tokens, torch.tensor([[10, 11]], dtype=torch.long)], dim=-1
         )
-        current_log_prob = torch.randn(1, 5)
+        current_log_prob = torch.tensor([[-0.2, -0.3, -0.4, -0.5, -0.6]])
+        assistant_mask = torch.tensor([[False, True, False, True, True]])
         data = TensorDict(
             {
                 "current_log_prob": current_log_prob,
-                "mask": torch.tensor([[False, False, False, True, True]]),
+                "mask": assistant_mask,
                 ("tokens", "full"): tokens_full,
                 ("log_probs", "full"): sample_log_prob,
                 "advantage": torch.ones(1, 5, 1),
             },
             batch_size=[1],
         )
-        loss = GRPOLoss(_PromptLogprobsFixedPolicy(), entropy_bonus=False)(data)
+        loss_mod = GRPOLoss(_PromptLogprobsFixedPolicy(), entropy_bonus=False)
+        log_weight, dist, _ = loss_mod._log_weight(data, adv_shape=torch.Size([1, 5]))
+        ratio = log_weight.squeeze(-1).exp()
+        torch.testing.assert_close(ratio[assistant_mask], torch.ones(3))
+        assert not dist.mask[0, 1]
+        assert dist.mask[0, 3] and dist.mask[0, 4]
+        loss = loss_mod(data)
         assert torch.isfinite(loss.loss_objective)
-        assert loss.loss_objective.shape == ()
+        torch.testing.assert_close(loss.loss_objective, torch.tensor(-1.0))
 
     def test_response_only_full_breaks_grpo_shape(self):
         # The previous generate-path fallback (full = response) is what
@@ -4032,7 +4036,7 @@ class TestVLLMPromptLogprobsConsumers:
     def test_generate_output_to_kl_computation(self):
         prompt_tokens, response_lp = self._three_plus_two_tokens(pad_output=True)
         gen_full = _assemble_generate_full_logprobs(None, response_lp, prompt_tokens)
-        ref_full = torch.randn(1, 5)
+        ref_full = torch.tensor([[-0.2, -0.3, -0.4, -0.8, -0.9]])
         data = TensorDict(
             {
                 ("log_probs", "full"): gen_full,
@@ -4043,7 +4047,8 @@ class TestVLLMPromptLogprobsConsumers:
         result = KLComputation(add_to_reward=False)(data)
         kl = result.get("kl_penalty", as_list=True)
         assert kl[0].shape == (5,)
-        torch.testing.assert_close(kl[0], gen_full[0] - ref_full[0])
+        torch.testing.assert_close(kl[0][:3], torch.zeros(3))
+        torch.testing.assert_close(kl[0][3:], gen_full[0][3:] - ref_full[0][3:])
 
 
 class TestTRLInterop:

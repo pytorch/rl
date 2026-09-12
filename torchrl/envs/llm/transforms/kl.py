@@ -1492,11 +1492,12 @@ class KLComputation(Transform):
                 )
 
         # Compute KL divergence: KL(p||q) = E_p[log p - log q]
-        # Here gen_log_probs = log p, ref_log_probs = log q
-        kl = [
-            gen_lp - ref_lp
-            for gen_lp, ref_lp in _zip_strict(gen_log_probs, ref_log_probs)
-        ]
+        # Here gen_log_probs = log p, ref_log_probs = log q.
+        # Non-finite values are alignment pads, not scores; 0.0 is log 1.
+        kl = []
+        for gen_lp, ref_lp in _zip_strict(gen_log_probs, ref_log_probs):
+            diff = gen_lp - ref_lp
+            kl.append(torch.where(torch.isfinite(diff), diff, torch.zeros_like(diff)))
 
         kl = torch.nested.as_nested_tensor(kl, layout=torch.strided)
 
