@@ -839,10 +839,43 @@ class TestRandomTruncationTransform(TransformBase):
         check_env_specs(env)
         rollout = env.rollout(20, break_when_any_done=False)
         assert ("next", "my_steps") in rollout.keys(True, True)
-        assert "step_count" not in rollout.keys()
+        assert "step_count" not in rollout.keys(True, True)
         assert rollout["next", "my_steps"].max() <= max_horizon
         assert rollout["next", "truncated"].any()
         assert rollout["next", "done"][rollout["next", "truncated"]].all()
+
+    def test_nested_custom_step_count_key(self):
+        """Last-component matching honors a custom NestedKey on a nested env."""
+        torch.manual_seed(0)
+        max_horizon = 5
+        env = TransformedEnv(
+            _AgentNestedCountingEnv(max_steps=100),
+            Compose(
+                StepCounter(step_count_key="my_steps"),
+                RandomTruncationTransform(
+                    prob=1.0,
+                    min_horizon=1,
+                    max_horizon=max_horizon,
+                    step_count_key="my_steps",
+                ),
+            ),
+        )
+        check_env_specs(env)
+        obs_keys = env.observation_spec.keys(True, True)
+        assert ("agent", "my_steps") in obs_keys
+        assert "my_steps" not in obs_keys
+        assert "step_count" not in obs_keys
+        rollout = env.rollout(20, break_when_any_done=False)
+        assert ("next", "agent", "my_steps") in rollout.keys(True, True)
+        assert "step_count" not in rollout.keys(True, True)
+        step_count = rollout["next", "agent", "my_steps"]
+        truncated = rollout["next", "agent", "truncated"]
+        done = rollout["next", "agent", "done"]
+        assert step_count.max() <= max_horizon
+        assert truncated.any(), "nested truncated should flip True by the horizon"
+        assert done[truncated].all()
+        assert (step_count[truncated] >= 1).all()
+        assert (step_count[truncated] <= max_horizon).all()
 
     def test_validation(self):
         """Invalid parameters raise ValueError."""
