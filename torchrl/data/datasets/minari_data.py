@@ -641,11 +641,17 @@ def _preallocate_nontensor_fields(
                 full_dst_key = prefix + (mapped_key,)
 
                 if is_non_tensor(val):
-                    dummy_stack = NonTensorStack(
-                        *[total_steps for _ in range(total_steps)]
+                    # Current and next must not share one stack: later
+                    # update_ of the TED current slice would otherwise
+                    # overwrite next (same object), so missions never shift.
+                    dst_td.set(
+                        full_dst_key,
+                        NonTensorStack(*[total_steps for _ in range(total_steps)]),
                     )
-                    dst_td.set(full_dst_key, dummy_stack)
-                    dst_td.set(("next",) + full_dst_key, dummy_stack)
+                    dst_td.set(
+                        ("next",) + full_dst_key,
+                        NonTensorStack(*[total_steps for _ in range(total_steps)]),
+                    )
 
                 elif is_tensor_collection(val):
                     _recurse(val, dst_td, full_dst_key)
