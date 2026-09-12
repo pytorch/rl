@@ -252,6 +252,7 @@ class TicTacToeEnv(EnvBase):
 
     @staticmethod
     def win(board: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        """Whether ``action`` completes a line; ``[..., 1]`` bool."""
         action = action.reshape(board.shape[:-2])
         row = action // 3
         col = action % 3

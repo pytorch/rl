@@ -139,9 +139,33 @@ class TestTicTacToeEnv:
         board[1, 1, 0] = 0
         td["mask"] = board.flatten(-2, -1) == -1
         td["action"] = torch.tensor([2, 2])
-        done = env.step(td)["next", "done"]
-        assert done[0]
-        assert not done[1]
+        nxt = env.step(td)["next"]
+        assert nxt["done"].eq(torch.tensor([[True], [False]])).all()
+        assert nxt["player0", "reward"].eq(torch.tensor([[1.0], [0.0]])).all()
+
+    def test_tictactoe_win_batched_single_player(self):
+        # env 0 wins on the learner move; env 1 stays live so player1 replies.
+        # the live board must not be overwritten by the terminal env.
+        torch.manual_seed(0)
+        env = TicTacToeEnv(single_player=True)
+        td = env.reset(TensorDict(batch_size=[2]))
+        board = td["board"]
+        board[0, 0, 0] = 1
+        board[0, 0, 1] = 1
+        board[0, 1, 0] = 0
+        board[0, 1, 1] = 0
+        board[1, 0, 0] = 1
+        board[1, 1, 0] = 0
+        td["mask"] = board.flatten(-2, -1) == -1
+        td["action"] = torch.tensor([2, 2])
+        nxt = env.step(td)["next"]
+        assert nxt["done"].eq(torch.tensor([[True], [False]])).all()
+        assert nxt["player0", "reward"].eq(torch.tensor([[1.0], [0.0]])).all()
+        assert (nxt["board"][0, 0] == 0).all()
+        assert not torch.equal(nxt["board"][1], nxt["board"][0])
+        occupied = nxt["board"] != -1
+        assert occupied[0].sum() == 5
+        assert occupied[1].sum() == 4
 
     def test_tictactoe_rand_action(self):
         torch.manual_seed(0)
