@@ -83,7 +83,7 @@ jobs:
   lint-done:
     name: lint-done
     needs: [python-source-and-configs, c-source]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check lint results
