@@ -573,9 +573,7 @@ def test_preallocate_nontensor_fields_does_not_alias_next_mission():
     missions = [b"pick up a blue box", b"pick up a green key", b"open the red door"]
     episode = _minari_like_episode(missions, n_actions=2)
     dest = TensorDict({}, batch_size=[2])
-    _preallocate_nontensor_fields(
-        dest, episode, total_steps=2, name_map=_NAME_MATCH
-    )
+    _preallocate_nontensor_fields(dest, episode, total_steps=2, name_map=_NAME_MATCH)
     current = dest.get(("observation", "mission"))
     nxt = dest.get(("next", "observation", "mission"))
     assert current is not nxt
