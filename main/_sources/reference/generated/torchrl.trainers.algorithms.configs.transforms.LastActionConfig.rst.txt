@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.LastActionConfig
+===============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: LastActionConfig

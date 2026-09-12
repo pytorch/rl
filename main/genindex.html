@@ -5437,9 +5437,13 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.device">(torchrl.envs.llm.transforms.RayDataLoadingPrimer property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer.device">(torchrl.envs.llm.transforms.Tokenizer property)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask.device">(torchrl.envs.MicroDuckTask property)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.MacroAction.html#torchrl.envs.transforms.MacroAction.device">(torchrl.envs.transforms.MacroAction property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.device">(torchrl.envs.transforms.Tokenizer property)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory.device">(torchrl.modules.llm.ChatHistory property)</a>
 </li>
@@ -7474,6 +7478,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.transforms.FrameSkipTransform.html#torchrl.envs.transforms.FrameSkipTransform.forward">(torchrl.envs.transforms.FrameSkipTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker.forward">(torchrl.envs.transforms.InitTracker method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction.forward">(torchrl.envs.transforms.LastAction method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.ModuleTransform.html#torchrl.envs.transforms.ModuleTransform.forward">(torchrl.envs.transforms.ModuleTransform method)</a>
 </li>
@@ -11544,6 +11550,10 @@ document.write(`
 <h2 id="L">L</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction">LastAction (class in torchrl.envs.transforms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.LastActionConfig.html#torchrl.trainers.algorithms.configs.transforms.LastActionConfig">LastActionConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
+</li>
       <li><a href="reference/generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation.latest">latest() (torchrl.checkpoint.CheckpointRotation method)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.AsyncVLLM.html#torchrl.modules.llm.AsyncVLLM.launch">launch() (torchrl.modules.llm.AsyncVLLM class method)</a>
@@ -14296,6 +14306,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html#torchrl.modules.OrnsteinUhlenbeckProcessModule">OrnsteinUhlenbeckProcessModule (class in torchrl.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer.out_device">out_device (torchrl.envs.llm.transforms.Tokenizer property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.out_device">(torchrl.envs.transforms.Tokenizer property)</a>
+</li>
+      </ul></li>
       <li><a href="reference/glossary.html#term-out_keys"><strong>out_keys</strong></a>
 
       <ul>
@@ -22511,6 +22527,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker.transform_observation_spec">(torchrl.envs.transforms.InitTracker method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction.transform_observation_spec">(torchrl.envs.transforms.LastAction method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.transforms.MeanActionSelector.html#torchrl.envs.transforms.MeanActionSelector.transform_observation_spec">(torchrl.envs.transforms.MeanActionSelector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.ModuleTransform.html#torchrl.envs.transforms.ModuleTransform.transform_observation_spec">(torchrl.envs.transforms.ModuleTransform method)</a>
@@ -23574,6 +23592,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase">WeightUpdaterBase (class in torchrl.collectors)</a>
 </li>
+      <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.win">win() (torchrl.envs.TicTacToeEnv static method)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv.with_tokenizer">with_tokenizer() (torchrl.envs.llm.ChatEnv class method)</a>
 </li>
       <li><a href="reference/generated/torchrl.checkpoint.CheckpointError.html#torchrl.checkpoint.CheckpointError.with_traceback">with_traceback() (torchrl.checkpoint.CheckpointError method)</a>
@@ -23632,10 +23652,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel">WorldModel (class in torchrl.modules)</a>
 </li>
-      <li><a href="reference/generated/torchrl.envs.model_based.world_model_env.WorldModelEnv.html#torchrl.envs.model_based.world_model_env.WorldModelEnv">WorldModelEnv() (in module torchrl.envs.model_based.world_model_env)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.envs.model_based.world_model_env.WorldModelEnv.html#torchrl.envs.model_based.world_model_env.WorldModelEnv">WorldModelEnv() (in module torchrl.envs.model_based.world_model_env)</a>
+</li>
       <li><a href="reference/generated/torchrl.objectives.WorldModelLoss.html#torchrl.objectives.WorldModelLoss">WorldModelLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper">WorldModelWrapper (class in torchrl.modules)</a>

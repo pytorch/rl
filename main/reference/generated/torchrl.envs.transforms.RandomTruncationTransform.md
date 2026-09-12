@@ -1,6 +1,6 @@
 # RandomTruncationTransform
 
-*class*torchrl.envs.transforms.RandomTruncationTransform(*min_horizon: int*, *max_horizon: int*, *prob: float = 0.0*, *first_episode_prob: float | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#RandomTruncationTransform)
+*class*torchrl.envs.transforms.RandomTruncationTransform(*min_horizon: int*, *max_horizon: int*, *prob: float = 0.0*, *first_episode_prob: float | None = None*, ***, *step_count_key: NestedKey = 'step_count'*, *truncated_key: NestedKey = 'truncated'*, *done_key: NestedKey = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#RandomTruncationTransform)
 
 Randomly truncate episodes to decorrelate synchronized batched envs.
 
@@ -24,7 +24,14 @@ decorrelation when batch sizes are large relative to `max_horizon`.
 Note
 
 This transform must be placed **after** `StepCounter`
-in the transform chain, as it relies on the `"step_count"` key.
+in the transform chain. It reads the same step-count
+`NestedKey` that the validator accepts - a key
+whose last component equals `step_count_key` (default
+`"step_count"`), not only a root-level `"step_count"`. Truncation
+flags are written next to that counter (e.g. `("agent", "step_count")`
+produces `("agent", "truncated")` / `("agent", "done")`), matching
+`StepCounter`. Pass the same `step_count_key`
+used by `StepCounter` when that key is customized.
 
 Parameters:
 
@@ -42,6 +49,24 @@ recommended - frequent truncation can negatively impact training.
 - **first_episode_prob** (*float**,**optional*) - truncation probability for each
 environment's first episode after the initial spread. Defaults to
 `prob` when omitted.
+
+Keyword Arguments:
+
+- **step_count_key** (*NestedKey**,**optional*) - key of the step counter written
+by `StepCounter`. A string is matched against
+the last component of any nested key (so `"step_count"` finds
+`("agent", "step_count")`). A tuple is used as an exact
+`NestedKey`. Must match
+`StepCounter`'s `step_count_key` when that
+is customized. Defaults to `"step_count"`.
+- **truncated_key** (*NestedKey**,**optional*) - key where the truncation flag is
+written. A string is placed next to the resolved step-count key
+via last-component replacement, matching
+`StepCounter`. A tuple is used as an exact
+key. Defaults to `"truncated"`.
+- **done_key** (*NestedKey**,**optional*) - key of the done flag that is OR-ed
+with the truncation signal, resolved like `truncated_key`.
+Defaults to `"done"`.
 
 Examples
 

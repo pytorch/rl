@@ -28,6 +28,10 @@ This transform can be used both to transform output strings into tokens and to t
 actions or states into strings. If the environment has a string state-spec, the transformed version will have
 a tokenized state-spec. If it is a string action spec, it will result in a tokenized action spec.
 
+*property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Deprecated alias for `out_device`, removed in TorchRL v0.17.
+
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#Tokenizer.forward)
 
 Reads the input tensordict, and for the selected keys, applies the transform.
@@ -61,6 +65,13 @@ Examples
 >>> env = env.append_transform(t) # works within envs
 >>> t(TensorDict(a=0)) # Works offline too.
 ```
+
+*property*out_device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Destination for token tensors and attention masks, read from the parent.
+
+If there is no parent or its device is `None`, tokenization outputs
+retain the device chosen by the tokenizer.
 
 transform_done_spec(*done_spec: [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*) → [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)
 

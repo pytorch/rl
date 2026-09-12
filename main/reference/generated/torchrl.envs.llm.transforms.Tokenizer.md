@@ -210,6 +210,10 @@ Return type:
 
 Module
 
+*property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Deprecated alias for `out_device`, removed in TorchRL v0.17.
+
 double() → Self
 
 Casts all floating point parameters and buffers to `double` datatype.
@@ -706,6 +710,13 @@ Example:
 >>> if name in ['bias']:
 >>> print(param.size())
 ```
+
+*property*out_device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Destination for token tensors and attention masks, read from the parent.
+
+If there is no parent or its device is `None`, tokenization outputs
+retain the device chosen by the tokenizer.
 
 parameters(*recurse: bool = True*) → Iterator[[Parameter](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter)]
 

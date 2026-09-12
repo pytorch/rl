@@ -2,6 +2,11 @@
 
 Transforms for LLM environments, including tools and utilities.
 
+[`Tokenizer.out_device`](generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer.out_device) describes the destination of token tensors and
+attention masks. It follows the current parent environment device; `None`
+leaves outputs on the tokenizer's chosen device. `Tokenizer.device` is a
+deprecated alias and will be removed in TorchRL v0.17.
+
 | [`AddThinkingPrompt`](generated/torchrl.envs.llm.transforms.AddThinkingPrompt.html#torchrl.envs.llm.transforms.AddThinkingPrompt)(cond[, prompt, ...]) | A transform that adds thinking prompts to encourage the LLM to reconsider its response. |
 | --- | --- |
 | [`BrowserTransform`](generated/torchrl.envs.llm.transforms.BrowserTransform.html#torchrl.envs.llm.transforms.BrowserTransform)([allowed_domains, ...]) | A transform that enables web browsing capabilities. |

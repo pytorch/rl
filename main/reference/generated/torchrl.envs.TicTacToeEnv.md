@@ -3045,6 +3045,10 @@ Return type:
 
 Module
 
+*static*win(*board: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *action: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/envs/custom/tictactoeenv.html#TicTacToeEnv.win)
+
+Whether `action` completes a line; `[..., 1]` bool.
+
 xpu(*device: int | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → Self
 
 Move all model parameters and buffers to the XPU.

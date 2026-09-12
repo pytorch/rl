@@ -25,6 +25,11 @@ By default, the transformed environment will inherit the device of the
 It is now apparent that this can bring a significant speedup depending on the kind of
 operations that is to be computed.
 
+[`Tokenizer.out_device`](generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.out_device) describes the destination of token tensors and
+attention masks. It follows the current parent environment device; `None`
+leaves outputs on the tokenizer's chosen device. `Tokenizer.device` is a
+deprecated alias and will be removed in TorchRL v0.17.
+
 A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
 The same can be achieved with TorchRL transformed environments: the `parent` attribute will
 return a new [`TransformedEnv`](generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv) with all the transforms up to the transform of interest.
@@ -284,6 +289,7 @@ to be able to create this other composition:
 | [`Hash`](generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash)(in_keys, out_keys[, in_keys_inv, ...]) | Adds a hash value to a tensordict. |
 | [`HumanoidMacroAction`](generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction)(mode, steps, ...[, ...]) | |
 | [`InitTracker`](generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker)([init_key]) | Reset tracker. |
+| [`LastAction`](generated/torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction)([in_keys, out_keys, default, ...]) | Copies the last action into the next observation. |
 | [`LineariseRewards`](generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards)(in_keys[, out_keys, weights]) | Transforms a multi-objective reward signal to a single-objective one via a weighted sum. |
 | [`MacroAction`](generated/torchrl.envs.transforms.MacroAction.html#torchrl.envs.transforms.MacroAction)(mode, steps, settle_steps, *, ...) | |
 | [`MacroPrimitive`](generated/torchrl.envs.transforms.MacroPrimitive.html#torchrl.envs.transforms.MacroPrimitive)(value[, names, module, ...]) | Generic primitive ids understood by [`MacroPrimitiveTransform`](generated/torchrl.envs.transforms.MacroPrimitiveTransform.html#torchrl.envs.transforms.MacroPrimitiveTransform). |

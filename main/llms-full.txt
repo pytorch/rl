@@ -3255,6 +3255,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`TimeMaxPoolConfig`](generated/torchrl.trainers.algorithms.configs.transforms.TimeMaxPoolConfig.html#torchrl.trainers.algorithms.configs.transforms.TimeMaxPoolConfig)([dim, in_keys, out_keys, ...]) | Configuration for TimeMaxPool transform. |
 | [`RandomCropTensorDictConfig`](generated/torchrl.trainers.algorithms.configs.transforms.RandomCropTensorDictConfig.html#torchrl.trainers.algorithms.configs.transforms.RandomCropTensorDictConfig)([crop_size, ...]) | Configuration for RandomCropTensorDict transform. |
 | [`InitTrackerConfig`](generated/torchrl.trainers.algorithms.configs.transforms.InitTrackerConfig.html#torchrl.trainers.algorithms.configs.transforms.InitTrackerConfig)([init_key, _target_]) | Configuration for InitTracker transform. |
+| [`LastActionConfig`](generated/torchrl.trainers.algorithms.configs.transforms.LastActionConfig.html#torchrl.trainers.algorithms.configs.transforms.LastActionConfig)([in_keys, out_keys, ...]) | Hydra configuration for [`LastAction`](generated/torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction). |
 | [`RenameTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.RenameTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.RenameTransformConfig)([key_mapping, _target_]) | Configuration for RenameTransform. |
 | [`Reward2GoTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.Reward2GoTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.Reward2GoTransformConfig)([gamma, in_keys, ...]) | Configuration for Reward2GoTransform. |
 | [`ActionMaskConfig`](generated/torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig.html#torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig)([mask_key, in_keys, ...]) | Configuration for ActionMask transform. |
@@ -6358,6 +6359,11 @@ By default, the transformed environment will inherit the device of the
 It is now apparent that this can bring a significant speedup depending on the kind of
 operations that is to be computed.
 
+[`Tokenizer.out_device`](generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.out_device) describes the destination of token tensors and
+attention masks. It follows the current parent environment device; `None`
+leaves outputs on the tokenizer's chosen device. `Tokenizer.device` is a
+deprecated alias and will be removed in TorchRL v0.17.
+
 A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
 The same can be achieved with TorchRL transformed environments: the `parent` attribute will
 return a new [`TransformedEnv`](generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv) with all the transforms up to the transform of interest.
@@ -6617,6 +6623,7 @@ to be able to create this other composition:
 | [`Hash`](generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash)(in_keys, out_keys[, in_keys_inv, ...]) | Adds a hash value to a tensordict. |
 | [`HumanoidMacroAction`](generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction)(mode, steps, ...[, ...]) | |
 | [`InitTracker`](generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker)([init_key]) | Reset tracker. |
+| [`LastAction`](generated/torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction)([in_keys, out_keys, default, ...]) | Copies the last action into the next observation. |
 | [`LineariseRewards`](generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards)(in_keys[, out_keys, weights]) | Transforms a multi-objective reward signal to a single-objective one via a weighted sum. |
 | [`MacroAction`](generated/torchrl.envs.transforms.MacroAction.html#torchrl.envs.transforms.MacroAction)(mode, steps, settle_steps, *, ...) | |
 | [`MacroPrimitive`](generated/torchrl.envs.transforms.MacroPrimitive.html#torchrl.envs.transforms.MacroPrimitive)(value[, names, module, ...]) | Generic primitive ids understood by [`MacroPrimitiveTransform`](generated/torchrl.envs.transforms.MacroPrimitiveTransform.html#torchrl.envs.transforms.MacroPrimitiveTransform). |
@@ -34244,7 +34251,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4f7d511120>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f673c1aabb0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47561,7 +47568,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f4f80488fe0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f673f078fe0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -124319,6 +124326,10 @@ Return type:
 
 Module
 
+*static*win(*board: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *action: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/envs/custom/tictactoeenv.html#TicTacToeEnv.win)
+
+Whether `action` completes a line; `[..., 1]` bool.
+
 xpu(*device: int | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → Self
 
 Move all model parameters and buffers to the XPU.
@@ -191718,6 +191729,10 @@ Return type:
 
 Module
 
+*property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Deprecated alias for `out_device`, removed in TorchRL v0.17.
+
 double() → Self
 
 Casts all floating point parameters and buffers to `double` datatype.
@@ -192214,6 +192229,13 @@ Example:
 >>> if name in ['bias']:
 >>> print(param.size())
 ```
+
+*property*out_device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Destination for token tensors and attention masks, read from the parent.
+
+If there is no parent or its device is `None`, tokenization outputs
+retain the device chosen by the tokenizer.
 
 parameters(*recurse: bool = True*) → Iterator[[Parameter](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter)]
 
@@ -198569,6 +198591,123 @@ expected spec after the transform
 
 ---
 
+# LastAction
+
+*class*torchrl.envs.transforms.LastAction(*in_keys: Sequence[NestedKey] | NestedKey | None = None*, *out_keys: Sequence[NestedKey] | NestedKey | None = None*, ***, *default: Literal['zeros', 'nan'] | float | int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) = 'zeros'*, *reset_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#LastAction)
+
+Copies the last action into the next observation.
+
+This is the action analogue of [`CatFrames`](torchrl.envs.transforms.CatFrames.html#torchrl.envs.transforms.CatFrames):
+the policy can condition on the action taken at the previous step (delayed
+control, recurrent policies, residual action heads). On each
+[`step()`](torchrl.envs.EnvBase.html#id4) the action at time `t` is written
+under `out_keys` in the `"next"` tensordict; on
+[`reset()`](torchrl.envs.EnvBase.html#id1) the same keys are filled with a
+default value (zeros, NaN, or a user-provided fill). On a batch-unlocked
+parent the default is expanded by the runtime reset batch, preserving
+the action feature shape.
+
+`out_keys` are registered as [`Unbounded`](torchrl.data.Unbounded.html#torchrl.data.Unbounded)
+observation specs with the action's shape, dtype and device, so reset
+fills (zeros on a one-hot action, NaN on a bounded action) remain
+in-spec.
+
+Parameters:
+
+- **in_keys** (*NestedKey**or**sequence**of**NestedKey**,**optional*) - keys pointing
+to the actions to remember. Defaults to the parent environment's
+[`action_keys`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.action_keys) when the transform is
+attached, or `["action"]` otherwise.
+- **out_keys** (*NestedKey**or**sequence**of**NestedKey**,**optional*) - destination
+keys written into the observation. Defaults to each `in_keys`
+entry with its last component replaced by `"last_action"`
+(e.g. `"action"` -> `"last_action"`,
+`("agents", "action")` -> `("agents", "last_action")`).
+
+Keyword Arguments:
+
+- **default** (*str**,**number**or*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - value used to fill
+`out_keys` on [`reset()`](torchrl.envs.EnvBase.html#id1). `"zeros"`
+(default) writes zeros matching the action spec; `"nan"` writes
+NaNs (floating-point action specs only); a scalar is broadcast
+with [`fill_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.fill_.html#torch.Tensor.fill_); a tensor is broadcast to the
+action spec shape on the spec's device and dtype. Defaults to
+`"zeros"`.
+- **reset_key** (*NestedKey**,**optional*) - the reset key to be used as a
+partial-reset indicator. Must be unique. If not provided, defaults
+to the only reset key of the parent environment (if it has only
+one) and raises an exception otherwise.
+
+Examples
+
+```
+>>> from torchrl.envs import GymEnv, TransformedEnv
+>>> from torchrl.envs.transforms import LastAction
+>>> env = TransformedEnv(GymEnv("Pendulum-v1"), LastAction())
+>>> td = env.reset()
+>>> td["last_action"]
+tensor([0.])
+>>> rollout = env.rollout(3)
+>>> (rollout["next", "last_action"] == rollout["action"]).all()
+tensor(True)
+```
+
+See also
+
+[`CatFrames`](torchrl.envs.transforms.CatFrames.html#torchrl.envs.transforms.CatFrames) for stacking past
+observations, [`InitTracker`](torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker) for
+marking episode starts, and
+`LastActionConfig` for the
+Hydra configuration.
+
+forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/envs/transforms/_action.html#LastAction.forward)
+
+Reads the input tensordict, and for the selected keys, applies the transform.
+
+By default, this method:
+
+- calls directly `_apply_transform()`.
+- does not call `_step()` or `_call()`.
+
+This method is not called within env.step at any point. However, is is called within
+[`sample()`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.sample).
+
+Note
+
+`forward` also works with regular keyword arguments using [`dispatch`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch) to cast the args
+names to the keys.
+
+Examples
+
+```
+>>> class TransformThatMeasuresBytes(Transform):
+... '''Measures the number of bytes in the tensordict, and writes it under `"bytes"`.'''
+... def __init__(self):
+... super().__init__(in_keys=[], out_keys=["bytes"])
+...
+... def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+... bytes_in_td = tensordict.bytes()
+... tensordict["bytes"] = bytes
+... return tensordict
+>>> t = TransformThatMeasuresBytes()
+>>> env = env.append_transform(t) # works within envs
+>>> t(TensorDict(a=0)) # Works offline too.
+```
+
+transform_observation_spec(*observation_spec: [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*) → [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)[[source]](../../_modules/torchrl/envs/transforms/_action.html#LastAction.transform_observation_spec)
+
+Transforms the observation spec such that the resulting spec matches transform mapping.
+
+Parameters:
+
+**observation_spec** ([*TensorSpec*](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)) - spec before the transform
+
+Returns:
+
+expected spec after the transform
+
+---
+
 # LineariseRewards
 
 *class*torchrl.envs.transforms.LineariseRewards(*in_keys: Sequence[NestedKey]*, *out_keys: Sequence[NestedKey] | None = None*, ***, *weights: Sequence[float] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#LineariseRewards)
@@ -200934,7 +201073,7 @@ Examples
 
 # RandomTruncationTransform
 
-*class*torchrl.envs.transforms.RandomTruncationTransform(*min_horizon: int*, *max_horizon: int*, *prob: float = 0.0*, *first_episode_prob: float | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#RandomTruncationTransform)
+*class*torchrl.envs.transforms.RandomTruncationTransform(*min_horizon: int*, *max_horizon: int*, *prob: float = 0.0*, *first_episode_prob: float | None = None*, ***, *step_count_key: NestedKey = 'step_count'*, *truncated_key: NestedKey = 'truncated'*, *done_key: NestedKey = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_env.html#RandomTruncationTransform)
 
 Randomly truncate episodes to decorrelate synchronized batched envs.
 
@@ -200958,7 +201097,14 @@ decorrelation when batch sizes are large relative to `max_horizon`.
 Note
 
 This transform must be placed **after** `StepCounter`
-in the transform chain, as it relies on the `"step_count"` key.
+in the transform chain. It reads the same step-count
+`NestedKey` that the validator accepts - a key
+whose last component equals `step_count_key` (default
+`"step_count"`), not only a root-level `"step_count"`. Truncation
+flags are written next to that counter (e.g. `("agent", "step_count")`
+produces `("agent", "truncated")` / `("agent", "done")`), matching
+`StepCounter`. Pass the same `step_count_key`
+used by `StepCounter` when that key is customized.
 
 Parameters:
 
@@ -200976,6 +201122,24 @@ recommended - frequent truncation can negatively impact training.
 - **first_episode_prob** (*float**,**optional*) - truncation probability for each
 environment's first episode after the initial spread. Defaults to
 `prob` when omitted.
+
+Keyword Arguments:
+
+- **step_count_key** (*NestedKey**,**optional*) - key of the step counter written
+by `StepCounter`. A string is matched against
+the last component of any nested key (so `"step_count"` finds
+`("agent", "step_count")`). A tuple is used as an exact
+`NestedKey`. Must match
+`StepCounter`'s `step_count_key` when that
+is customized. Defaults to `"step_count"`.
+- **truncated_key** (*NestedKey**,**optional*) - key where the truncation flag is
+written. A string is placed next to the resolved step-count key
+via last-component replacement, matching
+`StepCounter`. A tuple is used as an exact
+key. Defaults to `"truncated"`.
+- **done_key** (*NestedKey**,**optional*) - key of the done flag that is OR-ed
+with the truncation signal, resolved like `truncated_key`.
+Defaults to `"done"`.
 
 Examples
 
@@ -205920,6 +206084,10 @@ This transform can be used both to transform output strings into tokens and to t
 actions or states into strings. If the environment has a string state-spec, the transformed version will have
 a tokenized state-spec. If it is a string action spec, it will result in a tokenized action spec.
 
+*property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Deprecated alias for `out_device`, removed in TorchRL v0.17.
+
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/envs/transforms/_tensor.html#Tokenizer.forward)
 
 Reads the input tensordict, and for the selected keys, applies the transform.
@@ -205953,6 +206121,13 @@ Examples
 >>> env = env.append_transform(t) # works within envs
 >>> t(TensorDict(a=0)) # Works offline too.
 ```
+
+*property*out_device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None*
+
+Destination for token tensors and attention masks, read from the parent.
+
+If there is no parent or its device is `None`, tokenization outputs
+retain the device chosen by the tokenizer.
 
 transform_done_spec(*done_spec: [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*) → [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)
 
@@ -269187,6 +269362,14 @@ fails at runtime because the class requires one of them.
 
 ---
 
+# torchrl.trainers.algorithms.configs.transforms.LastActionConfig
+
+*class*torchrl.trainers.algorithms.configs.transforms.LastActionConfig(*in_keys: list[Any] | None = None*, *out_keys: list[Any] | None = None*, *default: Any = 'zeros'*, *reset_key: Any | None = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.transforms._make_last_action_transform'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/transforms.html#LastActionConfig)
+
+Hydra configuration for [`LastAction`](torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction).
+
+---
+
 # torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig
 
 *class*torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig(*in_keys: list[str] | None = None*, *out_keys: list[str] | None = None*, *weights: list[float] | None = None*, *_target_: str = 'torchrl.envs.transforms.transforms.LineariseRewards'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/transforms.html#LineariseRewardsConfig)
@@ -275202,6 +275385,11 @@ Specialized loss functions for LLM training.
 # LLM Transforms
 
 Transforms for LLM environments, including tools and utilities.
+
+[`Tokenizer.out_device`](generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer.out_device) describes the destination of token tensors and
+attention masks. It follows the current parent environment device; `None`
+leaves outputs on the tokenizer's chosen device. `Tokenizer.device` is a
+deprecated alias and will be removed in TorchRL v0.17.
 
 | [`AddThinkingPrompt`](generated/torchrl.envs.llm.transforms.AddThinkingPrompt.html#torchrl.envs.llm.transforms.AddThinkingPrompt)(cond[, prompt, ...]) | A transform that adds thinking prompts to encourage the LLM to reconsider its response. |
 | --- | --- |
