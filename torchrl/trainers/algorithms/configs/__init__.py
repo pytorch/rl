@@ -168,6 +168,7 @@ from torchrl.trainers.algorithms.configs.transforms import (
     CropConfig,
     DeviceCastTransformConfig,
     DiscreteActionProjectionConfig,
+    DoneTransformConfig,
     DoubleToFloatConfig,
     DTypeCastTransformConfig,
     EndOfLifeTransformConfig,
@@ -346,6 +347,7 @@ __all__ = [
     "CropConfig",
     "DeviceCastTransformConfig",
     "DiscreteActionProjectionConfig",
+    "DoneTransformConfig",
     "DoubleToFloatConfig",
     "DTypeCastTransformConfig",
     "EndOfLifeTransformConfig",
@@ -589,6 +591,7 @@ def _register_configs():
     cs.store(group="transform", name="noop_reset", node=NoopResetEnvConfig)
     cs.store(group="transform", name="step_counter", node=StepCounterConfig)
     cs.store(group="transform", name="expand_as", node=ExpandAsConfig)
+    cs.store(group="transform", name="done", node=DoneTransformConfig)
     cs.store(group="transform", name="compose", node=ComposeConfig)
     cs.store(group="transform", name="double_to_float", node=DoubleToFloatConfig)
     cs.store(group="transform", name="to_tensor_image", node=ToTensorImageConfig)
