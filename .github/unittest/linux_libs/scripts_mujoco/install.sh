@@ -44,10 +44,11 @@ else
 fi
 
 
-# MuJoCo physics backends -- pinned for compatibility with mujoco-torch 0.2.0:
-# mujoco>=3.8 removed the mjENBL_MULTICCD enum that mujoco-torch 0.2.0 references.
+# Keep the native and MJX versions paired. The mujoco-torch revision includes
+# the sparse mass-matrix batching and multi-mesh rendering fixes (#88, #89),
+# required by the football scene but absent from the 0.2.0 release.
 pip install mujoco==3.7.0 mujoco-mjx==3.7.0 'jax[cuda12]>=0.7.0,<0.11' --progress-bar off
-pip install mujoco-torch==0.2.0 --no-deps --progress-bar off
+pip install 'mujoco-torch @ https://github.com/vmoens/mujoco-torch/archive/08ec29fbadf18fc51f0c52ee6836a3788f370353.zip' --no-deps --progress-bar off
 
 # install tensordict
 pip install git+https://github.com/pytorch/tensordict.git --progress-bar off

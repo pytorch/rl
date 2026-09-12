@@ -61,10 +61,10 @@ if TYPE_CHECKING:
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
+# Name prefix of the two teams; team 0 attacks along ``+x``.
 TEAM_NAMES: tuple[str, str] = ("blue", "red")
-"""Name prefix of the two teams; team 0 attacks along ``+x``."""
+# Name of the MJCF ``<numeric>`` element that records the pitch parameters.
 FOOTBALL_NUMERIC: str = "football"
-"""Name of the MJCF ``<numeric>`` element that records the pitch parameters."""
 _WALL_THICKNESS = 0.02
 _ROBOT_COMPILER_FLAGS = (
     "fitaabb",
