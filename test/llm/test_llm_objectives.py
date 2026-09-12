@@ -1539,7 +1539,7 @@ def _grpo_masking_history_td(model, tokenizer):
         generate=False,
         return_log_probs=True,
         pad_output=True,
-        tokenizer_kwargs={"chat_template_name": "qwen"},
+        chat_template_name="qwen",
     )
     td = td.update(wrapper(td))
     log_probs = td.get(("log_probs", "full"), as_padded_tensor=True)
@@ -1551,10 +1551,12 @@ def _grpo_masking_history_td(model, tokenizer):
 class TestGRPOLossMaskingContract:
     """Deterministic CPU checks of the masking strategy contract.
 
-    Every supported combination of wrapper input mode and masking strategy must
-    run through GRPOLoss.forward with a finite loss, and ``rlhf`` with ``tokens``
-    input must fail with the assistant mask error. Response tokens are fabricated
-    so no generation engine is required (issue 4227).
+    Each supported combination of wrapper input mode and masking strategy must
+    select the tokens the contract promises, run through GRPOLoss.forward with
+    a finite loss, and keep the unreduced loss in the (B, T, 1) token layout.
+    Response tokens are fabricated so no generation engine is required
+    (issue 4227). The vLLM integration path of the skipped upstream test is not
+    covered by these cases.
     """
 
     @pytest.mark.parametrize(
@@ -1564,52 +1566,83 @@ class TestGRPOLossMaskingContract:
         model, tokenizer = tiny_qwen_and_tokenizer
         wrapper, td = _grpo_masking_history_td(model, tokenizer)
 
-        masks = td.get(("masks", "all_assistant_mask"), as_padded_tensor=True)
-        assert masks is not None
-        assert (
-            masks.shape
-            == td.get(("masks", "all_attention_mask"), as_padded_tensor=True).shape
-        )
-        assert masks.shape[0] == 2
-        assert masks.dtype == torch.bool
-        assert masks.any()
+        assistant_mask = td.get(("masks", "all_assistant_mask"), as_padded_tensor=True)
+        attention_mask = td.get(("masks", "all_attention_mask"), as_padded_tensor=True)
+        assert assistant_mask is not None
+        assert assistant_mask.shape == attention_mask.shape
+        assert assistant_mask.shape[0] == 2
+        assert assistant_mask.dtype == torch.bool
+        assert assistant_mask.any()
 
-        loss_fn = GRPOLoss(actor_network=wrapper, masking_strategy=strategy)
-        result = loss_fn(td)
+        # prompt tokens are absent in history mode, so sft and rlhf must select
+        # the assistant tokens and generic must select the attended tokens
+        if strategy == "generic":
+            dist = wrapper._get_generic_dist(td.clone())
+            expected = attention_mask
+        else:
+            get_dist = (
+                wrapper._get_sft_dist if strategy == "sft" else wrapper._get_rlhf_dist
+            )
+            dist = get_dist(td.clone())
+            expected = assistant_mask
+        torch.testing.assert_close(dist.mask.bool(), expected.bool())
+
+        result = GRPOLoss(actor_network=wrapper, masking_strategy=strategy)(td.clone())
         assert torch.isfinite(result.loss_objective)
         assert result.loss_objective.shape == ()
 
-    def test_tokens_input_rlhf_raises(self, tiny_qwen_and_tokenizer):
+        # the unreduced loss keeps the (B, T, 1) log weight layout
+        unreduced = GRPOLoss(
+            actor_network=wrapper, masking_strategy=strategy, aggregation="none"
+        )(td.clone())
+        assert unreduced.loss_objective.shape == (
+            2,
+            attention_mask.shape[-1],
+            1,
+        )
+
+    def test_tokens_input_rlhf(self, tiny_qwen_and_tokenizer):
         model, tokenizer = tiny_qwen_and_tokenizer
         wrapper, td = _grpo_masking_tokens_td(model, tokenizer)
 
+        # without an assistant mask the rlhf strategy cannot run
         loss_fn = GRPOLoss(actor_network=wrapper, masking_strategy="rlhf")
         with pytest.raises(ValueError, match="Assistant mask not found"):
-            loss_fn(td)
+            loss_fn(td.clone())
+
+        # a caller supplied assistant mask is used exactly as given
+        attention_mask = td.get(("masks", "all_attention_mask"), as_padded_tensor=True)
+        supplied = attention_mask.bool().clone()
+        supplied[..., :-6] = False
+        assert supplied.any()
+        td["masks", "all_assistant_mask"] = supplied
+        dist = wrapper._get_rlhf_dist(td.clone())
+        torch.testing.assert_close(dist.mask.bool(), supplied.bool())
+        result = loss_fn(td.clone())
+        assert torch.isfinite(result.loss_objective)
+        assert result.loss_objective.shape == ()
 
     def test_tokens_input_sft_and_generic(self, tiny_qwen_and_tokenizer):
         model, tokenizer = tiny_qwen_and_tokenizer
         wrapper, td = _grpo_masking_tokens_td(model, tokenizer)
 
-        sft = GRPOLoss(actor_network=wrapper, masking_strategy="sft")(td)
-        generic = GRPOLoss(actor_network=wrapper, masking_strategy="generic")(td)
+        attention_mask = td.get(("masks", "all_attention_mask"), as_padded_tensor=True)
+        prompt_width = td.get(("tokens", "prompt"), as_padded_tensor=True).shape[-1]
+
+        sft_dist = wrapper._get_sft_dist(td.clone())
+        expected_sft = attention_mask.clone()
+        expected_sft[..., :prompt_width] = False
+        torch.testing.assert_close(sft_dist.mask.bool(), expected_sft.bool())
+
+        generic_dist = wrapper._get_generic_dist(td.clone())
+        torch.testing.assert_close(generic_dist.mask.bool(), attention_mask.bool())
+
+        sft = GRPOLoss(actor_network=wrapper, masking_strategy="sft")(td.clone())
+        generic = GRPOLoss(actor_network=wrapper, masking_strategy="generic")(
+            td.clone()
+        )
         assert torch.isfinite(sft.loss_objective)
         assert torch.isfinite(generic.loss_objective)
-        # sft excludes the prompt positions, generic includes them, so with the
-        # same data and advantage the two losses must differ
-        assert sft.loss_objective.item() != generic.loss_objective.item()
-
-    def test_history_input_sft_falls_back_to_assistant_mask(
-        self, tiny_qwen_and_tokenizer
-    ):
-        model, tokenizer = tiny_qwen_and_tokenizer
-        wrapper, td = _grpo_masking_history_td(model, tokenizer)
-
-        sft = GRPOLoss(actor_network=wrapper, masking_strategy="sft")(td)
-        rlhf = GRPOLoss(actor_network=wrapper, masking_strategy="rlhf")(td)
-        # without ("tokens", "prompt") the sft strategy uses the assistant mask,
-        # so it must agree exactly with rlhf on the same data
-        torch.testing.assert_close(sft.loss_objective, rlhf.loss_objective)
 
 
 @pytest.mark.slow
