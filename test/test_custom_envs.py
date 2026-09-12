@@ -127,6 +127,37 @@ class TestTicTacToeEnv:
         )
         assert r.shape == (5, 100)
 
+    def test_tictactoe_win_batched(self):
+        env = TicTacToeEnv()
+        td = env.reset(TensorDict(batch_size=[2]))
+        board = td["board"]
+        board[0, 0, 0] = 1
+        board[0, 0, 1] = 1
+        board[0, 1, 0] = 0
+        board[0, 1, 1] = 0
+        board[1, 0, 0] = 1
+        board[1, 1, 0] = 0
+        td["mask"] = board.flatten(-2, -1) == -1
+        td["action"] = torch.tensor([2, 2])
+        done = env.step(td)["next", "done"]
+        assert done[0]
+        assert not done[1]
+
+    def test_tictactoe_rand_action(self):
+        torch.manual_seed(0)
+        env = TicTacToeEnv()
+        td = env.rand_action()
+        assert "action" in td
+
+        td = env.reset()
+        td["action"] = torch.tensor(0)
+        td = env.step(td)["next"]
+        mask = td["mask"]
+        assert not mask.all()
+        for _ in range(32):
+            action = env.rand_action(td.clone())["action"]
+            assert mask[action]
+
 
 class TestPendulum:
     @pytest.mark.parametrize("device", [None, *get_default_devices()])

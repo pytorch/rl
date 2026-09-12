@@ -239,34 +239,29 @@ class TicTacToeEnv(EnvBase):
         )
         if self.single_player:
             select = (~done & (turn == 0)).squeeze(-1)
-            if select.all():
-                state_select = state
-            elif select.any():
-                state_select = state[select]
-            else:
+            if not select.any():
                 return state
-            state_select = self._step(self.rand_action(state_select))
             if select.all():
-                return state_select
-            return torch.where(done, state, state_select)
+                return self._step(self.rand_action(state))
+            state[select] = self._step(self.rand_action(state[select]))
+            return state
         return state
 
     def _set_seed(self, seed: int | None) -> None:
         ...
 
     @staticmethod
-    def win(board: torch.Tensor, action: torch.Tensor):
-        row = action // 3  # type: ignore
-        col = action % 3  # type: ignore
-        if board[..., row, :].sum() == 3:
-            return True
-        if board[..., col].sum() == 3:
-            return True
-        if board.diagonal(0, -2, -1).sum() == 3:
-            return True
-        if board.flip(-1).diagonal(0, -2, -1).sum() == 3:
-            return True
-        return False
+    def win(board: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        action = action.reshape(board.shape[:-2])
+        row = action // 3
+        col = action % 3
+        row_win = board.sum(-1).gather(-1, row.unsqueeze(-1)).squeeze(-1) == 3
+        col_win = board.sum(-2).gather(-1, col.unsqueeze(-1)).squeeze(-1) == 3
+        diag_win = (row == col) & (board.diagonal(0, -2, -1).sum(-1) == 3)
+        antidiag_win = ((row + col) == 2) & (
+            board.flip(-1).diagonal(0, -2, -1).sum(-1) == 3
+        )
+        return (row_win | col_win | diag_win | antidiag_win).unsqueeze(-1)
 
     @staticmethod
     def full(board: torch.Tensor) -> bool:
@@ -277,12 +272,15 @@ class TicTacToeEnv(EnvBase):
         pass
 
     def rand_action(self, tensordict: TensorDictBase | None = None):
-        mask = tensordict.get("mask")
+        if tensordict is None:
+            tensordict = TensorDict(batch_size=self.batch_size, device=self.device)
+        mask = tensordict.get("mask", None)
         action_spec = self.action_spec
         if tensordict.ndim:
             action_spec = action_spec.expand(tensordict.shape)
         else:
             action_spec = action_spec.clone()
-        action_spec.update_mask(mask)
+        if mask is not None:
+            action_spec.update_mask(mask)
         tensordict.set(self.action_key, action_spec.rand())
         return tensordict
