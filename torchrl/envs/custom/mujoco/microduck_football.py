@@ -577,9 +577,14 @@ def build_football_scene(
 
         ball = world.add_body(name="ball", pos=[0.0, 0.0, ball_radius])
         ball.add_joint(name="ball_free", type=mujoco.mjtJoint.mjJNT_FREE)
-        # Hollow sphere: I = 2/3 m r^2, as in the upstream kick scene.
+        # Hollow sphere: I = 2/3 m r^2, as in the upstream kick scene. The
+        # inertial frame must sit at the body origin: MjSpec otherwise keeps
+        # the body position as the center of mass, which puts the mass at the
+        # top of the sphere and turns the rolling ball into an eccentric
+        # wheel that speeds up and bounces on its own.
         inertia = 2.0 / 3.0 * ball_mass * ball_radius**2
         ball.mass = ball_mass
+        ball.ipos = [0.0, 0.0, 0.0]
         ball.inertia = [inertia, inertia, inertia]
         ball.explicitinertial = True
         ball.add_geom(
@@ -589,7 +594,9 @@ def build_football_scene(
             rgba=[1.0, 0.55, 0.0, 1.0],
             mass=0.0,
             condim=6,
-            friction=[0.5, 0.005, 0.0001],
+            # Rolling friction 0.001: a 0.5 m/s ball loses ~0.07 m/s per
+            # second and stops within a metre; MuJoCo's default never stops.
+            friction=[0.5, 0.005, 0.001],
             contype=3,
             conaffinity=3,
         )

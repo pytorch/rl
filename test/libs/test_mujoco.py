@@ -1231,6 +1231,32 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_ball_rolls_without_speeding_up(self, tmp_path):
+        # The ball's mass sits at its center: a rolling ball keeps (slowly
+        # loses) its speed instead of wobbling like an eccentric wheel.
+        env = self._football_env(tmp_path, players_per_team=1)
+        env.reset()
+        assert env._backend._m.body("ball").ipos.tolist() == pytest.approx(
+            [0.0, 0.0, 0.0]
+        )
+        state = env.get_state()
+        qvel = state["qvel"].clone()
+        radius = env.ball_radius
+        qvel[0, -6] = 0.5  # rolling along +x without slipping
+        qvel[0, -2] = 0.5 / radius
+        env.reset(
+            TensorDict(qpos=state["qpos"], qvel=qvel, batch_size=[1]), set_state=True
+        )
+        action = self._football_action(env)
+        dt = env.frame_skip * env._backend.timestep
+        start = env.step(action)["next", "ball_position"][0, 0].item()
+        for _ in range(24):
+            step = env.step(action)
+        speed = (step["next", "ball_position"][0, 0].item() - start) / (24 * dt)
+        assert 0.35 < speed <= 0.5
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_football_observation_is_team_symmetric(self, tmp_path):
         env = self._football_env(tmp_path, players_per_team=2)
         env.reset()
