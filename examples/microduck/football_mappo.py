@@ -664,7 +664,8 @@ def train_mappo(
     ``video_interval`` evaluations ``video_recorder`` films one.
     ``best_checkpoint_path`` receives the parameters that rank best under
     :func:`evaluation_score` and ``latest_checkpoint_path`` the current ones.
-    ``iteration_callback`` runs with the iteration number after every update.
+    ``iteration_callback`` runs with the iteration number at the end of every
+    iteration, after its evaluation.
 
     Returns:
         One metrics dictionary per iteration. When evaluation is enabled the
@@ -878,8 +879,6 @@ def train_mappo(
                     scheduler.step(metrics["ppo/kl_approx"])
                 metrics["ppo/learning_rate"] = optimizer.param_groups[0]["lr"]
             replay_buffer.empty()
-            if iteration_callback is not None:
-                iteration_callback(iteration)
             collector.update_policy_weights_()
 
             timings = timeit.todict(prefix="time")
@@ -903,6 +902,10 @@ def train_mappo(
                 metrics.update(timeit.todict(prefix="time"))
             history.append(metrics)
             log(metrics, step=collected)
+            # After the evaluation, so a refreshed opponent is not measured
+            # against an identical copy of itself.
+            if iteration_callback is not None:
+                iteration_callback(iteration)
             torchrl_logger.info(
                 "Football MAPPO frames=%d/%d matches=%d goals blue=%d red=%d "
                 "reward=%+.4f collect=%.0f frames/s lr=%.2e",
