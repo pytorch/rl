@@ -20030,7 +20030,11 @@ policy_factory comes in handy whenever the policy cannot be serialized.
 - **dialog_turns_per_batch** (*int**,**optional*) - A keyword-only argument representing the total
 number of elements in a batch. It is always required except when yield_completed_trajectories=True.
 - **total_dialog_turns** (*int*) - A keyword-only argument representing the total
-number of steps returned by the collector during its lifespan. -1 is never ending (until shutdown).
+number of environment dialog turns (steps that actually ran) during
+the collector's lifespan. When `yield_only_last_steps=True`,
+dropped intermediate turns still count toward this budget so a
+3-turn dialog with `total_dialog_turns=3` completes one
+trajectory, not three. -1 is never ending (until shutdown).
 Defaults to -1.
 - **yield_completed_trajectories** (*bool**,**optional*) -
 
@@ -20048,6 +20052,7 @@ that never leads any data.
 whether to yield every step of a trajectory, or only the
 last (done) steps.
 If True, a single trajectory is yielded (or written in the buffer) at a time.
+Dropped intermediate turns still count toward `total_dialog_turns`.
 
 Warning
 
@@ -20866,7 +20871,9 @@ a policy instance. This is exclusive with the policy argument.
 - **dialog_turns_per_batch** (*int*) - A keyword-only argument representing the total
 number of elements in a batch.
 - **total_dialog_turns** (*int*) - A keyword-only argument representing the total
-number of dialog turns returned by the collector during its lifespan.
+number of environment dialog turns (steps that actually ran) during
+the collector's lifespan. When `yield_only_last_steps=True`,
+dropped intermediate turns still count.
 - **yield_only_last_steps** (*bool**,**optional*) - whether to yield every step of a trajectory, or only the
 last (done) steps.
 - **yield_completed_trajectories** (*bool**,**optional*) - whether to yield batches of rollouts with a given number of steps
@@ -34237,7 +34244,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f592a78aa70>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4f7d511120>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47554,7 +47561,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f592d5b4fe0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f4f80488fe0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 

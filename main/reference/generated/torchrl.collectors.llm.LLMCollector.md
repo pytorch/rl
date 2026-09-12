@@ -22,7 +22,11 @@ policy_factory comes in handy whenever the policy cannot be serialized.
 - **dialog_turns_per_batch** (*int**,**optional*) - A keyword-only argument representing the total
 number of elements in a batch. It is always required except when yield_completed_trajectories=True.
 - **total_dialog_turns** (*int*) - A keyword-only argument representing the total
-number of steps returned by the collector during its lifespan. -1 is never ending (until shutdown).
+number of environment dialog turns (steps that actually ran) during
+the collector's lifespan. When `yield_only_last_steps=True`,
+dropped intermediate turns still count toward this budget so a
+3-turn dialog with `total_dialog_turns=3` completes one
+trajectory, not three. -1 is never ending (until shutdown).
 Defaults to -1.
 - **yield_completed_trajectories** (*bool**,**optional*) -
 
@@ -40,6 +44,7 @@ that never leads any data.
 whether to yield every step of a trajectory, or only the
 last (done) steps.
 If True, a single trajectory is yielded (or written in the buffer) at a time.
+Dropped intermediate turns still count toward `total_dialog_turns`.
 
 Warning
 
