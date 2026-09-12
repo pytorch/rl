@@ -28,6 +28,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
+    TensorDictSequential,
 )
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.data import (
@@ -38,10 +39,12 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
+from torchrl.envs import Compose, RenameTransform, SerialEnv, TransformedEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.modules import TanhNormal
+from torchrl.modules import GRUModule, ProbabilisticActor, TanhNormal
 from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
 from torchrl.testing import PONG_VERSIONED
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.trainers import LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms.a2c import A2CTrainer
@@ -1048,19 +1051,21 @@ class TestOptimizer:
 class TestLogReward:
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
-    def test_log_reward(self, logname, pbar):
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.int64])
+    def test_log_reward(self, logname, pbar, dtype):
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
         log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
-        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.arange(3, dtype=dtype)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
         else:
             assert logname not in trainer._pbar_str
         assert trainer._log_dict[logname][-1] == 1
+        assert trainer._log_dict[f"{logname}_std"][-1] == 1
 
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
@@ -1999,6 +2004,124 @@ class TestLRSchedulerHook:
         # no new optimization step: the scheduler must not advance
         hook()
         assert optimizer.param_groups[0]["lr"] == 0.5
+
+
+class TestPPOFromEnv:
+    @pytest.mark.parametrize("recurrent", [False, True])
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_training_and_checkpoint_resume(self, recurrent, nested, tmp_path):
+        torch.manual_seed(0)
+        obs_key = ("agent", "observation") if nested else "observation"
+        action_key = ("agent", "command") if nested else "action"
+        value_key = ("agent", "value") if nested else "state_value"
+
+        def build(total_frames):
+            env = SerialEnv(2, ContinuousActionVecMockEnv)
+            if nested:
+                env = TransformedEnv(
+                    env,
+                    Compose(
+                        RenameTransform(
+                            in_keys=["observation", "reward", "done", "terminated"],
+                            out_keys=[
+                                ("agent", key)
+                                for key in (
+                                    "observation",
+                                    "reward",
+                                    "done",
+                                    "terminated",
+                                )
+                            ],
+                        ),
+                        RenameTransform(
+                            in_keys=[],
+                            out_keys=[],
+                            in_keys_inv=["action"],
+                            out_keys_inv=[action_key],
+                        ),
+                    ),
+                )
+            obs_dim = env.observation_spec[obs_key].shape[-1]
+            action_dim = env.full_action_spec[action_key].shape[-1]
+            modules = []
+            if recurrent and nested:
+                modules.append(
+                    RenameTransform(
+                        in_keys=[("agent", "is_init")], out_keys=["is_init"]
+                    )
+                )
+            if recurrent:
+                modules.append(
+                    GRUModule(
+                        input_size=obs_dim,
+                        hidden_size=8,
+                        in_keys=[obs_key, "hidden", "is_init"],
+                        out_keys=["features", ("next", "hidden")],
+                    )
+                )
+            modules.append(
+                TensorDictModule(
+                    nn.Sequential(
+                        nn.Linear(8 if recurrent else obs_dim, 2 * action_dim),
+                        NormalParamExtractor(),
+                    ),
+                    in_keys=["features" if recurrent else obs_key],
+                    out_keys=["loc", "scale"],
+                )
+            )
+            actor = ProbabilisticActor(
+                TensorDictSequential(*modules),
+                in_keys=["loc", "scale"],
+                out_keys=[action_key],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            )
+            critic = TensorDictModule(
+                nn.Linear(obs_dim, 1), in_keys=[obs_key], out_keys=[value_key]
+            )
+            trainer = PPOTrainer.from_env(
+                env,
+                actor=actor,
+                critic=critic,
+                value_key=value_key,
+                total_frames=total_frames,
+                frames_per_batch=32,
+                minibatch_size=16,
+                sub_traj_len=4 if recurrent else None,
+                num_epochs=2,
+                progress_bar=False,
+                loss_kwargs={"entropy_coeff": 0.01},
+                checkpoint=Checkpoint(),
+                save_trainer_file=tmp_path / "trainer",
+            )
+            return trainer, actor, critic
+
+        trainer, actor, critic = build(32)
+        actor_before = [p.detach().clone() for p in actor.parameters()]
+        critic_before = [p.detach().clone() for p in critic.parameters()]
+        trainer.train()
+        assert any(
+            not torch.equal(x, y) for x, y in zip(actor_before, actor.parameters())
+        )
+        assert any(
+            not torch.equal(x, y) for x, y in zip(critic_before, critic.parameters())
+        )
+        if recurrent:
+            # The GRU participates in the actor update, not just its output head.
+            assert not torch.equal(actor_before[0], next(actor.parameters()))
+        assert all(torch.isfinite(p).all() for p in actor.parameters())
+
+        restored, restored_actor, _ = build(64)
+        restored.load_from_file(tmp_path / "trainer")
+        before_resume = [p.detach().clone() for p in restored_actor.parameters()]
+        for expected, actual in zip(actor.parameters(), before_resume):
+            torch.testing.assert_close(expected, actual)
+        restored.train()
+        assert restored.collected_frames == 64
+        assert any(
+            not torch.equal(x, y)
+            for x, y in zip(before_resume, restored_actor.parameters())
+        )
 
 
 class TestOnPolicyTargetNetUpdater:
