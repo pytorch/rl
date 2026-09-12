@@ -359,7 +359,7 @@ class MCAdvantageSelector:
 
 
 class GRPOLoss(LossModule):
-    """GRPO loss.
+    r"""GRPO loss.
 
     The clipped importance weighted loss is computed as follows::
 
@@ -432,10 +432,15 @@ class GRPOLoss(LossModule):
             - "sft": Use prompt masking (response tokens only, suitable for single-turn)
             - "rlhf": Use assistant masking (assistant tokens only, suitable for multi-turn)
             - "generic": Use attention masking (all valid tokens)
-            Defaults to "sft" since we can't guarantee assistant masks are available.
+            Defaults to \"sft\" since we can't guarantee assistant masks are available.
+        ref_log_prob_padding_side (Literal["left", "right"], optional): side on which to pad the
+            reference log-probability tensor when it is retrieved from the input tensordict as a
+            ragged sequence. Defaults to ``"left"``.
+        ref_log_prob_padding_value (float, optional): fill value used when padding the reference
+            log-probability tensor. Defaults to ``0.0``.
 
-            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
-                the storages match the ones that are passed to other components, such as data collectors.
+    .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
+        the storages match the ones that are passed to other components, such as data collectors.
 
     .. note:: For non-symmetric clipping thresholds, see the `DAPO <https://arxiv.org/html/2503.14476>`_ paper.
 
@@ -503,6 +508,8 @@ class GRPOLoss(LossModule):
         kl_to_inference_coeff: float | None = None,
         device: torch.device | None = None,
         masking_strategy: Literal["sft", "rlhf", "generic"] = "sft",
+        ref_log_prob_padding_side: Literal["left", "right"] = "left",
+        ref_log_prob_padding_value: float = 0.0,
         **kwargs,
     ):
         super().__init__()
@@ -530,6 +537,8 @@ class GRPOLoss(LossModule):
         self.register_buffer("clip_epsilon_high", torch.tensor(eps_high, device=device))
 
         self.masking_strategy = masking_strategy
+        self.ref_log_prob_padding_side = ref_log_prob_padding_side
+        self.ref_log_prob_padding_value = ref_log_prob_padding_value
         # Defaults for keys
         self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
         # KL coefficients
@@ -737,17 +746,11 @@ class GRPOLoss(LossModule):
                     key, self._aggregate_loss_value(val, mask, tensordict=tensordict)
                 )
         if self.kl_to_ref_coeff is not None and self.kl_to_ref_coeff > 0:
-            # FIXME: parameterize this
             loss_kl, kl_penalty = self._kl_to_ref(
                 tensordict,
+                key=self.tensor_keys.ref_log_probs,
                 mask=mask,
                 dist=dist,
-                ref_log_prob=tensordict.get(
-                    self.tensor_keys.ref_log_probs,
-                    as_padded_tensor=True,
-                    padding_side="left",
-                    padding_value=0.0,
-                ),
             )
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
@@ -874,13 +877,12 @@ class GRPOLoss(LossModule):
     ):
         if coeff is None:
             coeff = self.kl_to_ref_coeff
-        # TODO: customize this
         if ref_log_prob is None:
             ref_log_prob = tensordict.get(
                 key,
                 as_padded_tensor=True,
-                padding_side="left",
-                padding_value=0.0,
+                padding_side=self.ref_log_prob_padding_side,
+                padding_value=self.ref_log_prob_padding_value,
             )
             if ref_log_prob is None:
                 raise KeyError(
@@ -888,11 +890,6 @@ class GRPOLoss(LossModule):
                 )
             ref_log_prob = ref_log_prob.squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
-        # TODO: remove this
-        if cur_log_prob.shape != ref_log_prob.shape:
-            raise ValueError(
-                f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
-            )
         if mask is not None:
             ref_log_prob = torch.where(
                 expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
@@ -975,47 +972,6 @@ class DAPO(GRPOLoss):
     """
 
     output_type: type[LLMLossOutput] = DAPOLossOutput
-
-    def __init__(
-        self,
-        tensordict: TensorDictBase,
-        key: NestedKey = ("next", "ref_log_prob"),
-        ref_log_prob: torch.Tensor | None = None,
-        coeff: float | None = None,
-        mask: torch.Tensor | None = None,
-        dist: d.Distribution | None = None,
-    ):
-        if coeff is None:
-            coeff = self.kl_to_ref_coeff
-        # TODO: customize this
-        if ref_log_prob is None:
-            ref_log_prob = tensordict.get(
-                key,
-                as_padded_tensor=True,
-                padding_side="left",
-                padding_value=0.0,
-            )
-            if ref_log_prob is None:
-                raise KeyError(
-                    f"Couldn't find the ref log-prob {key} in the input data ({tensordict.keys(True)=})."
-                )
-            ref_log_prob = ref_log_prob.squeeze(-1)
-        cur_log_prob = tensordict.get("_cur_log_prob")
-        # TODO: remove this
-        if cur_log_prob.shape != ref_log_prob.shape:
-            raise ValueError(
-                f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
-            )
-        if mask is not None:
-            ref_log_prob = torch.where(
-                expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
-            )
-            cur_log_prob = torch.where(
-                expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
-            )
-        diff = ref_log_prob - cur_log_prob
-        kl_penalty = (diff.expm1() - diff).mean()
-        return coeff * kl_penalty, kl_penalty
 
 
 class CISPOLoss(GRPOLoss):
