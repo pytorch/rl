@@ -16,6 +16,109 @@ raises an error listing the options.
 | [`heuristic_gait.py`](heuristic_gait.py) | Closed-form walking gait as a TensorDict policy, contact-based gait metrics, `rlrender` policy | `mujoco` |
 | [`ppo_mjlab.py`](ppo_mjlab.py) | PPO on the upstream `Mjlab-Velocity-Flat-MicroDuck` task through `MJLabWrapper` | MJLab, `mjlab_microduck`, CUDA |
 
+Start with [MicroDuck: tasks, rewards and simulation](../../tutorials/sphinx-tutorials/microduck.py)
+to explore task libraries, sampling, custom rewards, diagnostics and the supplied
+gait controller. It opens with a recorded skill grid that plays without simulation.
+
+[MicroDuck: train skills, then compose behaviors](../../tutorials/sphinx-tutorials/microduck_skills.py)
+is a separate, standalone train → deploy → train tutorial. It uses one CPU simulator and
+`PPOTrainer.from_env` at both levels: train a recurrent walker, deploy it with
+`MicroDuckController` and `ClosedLoopMultiAction`, then train a categorical
+skill selector for waypoint navigation.
+
+<details>
+<summary>Notebook execution and documentation builds</summary>
+
+The scripts and generated notebooks run top to bottom. They use a single CPU
+simulator (two serial simulators for the task-sampling example), so no worker
+processes or `__main__` guards are needed.
+
+The training tutorial runs 1,024 low-level transitions and 512 high-level
+decisions. Documentation builds set `TORCHRL_TUTORIALS_FAST=1` for 64 steps per
+training stage and shorter integration rollouts. Checkpoint evaluation still
+allows ten seconds of simulated time. Published files are cached after the first
+download. The opening video cells only need IPython.
+
+</details>
+
+[`train_skills.py`](train_skills.py) shares the same tasks and model definitions
+and owns the full CPU training recipe, including macOS parallel workers:
+
+```bash
+# Explore the environment interface.
+python tutorials/sphinx-tutorials/microduck.py
+
+# Train skills, deploy the saved walker, then train a skill selector.
+python tutorials/sphinx-tutorials/microduck_skills.py
+
+# Full training: 10M physical transitions, then 1M decisions.
+python -m examples.microduck.train_skills --num-envs 16 \
+    --low-level-frames 10000000 --high-level-frames 1000000 \
+    --output-dir ~/microduck-training
+
+# Check the launcher with one simulator and 64 steps per stage.
+python -m examples.microduck.train_skills --smoke --output-dir /tmp/microduck-smoke
+
+# Resume low-level training, retaining worker count and batch/model settings.
+python -m examples.microduck.train_skills --num-envs 16 \
+    --output-dir ~/microduck-training --resume
+
+# Reuse a walker and resume high-level training (omit --resume for a new run).
+python -m examples.microduck.train_skills --num-envs 16 \
+    --walker-checkpoint ~/microduck-training/walker.ckpt \
+    --output-dir ~/microduck-training --resume
+```
+
+The launcher writes CSV metrics under `low_level/` and `high_level/`, resumable
+`low_level.trainer` and `high_level.trainer` checkpoints, `walker.ckpt` (including
+architecture and ordered task definitions), per-skill evaluation in `skills.json`,
+and navigation evaluation in `navigation.json`. A high-level checkpoint must be
+paired with its original walker. Native MuJoCo resets simulator episodes after
+restarting, so checkpoint continuation is not bit-exact.
+
+Evaluate survival, command tracking and arrival rate before claiming learned
+behavior. Short runs exercise the complete pipeline; they do not establish skill
+quality. Full training can take hours; each tutorial is a 10–15 minute read and run.
+
+### Reuse and share a trained checkpoint
+
+The training tutorial performs its small PPO update, then loads the evaluated
+[10M-transition walker](https://huggingface.co/torchrl/microduck-skills) for
+high-level training. It pins a Hub revision and caches the download. This works
+in the generated notebook and in docs mode. To use your own trained walker:
+
+```bash
+MICRODUCK_WALKER_CHECKPOINT=~/microduck-training/walker.ckpt \
+    python tutorials/sphinx-tutorials/microduck_skills.py
+```
+
+The published checkpoint can also be downloaded directly:
+
+```python
+import os
+from huggingface_hub import hf_hub_download
+
+checkpoint_path = hf_hub_download(
+    repo_id="torchrl/microduck-skills",
+    filename="walker.ckpt",
+    revision="4191d7d25c4fd58a5c6e6395fcf8217459fdd073",
+)
+os.environ["MICRODUCK_WALKER_CHECKPOINT"] = checkpoint_path
+```
+
+The tutorial's loading cell uses the checkpoint's architecture, task order,
+weights and action scale, including when its network is larger than the small
+training demonstration. `TORCHRL_TUTORIALS_FAST=1` still executes this cell.
+The Hub's [download cache](https://huggingface.co/docs/huggingface_hub/guides/download)
+reuses the pinned file on subsequent builds.
+
+Publish `walker.ckpt` together with `skills.json`, evaluation videos and a model
+card recording the TorchRL commit, training recipe and measured limitations.
+Include the paired navigation checkpoint and `navigation.json` when sharing a
+trained skill selector. Hub storage supplies the files; the generated notebook
+needs a Python runtime (local Jupyter or a hosted notebook) to simulate new
+trajectories. See [Rendering](#rendering) for `rlrender` notebook playback.
+
 ## The task
 
 `MicroDuckEnv` is a family of locomotion tasks written once against

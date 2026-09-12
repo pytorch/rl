@@ -88,6 +88,7 @@ def test_tutorial(tutorial_path: Path):
     # Set environment variables for the tutorial
     env = os.environ.copy()
     env["MPLBACKEND"] = "Agg"
+    env["TORCHRL_TUTORIALS_FAST"] = "1"
     env["WANDB_MODE"] = "disabled"
     env["MUJOCO_GL"] = "egl"
     env["PYOPENGL_PLATFORM"] = "egl"
