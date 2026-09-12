@@ -35,6 +35,7 @@ from torchrl.envs.libs.gym import (
     _gym_to_torchrl_spec_transform,
     _has_gym,
     _is_from_pixels,
+    _looks_like_ale_env,
     _torchrl_to_gym_spec_transform,
     gym_backend,
     GymEnv,
@@ -1955,6 +1956,42 @@ class TestGym:
         check_env_specs(env)
         td = env.rand_step(env.reset())
         assert td["next", "reward"].shape == expected_reward_shape
+
+    @pytest.mark.parametrize(
+        "env_name,expected",
+        [
+            ("ALE/Pong-v5", True),
+            ("ale_py:ALE/Pong-v5", True),
+            ("PongNoFrameskip-v4", True),
+            ("BreakoutNoFrameskip-v4", True),
+            ("CartPole-v1", False),
+            ("HalfCheetah-v4", False),
+        ],
+    )
+    def test_looks_like_ale_env(self, env_name, expected):
+        assert _looks_like_ale_env(env_name) is expected
+
+    @pytest.mark.skipif(
+        not _has_ale,
+        reason="ALE not available (missing ale_py); skipping Atari gym test.",
+    )
+    @pytest.mark.parametrize("env_name", ["ALE/Pong-v5", "PongNoFrameskip-v4"])
+    def test_gymenv_ale_constructor(self, env_name):
+        if not _has_atari_for_gym():
+            pytest.skip(
+                "Atari not available for current gym version; skipping Atari gym test."
+            )
+        try:
+            env = GymEnv(env_name)
+        except Exception as err:
+            # NameNotFound is the regression: GymEnv must import ale_py first.
+            if isinstance(err, AttributeError) and "ale_py" in str(err):
+                pytest.skip(f"ALE/gym version incompatibility: {err}")
+            raise
+        try:
+            assert env.env_name == env_name
+        finally:
+            env.close()
 
 
 @pytest.mark.skipif(

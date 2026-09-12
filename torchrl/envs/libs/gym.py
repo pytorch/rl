@@ -106,6 +106,28 @@ def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
         return
 
 
+def _looks_like_ale_env(env_name: str) -> bool:
+    """Return True if ``env_name`` is an ALE or classic Atari gym id.
+
+    Gymnasium no longer auto-loads the ``ale_py`` plugin, so both the modern
+    ``ALE/*`` namespace and classic ids such as ``PongNoFrameskip-v4`` need
+    an explicit ``import ale_py`` before ``gym.make``.
+    """
+    return env_name.startswith(("ALE/", "ale_py:")) or "NoFrameskip" in env_name
+
+
+def _import_ale_py_if_needed(env_name: str) -> None:
+    """Import ``ale_py`` so gymnasium/gym can resolve Atari environment ids."""
+    if not _looks_like_ale_env(env_name):
+        return
+    try:
+        import ale_py  # noqa: F401
+    except ImportError as err:
+        torchrl_logger.warning(
+            f"ale_py not found, this may cause issues with ALE environments: {err}"
+        )
+
+
 def _gymnasium_reward_space(env):
     reward_space = getattr(env, "__dict__", {}).get("reward_space", None)
     if reward_space is not None:
@@ -2030,13 +2052,7 @@ class GymEnv(GymWrapper):
             # to find the config that works.
             try:
                 with warnings.catch_warnings(record=True) as w:
-                    if env_name.startswith("ALE/"):
-                        try:
-                            import ale_py  # noqa: F401
-                        except ImportError as err:
-                            torchrl_logger.warning(
-                                f"ale_py not found, this may cause issues with ALE environments: {err}"
-                            )
+                    _import_ale_py_if_needed(env_name)
                     _patch_legacy_ale_py_gym_env(env_name)
                     # we catch warnings as they may cause silent bugs
                     env = self.lib.make(env_name, **kwargs)
