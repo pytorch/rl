@@ -1038,7 +1038,7 @@ class DoneTransformConfig(TransformConfig):
 
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
-    reward_key: list[str] | str | None = None
+    reward_key: Any = None
     done_keys: list[str] | None = None
     _target_: str = (
         "torchrl.trainers.algorithms.configs.transforms._make_done_transform"
