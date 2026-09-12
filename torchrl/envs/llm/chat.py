@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
-from tensordict import lazy_stack, TensorDictBase
+from tensordict import lazy_stack, NonTensorData, NonTensorStack, TensorDictBase
 from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
 from torchrl.data import Composite, NonTensor
@@ -57,6 +57,49 @@ def _default_collate_fn(batch):
     return batch
 
 
+def _is_chat_payload(obj: Any) -> bool:
+    if isinstance(obj, dict) and "role" in obj and "content" in obj:
+        return True
+    if isinstance(obj, (list, tuple)) and obj:
+        first = obj[0]
+        if isinstance(first, dict) and "role" in first and "content" in first:
+            return True
+        if (
+            isinstance(first, (list, tuple))
+            and first
+            and isinstance(first[0], dict)
+            and "role" in first[0]
+            and "content" in first[0]
+        ):
+            return True
+    return False
+
+
+def _reset_query_payload(content: Any) -> Any:
+    if isinstance(content, History):
+        return content
+    # NonTensorData.data is the payload. NonTensorStack.data is only the first
+    # env -- unwrap stacks with tolist() / unbind so every History is kept.
+    if isinstance(content, NonTensorData):
+        data = content.data
+        return data if isinstance(data, History) else _reset_query_payload(data)
+    if isinstance(content, NonTensorStack):
+        try:
+            items = content.tolist()
+        except Exception:
+            items = content.unbind(0)
+        return [_reset_query_payload(item) for item in items]
+    if hasattr(content, "tolist") and not isinstance(content, (str, bytes)):
+        try:
+            return content.tolist()
+        except Exception:
+            pass
+    data = getattr(content, "data", None)
+    if data is not None:
+        return data
+    return content
+
+
 class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
     r"""A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.
 
@@ -75,11 +118,13 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
     Reset Operation
         During reset, the environment:
 
-            1. Takes input text from the `data_key` (default: `"query"`) in the tensordict
-            2. Creates a :class:`~torchrl.data.llm.History` object with the user's message
-            3. Optionally prepends a system prompt if provided
-            4. Formats the conversation according to the selected input mode (history, text, or tokens)
-            5. Returns the formatted prompt ready for the LLM
+            1. Takes input from the `data_key` (default: `"query"`) in the tensordict.
+               The value may be a raw string (wrapped as a user message), a
+               :class:`~torchrl.data.llm.History` (used as-is), or a list of chat
+               messages (dicts with ``role`` / ``content``).
+            2. Optionally prepends a system prompt if provided
+            3. Formats the conversation according to the selected input mode (history, text, or tokens)
+            4. Returns the formatted prompt ready for the LLM
 
     Step Operation
         During step, the environment:
@@ -116,6 +161,9 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
         user_role (str, optional): The role of the user (at reset time). Defaults to `"user"`.
         policy_role (str, optional): The role of the policy/assistant. Defaults to `"assistant"`.
         data_key (str, optional): The key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
+            The value may be a raw string (wrapped as a user utterance), a
+            :class:`~torchrl.data.llm.History`, or a list of chat messages. A
+            :attr:`system_prompt`, if set, is prepended in all cases.
         device (torch.device, optional): The device to use for computations. Defaults to `None`.
         with_tokenizer (bool, optional): If ``True``, the environment is automatically wrapped with
             :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer` to maintain ``tokens.prompt`` synchronized
@@ -126,6 +174,7 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
     Methods:
         reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"query"` entry
             (originating from the dataloader) must be passed. This key name is defined as a class attribute `data_key`.
+            ``query`` may be a raw string, a :class:`~torchrl.data.llm.History`, or a list of messages.
         step (TensorDict): Makes a step in the environment. A tensordict or equivalent with the LLM's response must be passed.
             The response key is defined as a class attribute `response_key`.
 
@@ -147,6 +196,16 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
         >>> reset_data = TensorDict({"query": "Hello, how are you?"}, batch_size=(1,))
         >>> obs = env.reset(reset_data)
         >>> print(obs["history"].prompt)  # History with system prompt + user message
+        >>>
+        >>> # Reset with an already-formatted conversation (roles are preserved)
+        >>> reset_data = TensorDict({
+        ...     "query": History.from_chats([[
+        ...         {"role": "user", "content": "Hello, how are you?"},
+        ...         {"role": "assistant", "content": "I'm well, thanks."},
+        ...     ]])
+        ... }, batch_size=(1,))
+        >>> obs = env.reset(reset_data)
+        >>> print(obs["history"].prompt.role)  # [['system', 'user', 'assistant']]
         >>>
         >>> # Simulate LLM response and step
         >>> response_data = TensorDict({
@@ -450,36 +509,75 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
         empty_td.set("tokens", new_history)
         return empty_td
 
+    def _align_history_batch(self, history: History) -> History:
+        env_bs = torch.Size(self.batch_size)
+        # Already batched only when env dims are a prefix *and* a conversation
+        # axis remains. A time-only History is never an env batch, even if its
+        # length equals the env size.
+        if history.ndim > len(env_bs) and history.batch_size[: len(env_bs)] == env_bs:
+            return history
+        # Scalar message or time-only conversation: expand over the env batch.
+        if history.ndim <= 1:
+            for s in reversed(env_bs):
+                history = lazy_stack([history for _ in range(s)])
+            return history
+        raise RuntimeError(
+            f"{type(self).__name__} reset query History has batch_size "
+            f"{history.batch_size} which is incompatible with env batch_size {env_bs}."
+        )
+
+    def _query_to_history(self, content: Any) -> History:
+        if isinstance(content, History):
+            return self._align_history_batch(content)
+        payload = _reset_query_payload(content)
+        if isinstance(payload, History):
+            return self._align_history_batch(payload)
+        if (
+            isinstance(payload, (list, tuple))
+            and payload
+            and all(isinstance(item, History) for item in payload)
+        ):
+            return self._align_history_batch(lazy_stack(list(payload)))
+        if _is_chat_payload(payload):
+            if isinstance(payload, dict) and "role" in payload and "content" in payload:
+                chats = [payload]
+            else:
+                chats = payload
+            return self._align_history_batch(History.from_chats(chats))
+
+        if getattr(content, "batch_size", ()) != self.batch_size:
+            for s in reversed(self.batch_size):
+                content = [content for _ in range(s)]
+        role = self.user_role
+        for s in reversed(self.batch_size):
+            role = [role for _ in range(s)]
+        return History(role=role, content=content, batch_size=self.batch_size)
+
     def _reset(self, tensordict: TensorDictBase | None, **kwargs):
         if tensordict is None:
             raise RuntimeError(
                 f"{type(self).__name__} expects a tensordict as input. Got `None`."
             )
-        # Find the total text
         content = tensordict.get(self.data_key)
         if content is None:
             raise RuntimeError(
                 f"{type(self).__name__} expects a tensordict with a {self.data_key} key, got {tensordict.keys()}"
             )
-        if content.batch_size != self.batch_size:
-            for s in reversed(self.batch_size):
-                content = [content for _ in range(s)]
-
-        # FIXME: Assume the text is not formatted and this is just content
-        role = self.user_role
-        for s in reversed(self.batch_size):
-            role = [role for _ in range(s)]
-        history = History(role=role, content=content, batch_size=self.batch_size)
+        history = self._query_to_history(content)
         if self.system_prompt is not None:
-            system_role = self.system_role
             history_system = History(
-                role=system_role,
+                role=self.system_role,
                 content=self.system_prompt,
             )
             for s in reversed(self.batch_size):
                 history_system = lazy_stack([history_system for _ in range(s)])
-            history = lazy_stack([history_system, history], -1)
-        else:
+            if history.ndim == len(self.batch_size):
+                history = lazy_stack([history_system, history], -1)
+            else:
+                history = history_system.unsqueeze(-1).extend(
+                    history, inplace=False, dim=-1
+                )
+        elif history.ndim == len(self.batch_size):
             history = history.unsqueeze(-1)
 
         # Now that we have the history, call the specific reset method
