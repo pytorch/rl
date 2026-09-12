@@ -678,12 +678,17 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
       during the step or has not stood up again yet.
     * ``ball_position`` (``(num_envs, 3)``) and ``goal`` (``(num_envs, 1)``,
       ``1`` when blue scored on this step, ``-1`` when red did, else ``0``).
+    * ``knockout`` (``(num_envs, 1)``): with ``knockout=True``, ``1`` when every
+      red duck is down so blue wins the match on this step, ``-1`` when every
+      blue duck is, else ``0``.
 
     Reward terms, weighted by :attr:`REWARD_WEIGHTS` (overridden per key by
     ``reward_weights``); the per-second terms are multiplied by the control
     period:
 
     * ``goal`` (one-off): ``+w`` for the scoring team, ``-w`` for the other.
+    * ``knockout`` (one-off): ``+w`` for the team left standing when every duck
+      of the other team is down, ``-w`` for that team (``knockout=True``).
     * ``ball_progress``: the ball's velocity along the team's attacking
       direction, so the two teams' shaping cancels out; with
       ``progress_players`` only the closest ducks of each team earn it, which
@@ -741,7 +746,11 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         reward_weights (Mapping[str, float], optional): weights replacing
             entries of :attr:`REWARD_WEIGHTS`.
         respawn (bool, optional): stand fallen ducks up again. Defaults to
-            ``True``.
+            ``True``; with ``False`` a fallen duck stays down for the rest of
+            the match, its actions ignored.
+        knockout (bool, optional): end the match, as a win for the other
+            team, when every duck of a team is down at the same time (a draw
+            when both teams are). Defaults to ``False``.
         respawn_mode (str, optional): ``"in_place"`` (default) stands a duck
             up where it fell, facing the goal it attacks; ``"kickoff"`` puts it
             back on its kickoff slot.
@@ -819,13 +828,14 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
     BALL_NV: ClassVar[int] = 6
     REWARD_WEIGHTS: ClassVar[dict[str, float]] = {
         "goal": 10.0,
+        "knockout": 10.0,
         "ball_progress": 2.0,
         "approach_ball": 0.5,
         "fall": -1.0,
         "action_rate": -0.05,
         "crowd": -0.2,
     }
-    """Default weight of every reward term; ``goal`` and ``fall`` are one-off."""
+    """Default weight of every reward term; ``goal``, ``knockout`` and ``fall`` are one-off."""
     APPROACH_SPEED_CAP: ClassVar[float] = 0.5
     """Cap on the speed toward the ball that ``approach_ball`` pays for, in m/s."""
     APPROACH_RADIUS_MARGIN: ClassVar[float] = 0.05
@@ -841,6 +851,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         action_scale: float = 1.0,
         reward_weights: Mapping[str, float] | None = None,
         respawn: bool = True,
+        knockout: bool = False,
         respawn_mode: Literal["in_place", "kickoff"] = "in_place",
         respawn_delay_s: float = 1.0,
         approach_players: int | None = None,
@@ -885,6 +896,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self.scene_path = Path(scene).expanduser().resolve()
         self.action_scale = float(action_scale)
         self.respawn = bool(respawn)
+        self.knockout = bool(knockout)
         if respawn_mode not in ("in_place", "kickoff"):
             raise ValueError("respawn_mode must be 'in_place' or 'kickoff'.")
         if not math.isfinite(respawn_delay_s) or respawn_delay_s < 0:
@@ -1076,6 +1088,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self._down = torch.zeros(shape, dtype=torch.bool, device=self.device)
         self._down_steps = torch.zeros(shape, dtype=torch.long, device=self.device)
         self._goal = torch.zeros(self.num_envs, 1, dtype=torch.long, device=self.device)
+        self._knockout = torch.zeros(
+            self.num_envs, 1, dtype=torch.long, device=self.device
+        )
 
     # ------------------------------------------------------------------
     # Specs
@@ -1131,6 +1146,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
                 shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
             ),
             goal=Unbounded(
+                shape=(self.num_envs, 1), dtype=torch.long, device=self.device
+            ),
+            knockout=Unbounded(
                 shape=(self.num_envs, 1), dtype=torch.long, device=self.device
             ),
             shape=(self.num_envs,),
@@ -1275,6 +1293,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self._down.zero_()
         self._down_steps.zero_()
         self._goal.zero_()
+        self._knockout.zero_()
 
     def _on_reset_mask(
         self,
@@ -1298,6 +1317,9 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         )
         self._goal = torch.where(
             mask[:, None], torch.zeros_like(self._goal), self._goal
+        )
+        self._knockout = torch.where(
+            mask[:, None], torch.zeros_like(self._knockout), self._knockout
         )
 
     # ------------------------------------------------------------------
@@ -1399,6 +1421,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             ),
             "ball_position": state["qpos"][..., -self.BALL_NQ : -4].to(self.dtype),
             "goal": self._goal.clone(),
+            "knockout": self._knockout.clone(),
         }
         if self.from_pixels:
             out["pixels"] = self._render_pixels()
@@ -1421,6 +1444,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         action: torch.Tensor,
         fell: torch.Tensor,
         goal: torch.Tensor,
+        knockout: torch.Tensor,
     ) -> torch.Tensor:
         weights = self.reward_weights
         dt = self.frame_skip * self._backend.timestep
@@ -1462,9 +1486,11 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             + weights["action_rate"] * action_rate
             + weights["crowd"] * neighbors
         )
-        one_off = weights["goal"] * goal.to(self.dtype) * sign + weights[
-            "fall"
-        ] * fell.to(self.dtype)
+        one_off = (
+            weights["goal"] * goal.to(self.dtype) * sign
+            + weights["knockout"] * knockout.to(self.dtype) * sign
+            + weights["fall"] * fell.to(self.dtype)
+        )
         return (per_second * dt + one_off).unsqueeze(-1)
 
     def _prepare_ctrl(self, action: torch.Tensor) -> torch.Tensor:
@@ -1565,8 +1591,19 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         # The fall penalty is paid on the step a duck goes down, not while it
         # lies there.
         fell = fallen & ~self._down
-        reward = self._rewards(ducks_q, ducks_v, ball_q, ball_v, action, fell, goal)
         down = fallen | self._down
+        knockout = torch.zeros_like(goal)
+        knocked = torch.zeros_like(goal, dtype=torch.bool)
+        if self.knockout:
+            team_down = down.view(self.num_envs, 2, self.players_per_team).all(-1)
+            # Blue wins when every red duck is down and some blue duck stands.
+            knockout = (team_down[:, 1:2].long() - team_down[:, :1].long()) * (
+                ~team_down.all(-1, keepdim=True)
+            ).long()
+            knocked = team_down.any(-1, keepdim=True)
+        reward = self._rewards(
+            ducks_q, ducks_v, ball_q, ball_v, action, fell, goal, knockout
+        )
         if self.respawn:
             # A duck that just fell waits the whole delay, the others count down.
             steps = torch.where(
@@ -1587,7 +1624,8 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self._down = down
         self._fallen = fell | down
         self._goal = goal
-        terminated = ((goal != 0) | ~finite.unsqueeze(-1)).to(torch.bool)
+        self._knockout = knockout
+        terminated = ((goal != 0) | knocked | ~finite.unsqueeze(-1)).to(torch.bool)
         truncated = (self._step_count >= self.max_episode_steps).unsqueeze(-1)
         obs = self._build_obs_dict(state)
         obs["agents"]["reward"] = reward
@@ -1623,6 +1661,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
             "down": self._down[index].clone(),
             "down_steps": self._down_steps[index].clone(),
             "goal": self._goal[index].clone(),
+            "knockout": self._knockout[index].clone(),
         }
 
     def _load_indexed_extra_state(self, state: dict[str, Any]) -> None:
@@ -1631,6 +1670,7 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self._down = state["down"].clone()
         self._down_steps = state["down_steps"].clone()
         self._goal = state["goal"].clone()
+        self._knockout = state["knockout"].clone()
 
     def _set_indexed_extra_state(
         self,
@@ -1647,3 +1687,4 @@ class MicroDuckFootballEnv(MujocoEnv, metaclass=_FootballMeta):
         self._down[index] = source._down.to(self.device)
         self._down_steps[index] = source._down_steps.to(self.device)
         self._goal[index] = source._goal.to(self.device)
+        self._knockout[index] = source._knockout.to(self.device)

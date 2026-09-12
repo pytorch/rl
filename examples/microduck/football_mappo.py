@@ -260,6 +260,7 @@ def make_env(
         "joint_reset_noise_scale": env_cfg["joint_reset_noise_scale"],
         "ball_noise": env_cfg["ball_noise"],
         "respawn": env_cfg["respawn"],
+        "knockout": env_cfg["knockout"],
         "respawn_mode": env_cfg["respawn_mode"],
         "respawn_delay_s": env_cfg["respawn_delay_s"],
         "approach_players": env_cfg["approach_players"],
@@ -545,16 +546,18 @@ def football_metrics(trajectories: TensorDictBase) -> dict[str, float]:
 
     Goals are counted per match for each team (both teams play the same
     policy, so a lasting difference between the two is a sign of an asymmetry
-    in the env), together with the fraction of matches decided by a goal, the
-    match length, the falls per duck and per match (a duck that lies down
-    for a while counts once), and how far the ball
-    traveled along blue's attacking direction.
+    in the env), together with the knockouts per team, the fraction of matches
+    decided by a goal or a knockout, the match length, the falls per duck and
+    per match (a duck that lies down for a while counts once), and how far the
+    ball traveled along blue's attacking direction.
     """
     mask = trajectories["collector", "mask"]
     lengths = mask.sum(-1)
     last = (lengths - 1).unsqueeze(-1)
     goal = trajectories["next", "goal"].squeeze(-1)
     goal = torch.where(mask, goal, torch.zeros_like(goal))
+    knockout = trajectories["next", "knockout"].squeeze(-1)
+    knockout = torch.where(mask, knockout, torch.zeros_like(knockout))
     fallen = trajectories["next", "agents", "fallen"].squeeze(-1) & mask.unsqueeze(-1)
     fallen = _fall_events(fallen, dim=trajectories.ndim - 1)
     ball_x = trajectories["next", "ball_position"][..., 0]
@@ -563,7 +566,9 @@ def football_metrics(trajectories: TensorDictBase) -> dict[str, float]:
     return {
         "goals_blue": float((goal == 1).sum(-1).float().mean()),
         "goals_red": float((goal == -1).sum(-1).float().mean()),
-        "decided_rate": float((goal != 0).any(-1).float().mean()),
+        "knockouts_blue": float((knockout == 1).sum(-1).float().mean()),
+        "knockouts_red": float((knockout == -1).sum(-1).float().mean()),
+        "decided_rate": float(((goal != 0) | (knockout != 0)).any(-1).float().mean()),
         "match_length": float(lengths.float().mean()),
         "falls_per_duck": float(
             fallen.sum(dim=(1, 2)).float().mean() / fallen.shape[-1]
@@ -576,6 +581,7 @@ def _collection_metrics(data: TensorDictBase) -> dict[str, float]:
     reward = data["next", REWARD_KEY].squeeze(-1)
     done = data["next", "done"].squeeze(-1)
     goal = data["next", "goal"].squeeze(-1)
+    knockout = data["next", "knockout"].squeeze(-1)
     fallen = _fall_events(
         data["next", "agents", "fallen"].squeeze(-1), dim=data.ndim - 1
     )
@@ -596,8 +602,11 @@ def _collection_metrics(data: TensorDictBase) -> dict[str, float]:
         "collection/falls_per_duck_step": float(fallen.float().mean()),
         "collection/goals_blue": float((goal == 1).sum()),
         "collection/goals_red": float((goal == -1).sum()),
+        "collection/knockouts_blue": float((knockout == 1).sum()),
+        "collection/knockouts_red": float((knockout == -1).sum()),
         "episode/finished": finished,
-        "episode/decided_rate": float((goal != 0).sum()) / max(finished, 1.0),
+        "episode/decided_rate": float(((goal != 0) | (knockout != 0)).sum())
+        / max(finished, 1.0),
         "episode/length_mean": float(lengths.mean()),
         "episode/return_mean": float(returns.mean()),
     }

@@ -1168,6 +1168,36 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_football_knockout_ends_the_match_for_the_standing_team(self, tmp_path):
+        weights = {name: 0.0 for name in MicroDuckFootballEnv.REWARD_WEIGHTS}
+        weights["knockout"] = 1.0
+        env = self._football_env(
+            tmp_path,
+            players_per_team=1,
+            reward_weights=weights,
+            respawn=False,
+            knockout=True,
+        )
+        env.reset()
+        state = env.get_state()
+        qpos = state["qpos"].clone()
+        nq = MicroDuckFootballEnv.DUCK_NQ
+        # The red duck lies on its side; blue stands.
+        qpos[0, nq + 2] = 0.05
+        qpos[0, nq + 3 : nq + 7] = torch.tensor(
+            [math.cos(math.pi / 4), math.sin(math.pi / 4), 0.0, 0.0], dtype=qpos.dtype
+        )
+        env.reset(
+            TensorDict(qpos=qpos, qvel=state["qvel"], batch_size=[1]), set_state=True
+        )
+        step = env.step(self._football_action(env))["next"]
+        assert bool(step["terminated"][0, 0])
+        assert step["knockout"].tolist() == [[1]]
+        assert step["goal"].tolist() == [[0]]
+        assert step["agents", "reward"][0, :, 0].tolist() == pytest.approx([1.0, -1.0])
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_football_observation_is_team_symmetric(self, tmp_path):
         env = self._football_env(tmp_path, players_per_team=2)
         env.reset()

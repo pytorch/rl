@@ -19,7 +19,8 @@ env:
   yaw_noise: 0.3            # uniform noise on the kickoff heading, in radians
   joint_reset_noise_scale: 0.02  # uniform noise on the joint positions at reset, in radians
   ball_noise: 0.1           # uniform noise on the ball's kickoff position, in meters (a large value spreads kickoffs over the pitch)
-  respawn: true             # stand fallen ducks up again after respawn_delay_s
+  respawn: true             # stand fallen ducks up again after respawn_delay_s; false: a fallen duck stays down for the rest of the match
+  knockout: false           # end the match as a win for the other team when every duck of a team is down
   respawn_mode: in_place    # in_place: where the duck fell, facing its goal; kickoff: back on its kickoff slot
   respawn_delay_s: 1.0      # seconds a fallen duck lies down, actions ignored, before standing up
   approach_players: null    # ducks per team, the closest to the ball, that earn the approach_ball reward (null: every duck)
