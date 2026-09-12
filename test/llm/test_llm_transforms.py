@@ -815,9 +815,9 @@ class TestKLModuleDevice:
         transform = RetrieveLogProb(model, assistant_only=False, device="cpu")
         transform.to("meta")
         td = TensorDict(
-            {("tokens", "full"): torch.ones(2, 4, dtype=torch.long)},
+            {("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="meta")},
             batch_size=[2],
-            device="cpu",
+            device="meta",
         )
         out = transform._step(td, td.copy())
         log_probs = out.get(("log_probs", "full"))
@@ -881,6 +881,30 @@ class TestKLModuleDevice:
         assert next(transform.ref_model.parameters()).device.type == torch.device(
             module_device
         ).type
+
+    def test_device_attr_is_deprecated_io_policy(self):
+        model = _MockLLMModule()
+        for cls, kwargs in (
+            (RetrieveLogProb, {"assistant_only": False}),
+            (KLRewardTransform, {}),
+        ):
+            transform = cls(model, device="cpu", **kwargs)
+            param = next(
+                transform.model.parameters()
+                if cls is RetrieveLogProb
+                else transform.ref_model.parameters()
+            )
+            with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+                assert transform.device is None
+            with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+                transform.device = "meta"
+            with pytest.warns(DeprecationWarning, match="removed in v0.17"):
+                assert transform.device == torch.device("meta")
+            assert next(
+                transform.model.parameters()
+                if cls is RetrieveLogProb
+                else transform.ref_model.parameters()
+            ).device == param.device
 
 
 if __name__ == "__main__":

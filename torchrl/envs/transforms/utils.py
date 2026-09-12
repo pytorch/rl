@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
+
 import torch
 from torch import nn
 
@@ -94,17 +96,42 @@ def _stateless_param(param):
     return param
 
 
-def _module_device(module: nn.Module) -> torch.device | None:
-    """Return the device of a module parameter or buffer, if any.
+def _warn_deprecated_io_device(cls_name: str, *, stacklevel: int = 3) -> None:
+    warnings.warn(
+        f"{cls_name}.device is deprecated and will be removed in v0.17. "
+        f"It is an explicit input/output tensordict placement policy, not the "
+        f"location of every parameter or buffer. Place the wrapped module with "
+        f"the constructor device= argument and let the module own device routing.",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
 
-    This is a per-call lookup, not cached module state. A module may span
-    several devices; the first parameter or buffer is used as the placement
-    hint for incoming tensordicts.
+
+def _in_out_device(obj: object) -> torch.device | None:
+    """Return the explicit I/O placement policy, if any.
+
+    This is not inferred from parameters or buffers.
     """
-    param = next(module.parameters(), None)
-    if param is not None:
-        return param.device
-    buffer = next(module.buffers(), None)
-    if buffer is not None:
-        return buffer.device
-    return None
+    return getattr(obj, "_io_device", None)
+
+
+class _DeprecatedIODevice:
+    """Deprecated public ``device`` attribute for an explicit I/O placement policy.
+
+    The stored value is never synthesized from a module's first parameter.
+    Internal callers must use :func:`_in_out_device` instead of this attribute.
+    """
+
+    def __get__(
+        self, obj: object | None, objtype: type | None = None
+    ) -> torch.device | None:
+        if obj is None:
+            return self
+        _warn_deprecated_io_device(type(obj).__name__, stacklevel=4)
+        return _in_out_device(obj)
+
+    def __set__(self, obj: object, value: torch.device | str | None) -> None:
+        _warn_deprecated_io_device(type(obj).__name__, stacklevel=4)
+        object.__setattr__(
+            obj, "_io_device", None if value is None else torch.device(value)
+        )

@@ -21,7 +21,11 @@ from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.envs import EnvBase, Transform
 from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Compose
-from torchrl.envs.transforms.utils import _module_device, _set_missing_tolerance
+from torchrl.envs.transforms.utils import (
+    _DeprecatedIODevice,
+    _in_out_device,
+    _set_missing_tolerance,
+)
 from torchrl.modules.llm.policies.common import LLMWrapperBase
 
 if TYPE_CHECKING:
@@ -189,14 +193,21 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         tokenizer (transformers.AutoTokenizer): the tokenizer to use. Defaults to `None`.
         detach (bool): whether to detach the KL from the computation graph. Defaults to `True`.
         device (torch.device): Device used to place the reference model at
-            construction time. The value is not stored on the transform: at call
-            time, incoming tensordicts are moved to the model's current parameter
-            or buffer device for computation, then results are restored to the
-            original tensordict device. When using Ray service, this device is
+            construction time. The value is not retained as module state and is
+            not an input/output placement policy: after construction the model
+            owns device routing. When using Ray service, this device is
             forwarded to the remote actor. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         use_ray_service (bool, optional): whether to use Ray service. Defaults to `False`.
         actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.
+
+    .. warning::
+        :attr:`KLRewardTransform.device` is deprecated and will be removed in v0.17.
+        It is an explicit input/output tensordict placement policy, not the
+        location of the reference model. Setting it moves incoming tensordicts
+        to that device for the call and restores results to the original
+        tensordict device. The constructor ``device=`` argument only places the
+        model at initialization.
 
     Examples:
         >>> # Legacy usage (not recommended for new code)
@@ -214,6 +225,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
 
     DEFAULT_IN_KEYS = ["reward"]
     _RayServiceClass = RayKLRewardTransform
+    device = _DeprecatedIODevice()
 
     def __init__(
         self,
@@ -350,14 +362,12 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        device = _module_device(self.ref_model)
-        if device is None:
-            device = self.coef.device
+        io_device = _in_out_device(self)
         original_device = None
-        if device is not None:
+        if io_device is not None:
             original_device = tensordict.device
-            tensordict = tensordict.to(device)
-            next_tensordict = next_tensordict.to(device)
+            tensordict = tensordict.to(io_device)
+            next_tensordict = next_tensordict.to(io_device)
         # tensordict = self._get_text_response(tensordict, next_tensordict)
         response = tensordict.get(self.action_key, None)
         if response is None:
@@ -371,7 +381,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
             return next_tensordict
 
         # We use the ("tokens", "full") key to get the log-probs of the reference model
-        with torch.device(device) if device is not None else nullcontext():
+        with torch.device(io_device) if io_device is not None else nullcontext():
             td_input = tensordict.copy()
             ref_log_prob_td = self.ref_model(td_input)
         if self.pad_output:
@@ -593,10 +603,18 @@ class RetrieveLogProb(Transform):
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): Device used to place the model at construction time.
-            The value is not stored on the transform: at call time, tensordicts and
-            newly created tensors follow the model's current parameter or buffer
-            device. Defaults to `None`.
+            The value is not retained as module state and is not an input/output
+            placement policy: after construction the model owns device routing
+            and newly created tensors follow the relevant input or output
+            tensor. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
+
+    .. warning::
+        :attr:`RetrieveLogProb.device` is deprecated and will be removed in v0.17.
+        It is an explicit input/output tensordict placement policy, not the
+        location of the wrapped model. Setting it moves incoming tensordicts to
+        that device for the call. The constructor ``device=`` argument only
+        places the model at initialization.
 
     Examples:
         >>> from torchrl.data.llm import History
@@ -674,6 +692,8 @@ class RetrieveLogProb(Transform):
         :class:`~torchrl.envs.llm.transforms.kl.KLComputation`: A transform that computes KL divergence between two log-prob tensors.
         :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`: A legacy transform for KL reward computation (use `RetrieveKL` instead).
     """
+
+    device = _DeprecatedIODevice()
 
     def __init__(
         self,
@@ -772,8 +792,8 @@ class RetrieveLogProb(Transform):
         Returns:
             Masked log-probs tensor
         """
-        device = _module_device(self.model)
-        with torch.device(device) if device is not None else nullcontext():
+        io_device = _in_out_device(self)
+        with torch.device(io_device) if io_device is not None else nullcontext():
             # Get assistant mask
             assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)  # type: ignore[misc]
             log_probs = td.get(lp_key, as_list=True)  # type: ignore[misc]
@@ -798,10 +818,12 @@ class RetrieveLogProb(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        device = _module_device(self.model)
-        if device is not None:
-            tensordict = tensordict.to(device)
-            next_tensordict = next_tensordict.to(device)
+        io_device = _in_out_device(self)
+        original_device = None
+        if io_device is not None:
+            original_device = tensordict.device
+            tensordict = tensordict.to(io_device)
+            next_tensordict = next_tensordict.to(io_device)
         # Compute log-probs using the model
         # Use tensordict since we want to process the "full" entry
         ref_td = self.model(tensordict.copy())
@@ -816,6 +838,8 @@ class RetrieveLogProb(Transform):
         if tmp_log_probs_key != self.log_probs_full_key:
             ref_td.rename_key_(tmp_log_probs_key, self.log_probs_full_key)
         next_tensordict.update(ref_td, keys_to_update=(self.log_probs_full_key,))
+        if original_device is not None:
+            next_tensordict = next_tensordict.to(original_device)
 
         return next_tensordict
 
