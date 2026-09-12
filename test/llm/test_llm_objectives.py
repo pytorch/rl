@@ -1444,6 +1444,207 @@ class TestDistillation:
         assert torch.isfinite(loss_vals.loss_distill)
 
 
+@pytest.fixture(scope="class")
+def tiny_qwen_and_tokenizer():
+    """Tiny causal LM and matching tokenizer, cached and CPU friendly."""
+    if not _has_transformers:
+        pytest.skip("transformers lib required")
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    model = AutoModelForCausalLM.from_pretrained(
+        "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
+    ).eval()
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    return model, tokenizer
+
+
+def _grpo_masking_tokens_td(model, tokenizer):
+    """Tokens input for batch 2 with fabricated response tokens (no generation)."""
+    vocab = model.config.vocab_size
+    response_len = 6
+    enc = tokenizer(
+        ["Are you happy? Say yes or no.", "What is 2+2?"],
+        return_tensors="pt",
+        padding=True,
+        padding_side="left",
+    )
+    prompt_ids, prompt_mask = enc["input_ids"], enc["attention_mask"]
+    batch = prompt_ids.shape[0]
+    gen = torch.Generator().manual_seed(0)
+    response_ids = torch.randint(1, vocab, (batch, response_len), generator=gen)
+    full_ids = torch.cat([prompt_ids, response_ids], dim=1)
+    attention_mask = torch.cat(
+        [prompt_mask, torch.ones(batch, response_len, dtype=prompt_mask.dtype)], dim=1
+    )
+    wrapper = TransformersWrapper(
+        model,
+        tokenizer=tokenizer,
+        input_mode="tokens",
+        generate=False,
+        return_log_probs=True,
+        pad_output=True,
+    )
+    td = TensorDict(
+        {
+            "tokens": Tokens(prompt=prompt_ids, full=full_ids),
+            "masks": Masks(all_attention_mask=attention_mask, all_assistant_mask=None),
+        },
+        batch_size=(batch,),
+    )
+    td = td.update(wrapper(td))
+    td["masks", "all_attention_mask"] = attention_mask
+    td["tokens", "full"] = full_ids
+    td["tokens", "prompt"] = prompt_ids
+    log_probs = td.get(("log_probs", "full"), as_padded_tensor=True)
+    td["log_probs", "full"] = log_probs.detach()
+    # Fixed per trajectory advantage, shape (batch, 1, 1)
+    td["advantage"] = torch.tensor([0.5, -0.5]).reshape(batch, 1, 1)
+    return wrapper, td
+
+
+def _grpo_masking_history_td(model, tokenizer):
+    """History input for batch 2 with fabricated assistant responses."""
+    chats = [
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Are you happy? Say yes or no."},
+        ],
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is 2+2?"},
+        ],
+    ]
+    responses = [
+        [{"role": "assistant", "content": "Yes."}],
+        [{"role": "assistant", "content": "4."}],
+    ]
+    rows = []
+    for chat, response in zip(chats, responses):
+        prompt = History.from_chats([chat]).squeeze(0)
+        resp = History.from_chats([response]).squeeze(0)
+        full = prompt.extend(resp, inplace=False, dim=-1)
+        rows.append(
+            TensorDict(
+                {"history": ChatHistory(prompt=prompt, response=resp, full=full)},
+                batch_size=(),
+            )
+        )
+    td = lazy_stack(rows)
+    wrapper = TransformersWrapper(
+        model,
+        tokenizer=tokenizer,
+        input_mode="history",
+        generate=False,
+        return_log_probs=True,
+        pad_output=True,
+        chat_template_name="qwen",
+    )
+    td = td.update(wrapper(td))
+    log_probs = td.get(("log_probs", "full"), as_padded_tensor=True)
+    td["log_probs", "full"] = log_probs.detach()
+    td["advantage"] = torch.tensor([0.5, -0.5]).reshape(2, 1, 1)
+    return wrapper, td
+
+
+class TestGRPOLossMaskingContract:
+    """Deterministic CPU checks of the masking strategy contract.
+
+    Each supported combination of wrapper input mode and masking strategy must
+    select the tokens the contract promises, run through GRPOLoss.forward with
+    a finite loss, and keep the unreduced loss in the (B, T, 1) token layout.
+    Response tokens are fabricated so no generation engine is required
+    (issue 4227). The vLLM integration path of the skipped upstream test is not
+    covered by these cases.
+    """
+
+    @pytest.mark.parametrize(
+        "strategy", ["sft", "rlhf", "generic"], ids=lambda s: f"strategy={s}"
+    )
+    def test_history_input_batch_2(self, tiny_qwen_and_tokenizer, strategy):
+        model, tokenizer = tiny_qwen_and_tokenizer
+        wrapper, td = _grpo_masking_history_td(model, tokenizer)
+
+        assistant_mask = td.get(("masks", "all_assistant_mask"), as_padded_tensor=True)
+        attention_mask = td.get(("masks", "all_attention_mask"), as_padded_tensor=True)
+        assert assistant_mask is not None
+        assert assistant_mask.shape == attention_mask.shape
+        assert assistant_mask.shape[0] == 2
+        assert assistant_mask.dtype == torch.bool
+        assert assistant_mask.any()
+
+        # prompt tokens are absent in history mode, so sft and rlhf must select
+        # the assistant tokens and generic must select the attended tokens
+        if strategy == "generic":
+            dist = wrapper._get_generic_dist(td.clone())
+            expected = attention_mask
+        else:
+            get_dist = (
+                wrapper._get_sft_dist if strategy == "sft" else wrapper._get_rlhf_dist
+            )
+            dist = get_dist(td.clone())
+            expected = assistant_mask
+        torch.testing.assert_close(dist.mask.bool(), expected.bool())
+
+        result = GRPOLoss(actor_network=wrapper, masking_strategy=strategy)(td.clone())
+        assert torch.isfinite(result.loss_objective)
+        assert result.loss_objective.shape == ()
+
+        # the unreduced loss keeps the (B, T, 1) log weight layout
+        unreduced = GRPOLoss(
+            actor_network=wrapper, masking_strategy=strategy, aggregation="none"
+        )(td.clone())
+        assert unreduced.loss_objective.shape == (
+            2,
+            attention_mask.shape[-1],
+            1,
+        )
+
+    def test_tokens_input_rlhf(self, tiny_qwen_and_tokenizer):
+        model, tokenizer = tiny_qwen_and_tokenizer
+        wrapper, td = _grpo_masking_tokens_td(model, tokenizer)
+
+        # without an assistant mask the rlhf strategy cannot run
+        loss_fn = GRPOLoss(actor_network=wrapper, masking_strategy="rlhf")
+        with pytest.raises(ValueError, match="Assistant mask not found"):
+            loss_fn(td.clone())
+
+        # a caller supplied assistant mask is used exactly as given
+        attention_mask = td.get(("masks", "all_attention_mask"), as_padded_tensor=True)
+        supplied = attention_mask.bool().clone()
+        supplied[..., :-6] = False
+        assert supplied.any()
+        td["masks", "all_assistant_mask"] = supplied
+        dist = wrapper._get_rlhf_dist(td.clone())
+        torch.testing.assert_close(dist.mask.bool(), supplied.bool())
+        result = loss_fn(td.clone())
+        assert torch.isfinite(result.loss_objective)
+        assert result.loss_objective.shape == ()
+
+    def test_tokens_input_sft_and_generic(self, tiny_qwen_and_tokenizer):
+        model, tokenizer = tiny_qwen_and_tokenizer
+        wrapper, td = _grpo_masking_tokens_td(model, tokenizer)
+
+        attention_mask = td.get(("masks", "all_attention_mask"), as_padded_tensor=True)
+        prompt_width = td.get(("tokens", "prompt"), as_padded_tensor=True).shape[-1]
+
+        sft_dist = wrapper._get_sft_dist(td.clone())
+        expected_sft = attention_mask.clone()
+        expected_sft[..., :prompt_width] = False
+        torch.testing.assert_close(sft_dist.mask.bool(), expected_sft.bool())
+
+        generic_dist = wrapper._get_generic_dist(td.clone())
+        torch.testing.assert_close(generic_dist.mask.bool(), attention_mask.bool())
+
+        sft = GRPOLoss(actor_network=wrapper, masking_strategy="sft")(td.clone())
+        generic = GRPOLoss(actor_network=wrapper, masking_strategy="generic")(
+            td.clone()
+        )
+        assert torch.isfinite(sft.loss_objective)
+        assert torch.isfinite(generic.loss_objective)
+
+
 @pytest.mark.slow
 @pytest.mark.integration
 class TestGRPOLossIntegration:
