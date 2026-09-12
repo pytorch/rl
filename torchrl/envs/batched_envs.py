@@ -128,7 +128,10 @@ def _check_start(fun):
                     "parent environment has been closed."
                 )
         elif self.is_closed:
-            self._create_td()
+            if not getattr(self, "_metadata_from_workers", False):
+                # With worker metadata the buffers are allocated by
+                # _start_workers, once the workers have reported their specs.
+                self._create_td()
             self._start_workers()
         else:
             if isinstance(self, ParallelEnv):
@@ -389,8 +392,9 @@ class BatchedEnvBase(EnvBase):
         metadata_from_workers (bool, optional): if ``True``, each worker constructs
             its environment and sends its metadata to the parent during startup. This
             avoids constructing temporary environments in the parent process. The mode
-            is only supported by :class:`~torchrl.envs.ParallelEnv`, starts its workers
-            eagerly, and currently requires ``use_buffers=False``. All workers must
+            is only supported by :class:`~torchrl.envs.ParallelEnv` and starts its
+            workers eagerly; the shared buffers (``use_buffers``) are allocated once
+            the workers have reported their specs and handed to them. All workers must
             report the same tensor schema: specs and example tensors may only differ
             in non-tensor payload values (such as language instructions). In this
             mode workers are also closed one at a time at shutdown to bound teardown
@@ -559,17 +563,10 @@ class BatchedEnvBase(EnvBase):
         self.daemon = daemon
         self.shutdown_timeout = float(shutdown_timeout)
 
-        if metadata_from_workers:
-            if not isinstance(self, ParallelEnv):
-                raise TypeError(
-                    "metadata_from_workers=True is only supported by ParallelEnv."
-                )
-            if use_buffers:
-                raise RuntimeError(
-                    "metadata_from_workers=True currently requires use_buffers=False "
-                    "because shared buffers must be allocated before workers start."
-                )
-            self._use_buffers = False
+        if metadata_from_workers and not isinstance(self, ParallelEnv):
+            raise TypeError(
+                "metadata_from_workers=True is only supported by ParallelEnv."
+            )
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -1515,7 +1512,8 @@ class BatchedEnvBase(EnvBase):
     def start(self) -> None:
         if not self.is_closed:
             raise RuntimeError("trying to start a environment that is not closed.")
-        self._create_td()
+        if not self._metadata_from_workers:
+            self._create_td()
         self._start_workers()
 
     def to(self, device: DEVICE_TYPING):
@@ -2102,25 +2100,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         self.parent_channels = []
         self._workers = []
-        if self._use_buffers:
+        # Workers that report their own metadata start on the pipe protocol
+        # and switch to the shared buffers once the parent has allocated them.
+        if self._use_buffers and not self._metadata_from_workers:
             func = _run_worker_pipe_shared_mem
         else:
             func = _run_worker_pipe_direct
-        # We look for cuda tensors through the leaves
-        # because the shared tensordict could be partially on cuda
-        # and some leaves may be inaccessible through get (e.g., LazyStacked)
-        has_cuda = [False]
-
-        def look_for_cuda(tensor, has_cuda=has_cuda):
-            has_cuda[0] = has_cuda[0] or tensor.is_cuda
-
-        if self._use_buffers:
-            self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
-        has_cuda = has_cuda[0]
-        if has_cuda:
-            self.event = torch.cuda.Event()
-        else:
-            self.event = None
         self._events = [ctx.Event() for _ in range(_num_workers)]
 
         # Shared-memory done flags: workers write 1 when done, parent spin-polls.
@@ -2128,7 +2113,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self._shm_done_flags = mp.RawArray("b", _num_workers)
 
         kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
-        if self._use_buffers:
+        if self._use_buffers or self._metadata_from_workers:
             for i in range(_num_workers):
                 kwargs[i].update(
                     {
@@ -2158,7 +2143,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "filter_warnings": self._filter_warnings_subprocess(),
                     }
                 )
-                if self._use_buffers:
+                if self._use_buffers and not self._metadata_from_workers:
                     kwargs[idx].update(
                         {
                             "shared_tensordict": self.shared_tensordicts[idx],
@@ -2186,10 +2171,27 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             if self._metadata_from_workers:
                 metadata = self._receive_worker_metadata()
                 self._set_worker_metadata(metadata)
+                # The specs are known now: allocate the shared buffers and
+                # hand them to the workers, which then leave the pipe protocol.
+                self._create_td()
+                if self._use_buffers:
+                    self._send_worker_buffers()
             else:
                 for parent_pipe in self.parent_channels:
                     # use msg as sync point
                     parent_pipe.recv()
+
+            # We look for cuda tensors through the leaves
+            # because the shared tensordict could be partially on cuda
+            # and some leaves may be inaccessible through get (e.g., LazyStacked)
+            has_cuda = [False]
+
+            def look_for_cuda(tensor, has_cuda=has_cuda):
+                has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+            if self._use_buffers:
+                self.shared_tensordict_parent.apply(look_for_cuda, filter_empty=True)
+            self.event = torch.cuda.Event() if has_cuda[0] else None
 
             for channel in self.parent_channels:
                 channel.send(("init", None))
@@ -2200,6 +2202,33 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         self.is_closed = False
         self.set_spec_lock_()
+
+    def _send_worker_buffers(self) -> None:
+        """Hand the freshly allocated shared buffers to workers started for their metadata."""
+        for idx, channel in enumerate(self.parent_channels):
+            channel.send(
+                (
+                    "buffers",
+                    {
+                        "shared_tensordict": self.shared_tensordicts[idx],
+                        "_selected_input_keys": self._selected_input_keys,
+                        "_selected_reset_keys": self._selected_reset_keys,
+                        "_selected_step_keys": self._selected_step_keys,
+                        "_non_tensor_keys": self._non_tensor_keys,
+                    },
+                )
+            )
+        for worker_idx, channel in enumerate(self.parent_channels):
+            if not channel.poll(self.BATCHED_PIPE_TIMEOUT):
+                raise TimeoutError(
+                    f"ParallelEnv worker {worker_idx} did not acknowledge the shared buffers."
+                )
+            message = channel.recv()
+            if message != "started":
+                raise RuntimeError(
+                    f"ParallelEnv worker {worker_idx} sent {message!r} instead of "
+                    "acknowledging the shared buffers."
+                )
 
     def _receive_worker_metadata(self) -> list[EnvMetaData]:
         metadata = [None] * self.num_workers
@@ -3626,9 +3655,7 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "load_state_dict":
             env.load_state_dict(data)
-            _signal_done()
-            # Also set mp_event so the parent's load_state_dict (which waits
-            # on events) can detect completion.
+            # The parent consumes only this event, not the shared completion flag.
             mp_event.set()
 
         elif cmd == "state_dict":
@@ -3686,6 +3713,8 @@ def _run_worker_pipe_direct(
     consolidate: bool = True,
     filter_warnings: bool = False,
     metadata_from_worker: bool = False,
+    worker_idx: int | None = None,
+    shm_done_flags=None,
 ) -> None:
     # Handle warning filtering (moved from _ProcessNoWarn)
     if filter_warnings:
@@ -3781,6 +3810,26 @@ def _run_worker_pipe_direct(
             # np.random.seed(data)
             new_seed = env.set_seed(data[0], static_seed=data[1])
             child_pipe.send(("seeded", new_seed))
+
+        elif cmd == "buffers":
+            # The parent allocated the shared buffers from the metadata this
+            # worker reported: serve the env through them from now on.
+            if initialized:
+                raise RuntimeError("worker already initialized")
+            _run_worker_pipe_shared_mem(
+                parent_pipe,
+                child_pipe,
+                env,
+                {},
+                mp_event=mp_event,
+                non_blocking=non_blocking,
+                has_lazy_inputs=has_lazy_inputs,
+                verbose=verbose,
+                worker_idx=worker_idx,
+                shm_done_flags=shm_done_flags,
+                **data,
+            )
+            return
 
         elif cmd == "init":
             if verbose:

@@ -1808,7 +1808,7 @@ class TestGym:
                 nworkers = getattr(env, "num_envs", None)
             assert nworkers == 3
             assert env._metadata_from_workers
-            assert env._use_buffers is False
+            assert env._use_buffers == (not env.meta_data.has_dynamic_specs)
             assert not any(
                 isinstance(factory, EnvCreator) for factory in env.create_env_fn
             )

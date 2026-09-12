@@ -195,7 +195,7 @@ class TestMujocoPlayground:
             assert isinstance(env, ParallelEnv)
             assert env.num_workers == 3
             assert env._metadata_from_workers
-            assert env._use_buffers is False
+            assert env._use_buffers == (not env.meta_data.has_dynamic_specs)
             assert not env.is_closed
             env.reset()
         finally:

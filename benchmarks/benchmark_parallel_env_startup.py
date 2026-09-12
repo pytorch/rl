@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Benchmark ``ParallelEnv`` startup metadata strategies.
+"""Benchmark ``ParallelEnv`` startup metadata strategies and rollout throughput.
 
 The benchmark records constructor calls in separate marker files so parent-side
 temporary environments and long-lived worker environments can be counted
@@ -13,6 +13,7 @@ independently. For example::
 
 Use ``--mode`` to run one strategy, and ``--start-method forkserver`` to compare
 the no-shadow-environment path with the default ``spawn`` worker startup.
+Compare ``--use-buffers`` and ``--no-use-buffers`` for batched control steps/s.
 """
 
 from __future__ import annotations
@@ -62,6 +63,8 @@ def _run_mode(
     delay: float,
     start_method: Literal["spawn", "forkserver", "fork"],
     marker_dir: Path,
+    use_buffers: bool | None,
+    steps: int,
 ) -> dict[str, float | int | str]:
     parent_pid = os.getpid()
     common_factory = partial(
@@ -88,7 +91,7 @@ def _run_mode(
             create_env_fn,
             create_env_kwargs=create_env_kwargs,
             metadata_from_workers=mode == "workers",
-            use_buffers=False,
+            use_buffers=use_buffers,
             mp_start_method=start_method,
         )
     construct_seconds = construct_timer.elapsed()
@@ -99,6 +102,9 @@ def _run_mode(
         with timeit(f"{mode}/first_step") as step_timer:
             env.rand_step(tensordict)
         first_step_seconds = step_timer.elapsed()
+        with timeit(f"{mode}/rollout") as rollout_timer:
+            env.rollout(steps, break_when_any_done=False)
+        steps_per_second = steps / rollout_timer.elapsed()
     finally:
         env.close(raise_if_closed=False)
 
@@ -109,6 +115,8 @@ def _run_mode(
         "mode": mode,
         "start_method": start_method,
         "num_workers": num_workers,
+        "use_buffers": env._use_buffers,
+        "steps_per_second": steps_per_second,
         "parent_constructions": parent_constructions,
         "worker_constructions": worker_constructions,
         "closed_constructions": closed_constructions,
@@ -132,6 +140,8 @@ def main() -> None:
         choices=("spawn", "forkserver", "fork"),
         default="spawn",
     )
+    parser.add_argument("--use-buffers", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--steps", type=int, default=1000)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -145,6 +155,8 @@ def main() -> None:
                 delay=args.delay,
                 start_method=args.start_method,
                 marker_dir=Path(marker_dir),
+                use_buffers=args.use_buffers,
+                steps=args.steps,
             )
         results.append(result)
         torchrl_logger.info("ParallelEnv startup benchmark: %s", result)

@@ -2063,8 +2063,8 @@ class TestMujoco:
             assert isinstance(env_b, ParallelEnv)
             assert env_a._metadata_from_workers
             assert env_b._metadata_from_workers
-            assert env_a._use_buffers is False
-            assert env_b._use_buffers is False
+            assert env_a._use_buffers
+            assert env_b._use_buffers
             assert env_a.batch_size == env_b.batch_size
         finally:
             env_a.close()
@@ -2088,7 +2088,7 @@ class TestMujoco:
         env = HopperEnv(backend="mujoco", num_envs=2, seed=0)
         assert isinstance(env, ParallelEnv)
         assert env._metadata_from_workers
-        assert env._use_buffers is False
+        assert env._use_buffers
         td = env.rollout(3)
         assert torch.isfinite(td.get(("next", "reward"))).all()
         env.close()
