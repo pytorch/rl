@@ -238,7 +238,9 @@ export pybind11_DIR
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+  # Draft dependency: TensorDict #1789 (typed key traversal and compilation).
+  # Remove this pin once the prerequisite has merged into TensorDict main.
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@2d252bfae380f150a6136930d7d7a5833d68ecf1
 else
   uv_pip_install --no-deps tensordict
 fi

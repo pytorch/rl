@@ -7,6 +7,7 @@ from __future__ import annotations
 import concurrent.futures
 import contextlib
 import functools as ft
+import gc
 import importlib.util
 import logging
 import multiprocessing as mp
@@ -547,6 +548,9 @@ class TestInferenceServerCore:
     @pytest.mark.parametrize("metadata", [False, True])
     @set_capture_non_tensor_stack(True)
     def test_static_batch_pads_slices_and_owns_results(self, metadata):
+        # Collect previous servers' reference cycles before capturing: their
+        # CUDA graph destructors must not run during this case's capture.
+        gc.collect()
         policy = TensorDictModule(
             _BatchSizeModule(), in_keys=["observation"], out_keys=["action"]
         )
