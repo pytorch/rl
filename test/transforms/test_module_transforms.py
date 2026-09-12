@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 from functools import partial
 
 import pytest
@@ -142,6 +143,29 @@ class TestModuleTransform(TransformBase):
         )
         env = ContinuousActionVecMockEnv().append_transform(t)
         env.check_env_specs()
+
+    def test_to_meta_does_not_recast_to_constructor_device(self):
+        module = TensorDictModule(
+            nn.Linear(3, 3),
+            in_keys=["observation"],
+            out_keys=["observation"],
+        )
+        t = ModuleTransform(module=module, device="cpu")
+        t.to("meta")
+        td = TensorDict(
+            {"observation": torch.randn(2, 3)},
+            batch_size=[2],
+            device="cpu",
+        )
+        out = t._call(td)
+        assert out["observation"].device.type == "meta"
+        devices = {
+            value.device.type
+            for value in out.values(True, True)
+            if torch.is_tensor(value)
+        }
+        assert devices == {"meta"}
+        assert next(t.module.parameters()).device.type == "meta"
 
     @pytest.mark.skipif(not _has_ray, reason="ray required")
     def test_ray_extension(self):
@@ -289,3 +313,8 @@ class TestRayModuleTransform:
             f"Weight update did not take effect: first_mean={first_batch_mean:.2f}, "
             f"second_mean={second_batch_mean:.2f}. Expected second to be at least 50 higher."
         )
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

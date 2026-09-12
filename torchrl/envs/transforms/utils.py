@@ -92,3 +92,19 @@ def _stateless_param(param):
     if is_param:
         return nn.Parameter(param, requires_grad=False)
     return param
+
+
+def _module_device(module: nn.Module) -> torch.device | None:
+    """Return the device of a module parameter or buffer, if any.
+
+    This is a per-call lookup, not cached module state. A module may span
+    several devices; the first parameter or buffer is used as the placement
+    hint for incoming tensordicts.
+    """
+    param = next(module.parameters(), None)
+    if param is not None:
+        return param.device
+    buffer = next(module.buffers(), None)
+    if buffer is not None:
+        return buffer.device
+    return None
