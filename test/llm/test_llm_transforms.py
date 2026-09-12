@@ -25,7 +25,7 @@ from torchrl.envs.llm.transforms import (
     ToolRegistry,
     XMLBlockParser,
 )
-from torchrl.envs.transforms import TransformedEnv
+from torchrl.envs.transforms import Tokenizer as EnvTokenizer, TransformedEnv
 from torchrl.testing.mocking_classes import CountingEnv
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -725,7 +725,9 @@ class TestIncrementalTokenizer:
 
 
 class TestTokenizer:
-    def test_device_follows_env_to(self):
+    @pytest.mark.parametrize("tokenizer_cls", [Tokenizer, EnvTokenizer])
+    @pytest.mark.filterwarnings("error::DeprecationWarning")
+    def test_device_follows_env_to(self, tokenizer_cls):
         # Cached parent.device goes stale after env.to (issue #4345).
         class DummyTokenizer:
             def __call__(self, value, return_tensors="pt", **kwargs):
@@ -735,17 +737,32 @@ class TestTokenizer:
                     "attention_mask": torch.ones(batch, 2, dtype=torch.long),
                 }
 
-        t = Tokenizer(
-            in_keys=["text"],
-            out_keys=["input_ids"],
+        t = tokenizer_cls(
+            in_keys=[("text", "prompt")],
+            out_keys=[("tokens", "prompt")],
             tokenizer=DummyTokenizer(),
         )
-        env = TransformedEnv(CountingEnv(), t)
-        td = TensorDict({"text": "hello"})
-        t(td.clone())
-        env.to("meta")
+        td = TensorDict({("text", "prompt"): "hello"})
+        assert t.out_device is None
         out = t(td.clone())
-        assert out["input_ids"].device == torch.device("meta")
+        assert out["tokens", "prompt"].device == torch.device("cpu")
+        with pytest.warns(DeprecationWarning, match=r"v0\.17.*out_device"):
+            assert t.device is None
+
+        env = TransformedEnv(CountingEnv(), t)
+        try:
+            for device in (None, "cpu", "meta"):
+                if device is not None:
+                    env.to(device)
+                expected = torch.device(device) if device is not None else None
+                assert t.out_device == expected
+                out = t(td.clone())
+                for key in ("prompt", "attention_mask"):
+                    assert out["tokens", key].device == torch.device(device or "cpu")
+                with pytest.warns(DeprecationWarning, match=r"v0\.17.*out_device"):
+                    assert t.device == t.out_device
+        finally:
+            env.close()
 
 
 class TestPolicyVersion:

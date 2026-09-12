@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import warnings
 from collections.abc import Callable, Sequence
 from copy import copy
 from typing import Any, TYPE_CHECKING
@@ -758,11 +759,27 @@ class Tokenizer(UnaryTransform):
         self._missing_tolerance = missing_tolerance
 
     @property
-    def device(self) -> torch.device | None:
+    def out_device(self) -> torch.device | None:
+        """Destination for token tensors and attention masks, read from the parent.
+
+        If there is no parent or its device is ``None``, tokenization outputs
+        retain the device chosen by the tokenizer.
+        """
         parent = self.parent
         if parent is None:
             return None
         return parent.device
+
+    @property
+    def device(self) -> torch.device | None:
+        """Deprecated alias for :attr:`out_device`, removed in TorchRL v0.17."""
+        warnings.warn(
+            "Tokenizer.device is deprecated and will be removed in TorchRL v0.17. "
+            "Use out_device instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.out_device
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         # Specialized for attention mask
@@ -827,7 +844,7 @@ class Tokenizer(UnaryTransform):
         return super()._reset(tensordict, tensordict_reset)
 
     def call_tokenizer_fn(self, value: str | list[str]):
-        device = self.device
+        device = self.out_device
         kwargs = {"add_special_tokens": self.add_special_tokens}
         if self.max_length is not None:
             kwargs["padding"] = "max_length"
