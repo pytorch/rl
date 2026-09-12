@@ -943,7 +943,11 @@ class GRPOLoss(LossModule):
             )
             raise ValueError(error_msg)
 
-        attention_mask = dist.mask
+        # 0.0 is a valid log-prob (log 1). Alignment pads in generate-path
+        # LogProbs.full are NaN so earlier assistant turns inside the
+        # prompt cannot enter the importance ratio as fabricated scores.
+        attention_mask = dist.mask & torch.isfinite(prev_log_prob)
+        dist.mask = attention_mask
         cur_log_prob = torch.where(
             expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0
         )
