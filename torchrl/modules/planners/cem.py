@@ -7,8 +7,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
-from tensordict import TensorDict, TensorDictBase
-from torchrl.modules.planners.common import MPCPlannerBase
+from tensordict import NestedKey, TensorDict, TensorDictBase
+from torchrl.modules.planners.common import (
+    _mask_post_done_reward,
+    _planning_done_keys,
+    MPCPlannerBase,
+)
 
 if TYPE_CHECKING:
     from torchrl.envs.common import EnvBase
@@ -24,8 +28,9 @@ class CEMPlanner(MPCPlannerBase):
     The CEM planning step is performed by sampling actions from a Gaussian
     distribution with zero mean and unit variance.
     The sampled actions are then used to perform a rollout in the environment.
-    The cumulative rewards obtained with the rollout is then
-    ranked. We select the top-k episodes and use their actions to update the
+    Rollouts always run for the full planning horizon. Rewards after the
+    first environment ``done`` (termination or truncation) are ignored, and
+    the remaining return is ranked. We select the top-k episodes and use their actions to update the
     mean and standard deviation of the actions distribution.
     The CEM planning step is repeated for a specified number of steps.
 
@@ -42,10 +47,10 @@ class CEMPlanner(MPCPlannerBase):
             Gaussian distributions.
         top_k (int): The number of top candidates to use to
             update the mean and standard deviation of the Gaussian distribution.
-        reward_key (str, optional): The key in the TensorDict to use to
-            retrieve the reward. Defaults to "reward".
-        action_key (str, optional): The key in the TensorDict to use to store
-            the action. Defaults to "action"
+        reward_key (NestedKey, optional): The key in the TensorDict to use to
+            retrieve the reward. Defaults to ``("next", "reward")``.
+        action_key (NestedKey, optional): The key in the TensorDict to use to store
+            the action. Defaults to ``"action"``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -123,8 +128,8 @@ class CEMPlanner(MPCPlannerBase):
         optim_steps: int,
         num_candidates: int,
         top_k: int,
-        reward_key: str = ("next", "reward"),
-        action_key: str = "action",
+        reward_key: NestedKey = ("next", "reward"),
+        action_key: NestedKey = "action",
     ):
         super().__init__(env=env, action_key=action_key)
         self.planning_horizon = planning_horizon
@@ -191,16 +196,21 @@ class CEMPlanner(MPCPlannerBase):
             actions = self.env.action_spec.project(actions)
             optim_tensordict = container.get("tensordict").clone()
             policy = _PrecomputedActionsSequentialSetter(actions)
+            # Full horizon for every candidate; post-done rewards are masked below.
             optim_tensordict = self.env.rollout(
                 max_steps=self.planning_horizon,
                 policy=policy,
                 auto_reset=False,
                 tensordict=optim_tensordict,
+                break_when_any_done=False,
             )
 
-            sum_rewards = optim_tensordict.get(self.reward_key).sum(
-                dim=TIME_DIM, keepdim=True
-            )
+            sum_rewards = _mask_post_done_reward(
+                optim_tensordict,
+                reward_key=self.reward_key,
+                done_key=_planning_done_keys(self.env),
+                time_dim=TIME_DIM,
+            ).sum(dim=TIME_DIM, keepdim=True)
             _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
             top_k = top_k.expand(action_topk_shape)
             best_actions = actions.gather(K_DIM, top_k)
