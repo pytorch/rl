@@ -1,0 +1,80 @@
+[
+  {
+    "container": "td",
+    "storage": "LazyTensorStorage",
+    "capacity_windows": 4,
+    "window_length": 8,
+    "full_allocated_bytes": 69280,
+    "compact_allocated_bytes": 7136,
+    "full_root_memory_bytes": 32768,
+    "compact_memory_bytes": 4096,
+    "max_output_error": 0.0,
+    "sampled_state_class": "TensorDict",
+    "memory_expansion_is_view": true
+  },
+  {
+    "container": "td",
+    "storage": "LazyMemmapStorage",
+    "capacity_windows": 4,
+    "window_length": 8,
+    "full_allocated_bytes": 69280,
+    "compact_allocated_bytes": 7136,
+    "full_root_memory_bytes": 32768,
+    "compact_memory_bytes": 4096,
+    "max_output_error": 0.0,
+    "sampled_state_class": "TensorDict",
+    "memory_expansion_is_view": true
+  },
+  {
+    "container": "tc",
+    "storage": "LazyTensorStorage",
+    "capacity_windows": 4,
+    "window_length": 8,
+    "full_allocated_bytes": 69280,
+    "compact_allocated_bytes": 7136,
+    "full_root_memory_bytes": 32768,
+    "compact_memory_bytes": 4096,
+    "max_output_error": 0.0,
+    "sampled_state_class": "_GTrXLTC",
+    "memory_expansion_is_view": true
+  },
+  {
+    "container": "tc",
+    "storage": "LazyMemmapStorage",
+    "capacity_windows": 4,
+    "window_length": 8,
+    "full_allocated_bytes": 69280,
+    "compact_allocated_bytes": 7136,
+    "full_root_memory_bytes": 32768,
+    "compact_memory_bytes": 4096,
+    "max_output_error": 0.0,
+    "sampled_state_class": "_GTrXLTC",
+    "memory_expansion_is_view": true
+  },
+  {
+    "container": "ttd",
+    "storage": "LazyTensorStorage",
+    "capacity_windows": 4,
+    "window_length": 8,
+    "full_allocated_bytes": 69280,
+    "compact_allocated_bytes": 7136,
+    "full_root_memory_bytes": 32768,
+    "compact_memory_bytes": 4096,
+    "max_output_error": 0.0,
+    "sampled_state_class": "_GTrXLTTD",
+    "memory_expansion_is_view": true
+  },
+  {
+    "container": "ttd",
+    "storage": "LazyMemmapStorage",
+    "capacity_windows": 4,
+    "window_length": 8,
+    "full_allocated_bytes": 69280,
+    "compact_allocated_bytes": 7136,
+    "full_root_memory_bytes": 32768,
+    "compact_memory_bytes": 4096,
+    "max_output_error": 0.0,
+    "sampled_state_class": "_GTrXLTTD",
+    "memory_expansion_is_view": true
+  }
+]
