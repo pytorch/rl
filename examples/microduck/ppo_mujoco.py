@@ -112,6 +112,7 @@ TASK_PRESETS = (
     "standing_task",
     "speed_range_task",
     "sidestep_task",
+    "turning_task",
     "jump_task",
 )
 # The asset location is machine specific and is never taken from a checkpoint.
