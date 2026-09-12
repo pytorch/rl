@@ -107,19 +107,11 @@ def _warn_deprecated_io_device(cls_name: str, *, stacklevel: int = 3) -> None:
     )
 
 
-def _in_out_device(obj: object) -> torch.device | None:
-    """Return the explicit I/O placement policy, if any.
-
-    This is not inferred from parameters or buffers.
-    """
-    return getattr(obj, "_io_device", None)
-
-
 class _DeprecatedIODevice:
     """Deprecated public ``device`` attribute for an explicit I/O placement policy.
 
     The stored value is never synthesized from a module's first parameter.
-    Internal callers must use :func:`_in_out_device` instead of this attribute.
+    Internal callers must read ``_io_device`` instead of this attribute.
     """
 
     def __get__(
@@ -127,11 +119,11 @@ class _DeprecatedIODevice:
     ) -> torch.device | None:
         if obj is None:
             return self
-        _warn_deprecated_io_device(type(obj).__name__, stacklevel=4)
-        return _in_out_device(obj)
+        _warn_deprecated_io_device(type(obj).__name__, stacklevel=3)
+        return getattr(obj, "_io_device", None)
 
     def __set__(self, obj: object, value: torch.device | str | None) -> None:
-        _warn_deprecated_io_device(type(obj).__name__, stacklevel=4)
+        _warn_deprecated_io_device(type(obj).__name__, stacklevel=3)
         object.__setattr__(
             obj, "_io_device", None if value is None else torch.device(value)
         )

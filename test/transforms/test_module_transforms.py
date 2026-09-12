@@ -41,21 +41,6 @@ from torchrl.testing.modules import BiasModule
 from torchrl.weight_update import RayModuleTransformScheme
 
 
-class _CopyToWeightDeviceModule(nn.Module):
-    """Copies ``observation`` onto ``self.weight.device`` as ``copied``."""
-
-    def __init__(self):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(1))
-        self.in_keys = ["observation"]
-        self.out_keys = ["copied"]
-
-    def forward(self, tensordict: TensorDict) -> TensorDict:
-        observation = tensordict.get("observation")
-        tensordict["copied"] = observation.to(self.weight.device)
-        return tensordict
-
-
 class _SplitModule(nn.Module):
     """CPU first-parameter plus an accelerator branch; inputs stay put."""
 
@@ -72,14 +57,6 @@ class _SplitModule(nn.Module):
             self.accelerator_branch(tensordict["accelerator_input"]).to("cpu")
         )
         return tensordict
-
-
-def _tensor_devices(data: TensorDict) -> set[str]:
-    return {
-        value.device.type
-        for value in data.values(True, True)
-        if torch.is_tensor(value)
-    }
 
 
 _CROSS_DEVICE_PARAMS = [
@@ -204,44 +181,20 @@ class TestModuleTransform(TransformBase):
         env = ContinuousActionVecMockEnv().append_transform(t)
         env.check_env_specs()
 
-    def test_to_meta_does_not_recast_to_constructor_device(self):
-        t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="cpu")
-        t.to("meta")
-        td = TensorDict(
-            {
-                "observation": torch.randn(2, 3, device="meta"),
-                "leftover": torch.ones(2, 1, device="meta"),
-            },
-            batch_size=[2],
-            device="meta",
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_constructor_device_moves_cpu_input(self, accelerator):
+        module = TensorDictModule(
+            nn.Linear(2, 2, device=accelerator), in_keys=["x"], out_keys=["y"]
         )
-        out = t._call(td)
-        assert out["copied"].device.type == "meta"
-        assert _tensor_devices(out) == {"meta"}
-        assert next(t.module.parameters()).device.type == "meta"
-
-    @pytest.mark.parametrize("module_device", _CROSS_DEVICE_PARAMS)
-    @pytest.mark.parametrize("inverse", [False, True])
-    def test_copies_module_output_back_to_input(self, module_device, inverse):
-        t = ModuleTransform(
-            module=_CopyToWeightDeviceModule(),
-            device=module_device,
-            inverse=inverse,
-        )
-        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
-            t.device = module_device
-        td = TensorDict(
-            {"observation": torch.randn(2, 3, device="cpu")},
-            batch_size=[2],
-            device="cpu",
-        )
-        call = t._inv_call if inverse else t._call
-        out = call(td)
-        assert "copied" in td.keys()
-        assert td["copied"].device.type == "cpu"
-        assert td["observation"].device.type == "cpu"
-        assert out["copied"].device.type == torch.device(module_device).type
-        assert out is not td
+        transform = ModuleTransform(module=module, device=accelerator)
+        with pytest.warns(DeprecationWarning, match="removed in v0.17") as rec:
+            assert transform.device == torch.device(accelerator)
+        assert rec.list[0].filename == __file__
+        td = TensorDict({"x": torch.ones(1, 2)}, batch_size=[1], device="cpu")
+        out = transform(td)
+        assert torch.isfinite(out["y"]).all()
+        assert out["y"].shape == (1, 2)
+        assert td["y"].device.type == "cpu"
 
     @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
     def test_does_not_move_split_module_inputs(self, accelerator):
@@ -261,21 +214,6 @@ class TestModuleTransform(TransformBase):
         assert out["cpu_input"].device.type == "cpu"
         assert out["accelerator_input"].device.type == torch.device(accelerator).type
         assert out["result"].device.type == "cpu"
-
-    def test_device_attr_is_deprecated_io_policy(self):
-        t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="cpu")
-        param_device = next(t.module.parameters()).device
-        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
-            assert t.device is None
-        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
-            t.device = "meta"
-        with pytest.warns(DeprecationWarning, match="removed in v0.17"):
-            assert t.device == torch.device("meta")
-        assert next(t.module.parameters()).device == param_device
-
-    def test_construct_with_meta_places_wrapped_module(self):
-        t = ModuleTransform(module=_CopyToWeightDeviceModule(), device="meta")
-        assert next(t.module.parameters()).device.type == "meta"
 
     @pytest.mark.skipif(not _has_ray, reason="ray required")
     def test_ray_extension(self):

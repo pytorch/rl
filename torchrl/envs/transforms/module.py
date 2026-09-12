@@ -16,7 +16,7 @@ from torchrl._utils import _RayServiceMetaClass, logger as torchrl_logger
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Transform
-from torchrl.envs.transforms.utils import _DeprecatedIODevice, _in_out_device
+from torchrl.envs.transforms.utils import _DeprecatedIODevice
 
 if TYPE_CHECKING:
     from torchrl.weight_update import WeightSyncScheme
@@ -130,10 +130,12 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         no_grad (bool, optional): Whether to use gradient computation. Default is `False`.
         inverse (bool, optional): Whether to use the inverse of the module. Default is `False`.
         device (torch.device, optional): Device used to place the wrapped module at
-            construction time. The value is not retained as module state and is
-            not an input/output placement policy: after construction the module
-            owns device routing, and incoming tensordicts are left in place.
-            Defaults to `None` (the module is left where it is).
+            construction time. Until v0.17 this value is also the explicit
+            input/output tensordict placement policy: incoming tensordicts are
+            moved to this device for the call (TensorDict ``.to()`` copy-back).
+            :attr:`ModuleTransform.device` returns this value and will be removed
+            in v0.17. Defaults to `None` (the module is left where it is and
+            incoming tensordicts are not moved).
         use_ray_service (bool, optional): Whether to use Ray service. Default is `False`.
         num_gpus (int, optional): The number of GPUs to use if using Ray. Default is `None`.
         num_cpus (int, optional): The number of CPUs to use if using Ray. Default is `None`.
@@ -160,7 +162,8 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         It is an explicit input/output tensordict placement policy, not the
         location of the wrapped module. Setting it moves incoming tensordicts to
         that device for the call (TensorDict ``.to()`` copy-back). The
-        constructor ``device=`` argument only places the module at initialization.
+        constructor ``device=`` argument places the module at initialization and,
+        until v0.17, also sets this I/O policy.
     """
 
     _RayServiceClass = RayModuleTransform
@@ -205,8 +208,9 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
             )
         self.module = module if module is not None else module_factory()
         if device is not None:
-            # User-supplied / factory-built module: place it, then drop the ctor device.
+            # Place the module and keep device as the explicit I/O policy until v0.17.
             self.module = self.module.to(device)
+            self._io_device = torch.device(device)
         self.no_grad = no_grad
         self.inverse = inverse
         self.observation_spec_transform = observation_spec_transform
@@ -271,7 +275,7 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.inverse:
             return tensordict
-        io_device = _in_out_device(self)
+        io_device = getattr(self, "_io_device", None)
         with torch.no_grad() if self.no_grad else nullcontext():
             with (
                 tensordict.to(io_device)
@@ -283,7 +287,7 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.inverse:
             return tensordict
-        io_device = _in_out_device(self)
+        io_device = getattr(self, "_io_device", None)
         with torch.no_grad() if self.no_grad else nullcontext():
             with (
                 tensordict.to(io_device)

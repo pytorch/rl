@@ -23,7 +23,6 @@ from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import (
     _DeprecatedIODevice,
-    _in_out_device,
     _set_missing_tolerance,
 )
 from torchrl.modules.llm.policies.common import LLMWrapperBase
@@ -193,10 +192,13 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         tokenizer (transformers.AutoTokenizer): the tokenizer to use. Defaults to `None`.
         detach (bool): whether to detach the KL from the computation graph. Defaults to `True`.
         device (torch.device): Device used to place the reference model at
-            construction time. The value is not retained as module state and is
-            not an input/output placement policy: after construction the model
-            owns device routing. When using Ray service, this device is
-            forwarded to the remote actor. Defaults to `None`.
+            construction time. Until v0.17 this value is also the explicit
+            input/output tensordict placement policy: incoming tensordicts are
+            moved to this device for the call and results are restored to the
+            original tensordict device. :attr:`KLRewardTransform.device`
+            returns this value and will be removed in v0.17. When using Ray
+            service, this device is forwarded to the remote actor. Defaults
+            to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         use_ray_service (bool, optional): whether to use Ray service. Defaults to `False`.
         actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.
@@ -206,8 +208,8 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         It is an explicit input/output tensordict placement policy, not the
         location of the reference model. Setting it moves incoming tensordicts
         to that device for the call and restores results to the original
-        tensordict device. The constructor ``device=`` argument only places the
-        model at initialization.
+        tensordict device. The constructor ``device=`` argument places the
+        model at initialization and, until v0.17, also sets this I/O policy.
 
     Examples:
         >>> # Legacy usage (not recommended for new code)
@@ -289,8 +291,9 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
 
         self.add_to_reward = add_to_reward
         if device is not None:
-            # User-supplied model: place it, then drop the constructor device.
+            # Place the model and keep device as the explicit I/O policy until v0.17.
             ref_model = ref_model.to(device)
+            self._io_device = torch.device(device)
         # Register as a submodule so module.to(...) moves the reference model.
         self.ref_model = ref_model
 
@@ -362,7 +365,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        io_device = _in_out_device(self)
+        io_device = getattr(self, "_io_device", None)
         original_device = None
         if io_device is not None:
             original_device = tensordict.device
@@ -603,18 +606,18 @@ class RetrieveLogProb(Transform):
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): Device used to place the model at construction time.
-            The value is not retained as module state and is not an input/output
-            placement policy: after construction the model owns device routing
-            and newly created tensors follow the relevant input or output
-            tensor. Defaults to `None`.
+            Until v0.17 this value is also the explicit input/output tensordict
+            placement policy: incoming tensordicts are moved to this device for
+            the call. :attr:`RetrieveLogProb.device` returns this value and will
+            be removed in v0.17. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
 
     .. warning::
         :attr:`RetrieveLogProb.device` is deprecated and will be removed in v0.17.
         It is an explicit input/output tensordict placement policy, not the
         location of the wrapped model. Setting it moves incoming tensordicts to
-        that device for the call. The constructor ``device=`` argument only
-        places the model at initialization.
+        that device for the call. The constructor ``device=`` argument places
+        the model at initialization and, until v0.17, also sets this I/O policy.
 
     Examples:
         >>> from torchrl.data.llm import History
@@ -728,8 +731,9 @@ class RetrieveLogProb(Transform):
 
         # Store model and configuration
         if device is not None:
-            # User-supplied model: place it, then drop the constructor device.
+            # Place the model and keep device as the explicit I/O policy until v0.17.
             model = model.to(device)
+            self._io_device = torch.device(device)
         self.model = model
         self.assistant_only = assistant_only
         self.detach = detach
@@ -792,7 +796,7 @@ class RetrieveLogProb(Transform):
         Returns:
             Masked log-probs tensor
         """
-        io_device = _in_out_device(self)
+        io_device = getattr(self, "_io_device", None)
         with torch.device(io_device) if io_device is not None else nullcontext():
             # Get assistant mask
             assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)  # type: ignore[misc]
@@ -818,7 +822,7 @@ class RetrieveLogProb(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        io_device = _in_out_device(self)
+        io_device = getattr(self, "_io_device", None)
         original_device = None
         if io_device is not None:
             original_device = tensordict.device
