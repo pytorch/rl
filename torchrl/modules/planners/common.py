@@ -8,12 +8,40 @@ import abc
 from typing import TYPE_CHECKING
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import NestedKey, TensorDictBase
 
 from torchrl.modules import SafeModule
 
 if TYPE_CHECKING:
     from torchrl.envs.common import EnvBase
+
+
+def _mask_post_done_reward(
+    tensordict: TensorDictBase,
+    reward_key: NestedKey = ("next", "reward"),
+    done_key: NestedKey = ("next", "done"),
+    *,
+    time_dim: int | None = None,
+) -> torch.Tensor:
+    """Zero rewards that follow the first ``done`` along the time dimension.
+
+    The reward at the first ``done`` step is kept. ``done`` is used (not
+    ``terminated``) so a truncated episode also stops contributing to the
+    planning score.
+    """
+    reward = tensordict.get(reward_key)
+    done = tensordict.get(done_key)
+    if time_dim is None:
+        names = tensordict.names
+        if names is not None and "time" in names:
+            time_dim = names.index("time")
+        else:
+            time_dim = -2
+    if done.shape != reward.shape:
+        done = done.expand_as(reward)
+    done_int = done.to(dtype=torch.int64)
+    already_done = done_int.cumsum(dim=time_dim) > done_int
+    return torch.where(already_done, torch.zeros_like(reward), reward)
 
 
 class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
@@ -22,15 +50,19 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
     This class inherits from :obj:`SafeModule`. Provided a :obj:`TensorDict`, this module will perform a Model Predictive Control (MPC) planning step.
     At the end of the planning step, the :obj:`MPCPlanner` will return a proposed action.
 
+    Imagined rollouts keep a full planning horizon even after a candidate
+    hits ``done``. Rewards after the first :obj:`("next", "done")` are ignored
+    when scoring those trajectories.
+
     Args:
         env (EnvBase): The environment to perform the planning step on (Can be :obj:`ModelBasedEnvBase` or :obj:`EnvBase`).
-        action_key (str, optional): The key that will point to the computed action.
+        action_key (NestedKey, optional): The key that will point to the computed action.
     """
 
     def __init__(
         self,
         env: EnvBase,
-        action_key: str = "action",
+        action_key: NestedKey = "action",
     ):
         # Check if env is stateless
         if env.batch_locked:
