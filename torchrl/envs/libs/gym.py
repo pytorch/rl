@@ -106,8 +106,8 @@ def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
         return
 
 
-def _looks_like_ale_env(env_name: str) -> bool:
-    """Return True if ``env_name`` is an ``ALE/``, ``ale_py:``, or ``*NoFrameskip*`` id.
+def _import_ale_py_if_needed(env_name: str) -> None:
+    """Import ``ale_py`` so gymnasium/gym can resolve Atari environment ids.
 
     Gymnasium no longer auto-loads the ``ale_py`` plugin, so the modern
     ``ALE/*`` namespace, the ``ale_py:`` prefix, and classic
@@ -115,12 +115,7 @@ def _looks_like_ale_env(env_name: str) -> bool:
     ``import ale_py`` before ``gym.make``. Other classic ids (``Pong-v4``,
     ``Breakout-v0``, ...) are not matched.
     """
-    return env_name.startswith(("ALE/", "ale_py:")) or "NoFrameskip" in env_name
-
-
-def _import_ale_py_if_needed(env_name: str) -> None:
-    """Import ``ale_py`` so gymnasium/gym can resolve Atari environment ids."""
-    if not _looks_like_ale_env(env_name):
+    if not (env_name.startswith(("ALE/", "ale_py:")) or "NoFrameskip" in env_name):
         return
     try:
         import ale_py  # noqa: F401

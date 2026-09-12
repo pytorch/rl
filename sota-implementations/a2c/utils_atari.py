@@ -46,7 +46,7 @@ from torchrl.record import VideoRecorder
 
 
 def make_base_env(
-    env_name="ALE/Pong-v5",
+    env_name="BreakoutNoFrameskip-v4",
     gym_backend="gymnasium",
     frame_skip=4,
     device="cpu",
