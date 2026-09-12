@@ -465,6 +465,9 @@ class TestToolCall:
 class TestIncrementalTokenizer:
     """Tests for the IncrementalTokenizer transform."""
 
+    class DummyTokenizer:
+        vocab_size = 32
+
     def test_reset_tokenizes_history(self, tokenizer):
         """Test that reset produces correct tokens from history."""
         system_prompt = "You are a helpful assistant."
@@ -722,6 +725,48 @@ class TestIncrementalTokenizer:
         assert ("tokens", "prompt") in result.keys(True, True)
         tokens = result.get(("tokens", "prompt"), as_list=True)
         assert tokens[0].numel() > 0
+
+    @pytest.mark.parametrize(
+        "tokens_key, expected_full_key, decoy_key",
+        [
+            pytest.param(
+                ("obs", "tok", "prompt"),
+                ("obs", "tok", "full"),
+                ("obs", "full"),
+                id="nested",
+            ),
+            pytest.param(
+                "tokens",
+                ("tokens", "full"),
+                "tokens_full",
+                id="string",
+            ),
+            pytest.param(
+                ("tokens",),
+                ("tokens", "full"),
+                "full",
+                id="one_tuple",
+            ),
+        ],
+    )
+    def test_step_tokens_full_key(self, tokens_key, expected_full_key, decoy_key):
+        """Reuse tokens.full under the last NestedKey component; decoys fail the old lookups."""
+        tokens_full = torch.tensor([1, 2, 3])
+        decoy = torch.tensor([9, 9, 9])
+        transform = IncrementalTokenizer(
+            self.DummyTokenizer(),
+            tokens_key=tokens_key,
+        )
+        td = TensorDict(
+            {
+                expected_full_key: tokens_full,
+                decoy_key: decoy,
+            },
+            batch_size=(),
+        )
+        next_td = TensorDict(batch_size=())
+        out = transform._step(td, next_td)
+        assert torch.equal(out[tokens_key], tokens_full)
 
 
 class TestTokenizer:

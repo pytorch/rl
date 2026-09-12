@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import Any, TYPE_CHECKING
 
 import torch
-from tensordict import NonTensorData, NonTensorStack, TensorDictBase
+from tensordict import NonTensorData, NonTensorStack, TensorDictBase, unravel_key
 from tensordict.nn import dispatch
 from tensordict.utils import _zip_strict, NestedKey
 from torch import Tensor
@@ -504,11 +504,15 @@ class IncrementalTokenizer(Transform):
         """
         # Try to reuse tokens.full from the action tensordict
         # Since next.history.prompt = history.full, tokens.full is already the correct tokenization
-        tokens_full_key = (
-            (self.tokens_key[0], "full")
-            if isinstance(self.tokens_key, tuple)
-            else "tokens_full"
-        )
+        # Replace the last NestedKey component with "full":
+        #   "tokens" -> ("tokens", "full")
+        #   ("tokens",) -> ("tokens", "full")
+        #   ("obs", "tok", "prompt") -> ("obs", "tok", "full")
+        tokens_key = unravel_key(self.tokens_key)
+        if isinstance(tokens_key, str):
+            tokens_full_key = (tokens_key, "full")
+        else:
+            tokens_full_key = (*tokens_key[:-1], "full")
         existing_tokens_full = tensordict.get(tokens_full_key, None)
 
         if existing_tokens_full is not None:
