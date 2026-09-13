@@ -1545,13 +1545,6 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
         elif replay_buffer is not None:
             collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
-    env = collector.env
-    action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
-    if hasattr(action_spec, "get"):
-        nested_action_spec = action_spec.get("action", default=None)
-        if nested_action_spec is not None:
-            action_spec = nested_action_spec
-
     if not callable(loss_module):
         # TD3Loss currently requires real action bounds from the environment. Therefore, we
         # require it to be a partial for now.
@@ -1561,11 +1554,25 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
             "trainer inject actor_network, qvalue_network, and action_spec."
         )
     else:
-        loss_module = loss_module(
-            action_spec=action_spec,
-            actor_network=actor_network,
-            qvalue_network=qvalue_network,
+        loss_kwargs = {
+            "actor_network": actor_network,
+            "qvalue_network": qvalue_network,
+        }
+        partial_kwargs = getattr(loss_module, "keywords", None) or {}
+        has_action_domain = any(
+            partial_kwargs.get(key) is not None for key in ("action_spec", "bounds")
         )
+        if not has_action_domain and hasattr(collector, "env"):
+            env = collector.env
+            action_spec = (
+                getattr(env, "action_spec_unbatched", None) or env.action_spec
+            )
+            if hasattr(action_spec, "get"):
+                nested_action_spec = action_spec.get("action", default=None)
+                if nested_action_spec is not None:
+                    action_spec = nested_action_spec
+            loss_kwargs["action_spec"] = action_spec
+        loss_module = loss_module(**loss_kwargs)
 
     if value_estimator_gamma is not None:
         loss_module.make_value_estimator(gamma=value_estimator_gamma)
