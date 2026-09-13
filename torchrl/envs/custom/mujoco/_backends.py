@@ -412,7 +412,10 @@ class _TorchBackend(_PhysicsBackend):
         self._dx = self._dx0.expand(self.num_envs).clone()
         self._dx.qpos.copy_(qpos.to(self._sim_dtype))
         self._dx.qvel.copy_(qvel.to(self._sim_dtype))
-        self._dx = self._vmap_forward(self._dx)
+        # Forward may broadcast constant contact fields with stride-zero batch
+        # dimensions. Materialize them as in the stepped state, otherwise the
+        # first physics step changes strides and triggers recompilation.
+        self._dx = self._vmap_forward(self._dx).clone()
 
     def reset_mask(
         self, mask: torch.Tensor, qpos: torch.Tensor, qvel: torch.Tensor

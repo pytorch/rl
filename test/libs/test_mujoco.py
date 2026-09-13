@@ -3174,8 +3174,10 @@ class TestMujoco:
         torch._dynamo.reset()
         torch._dynamo.utils.counters.clear()
         env = HopperEnv(num_envs=2, seed=0, compile_step=True)
-        td = env.rollout(3)
-        assert torch.isfinite(td.get(("next", "reward"))).all()
+        # Both the first reset and later resets must retain the stepped layout.
+        for _ in range(2):
+            td = env.rollout(3)
+            assert torch.isfinite(td.get(("next", "reward"))).all()
         unique_graphs = torch._dynamo.utils.counters["stats"].get("unique_graphs")
         assert (
             unique_graphs == 1
