@@ -557,17 +557,37 @@ def save_checkpoint(
 
 
 def load_parameters(
-    path: str | Path, actor: ProbabilisticActor, critic: TensorDictSequential
+    path: str | Path,
+    actor: ProbabilisticActor,
+    critic: TensorDictSequential,
+    *,
+    task_mapping: Sequence[int] | None = None,
 ) -> int:
-    """Load actor and critic parameters from a checkpoint written by :func:`save_checkpoint`.
+    """Load actor parameters and, when saved, critic parameters from a checkpoint.
+
+    ``task_mapping`` optionally gives one source embedding index for each
+    destination task, allowing a skill library to grow without changing the
+    existing skills' inference weights. Optimizer state is not loaded.
 
     Returns:
         The number of transitions the checkpoint was trained on.
     """
     payload = load_checkpoint(path)
+    if task_mapping is not None:
+        for state in (
+            payload["model_state_dict"],
+            payload.get("critic_state_dict", {}),
+        ):
+            for key, value in state.items():
+                if key.endswith(".task.weight"):
+                    indices = torch.as_tensor(
+                        task_mapping, dtype=torch.long, device=value.device
+                    )
+                    state[key] = value.index_select(0, indices)
     try:
         actor.load_state_dict(payload["model_state_dict"])
-        critic.load_state_dict(payload["critic_state_dict"])
+        if "critic_state_dict" in payload:
+            critic.load_state_dict(payload["critic_state_dict"])
     except RuntimeError as err:
         raise RuntimeError(
             f"The checkpoint {path} was trained with policy kwargs "
@@ -615,7 +635,7 @@ def microduck_metrics(
     last = trajectories["next", "terminated"][..., 0].gather(
         -1, (lengths - 1).unsqueeze(-1)
     )
-    return {
+    metrics = {
         "tracking_error": float(error[mask].mean()),
         "forward_speed": float(velocity[..., 0][mask].mean()),
         "lateral_speed": float(velocity[..., 1][mask].mean()),
@@ -625,6 +645,23 @@ def microduck_metrics(
         "task_score": float(score[mask].mean()),
         "task_score_min": float(episode_score.min()),
     }
+    if ("next", "diagnostic_head_pitch") in trajectories.keys(True):
+        for name in ("head_pitch", "head_yaw", "yaw_rate"):
+            values = trajectories["next", f"diagnostic_{name}"][..., 0]
+            metrics[name] = float(values[mask].mean())
+            metrics[f"{name}_abs"] = float(values[mask].abs().mean())
+        height = trajectories["next", "diagnostic_height_gain"][..., 0]
+        metrics["hop_height_max"] = float(height.masked_fill(~mask, 0).amax(-1).mean())
+        metrics["planar_speed"] = float(velocity.norm(dim=-1)[mask].mean())
+        pairs = mask[..., 1:] & mask[..., :-1]
+        takeoffs = (airborne[..., 1:] > airborne[..., :-1]) & pairs
+        landings = (airborne[..., 1:] < airborne[..., :-1]) & pairs
+        metrics["takeoffs_per_episode"] = float(takeoffs.sum(-1).float().mean())
+        metrics["landings_per_episode"] = float(landings.sum(-1).float().mean())
+        metrics["hopping_episode_fraction"] = float(
+            ((takeoffs.sum(-1) >= 2) & (landings.sum(-1) >= 2)).float().mean()
+        )
+    return metrics
 
 
 def make_evaluator(

@@ -21,6 +21,7 @@ import torch
 
 from examples.microduck.ppo_mujoco import (
     evaluation_metrics,
+    load_parameters,
     make_env,
     make_evaluator,
     make_models,
@@ -44,11 +45,14 @@ from torchrl.trainers.algorithms import PPOTrainer
 # These ordered definitions are also saved in walker.ckpt. Never reorder them
 # when loading weights: task_id indexes a learned embedding.
 SKILL_PRESETS = [
-    {"preset": "standing_task"},
+    {"preset": "standing_task", "reward_weights": {"head_level": 4.0}},
     {"preset": "tracking_task", "speed": 0.2},
     {"preset": "tracking_task", "speed": -0.2},
     {"preset": "sidestep_task", "speed": 0.15},
     {"preset": "sidestep_task", "speed": -0.15},
+    {"preset": "jump_task", "speed": 0.3, "weight": 3.0},
+    {"preset": "turning_task", "rate": 1.0},
+    {"preset": "turning_task", "rate": -1.0},
     {"preset": "jump_task", "weight": 3.0},
 ]
 
@@ -177,6 +181,12 @@ def main() -> None:
     parser.add_argument("--low-level-frames", type=int, default=10_000_000)
     parser.add_argument("--high-level-frames", type=int, default=1_000_000)
     parser.add_argument("--walker-checkpoint", type=Path)
+    parser.add_argument(
+        "--init-from", type=Path, help="Initialize from a released six-skill walker"
+    )
+    parser.add_argument("--low-level-only", action="store_true")
+    parser.add_argument("--evaluation-episodes", type=int, default=8)
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
         "--smoke", action="store_true", help="64 steps per stage, one simulator"
@@ -188,7 +198,7 @@ def main() -> None:
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(1)
-    torch.manual_seed(0)
+    torch.manual_seed(args.seed)
     (output_dir / "run.json").write_text(json.dumps(vars(args), default=str, indent=2))
 
     if args.walker_checkpoint:
@@ -203,14 +213,24 @@ def main() -> None:
             "max_episode_steps": 32 if args.smoke else 500,
             "action_scale": 1.0,
             "tasks": SKILL_PRESETS,
+            "seed": args.seed,
         }
         policy_kwargs = {
             "hidden_size": 32 if args.smoke else 128,
             "policy_head": "gaussian",
             "initial_policy_scale": 1.0,
         }
+        if args.init_from:
+            initial = load_checkpoint(args.init_from)
+            if len(initial["config"]["env"]["tasks"]) != 6:
+                raise ValueError("--init-from requires the released six-skill library.")
+            policy_kwargs = initial["policy_kwargs"]
         env = make_env(env_config)
         actor, critic = make_models(env, **policy_kwargs)
+        if args.init_from:
+            load_parameters(
+                args.init_from, actor, critic, task_mapping=[0, 1, 2, 3, 4, 5, 0, 0, 5]
+            )
         low_trainer = PPOTrainer.from_env(
             env,
             actor=actor,
@@ -255,7 +275,12 @@ def main() -> None:
         evaluator = make_evaluator(
             make_env(
                 checkpoint=payload,
-                cfg={"backend": "mujoco", "task_id": task_id, "diagnostics": True},
+                cfg={
+                    "backend": "mujoco",
+                    "task_id": task_id,
+                    "diagnostics": True,
+                    "seed": args.seed + 1,
+                },
                 download=True,
                 num_envs=1,
                 parallel=False,
@@ -263,7 +288,7 @@ def main() -> None:
             walker,
             label=str(task_id),
             jumping=bool(task.reward_weights[jump_index] > 0),
-            num_episodes=1 if args.smoke else 8,
+            num_episodes=1 if args.smoke else args.evaluation_episodes,
             steps=32 if args.smoke else 500,
         )
         try:
@@ -273,6 +298,9 @@ def main() -> None:
     (output_dir / "skills.json").write_text(
         json.dumps(evaluation_metrics(skill_results), indent=2)
     )
+
+    if args.low_level_only:
+        return
 
     task_factory = ft.partial(
         WaypointMicroDuck,

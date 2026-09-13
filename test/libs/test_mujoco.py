@@ -68,7 +68,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import load_checkpoint
+from torchrl.render import load_checkpoint, save_render_checkpoint
 
 if _has_mujoco:
     import mujoco
@@ -162,8 +162,8 @@ class TestMujoco:
             '  <worldbody><geom type="plane" size="1 1 0.1" contype="1" conaffinity="1"/>',
             '    <body name="torso" pos="0 0 0.12"><freejoint name="root"/>',
             '      <geom type="sphere" size="0.02" mass="0.1"/>',
-            '      <site name="head_imu" pos="0 0 0.02"/>',
-            '      <site name="mouth_tip" pos="0.03 0 0.02"/>',
+            '      <site name="head_imu" pos="0 0 0.02" quat="0.707107 0 -0.707107 0"/>',
+            '      <site name="mouth_tip" pos="0.0266783 0 -0.00332564"/>',
         ]
         for side, y in (("left", 0.03), ("right", -0.03)):
             lines.extend(
@@ -697,6 +697,7 @@ class TestMujoco:
                 MicroDuckEnv.sidestep_task(-0.15),
                 MicroDuckEnv.jump_task(),
                 MicroDuckEnv.standing_task(),
+                MicroDuckEnv.jump_task(speed=0.3),
             ],
             seed=0,
         )
@@ -818,6 +819,15 @@ class TestMujoco:
         assert (
             env._reward_components(drifting, action)["diagnostic_reward_drift"] == 0
         ).all()
+        # Forward hopping retains airborne rewards, but tracks its command
+        # without paying the penalty intended for a stationary hop.
+        td = env.reset(TensorDict({"task_id": torch.tensor([[4]])}, batch_size=(1,)))
+        torch.testing.assert_close(td["command"], torch.tensor([[0.3, 0.0]]))
+        moving = env.get_state().clone()
+        moving["qvel"][..., 0] = 0.3
+        assert (term(moving, "tracking") > term(env.get_state(), "tracking")).all()
+        assert (term(moving, "drift") == 0).all()
+        assert (term(risen, "jump") > 0).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
@@ -897,11 +907,12 @@ class TestMujoco:
         assert torch.equal(first_sample, second_sample)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_head_level_and_turn_terms(self, tmp_path):
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_microduck_head_level_and_turn_terms(self, tmp_path, backend):
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(
             scene,
-            backend="mujoco",
+            backend=backend,
             tasks=[
                 MicroDuckEnv.standing_task(),
                 MicroDuckEnv.turning_task(1.0),
@@ -913,8 +924,8 @@ class TestMujoco:
         action = torch.zeros_like(env.action_spec.rand())
         env.reset(TensorDict({"task_id": torch.tensor([[0]])}, batch_size=(1,)))
         level = env.get_state()
-        # Pitch the whole robot 45 degrees nose down: the fixture's gaze runs
-        # along +x, so it drops below the horizon and head_level pays less.
+        # The calibrated frame faces +x, despite a downward IMU-to-beak line
+        # matching the real robot's 41-degree offset.
         nose_down = level.clone()
         nose_down["qpos"][..., 3:7] = torch.tensor(
             [math.cos(math.pi / 8), 0.0, math.sin(math.pi / 8), 0.0]
@@ -926,6 +937,15 @@ class TestMujoco:
         )
         torch.testing.assert_close(env.head_pitch(), torch.zeros(1), atol=1e-4, rtol=0)
         paid_level = env._reward_components(level, action)[head_level]
+        turned = level.clone()
+        turned["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4)]
+        )
+        env.reset(turned, set_state=True)
+        # Looking forward is relative to the body, not a fixed world heading.
+        torch.testing.assert_close(
+            env._reward_components(turned, action)[head_level], paid_level
+        )
         env.reset(
             TensorDict(qpos=nose_down["qpos"], qvel=nose_down["qvel"], batch_size=[1]),
             set_state=True,
@@ -1149,7 +1169,12 @@ class TestMujoco:
         assert gait.gait_metrics(short)["walking"] == 0.0
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_tutorial_loads_saved_walker(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize(
+        "expand,with_critic", [(False, True), (True, True), (True, False)]
+    )
+    def test_microduck_tutorial_loads_saved_walker(
+        self, tmp_path, monkeypatch, expand, with_critic
+    ):
         recipe = self._load_example("train_skills")
         scene = self._write_microduck_fixture(tmp_path)
         monkeypatch.setenv(MicroDuckEnv.ROOT_ENV_VAR, str(scene))
@@ -1176,6 +1201,14 @@ class TestMujoco:
                 metrics={},
                 config={"env": config},
             )
+            if not with_critic:
+                save_render_checkpoint(
+                    path,
+                    actor,
+                    env_metadata={"policy_kwargs": {"hidden_size": 16}},
+                    config={"env": config},
+                    format="archive",
+                )
             restored, tasks = recipe.load_walker(
                 load_checkpoint(path, weights_only=True)
             )
@@ -1186,11 +1219,33 @@ class TestMujoco:
             # Restore a non-default architecture and compare inference, including
             # recurrent outputs that deployment will carry to the next step.
             inputs = env.reset()
+            if expand:
+                expanded = recipe.make_env(
+                    {**config, "tasks": config["tasks"] + [config["tasks"][0]]}
+                )
+                try:
+                    restored, expanded_critic = recipe.make_models(
+                        expanded, hidden_size=16
+                    )
+                    recipe.load_parameters(
+                        path, restored, expanded_critic, task_mapping=[0, 1, 0]
+                    )
+                finally:
+                    expanded.close(raise_if_closed=False)
             with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
                 expected = actor(inputs.clone())
                 actual = restored(inputs.clone())
             for key in ("action", ("next", "recurrent_state")):
                 torch.testing.assert_close(actual[key], expected[key])
+            if expand:
+                inputs["task_id"].fill_(0)
+                with torch.no_grad(), set_exploration_type(
+                    ExplorationType.DETERMINISTIC
+                ):
+                    expected = actor(inputs.clone())
+                    inputs["task_id"].fill_(2)
+                    actual = restored(inputs.clone())
+                torch.testing.assert_close(actual["action"], expected["action"])
         finally:
             env.close()
 
