@@ -589,9 +589,7 @@ class TestLLMCollectorLastStepFrames:
             )
             return env.append_transform(StepCounter(max_steps=max_turns))
 
-        env = AsyncEnvPool(
-            [env_maker] * num_envs, backend="threading", stack="lazy"
-        )
+        env = AsyncEnvPool([env_maker] * num_envs, backend="threading", stack="lazy")
         collector = LLMCollector(
             env=env,
             policy=_DummyAssistantPolicy(),
