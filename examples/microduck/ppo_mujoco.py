@@ -622,6 +622,9 @@ def microduck_metrics(
     excursion in metres, including trajectories that return to the start.
     Heading rates in rad/s are unwrapped per episode, with extrema exposing
     episodes that turn in the wrong direction despite a correct mean.
+    ``ground_forward_speed`` and ``ground_lateral_speed`` use horizontal
+    position differences and the interval's midpoint heading, so trunk pitch
+    does not mix vertical hopping into measured ground speed.
     """
     mask = trajectories["collector", "mask"]
     lengths = mask.sum(-1)
@@ -677,6 +680,8 @@ def microduck_metrics(
             values = trajectories["next", f"diagnostic_{name}"][..., 0]
             if name != "time":
                 offsets.append(values - values[..., :1])
+            else:
+                intervals = (values[..., 1:] - values[..., :-1]).clamp_min(1e-6)
             displacement.append(
                 values.gather(-1, (lengths - 1).unsqueeze(-1)).squeeze(-1)
                 - values[..., 0]
@@ -696,6 +701,20 @@ def microduck_metrics(
         metrics["heading_rate"] = float(heading_rate.mean())
         metrics["heading_rate_min"] = float(heading_rate.min())
         metrics["heading_rate_max"] = float(heading_rate.max())
+        position = torch.stack(offsets, -1)
+        ground_velocity = (position[..., 1:, :] - position[..., :-1, :]) / intervals[
+            ..., None
+        ]
+        midpoint = heading[..., :-1] + 0.5 * delta
+        vx, vy = ground_velocity.unbind(-1)
+        pairs = mask[..., 1:] & mask[..., :-1]
+        count = pairs.sum().clamp_min(1)
+        metrics["ground_forward_speed"] = float(
+            (vx * midpoint.cos() + vy * midpoint.sin())[pairs].sum() / count
+        )
+        metrics["ground_lateral_speed"] = float(
+            (-vx * midpoint.sin() + vy * midpoint.cos())[pairs].sum() / count
+        )
     return metrics
 
 
