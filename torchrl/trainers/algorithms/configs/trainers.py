@@ -1564,9 +1564,7 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
         )
         if not has_action_domain and hasattr(collector, "env"):
             env = collector.env
-            action_spec = (
-                getattr(env, "action_spec_unbatched", None) or env.action_spec
-            )
+            action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
             if hasattr(action_spec, "get"):
                 nested_action_spec = action_spec.get("action", default=None)
                 if nested_action_spec is not None:
