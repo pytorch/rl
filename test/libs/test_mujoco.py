@@ -156,8 +156,8 @@ class TestMujoco:
             '  <worldbody><geom type="plane" size="1 1 0.1" contype="1" conaffinity="1"/>',
             '    <body name="torso" pos="0 0 0.12"><freejoint name="root"/>',
             '      <geom type="sphere" size="0.02" mass="0.1"/>',
-            '      <site name="head_imu" pos="0 0 0.02"/>',
-            '      <site name="mouth_tip" pos="0.03 0 0.02"/>',
+            '      <site name="head_imu" pos="0 0 0.02" quat="0.707107 0 -0.707107 0"/>',
+            '      <site name="mouth_tip" pos="0.0266783 0 -0.00332564"/>',
         ]
         for side, y in (("left", 0.03), ("right", -0.03)):
             lines.extend(
@@ -891,11 +891,12 @@ class TestMujoco:
         assert torch.equal(first_sample, second_sample)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_head_level_and_turn_terms(self, tmp_path):
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_microduck_head_level_and_turn_terms(self, tmp_path, backend):
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckEnv(
             scene,
-            backend="mujoco",
+            backend=backend,
             tasks=[
                 MicroDuckEnv.standing_task(),
                 MicroDuckEnv.turning_task(1.0),
@@ -907,8 +908,8 @@ class TestMujoco:
         action = torch.zeros_like(env.action_spec.rand())
         env.reset(TensorDict({"task_id": torch.tensor([[0]])}, batch_size=(1,)))
         level = env.get_state()
-        # Pitch the whole robot 45 degrees nose down: the fixture's gaze runs
-        # along +x, so it drops below the horizon and head_level pays less.
+        # The calibrated frame faces +x, despite a downward IMU-to-beak line
+        # matching the real robot's 41-degree offset.
         nose_down = level.clone()
         nose_down["qpos"][..., 3:7] = torch.tensor(
             [math.cos(math.pi / 8), 0.0, math.sin(math.pi / 8), 0.0]
@@ -920,6 +921,15 @@ class TestMujoco:
         )
         torch.testing.assert_close(env.head_pitch(), torch.zeros(1), atol=1e-4, rtol=0)
         paid_level = env._reward_components(level, action)[head_level]
+        turned = level.clone()
+        turned["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4)]
+        )
+        env.reset(turned, set_state=True)
+        # Looking forward is relative to the body, not a fixed world heading.
+        torch.testing.assert_close(
+            env._reward_components(turned, action)[head_level], paid_level
+        )
         env.reset(
             TensorDict(qpos=nose_down["qpos"], qvel=nose_down["qvel"], batch_size=[1]),
             set_state=True,
