@@ -1,6 +1,13 @@
 #!/bin/bash
 
-export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.14.0}"
+# test-infra maps release branches to its test index. Override its install
+# command before the first install so release wheels use stable PyTorch.
+if [[ "${GITHUB_REF_NAME:-}" == release/* || ("${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$) ]]; then
+    export TORCHRL_RELEASE_TORCH_VERSION=2.14.0
+    export PIP_INSTALL_TORCH="pip install torch==${TORCHRL_RELEASE_TORCH_VERSION} --index-url https://download.pytorch.org/whl/${CU_VERSION:-cpu}"
+fi
+
+export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.14.1}"
 # PyPI rejects local versions such as X.Y.Z+cpu. CPU wheels are the
 # default PyPI artifacts, so strip only the CPU build suffix while keeping
 # CUDA/ROCm suffixes for the extra-index wheels.
@@ -40,8 +47,12 @@ install_tensordict() {
     fi
 }
 
-if ${CONDA_RUN} pip list | grep -q torch; then
+if ${CONDA_RUN} pip show torch >/dev/null 2>&1; then
     echo "Torch is installed."
+    # This script is sourced again before compilation and wheel smoke tests.
+    if [[ -n "${TORCHRL_RELEASE_TORCH_VERSION:-}" ]]; then
+        ${CONDA_RUN} python -c 'import os, torch; expected = os.environ["TORCHRL_RELEASE_TORCH_VERSION"]; assert torch.__version__.split("+", 1)[0] == expected, f"Expected stable PyTorch {expected}, got {torch.__version__}"; print(f"Release build PyTorch: {torch.__version__}")'
+    fi
     install_tensordict
 elif [[ -n "${SMOKE_TEST_SCRIPT:-}" ]]; then
     ${CONDA_RUN} ${PIP_INSTALL_TORCH}
