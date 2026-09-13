@@ -3133,6 +3133,12 @@ class TestMujoco:
         rgb = env.render(width=24, height=24)
         assert rgb.shape == torch.Size([n, 24, 24, 3])
         assert rgb.dtype == torch.uint8
+        # Grow beyond the model's default offscreen framebuffer, then shrink.
+        for width, height in ((960, 720), (32, 24)):
+            rgb = env.render(width=width, height=height)
+            assert rgb.shape == torch.Size([n, height, width, 3])
+            assert rgb.float().std() > 0
+        env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_render_every(self, backend):

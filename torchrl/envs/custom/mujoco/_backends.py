@@ -528,6 +528,14 @@ class _TorchBackend(_PhysicsBackend):
             or self._renderer.height != height
             or self._renderer.width != width
         ):
+            if hasattr(self, "_renderer"):
+                self._renderer.close()
+            self._m_mj.vis.global_.offwidth = max(
+                self._m_mj.vis.global_.offwidth, width
+            )
+            self._m_mj.vis.global_.offheight = max(
+                self._m_mj.vis.global_.offheight, height
+            )
             self._renderer = mujoco.Renderer(self._m_mj, height=height, width=width)
         if not hasattr(self, "_render_d"):
             self._render_d = mujoco.MjData(self._m_mj)
@@ -718,6 +726,10 @@ class _MujocoBackend(_PhysicsBackend):
             or self._renderer.height != height
             or self._renderer.width != width
         ):
+            if hasattr(self, "_renderer"):
+                self._renderer.close()
+            self._m.vis.global_.offwidth = max(self._m.vis.global_.offwidth, width)
+            self._m.vis.global_.offheight = max(self._m.vis.global_.offheight, height)
             self._renderer = mujoco.Renderer(self._m, height=height, width=width)
         self._renderer.update_scene(self._d, camera=camera_id)
         rgb = self._renderer.render()  # (H, W, 3) uint8 numpy
@@ -970,6 +982,14 @@ class _MJXBackend(_PhysicsBackend):
             or self._renderer.height != height
             or self._renderer.width != width
         ):
+            if hasattr(self, "_renderer"):
+                self._renderer.close()
+            self._m_mj.vis.global_.offwidth = max(
+                self._m_mj.vis.global_.offwidth, width
+            )
+            self._m_mj.vis.global_.offheight = max(
+                self._m_mj.vis.global_.offheight, height
+            )
             self._renderer = mujoco.Renderer(self._m_mj, height=height, width=width)
         if not hasattr(self, "_render_d"):
             self._render_d = mujoco.MjData(self._m_mj)
