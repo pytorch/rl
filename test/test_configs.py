@@ -17,6 +17,8 @@ import subprocess
 import sys
 import typing
 import warnings
+from functools import partial
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -2802,6 +2804,54 @@ class TestTrainerConfigs:
         assert cfg.optim_steps_per_batch == 1
         assert cfg.policy_update_delay == 2
         assert cfg.clip_grad_norm is True
+
+    @pytest.mark.parametrize(
+        "collector_cls", [AsyncCollector, MultiSyncCollector, MultiAsyncCollector]
+    )
+    def test_td3_trainer_uses_loss_bounds_without_collector_env(self, collector_cls):
+        from torchrl.objectives import SoftUpdate, TD3Loss
+        from torchrl.trainers.algorithms.configs.trainers import _make_td3_trainer
+
+        actor = TensorDictSequential(
+            TensorDictModule(
+                torch.nn.Linear(7, 7),
+                in_keys=["observation"],
+                out_keys=["param"],
+            ),
+            TanhModule(
+                in_keys=["param"],
+                out_keys=["action"],
+                low=-1.0,
+                high=1.0,
+            ),
+        )
+        qvalue = ValueOperator(
+            torch.nn.Linear(14, 1),
+            in_keys=["observation", "action"],
+            out_keys=["state_action_value"],
+        )
+        collector = MagicMock(spec=collector_cls)
+        collector.total_frames = 16
+
+        with pytest.warns(UserWarning, match="TD3Trainer is an experimental"):
+            trainer = _make_td3_trainer(
+                collector=collector,
+                total_frames=16,
+                loss_module=partial(TD3Loss, bounds=(-1.0, 1.0)),
+                actor_network=actor,
+                qvalue_network=qvalue,
+                target_net_updater=partial(SoftUpdate, eps=0.99),
+                optimizer=partial(torch.optim.Adam, lr=1e-3),
+                logger=None,
+                clip_norm=None,
+                replay_buffer=None,
+                save_trainer_file=None,
+                seed=0,
+                create_env_fn=None,
+            )
+
+        torch.testing.assert_close(trainer.loss_module.min_action, torch.tensor(-1.0))
+        torch.testing.assert_close(trainer.loss_module.max_action, torch.tensor(1.0))
 
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
