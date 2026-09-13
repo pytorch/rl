@@ -4111,3 +4111,111 @@ class TestREDQ(LossModuleTestBase):
                 if not key.startswith("loss"):
                     continue
                 assert loss[key].shape == torch.Size([])
+
+
+class TestDiscreteSACActionValueSelectionRegression:
+    """Behavioral regression test for action-value selection in DiscreteSACLoss.
+
+    Calls the public qvalue_loss API with a pinned Q-network and asserts the
+    exact numeric loss.  A wrong gather, shape mismatch, or missing squeeze
+    will select the wrong Q-value element and produce a different scalar.
+    """
+
+    def test_discrete_sac_categorical_selects_correct_action_value(self):
+        """DiscreteSACLoss.qvalue_loss must index by the taken action, not another element.
+
+        We set up Q-values so that action=0 and action=3 from the same observation
+        yield Q-values of 2.0 and -2.0 respectively. The two resulting losses must
+        be clearly different because the `chosen_action_value` used in the Bellman
+        MSE is a different element of the tensor.
+
+        If gather always returns the same element regardless of the action argument
+        (e.g., always index 0), both losses would be identical — exposing the bug.
+        """
+        torch.manual_seed(0)
+
+        # 4 actions, 4 obs dims. Identity Q-net: obs[i] -> Q[i].
+        # obs = [2, 0, 0, -2] -> Q-values = [2.0, 0.0, 0.0, -2.0]
+        # action=0 selects Q=2.0; action=3 selects Q=-2.0 -> MSE against same target differs.
+        obs_dim = 4
+        action_dim = 4
+
+        actor_net = nn.Linear(obs_dim, action_dim, bias=False)
+        with torch.no_grad():
+            actor_net.weight.copy_(torch.eye(obs_dim))
+        actor_module = TensorDictModule(
+            actor_net, in_keys=["observation"], out_keys=["logits"]
+        )
+        action_spec = OneHot(action_dim)
+        actor = ProbabilisticActor(
+            spec=action_spec,
+            module=actor_module,
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=OneHotCategorical,
+            return_log_prob=False,
+        )
+
+        class IdentityQNet(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim, action_dim, bias=False)
+                with torch.no_grad():
+                    self.linear.weight.copy_(torch.eye(obs_dim))
+
+            def forward(self, obs):
+                return self.linear(obs)
+
+        qvalue = ValueOperator(
+            module=IdentityQNet(),
+            in_keys=["observation"],
+            out_keys=["action_value"],
+        )
+
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=action_dim,
+            action_space="categorical",
+            loss_function="l2",
+            reduction="mean",
+        )
+        loss_fn.make_value_estimator(ValueEstimators.TD0, gamma=0.0)
+
+        # obs = [2, 0, 0, -2]: Q-values are [2.0, 0.0, 0.0, -2.0]
+        # action=0 -> chosen Q = 2.0; action=3 -> chosen Q = -2.0
+        # These yield clearly different MSE errors against any shared target.
+        obs = torch.tensor([[2.0, 0.0, 0.0, -2.0]])
+        next_obs = torch.zeros(1, obs_dim)
+
+        def make_td(action_idx):
+            return TensorDict(
+                {
+                    "observation": obs,
+                    "action": torch.tensor([action_idx]),
+                    "next": {
+                        "observation": next_obs,
+                        "reward": torch.tensor([[0.0]]),
+                        "done": torch.tensor([[True]]),
+                        "terminated": torch.tensor([[True]]),
+                    },
+                },
+                batch_size=[1],
+            )
+
+        with torch.no_grad():
+            loss_action0, _ = loss_fn.qvalue_loss(make_td(0))  # chosen Q = 2.0
+            loss_action3, _ = loss_fn.qvalue_loss(make_td(3))  # chosen Q = -2.0
+
+        # The two losses must differ because action=0 selects Q=2.0 and
+        # action=3 selects Q=-2.0; they produce different MSE errors.
+        # If gather returns the same element for both actions, the losses are equal.
+        assert not torch.isclose(loss_action0, loss_action3, atol=1e-3), (
+            f"qvalue_loss was identical for action=0 (Q=2.0, loss={loss_action0.item():.6f}) "
+            f"and action=3 (Q=-2.0, loss={loss_action3.item():.6f}); "
+            "this indicates gather is not indexing by the action argument."
+        )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

@@ -32,6 +32,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _select_action_value,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
@@ -1493,18 +1494,9 @@ class DiscreteSACLoss(LossModule):
         action = tensordict.get(self.tensor_keys.action)
         action = action.expand((action_value.shape[0], *action.shape))  # Add vmap dim
 
-        # TODO this block comes from the dqn loss, we need to swap all these with a proper
-        #  helper function which selects the value given the action for all discrete spaces
-        if self.action_space == "categorical":
-            if action.shape != action_value.shape:
-                # unsqueeze the action if it lacks on trailing singleton dim
-                action = action.unsqueeze(-1)
-            chosen_action_value = torch.gather(action_value, -1, index=action).squeeze(
-                -1
-            )
-        else:
-            action = action.to(torch.float)
-            chosen_action_value = (action_value * action).sum(-1)
+        chosen_action_value = _select_action_value(
+            self.action_space, action, action_value
+        )
 
         td_error = torch.abs(chosen_action_value - target_value)
         loss_qval = distance_loss(

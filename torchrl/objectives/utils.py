@@ -366,6 +366,49 @@ def distance_loss(
     raise NotImplementedError(f"Unknown loss {loss_function}.")
 
 
+def _select_action_value(
+    action_space: str,
+    action: Tensor,
+    action_value: Tensor,
+    keepdim: bool = False,
+) -> Tensor:
+    """Select the Q-value of the taken action for any discrete action encoding.
+
+    Centralises the repeated ``if action_space == "categorical": ... else: ...``
+    blocks that appear in :class:`~torchrl.objectives.DQNLoss`,
+    :class:`~torchrl.objectives.DiscreteSACLoss`, and
+    :class:`~torchrl.objectives.QMixerLoss`.
+
+    Args:
+        action_space (str): one of ``"categorical"``, ``"one_hot"``,
+            ``"mult_one_hot"`` or ``"binary"``.  Determines how the action
+            tensor is interpreted.
+        action (Tensor): the taken action.  For ``"categorical"`` this is an
+            integer index tensor of shape ``(*batch,)`` or ``(*batch, 1)``;
+            for all other encodings it is a float mask of shape
+            ``(*batch, n_actions)``.
+        action_value (Tensor): Q-value tensor of shape ``(*batch, n_actions)``
+            (or ``(*vmap_batch, *batch, n_actions)`` for vmapped losses).
+        keepdim (bool, optional): if ``True``, retain a trailing size-1
+            dimension in the output, matching the behaviour expected by
+            Double-DQN and QMixer callers.  Default is ``False``.
+
+    Returns:
+        Tensor: the selected Q-value(s) of shape ``(*batch,)`` when
+        ``keepdim=False``, or ``(*batch, 1)`` when ``keepdim=True``.
+    """
+    if action_space == "categorical":
+        if action.ndim != action_value.ndim:
+            # unsqueeze the action if it lacks a trailing singleton dim
+            action = action.unsqueeze(-1)
+        out = torch.gather(action_value, -1, index=action)
+        if not keepdim:
+            out = out.squeeze(-1)
+        return out
+    action = action.to(torch.float)
+    return (action_value * action).sum(-1, keepdim=keepdim)
+
+
 class TargetNetUpdater:
     """An abstract class for target network update in Double DQN/DDPG.
 
