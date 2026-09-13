@@ -35,13 +35,28 @@ Keyword Arguments:
 - **assistant_only** (*bool*) - whether to only compute KL on assistant tokens. Defaults to True.
 - **tokenizer** (*transformers.AutoTokenizer*) - the tokenizer to use. Defaults to None.
 - **detach** (*bool*) - whether to detach the KL from the computation graph. Defaults to True.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the device to cast the tensors to. This is not the device of the specs, but the device
-onto which the tensors will be moved. It allows to keep the model on a different device
-than the upcoming data. When using Ray service, this device will be used on the remote actor.
-Defaults to None.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - Device used to place the reference model at
+construction time. Until v0.17 this value is also the explicit
+input/output tensordict placement policy: incoming tensordicts are
+moved to this device for the call and results are restored to the
+original tensordict device. A later `.to(device)` updates this
+policy to the same destination; a dtype-only `.to()` does not.
+`KLRewardTransform.device` returns this value and will be
+removed in v0.17. When using Ray service, this device is forwarded
+to the remote actor. Defaults to None.
 - **padding_side** (*str*) - the side of the padding when using pad_sequence. Defaults to "left".
 - **use_ray_service** (*bool**,**optional*) - whether to use Ray service. Defaults to False.
 - **actor_name** (*str**,**optional*) - the name of the Ray actor to use. Defaults to None.
+
+Warning
+
+`KLRewardTransform.device` is deprecated and will be removed in v0.17.
+It is an explicit input/output tensordict placement policy, not the
+location of the reference model. Setting it moves incoming tensordicts
+to that device for the call and restores results to the original
+tensordict device. The constructor `device=` argument places the
+model at initialization and, until v0.17, also sets this I/O policy.
+A later `.to(device)` updates the policy to that destination.
 
 Examples
 
@@ -1283,19 +1298,19 @@ Example:
 ['bias', 'weight']
 ```
 
-to(**args*, ***kwargs*) → [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)
+to(**args*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform.to)
 
 Move and/or cast the parameters and buffers.
 
 This can be called as
 
-to(*device=None*, *dtype=None*, *non_blocking=False*)
+to(*device=None*, *dtype=None*, *non_blocking=False*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform.to)
 
-to(*dtype*, *non_blocking=False*)
+to(*dtype*, *non_blocking=False*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform.to)
 
-to(*tensor*, *non_blocking=False*)
+to(*tensor*, *non_blocking=False*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform.to)
 
-to(*memory_format=torch.channels_last*)
+to(*memory_format=torch.channels_last*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform.to)
 
 Its signature is similar to [`torch.Tensor.to()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to), but only accepts
 floating point or complex `dtype`s. In addition, this method will

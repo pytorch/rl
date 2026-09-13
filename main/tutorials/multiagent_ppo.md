@@ -121,7 +121,7 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 
 # Env
-from torchrl.envs import RewardSum, TransformedEnv
+from torchrl.envs import Compose, DoneTransform, RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs
 
@@ -391,6 +391,10 @@ We stress that, in multi-agent contexts, it is paramount to provide explicitly t
 
 For example, in this case, we will instantiate a `RewardSum` transform which will sum rewards over the episode.
 We will tell this transform where to find the reward key and where to write the summed episode reward.
+We also append a [`DoneTransform`](../reference/generated/torchrl.envs.transforms.DoneTransform.html#torchrl.envs.transforms.DoneTransform) that expands the
+shared environment-level done flags to the per-agent reward shape, writing
+`("agents", "done")` and `("agents", "terminated")`. The value estimator
+expects this expanded shape.
 The transformed environment will inherit
 the device and meta-data of the wrapped environment, and transform these depending on the sequence
 of transforms it contains.
@@ -398,7 +402,10 @@ of transforms it contains.
 ```
 env = TransformedEnv(
  env,
+ Compose(
  RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
+ DoneTransform(in_keys=env.done_keys, reward_key=env.reward_key),
+ ),
 )
 ```
 
@@ -429,24 +436,7 @@ rollout of three steps: TensorDict(
  agents: TensorDict(
  fields={
  action: Tensor(shape=torch.Size([60, 5, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- episode_reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- info: TensorDict(
- fields={
- agent_collisions: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- final_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- pos_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([60, 5, 3]),
- device=cpu,
- is_shared=False),
- observation: Tensor(shape=torch.Size([60, 5, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([60, 5, 3]),
- device=cpu,
- is_shared=False),
- done: Tensor(shape=torch.Size([60, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- next: TensorDict(
- fields={
- agents: TensorDict(
- fields={
+ done: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
  episode_reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
  info: TensorDict(
  fields={
@@ -457,7 +447,28 @@ rollout of three steps: TensorDict(
  device=cpu,
  is_shared=False),
  observation: Tensor(shape=torch.Size([60, 5, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
- reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+ terminated: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+ batch_size=torch.Size([60, 5, 3]),
+ device=cpu,
+ is_shared=False),
+ done: Tensor(shape=torch.Size([60, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+ next: TensorDict(
+ fields={
+ agents: TensorDict(
+ fields={
+ done: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+ episode_reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+ info: TensorDict(
+ fields={
+ agent_collisions: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+ final_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+ pos_rew: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([60, 5, 3]),
+ device=cpu,
+ is_shared=False),
+ observation: Tensor(shape=torch.Size([60, 5, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
+ reward: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+ terminated: Tensor(shape=torch.Size([60, 5, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
  batch_size=torch.Size([60, 5, 3]),
  device=cpu,
  is_shared=False),
@@ -672,6 +683,7 @@ Running policy: TensorDict(
  fields={
  action: Tensor(shape=torch.Size([60, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
  action_log_prob: Tensor(shape=torch.Size([60, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+ done: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
  episode_reward: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
  info: TensorDict(
  fields={
@@ -683,7 +695,8 @@ Running policy: TensorDict(
  is_shared=False),
  loc: Tensor(shape=torch.Size([60, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
  observation: Tensor(shape=torch.Size([60, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
- scale: Tensor(shape=torch.Size([60, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
+ scale: Tensor(shape=torch.Size([60, 3, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+ terminated: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
  batch_size=torch.Size([60, 3]),
  device=cpu,
  is_shared=False),
@@ -696,6 +709,7 @@ Running value: TensorDict(
  fields={
  agents: TensorDict(
  fields={
+ done: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
  episode_reward: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
  info: TensorDict(
  fields={
@@ -706,7 +720,8 @@ Running value: TensorDict(
  device=cpu,
  is_shared=False),
  observation: Tensor(shape=torch.Size([60, 3, 18]), device=cpu, dtype=torch.float32, is_shared=False),
- state_value: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+ state_value: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+ terminated: Tensor(shape=torch.Size([60, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
  batch_size=torch.Size([60, 3]),
  device=cpu,
  is_shared=False),
@@ -795,7 +810,7 @@ loss_module.set_keys( # We have to tell the loss where to find the keys
  reward=env.reward_key,
  action=env.action_key,
  value=("agents", "state_value"),
- # These last 2 keys will be expanded to match the reward shape
+ # Written by DoneTransform to match the per-agent reward shape
  done=("agents", "done"),
  terminated=("agents", "terminated"),
 )
@@ -833,20 +848,6 @@ pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 
 episode_reward_mean_list = []
 for tensordict_data in collector:
- tensordict_data.set(
- ("next", "agents", "done"),
- tensordict_data.get(("next", "done"))
- .unsqueeze(-1)
- .expand(tensordict_data.get_item_shape(("next", env.reward_key))),
- )
- tensordict_data.set(
- ("next", "agents", "terminated"),
- tensordict_data.get(("next", "terminated"))
- .unsqueeze(-1)
- .expand(tensordict_data.get_item_shape(("next", env.reward_key))),
- )
- # We need to expand the done and terminated to match the reward shape (this is expected by the value estimator)
-
  with torch.no_grad():
  GAE(
  tensordict_data,
@@ -891,11 +892,11 @@ for tensordict_data in collector:
 
 ```
 episode_reward_mean = 0: 0%| | 0/5 [00:00<?, ?it/s]
-episode_reward_mean = -0.5410140752792358: 20%|██ | 1/5 [00:05<00:21, 5.37s/it]
-episode_reward_mean = 0.42603209614753723: 40%|████ | 2/5 [00:10<00:16, 5.35s/it]
-episode_reward_mean = 0.8968130350112915: 60%|██████ | 3/5 [00:16<00:10, 5.33s/it]
-episode_reward_mean = 1.4087494611740112: 80%|████████ | 4/5 [00:21<00:05, 5.34s/it]
-episode_reward_mean = 1.902047038078308: 100%|██████████| 5/5 [00:26<00:00, 5.33s/it]
+episode_reward_mean = -0.6511693000793457: 20%|██ | 1/5 [00:05<00:20, 5.23s/it]
+episode_reward_mean = 0.4506039619445801: 40%|████ | 2/5 [00:10<00:15, 5.21s/it]
+episode_reward_mean = 0.9240025877952576: 60%|██████ | 3/5 [00:15<00:10, 5.22s/it]
+episode_reward_mean = 1.3600338697433472: 80%|████████ | 4/5 [00:20<00:05, 5.23s/it]
+episode_reward_mean = 1.8064939975738525: 100%|██████████| 5/5 [00:26<00:00, 5.23s/it]
 ```
 
 ## Results
@@ -997,7 +998,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 Scenarios available in [VMAS](https://github.com/proroklab/VectorizedMultiAgentSimulator)
 
-**Total running time of the script:** (0 minutes 26.879 seconds)
+**Total running time of the script:** (0 minutes 26.351 seconds)
 
 [`Download Jupyter notebook: multiagent_ppo.ipynb`](../_downloads/a977047786179278d12b52546e1c0da8/multiagent_ppo.ipynb)
 

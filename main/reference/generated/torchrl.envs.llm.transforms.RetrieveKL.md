@@ -44,10 +44,11 @@ This ensures users are conscious of the limitation that assistant token identifi
 To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
 Defaults to {"return_assistant_tokens_mask": True, "tokenize": True, "return_tensors": "pt", "padding": True, "add_generation_prompt": False}.
 - **detach** (*bool*) - whether to exclude the log-probs from the gradient computation. Defaults to True.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the device to cast the tensors to. This is not the device of the specs, but the device
-onto which the tensors will be moved. It allows to keep the model on a different device
-than the upcoming data itself. When using Ray service, this device will be used on the remote actor.
-Defaults to None.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - Device used to place the wrapped models at
+construction time. The value is not stored on the transform: at call
+time, incoming tensordicts follow each model's current parameter or
+buffer device. When using Ray service, this device is forwarded to
+the remote actor. Defaults to None.
 - **tokenizer** (*transformers.AutoTokenizer*) - the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the actor.
 - **padding_side** (*str*) - the side of the padding when using pad_sequence. Defaults to "left".
 - **kl_key** (*NestedKey*) - the key where the KL divergence is stored. Defaults to "kl_penalty".

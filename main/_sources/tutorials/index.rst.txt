@@ -325,6 +325,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and :pytorchrl to solve a Multi-Agent Reinforcement Learning (MARL) problem.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_multiagent_ppo_thumb.png
+    :alt:
+
+  :doc:`/tutorials/multiagent_ppo`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Get started with reinforcement learning in PyTorch.">
 
 .. only:: html
@@ -354,23 +371,6 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Exporting TorchRL modules</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and :pytorchrl to solve a Multi-Agent Reinforcement Learning (MARL) problem.">
-
-.. only:: html
-
-  .. image:: /tutorials/images/thumb/sphx_glr_multiagent_ppo_thumb.png
-    :alt:
-
-  :doc:`/tutorials/multiagent_ppo`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</div>
     </div>
 
 
@@ -555,9 +555,9 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/dqn_with_rnn
    /tutorials/memory_efficient_rl
    /tutorials/recurrent_sequence_training
+   /tutorials/multiagent_ppo
    /tutorials/torchrl_demo
    /tutorials/export
-   /tutorials/multiagent_ppo
    /tutorials/coding_ppo
    /tutorials/torchrl_envs
    /tutorials/llm_wrappers

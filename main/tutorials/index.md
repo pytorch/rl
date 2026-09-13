@@ -92,6 +92,11 @@ Memory-Efficient RL Training
 [Recurrent training on sequence batches](recurrent_sequence_training.html)
 
 Recurrent training on sequence batches
+![](../_images/sphx_glr_multiagent_ppo_thumb.png)
+
+[Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](multiagent_ppo.html)
+
+Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 ![](../_images/sphx_glr_torchrl_demo_thumb.png)
 
 [Introduction to TorchRL](torchrl_demo.html)
@@ -102,11 +107,6 @@ Introduction to TorchRL
 [Exporting TorchRL modules](export.html)
 
 Exporting TorchRL modules
-![](../_images/sphx_glr_multiagent_ppo_thumb.png)
-
-[Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial](multiagent_ppo.html)
-
-Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 ![](../_images/sphx_glr_coding_ppo_thumb.png)
 
 [Reinforcement Learning (PPO) with TorchRL Tutorial](coding_ppo.html)

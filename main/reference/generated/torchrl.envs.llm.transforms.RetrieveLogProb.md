@@ -33,8 +33,23 @@ To control the tokenization in the ref_model, pass the tokenizer kwargs to the r
 Defaults to {"return_assistant_tokens_mask": True, "tokenize": True, "return_dict": True, "padding": False, "add_generation_prompt": False}.
 - **tokenizer** (*transformers.AutoTokenizer*) - the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the ref_model.
 - **detach** (*bool*) - whether to exclude the log-probs from the gradient computation. Defaults to True.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the device to use for tensor creation. Defaults to None.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - Device used to place the model at construction time.
+Until v0.17 this value is also the explicit input/output tensordict
+placement policy: incoming tensordicts are moved to this device for
+the call. A later `.to(device)` updates this policy to the same
+destination; a dtype-only `.to()` does not.
+`RetrieveLogProb.device` returns this value and will be
+removed in v0.17. Defaults to None.
 - **padding_side** (*str*) - the side of the padding when using pad_sequence. Defaults to "left".
+
+Warning
+
+`RetrieveLogProb.device` is deprecated and will be removed in v0.17.
+It is an explicit input/output tensordict placement policy, not the
+location of the wrapped model. Setting it moves incoming tensordicts to
+that device for the call. The constructor `device=` argument places
+the model at initialization and, until v0.17, also sets this I/O policy.
+A later `.to(device)` updates the policy to that destination.
 
 Examples
 
@@ -1340,19 +1355,19 @@ Example:
 ['bias', 'weight']
 ```
 
-to(**args*, ***kwargs*) → [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)
+to(**args*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb.to)
 
 Move and/or cast the parameters and buffers.
 
 This can be called as
 
-to(*device=None*, *dtype=None*, *non_blocking=False*)
+to(*device=None*, *dtype=None*, *non_blocking=False*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb.to)
 
-to(*dtype*, *non_blocking=False*)
+to(*dtype*, *non_blocking=False*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb.to)
 
-to(*tensor*, *non_blocking=False*)
+to(*tensor*, *non_blocking=False*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb.to)
 
-to(*memory_format=torch.channels_last*)
+to(*memory_format=torch.channels_last*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb.to)
 
 Its signature is similar to [`torch.Tensor.to()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to), but only accepts
 floating point or complex `dtype`s. In addition, this method will
