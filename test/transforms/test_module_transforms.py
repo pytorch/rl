@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 from functools import partial
 
 import pytest
@@ -38,6 +39,41 @@ from torchrl.testing import (  # noqa
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.testing.modules import BiasModule
 from torchrl.weight_update import RayModuleTransformScheme
+
+
+class _SplitModule(nn.Module):
+    """CPU first-parameter plus an accelerator branch; inputs stay put."""
+
+    in_keys = ["cpu_input", "accelerator_input"]
+    out_keys = ["result"]
+
+    def __init__(self, accelerator: str):
+        super().__init__()
+        self.cpu_branch = nn.Linear(2, 2, device="cpu")
+        self.accelerator_branch = nn.Linear(2, 2, device=accelerator)
+
+    def forward(self, tensordict: TensorDict) -> TensorDict:
+        tensordict["result"] = self.cpu_branch(tensordict["cpu_input"]) + (
+            self.accelerator_branch(tensordict["accelerator_input"]).to("cpu")
+        )
+        return tensordict
+
+
+_CROSS_DEVICE_PARAMS = [
+    pytest.param(
+        "cuda",
+        marks=[
+            pytest.mark.gpu,
+            pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA"),
+        ],
+    ),
+    pytest.param(
+        "mps",
+        marks=pytest.mark.skipif(
+            not torch.backends.mps.is_available(), reason="needs MPS"
+        ),
+    ),
+]
 
 
 class TestModuleTransform(TransformBase):
@@ -142,6 +178,68 @@ class TestModuleTransform(TransformBase):
         )
         env = ContinuousActionVecMockEnv().append_transform(t)
         env.check_env_specs()
+
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_constructor_device_moves_cpu_input(self, accelerator):
+        module = TensorDictModule(
+            nn.Linear(2, 2, device=accelerator), in_keys=["x"], out_keys=["y"]
+        )
+        transform = ModuleTransform(module=module, device=accelerator)
+        with pytest.warns(DeprecationWarning, match="removed in v0.17") as rec:
+            assert transform.device == torch.device(accelerator)
+        assert rec.list[0].filename == __file__
+        td = TensorDict({"x": torch.ones(1, 2)}, batch_size=[1], device="cpu")
+        out = transform(td)
+        assert torch.isfinite(out["y"]).all()
+        assert out["y"].shape == (1, 2)
+        assert td["y"].device.type == "cpu"
+
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_to_accelerator_does_not_recast_input(self, accelerator):
+        module = TensorDictModule(nn.Linear(2, 2), in_keys=["x"], out_keys=["y"])
+        transform = ModuleTransform(module=module, device="cpu").to(accelerator)
+        td = TensorDict(
+            {"x": torch.ones(1, 2, device=accelerator)},
+            batch_size=[1],
+            device=accelerator,
+        )
+        out = transform(td)
+        assert torch.isfinite(out["y"]).all()
+        assert out["y"].shape == (1, 2)
+        assert out["y"].device.type == torch.device(accelerator).type
+
+    def test_to_meta_does_not_recast_input(self):
+        module = TensorDictModule(
+            nn.Linear(3, 2), in_keys=["observation"], out_keys=["embedding"]
+        )
+        transform = ModuleTransform(module=module, device="cpu").to("meta")
+        td = TensorDict(
+            {"observation": torch.ones(2, 3, device="meta")},
+            batch_size=[2],
+            device="meta",
+        )
+        out = transform(td)
+        assert out["embedding"].device.type == "meta"
+        assert out["embedding"].shape == (2, 2)
+
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_does_not_move_split_module_inputs(self, accelerator):
+        module = _SplitModule(accelerator)
+        td = TensorDict(
+            {
+                "cpu_input": torch.ones(1, 2, device="cpu"),
+                "accelerator_input": torch.ones(1, 2, device=accelerator),
+            },
+            batch_size=[1],
+        )
+        assert td.device is None
+        assert torch.isfinite(module(td.clone())["result"]).all()
+
+        out = ModuleTransform(module=module, device=None)(td.clone())
+        assert torch.isfinite(out["result"]).all()
+        assert out["cpu_input"].device.type == "cpu"
+        assert out["accelerator_input"].device.type == torch.device(accelerator).type
+        assert out["result"].device.type == "cpu"
 
     @pytest.mark.skipif(not _has_ray, reason="ray required")
     def test_ray_extension(self):
@@ -289,3 +387,8 @@ class TestRayModuleTransform:
             f"Weight update did not take effect: first_mean={first_batch_mean:.2f}, "
             f"second_mean={second_batch_mean:.2f}. Expected second to be at least 50 higher."
         )
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
