@@ -42,6 +42,10 @@ For example:
 python mappo_ippo.py
 ```
 
+The available scripts are `mappo_ippo.py` (MAPPO / IPPO), `qmix_vdn.py` (QMix /
+VDN), `coma.py` (COMA), `maddpg_iddpg.py` (MADDPG / IDDPG), `iql.py` (IQL) and
+`sac.py` (multi-agent SAC).
+
 You can even change the config from the command line like:
 
 ```bash
