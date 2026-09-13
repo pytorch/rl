@@ -46,14 +46,58 @@ from torchrl.trainers.algorithms import PPOTrainer
 # when loading weights: task_id indexes a learned embedding.
 SKILL_PRESETS = [
     {"preset": "standing_task", "reward_weights": {"head_level": 4.0}},
-    {"preset": "tracking_task", "speed": 0.2},
-    {"preset": "tracking_task", "speed": -0.2},
-    {"preset": "sidestep_task", "speed": 0.15},
-    {"preset": "sidestep_task", "speed": -0.15},
-    {"preset": "jump_task", "speed": 0.3, "weight": 3.0},
-    {"preset": "turning_task", "rate": 1.0},
-    {"preset": "turning_task", "rate": -1.0},
-    {"preset": "jump_task", "weight": 3.0},
+    {
+        "preset": "tracking_task",
+        "speed": 0.2,
+        "reward_weights": {"tracking": 3.0, "yaw_rate": 2.0, "head_level": 2.0},
+        "head_level_std": 0.7,
+    },
+    {
+        "preset": "tracking_task",
+        "speed": -0.2,
+        "reward_weights": {"tracking": 3.0, "yaw_rate": 2.0, "head_level": 2.0},
+        "head_level_std": 0.7,
+    },
+    {
+        "preset": "sidestep_task",
+        "speed": 0.15,
+        "reward_weights": {"yaw_rate": 2.0, "head_level": 2.0},
+        "head_level_std": 0.7,
+    },
+    {
+        "preset": "sidestep_task",
+        "speed": -0.15,
+        "reward_weights": {"yaw_rate": 2.0, "head_level": 2.0},
+        "head_level_std": 0.7,
+    },
+    {
+        "preset": "jump_task",
+        "speed": 0.3,
+        "weight": 3.0,
+        "reward_weights": {"tracking": 3.0, "yaw_rate": 2.0, "head_level": 2.0},
+        "head_level_std": 0.7,
+    },
+    {
+        "preset": "turning_task",
+        "rate": 1.0,
+        "turn_rate_std": 1.0,
+        "reward_weights": {"turn": 4.0, "head_level": 2.0},
+        "head_level_std": 0.7,
+    },
+    {
+        "preset": "turning_task",
+        "rate": -1.0,
+        "turn_rate_std": 1.0,
+        "reward_weights": {"turn": 4.0, "head_level": 2.0},
+        "head_level_std": 0.7,
+    },
+    {
+        "preset": "jump_task",
+        "weight": 3.0,
+        "reward_weights": {"drift": -15.0, "head_level": 4.0},
+        "drift_speed_scale": 1.0,
+        "head_level_std": 0.7,
+    },
 ]
 
 

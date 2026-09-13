@@ -886,7 +886,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         ``standing_height``, ``joint_error`` (14), ``joint_velocity`` (14),
         ``action`` (14), ``previous_action`` (14), ``contacts`` (bool, 2),
         ``foot_heights`` (2), ``head_pitch`` (gaze pitch above the horizontal,
-        radians), ``touchdown_air_time`` (2), ``gait_phase``
+        radians), ``head_yaw`` (gaze yaw relative to the trunk, radians),
+        ``touchdown_air_time`` (2), ``gait_phase``
         (radians), ``command`` (2) and ``fallen`` (bool). ``params`` is the
         per-env TensorDict of task parameters, each of shape ``(num_envs,)``.
 
