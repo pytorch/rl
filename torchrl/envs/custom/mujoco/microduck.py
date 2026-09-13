@@ -882,6 +882,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         Used as a decorator on a function ``(features, params) -> Tensor`` of
         shape ``(num_envs,)``. ``features`` is the step's feature TensorDict
         with entries ``body_velocity`` (body frame, ``(num_envs, 3)``),
+        ``world_velocity`` (world frame, ``(num_envs, 3)``),
         ``angular_velocity`` (3), ``upright`` (cosine of the tilt), ``base_height``,
         ``standing_height``, ``joint_error`` (14), ``joint_velocity`` (14),
         ``action`` (14), ``previous_action`` (14), ``contacts`` (bool, 2),
@@ -1637,6 +1638,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         return TensorDict(
             {
                 "body_velocity": _body_frame_linear_velocity(quaternion, qvel[..., :3]),
+                "world_velocity": qvel[..., :3],
                 "angular_velocity": qvel[..., 3:6],
                 "upright": (-_projected_gravity(quaternion)[..., 2]).clamp(-1.0, 1.0),
                 "base_height": qpos[..., 2],
@@ -2006,10 +2008,10 @@ def _joint_velocity(features: TensorDictBase, params: TensorDictBase) -> torch.T
 
 @MicroDuckEnv.register_reward("drift", weight=0.0, drift_speed_scale=0.3)
 def _drift(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
-    # Planar speed as a fraction of ``drift_speed_scale``, clipped at one: a
+    # World-horizontal speed as a fraction of ``drift_speed_scale``, clipped at one: a
     # linear penalty that keeps paying where the tracking Gaussian has
     # saturated, for tasks that must stay in place.
-    speed = features["body_velocity"][..., :2].norm(dim=-1)
+    speed = features["world_velocity"][..., :2].norm(dim=-1)
     return (speed / params["drift_speed_scale"]).clamp(max=1.0)
 
 
@@ -2023,7 +2025,7 @@ def _hop_rhythm(features: TensorDictBase, params: TensorDictBase) -> torch.Tenso
     # every bit of crouch-and-extend motion on the beat.
     beat = features["gait_phase"].cos().sign()
     fraction = (
-        features["body_velocity"][..., 2] * beat / params["hop_velocity_amplitude"]
+        features["world_velocity"][..., 2] * beat / params["hop_velocity_amplitude"]
     )
     return fraction.clamp(-1.0, 1.0) * _gait_gate(features)
 
@@ -2036,7 +2038,7 @@ def _launch(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     # amplitude so a faster extension keeps paying up to take-off speed.
     planted = features["contacts"].all(dim=-1).to(features["upright"].dtype)
     upward = (
-        features["body_velocity"][..., 2] / params["launch_velocity_scale"]
+        features["world_velocity"][..., 2] / params["launch_velocity_scale"]
     ).clamp(0.0, 1.0)
     return upward * planted * _gait_gate(features)
 
