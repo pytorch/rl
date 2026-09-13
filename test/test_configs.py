@@ -4715,6 +4715,23 @@ class TestTransformConfigs:
         rollout = env.rollout(3)
         torch.testing.assert_close(rollout["next", "last_action"], rollout["action"])
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_done_transform_config(self):
+        import torchrl.trainers.algorithms.configs
+        from hydra.utils import instantiate
+        from torchrl.envs.transforms import DoneTransform
+        from torchrl.trainers.algorithms.configs.transforms import DoneTransformConfig
+
+        assert torchrl.trainers.algorithms.configs is not None
+
+        flat = instantiate(DoneTransformConfig(reward_key="reward"))
+        assert isinstance(flat, DoneTransform)
+        assert flat.reward_key == "reward"
+
+        nested = instantiate(DoneTransformConfig(reward_key=["player0", "reward"]))
+        assert isinstance(nested, DoneTransform)
+        assert nested.reward_key == ("player0", "reward")
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
