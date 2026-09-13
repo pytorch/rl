@@ -1153,6 +1153,11 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             speed (float, optional): Forward speed in m/s. Defaults to zero
                 (hop in place). A nonzero speed disables the stationary drift
                 penalty and uses velocity tracking alongside the hop terms.
+            weight (float, optional): Relative task sampling weight. Defaults
+                to 1.0. Set to 3.0 to sample hopping three times as often as a
+                task with unit weight.
+            **overrides: Task fields and reward parameters forwarded to
+                :meth:`make_task`.
 
         Three terms shape the hop, in the order a policy discovers it.
         ``hop_rhythm`` (weight 1) pays, linearly up to the
