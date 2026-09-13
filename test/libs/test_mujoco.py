@@ -77,7 +77,7 @@ from torchrl.envs.custom.mujoco.microduck_football import (
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule
-from torchrl.render import load_checkpoint
+from torchrl.render import load_checkpoint, save_render_checkpoint
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
 if _has_hydra:
@@ -710,6 +710,7 @@ class TestMujoco:
                 MicroDuckEnv.sidestep_task(-0.15),
                 MicroDuckEnv.jump_task(),
                 MicroDuckEnv.standing_task(),
+                MicroDuckEnv.jump_task(speed=0.3),
             ],
             seed=0,
         )
@@ -831,6 +832,15 @@ class TestMujoco:
         assert (
             env._reward_components(drifting, action)["diagnostic_reward_drift"] == 0
         ).all()
+        # Forward hopping retains airborne rewards, but tracks its command
+        # without paying the penalty intended for a stationary hop.
+        td = env.reset(TensorDict({"task_id": torch.tensor([[4]])}, batch_size=(1,)))
+        torch.testing.assert_close(td["command"], torch.tensor([[0.3, 0.0]]))
+        moving = env.get_state().clone()
+        moving["qvel"][..., 0] = 0.3
+        assert (term(moving, "tracking") > term(env.get_state(), "tracking")).all()
+        assert (term(moving, "drift") == 0).all()
+        assert (term(risen, "jump") > 0).all()
         env.close()
 
     # ------------------------------------------------------------------
@@ -1897,7 +1907,12 @@ class TestMujoco:
         assert gait.gait_metrics(short)["walking"] == 0.0
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_tutorial_loads_saved_walker(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize(
+        "expand,with_critic", [(False, True), (True, True), (True, False)]
+    )
+    def test_microduck_tutorial_loads_saved_walker(
+        self, tmp_path, monkeypatch, expand, with_critic
+    ):
         recipe = self._load_example("train_skills")
         scene = self._write_microduck_fixture(tmp_path)
         monkeypatch.setenv(MicroDuckEnv.ROOT_ENV_VAR, str(scene))
@@ -1924,6 +1939,14 @@ class TestMujoco:
                 metrics={},
                 config={"env": config},
             )
+            if not with_critic:
+                save_render_checkpoint(
+                    path,
+                    actor,
+                    env_metadata={"policy_kwargs": {"hidden_size": 16}},
+                    config={"env": config},
+                    format="archive",
+                )
             restored, tasks = recipe.load_walker(
                 load_checkpoint(path, weights_only=True)
             )
@@ -1934,11 +1957,33 @@ class TestMujoco:
             # Restore a non-default architecture and compare inference, including
             # recurrent outputs that deployment will carry to the next step.
             inputs = env.reset()
+            if expand:
+                expanded = recipe.make_env(
+                    {**config, "tasks": config["tasks"] + [config["tasks"][0]]}
+                )
+                try:
+                    restored, expanded_critic = recipe.make_models(
+                        expanded, hidden_size=16
+                    )
+                    recipe.load_parameters(
+                        path, restored, expanded_critic, task_mapping=[0, 1, 0]
+                    )
+                finally:
+                    expanded.close(raise_if_closed=False)
             with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
                 expected = actor(inputs.clone())
                 actual = restored(inputs.clone())
             for key in ("action", ("next", "recurrent_state")):
                 torch.testing.assert_close(actual[key], expected[key])
+            if expand:
+                inputs["task_id"].fill_(0)
+                with torch.no_grad(), set_exploration_type(
+                    ExplorationType.DETERMINISTIC
+                ):
+                    expected = actor(inputs.clone())
+                    inputs["task_id"].fill_(2)
+                    actual = restored(inputs.clone())
+                torch.testing.assert_close(actual["action"], expected["action"])
         finally:
             env.close()
 

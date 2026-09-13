@@ -105,16 +105,19 @@ torch.set_num_threads(1)
 # -----------------------------------------
 #
 # A :class:`~torchrl.envs.MicroDuckTask` contains command ranges, reward weights
-# and gait parameters. The shared preset list defines these six tasks, in order:
+# and gait parameters. The shared preset list defines these nine tasks, in order:
 #
 # .. code-block:: python
 #
 #    SKILL_PRESETS = [
-#        {"preset": "standing_task"},
+#        {"preset": "standing_task", "reward_weights": {"head_level": 4.0}},
 #        {"preset": "tracking_task", "speed": 0.2},
 #        {"preset": "tracking_task", "speed": -0.2},
 #        {"preset": "sidestep_task", "speed": 0.15},
 #        {"preset": "sidestep_task", "speed": -0.15},
+#        {"preset": "jump_task", "speed": 0.3, "weight": 3.0},
+#        {"preset": "turning_task", "rate": 1.0},
+#        {"preset": "turning_task", "rate": -1.0},
 #        {"preset": "jump_task", "weight": 3.0},
 #    ]
 #
@@ -243,7 +246,7 @@ assert training_env.observation_spec["observation"].shape[-1] == 62
 # ---------------------------
 #
 # ``make_navigation_models`` creates two ordinary 64–64 MLPs: an actor with
-# six categorical logits, and a critic with one value output. Their interfaces
+# one categorical logit per loaded skill, and a critic with one value output. Their interfaces
 # are ``observation -> skill`` and ``observation -> state_value``.
 #
 # PPO sees only this actor. The walker belongs to the environment and is absent
