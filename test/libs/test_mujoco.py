@@ -1914,6 +1914,17 @@ class TestMujoco:
         assert metrics["takeoffs_per_episode"] == 2.0
         assert metrics["landings_per_episode"] == 2.0
         assert metrics["head_pitch_abs_p95"] == 0.0
+        # Ground speed comes from displacement and time, independently of
+        # the tilted body-frame velocity in the policy observation.
+        rollout["next", "diagnostic_heading"].zero_()
+        rollout["next", "diagnostic_position_y"].zero_()
+        rollout["next", "diagnostic_position_x"] = torch.tensor(
+            [[[0.0], [1.0], [2.0], [3.0], [4.0], [99.0]]]
+        )
+        metrics = ppo.microduck_metrics(rollout)
+        assert metrics["ground_forward_speed"] == 1.0
+        assert metrics["ground_lateral_speed"] == 0.0
+        assert ppo.microduck_metrics(rollout[..., :1])["ground_forward_speed"] == 0.0
 
     def test_microduck_example_gait_metrics_count_swing_phases(self):
         gait = self._load_example("heuristic_gait")
