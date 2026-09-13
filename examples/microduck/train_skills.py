@@ -49,7 +49,12 @@ SKILL_PRESETS = [
     {
         "preset": "tracking_task",
         "speed": 0.2,
-        "reward_weights": {"tracking": 3.0, "yaw_rate": 2.0, "head_level": 2.0},
+        "reward_weights": {
+            "tracking": 3.0,
+            "yaw_rate": 2.0,
+            "head_level": 2.0,
+            "termination": -20.0,
+        },
         "head_level_std": 0.7,
     },
     {
@@ -74,7 +79,7 @@ SKILL_PRESETS = [
         "preset": "jump_task",
         "speed": 0.3,
         "weight": 3.0,
-        "reward_weights": {"tracking": 3.0, "yaw_rate": 2.0, "head_level": 2.0},
+        "reward_weights": {"tracking": 3.0, "yaw_rate": 2.0, "head_level": 4.0},
         "head_level_std": 0.7,
     },
     {
