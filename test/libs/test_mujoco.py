@@ -2436,11 +2436,17 @@ class TestMujoco:
         torch._dynamo.reset()
         torch._dynamo.utils.counters.clear()
         env = HopperEnv(num_envs=2, seed=0, compile_step=True)
+        # Older mujoco-torch releases compile a solver while_loop during the
+        # eager reset forward pass. Count the physics-step graph separately.
+        env.reset()
+        reset_graphs = torch._dynamo.utils.counters["stats"].get("unique_graphs", 0)
         # Both the first reset and later resets must retain the stepped layout.
         for _ in range(2):
             td = env.rollout(3)
             assert torch.isfinite(td.get(("next", "reward"))).all()
-        unique_graphs = torch._dynamo.utils.counters["stats"].get("unique_graphs")
+        unique_graphs = (
+            torch._dynamo.utils.counters["stats"].get("unique_graphs", 0) - reset_graphs
+        )
         assert (
             unique_graphs == 1
         ), f"expected a single compiled graph, got {unique_graphs}"
