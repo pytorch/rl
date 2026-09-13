@@ -804,6 +804,23 @@ class TestMujoco:
             components["diagnostic_reward_drift"],
             torch.full((1, 1), MicroDuckEnv.DRIFT_WEIGHT * 0.5 * 0.02),
         )
+        # A tilted trunk must not turn horizontal travel into a launch, or
+        # make a purely vertical hop pay a horizontal drift penalty.
+        tilted = drifting.clone()
+        tilted["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 6), 0.0, math.sin(math.pi / 6), 0.0]
+        )
+        tilted["qvel"].zero_()
+        tilted["qvel"][..., 0] = 0.15
+        env._contacts.fill_(True)
+        torch.testing.assert_close(term(tilted, "drift"), term(drifting, "drift"))
+        assert (term(tilted, "launch") == 0).all()
+        assert (rhythm(tilted) == 0).all()
+        tilted["qvel"][..., 0] = 0.0
+        tilted["qvel"][..., 2] = on_beat["qvel"][..., 2]
+        assert (term(tilted, "drift") == 0).all()
+        torch.testing.assert_close(rhythm(tilted), rhythm(on_beat))
+        torch.testing.assert_close(term(tilted, "launch"), term(on_beat, "launch"))
         # Under the standing row the same motion earns no jump reward and pays
         # the vertical-velocity cost.
         env.reset(TensorDict({"task_id": torch.tensor([[3]])}, batch_size=(1,)))

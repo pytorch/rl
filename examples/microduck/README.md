@@ -397,6 +397,10 @@ and in-place hopping starts from the existing hopping embedding. Optimizer
 state is fresh. Evaluation uses a separate seed and reports per-skill head
 angles, yaw rate, airborne fraction, takeoffs, landings, height and survival.
 A high airborne fraction alone does not establish controlled hopping.
+The hop rhythm and launch rewards measure world-vertical velocity, while the
+stationary drift penalty measures world-horizontal velocity. Using the tilted
+body frame would reward horizontal travel as a launch and penalize a vertical
+hop as drift.
 
 Always load the ordered task library and action scale from the checkpoint.
 Existing navigation and football policies remain paired with their original
