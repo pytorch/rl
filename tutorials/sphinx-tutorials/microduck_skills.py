@@ -105,7 +105,9 @@ torch.set_num_threads(1)
 # -----------------------------------------
 #
 # A :class:`~torchrl.envs.MicroDuckTask` contains command ranges, reward weights
-# and gait parameters. The shared preset list defines these nine tasks, in order:
+# and gait parameters. The shared preset list defines these nine tasks, in order.
+# The abbreviated list below shows commands and sampling weights; the training
+# recipe also sets tracking, head-alignment and drift reward parameters:
 #
 # .. code-block:: python
 #
