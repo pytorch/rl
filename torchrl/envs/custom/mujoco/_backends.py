@@ -19,6 +19,7 @@ to compute observations and rewards.
 from __future__ import annotations
 
 import abc
+import functools as ft
 import importlib.util
 import urllib.request
 from collections.abc import Sequence
@@ -236,6 +237,12 @@ class _PhysicsBackend(abc.ABC):
             f"{type(self).__name__} does not expose site positions."
         )
 
+    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
+        """World-frame site rotations, shaped ``(num_envs, sites, 3, 3)``."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not expose site rotations."
+        )
+
     def render(
         self,
         *,
@@ -329,6 +336,7 @@ class _TorchBackend(_PhysicsBackend):
         dx0 = mujoco_torch.step(mx, dx0)
 
         self._mx = mx
+        self._vmap_forward = torch.vmap(ft.partial(mujoco_torch.forward, mx))
         self._dx0 = dx0
         self._sim_dtype = dx0.qpos.dtype
         self._ctrl_dtype = dx0.ctrl.dtype
@@ -404,6 +412,7 @@ class _TorchBackend(_PhysicsBackend):
         self._dx = self._dx0.expand(self.num_envs).clone()
         self._dx.qpos.copy_(qpos.to(self._sim_dtype))
         self._dx.qvel.copy_(qvel.to(self._sim_dtype))
+        self._dx = self._vmap_forward(self._dx)
 
     def reset_mask(
         self, mask: torch.Tensor, qpos: torch.Tensor, qvel: torch.Tensor
@@ -414,6 +423,7 @@ class _TorchBackend(_PhysicsBackend):
         fresh = self._dx0.expand(self.num_envs).clone()
         fresh.qpos.copy_(qpos.to(self._sim_dtype))
         fresh.qvel.copy_(qvel.to(self._sim_dtype))
+        fresh = self._vmap_forward(fresh)
         # The simulator state contains both per-env tensors and 0-dim /
         # non-batched leaves shared across envs (``nefc``, ``ncon``,
         # ...). Mask only the batched ones; the shared scalars don't
@@ -505,6 +515,10 @@ class _TorchBackend(_PhysicsBackend):
     def site_positions(self, site_ids: Sequence[int]) -> torch.Tensor:
         ids = torch.as_tensor(list(site_ids), dtype=torch.long, device=self.device)
         return self._dx.site_xpos.to(self.device)[:, ids].to(torch.float32)
+
+    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
+        ids = torch.as_tensor(list(site_ids), dtype=torch.long, device=self.device)
+        return self._dx.site_xmat.to(self.device)[:, ids].to(torch.float32)
 
     def render(
         self,
@@ -709,6 +723,13 @@ class _MujocoBackend(_PhysicsBackend):
             device=self.device,
             dtype=torch.float32,
         ).unsqueeze(0)
+
+    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
+        return torch.as_tensor(
+            self._d.site_xmat[list(site_ids)].copy(),
+            device=self.device,
+            dtype=torch.float32,
+        ).reshape(1, len(site_ids), 3, 3)
 
     def render(
         self,
@@ -960,6 +981,9 @@ class _MJXBackend(_PhysicsBackend):
 
     def site_positions(self, site_ids: Sequence[int]) -> torch.Tensor:
         return self._jax_to_torch(self._dx.site_xpos[:, list(site_ids)])
+
+    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
+        return self._jax_to_torch(self._dx.site_xmat[:, list(site_ids)])
 
     def render(
         self,

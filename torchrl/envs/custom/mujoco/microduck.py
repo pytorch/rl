@@ -624,7 +624,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     )
     FOOT_SITES: ClassVar[tuple[str, str]] = ("left_foot", "right_foot")
     HEAD_SITES: ClassVar[tuple[str, str]] = ("head_imu", "mouth_tip")
-    """Sites at the back of the head and at the beak tip; their difference is the gaze."""
+    """Head landmarks. The IMU's local -z axis is the forward gaze direction."""
     BODY_VELOCITY_START: ClassVar[int] = 6
     """Index of the body-frame linear velocity ``(vx, vy, vz)`` in the observation."""
     COMMAND_START: ClassVar[int] = 9
@@ -666,6 +666,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         "upright",
         "pitch",
         "roll",
+        "head_pitch",
+        "head_yaw",
+        "yaw_rate",
+        "height_gain",
         "body_velocity_x",
         "body_velocity_y",
         "body_velocity_z",
@@ -1300,6 +1304,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self._joint_low = joint_low.to(device=self.device, dtype=self.dtype)
         self._joint_high = joint_high.to(device=self.device, dtype=self.dtype)
         self._target_height = self._home_qpos[2].clone()
+        self._head_site_id = model.site(self.HEAD_SITES[0]).id
 
     # ------------------------------------------------------------------
     # Contact helpers
@@ -1316,12 +1321,21 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     def head_pitch(self) -> torch.Tensor:
         """Return the ``(num_envs,)`` pitch of the gaze above the horizontal, in radians.
 
-        The gaze runs from the :attr:`HEAD_SITES` at the back of the head to the
-        beak tip, so it follows the trunk and the neck and head joints together.
+        The gaze follows the head IMU frame's local -z axis. The line joining
+        the IMU to the beak tip is tilted down by 41 degrees in the robot's
+        head frame and must not be used as a forward direction.
         """
-        back, tip = self.site_positions(self.HEAD_SITES).unbind(-2)
-        gaze = tip - back
-        return torch.atan2(gaze[..., 2], gaze[..., :2].norm(dim=-1))
+        return self._head_angles(self._backend.qpos)[0]
+
+    def _head_angles(self, qpos: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        gaze = -self._backend.site_rotations([self._head_site_id])[:, 0, :, 2]
+        pitch = torch.atan2(gaze[..., 2], gaze[..., :2].norm(dim=-1))
+        forward = _body_forward_vector(qpos[..., 3:7].to(gaze.dtype))
+        yaw = torch.atan2(
+            forward[..., 0] * gaze[..., 1] - forward[..., 1] * gaze[..., 0],
+            (forward[..., :2] * gaze[..., :2]).sum(-1),
+        )
+        return pitch, yaw
 
     # ------------------------------------------------------------------
     # Specs and observations
@@ -1602,6 +1616,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         qvel = state["qvel"].to(self.dtype)
         quaternion = qpos[..., 3:7]
         phase, _ = self._gait_clock()
+        head_pitch, head_yaw = self._head_angles(qpos)
         return TensorDict(
             {
                 "body_velocity": _body_frame_linear_velocity(quaternion, qvel[..., :3]),
@@ -1615,7 +1630,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 "previous_action": self._previous_action,
                 "contacts": self._contacts,
                 "foot_heights": self._foot_heights,
-                "head_pitch": self.head_pitch().to(self.dtype),
+                "head_pitch": head_pitch.to(self.dtype),
+                "head_yaw": head_yaw.to(self.dtype),
                 "touchdown_air_time": self._touchdown_air_time,
                 "gait_phase": phase,
                 "command": self._command,
@@ -1667,12 +1683,17 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         target_clamped = (target < self._joint_low) | (target > self._joint_high)
         finite = torch.isfinite(qpos).all(dim=-1) & torch.isfinite(qvel).all(dim=-1)
         diagnostics = self._reward_components(state, action)
+        head_pitch, head_yaw = self._head_angles(qpos)
         diagnostics.update(
             {
                 "diagnostic_height": qpos[..., 2:3],
                 "diagnostic_upright": upright.unsqueeze(-1),
                 "diagnostic_pitch": pitch.unsqueeze(-1),
                 "diagnostic_roll": roll.unsqueeze(-1),
+                "diagnostic_head_pitch": head_pitch.unsqueeze(-1),
+                "diagnostic_head_yaw": head_yaw.unsqueeze(-1),
+                "diagnostic_yaw_rate": qvel[..., 5:6],
+                "diagnostic_height_gain": qpos[..., 2:3] - self._target_height,
                 "diagnostic_body_velocity_x": body_velocity[..., 0:1],
                 "diagnostic_body_velocity_y": body_velocity[..., 1:2],
                 "diagnostic_body_velocity_z": body_velocity[..., 2:3],
@@ -1867,7 +1888,10 @@ def _head_level(features: TensorDictBase, params: TensorDictBase) -> torch.Tenso
     # Keeps the gaze on the horizon: the head carries the camera, and a
     # policy left free to move the four head joints stares at its feet.
     error = features["head_pitch"] - params["head_pitch_target"]
-    return torch.exp(-error.square() / params["head_level_std"].square())
+    return torch.exp(
+        -(error.square() + features["head_yaw"].square())
+        / params["head_level_std"].square()
+    )
 
 
 @MicroDuckEnv.register_reward("upright", weight=2.0, upright_std=0.05**0.5)
