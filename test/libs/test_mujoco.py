@@ -1171,6 +1171,7 @@ class TestMujoco:
         metrics = ppo.microduck_metrics(rollout, jumping=True)
         assert metrics["airborne_fraction"] == pytest.approx(0.4)
         assert metrics["drift_speed"] == 0.0
+        assert metrics["displacement_max"] == pytest.approx(math.sqrt(2) * 0.01)
         assert metrics["heading_rate"] == pytest.approx(0.1)
         assert metrics["takeoffs_per_episode"] == 2.0
         assert metrics["landings_per_episode"] == 2.0
