@@ -58,7 +58,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f115e9b45b0>
+<torch._C.Generator object at 0x7fed68a903b0>
 ```
 
 ## The problem
@@ -287,8 +287,8 @@ print(
 ```
 
 ```
-rows with NaN next-obs: [19, 39]
-rows flagged as trajectory boundaries: [19, 39]
+rows with NaN next-obs: [39]
+rows flagged as trajectory boundaries: [39]
 ```
 
 ## Knob 3 -- Lossy delta compression, boundary-preserving
@@ -866,7 +866,7 @@ sampling sequences for the loss.
 -- how collectors lay out trajectory ids, masks, and slices.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 0.332 seconds)
+**Total running time of the script:** (0 minutes 0.315 seconds)
 
 [`Download Jupyter notebook: memory_efficient_rl.ipynb`](../_downloads/1dc9c90b893b412af56b0fa1674e3ac1/memory_efficient_rl.ipynb)
 
