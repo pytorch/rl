@@ -57,7 +57,10 @@ pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+# Keep the source TensorDict build: its development version can sort below the
+# release dependency bound even when it contains newer compiler fixes.
+pip install 'hoptorch>=0.1.4' --no-deps --progress-bar off
+python -m pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"
