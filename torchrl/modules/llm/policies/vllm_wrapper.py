@@ -2375,9 +2375,7 @@ def _cat_prompt_response(
     if prompt is None or response is None:
         return None
     if isinstance(prompt, list) or isinstance(response, list):
-        return [
-            _cat_prompt_response(p, r) for p, r in _zip_strict(prompt, response)
-        ]
+        return [_cat_prompt_response(p, r) for p, r in _zip_strict(prompt, response)]
     return torch.cat([prompt, response], dim=-1)
 
 
