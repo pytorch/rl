@@ -1865,6 +1865,38 @@ class TestMujoco:
         assert (metrics["left_single_support_steps"] == 0.0).all()
         env.close()
 
+    def test_microduck_skill_metrics_exclude_padding(self):
+        ppo = self._load_example("ppo_mujoco")
+        rollout = TensorDict(batch_size=(1, 6))
+        rollout["collector", "mask"] = torch.tensor([[True] * 5 + [False]])
+        rollout["command"] = torch.zeros(1, 6, 2)
+        rollout["next", "observation"] = torch.zeros(1, 6, 56)
+        rollout["next", "terminated"] = torch.zeros(1, 6, 1, dtype=torch.bool)
+        for foot in ("left", "right"):
+            rollout["next", f"diagnostic_{foot}_foot_contact"] = torch.tensor(
+                [[[1.0], [0.0], [1.0], [0.0], [1.0], [0.0]]]
+            )
+        for name in ("position_x", "position_y"):
+            rollout["next", f"diagnostic_{name}"] = torch.tensor(
+                [[[0.0], [0.01], [0.0], [0.01], [0.0], [99.0]]]
+            )
+        rollout["next", "diagnostic_time"] = torch.arange(6).view(1, 6, 1).float()
+        for name in ("head_pitch", "head_yaw", "yaw_rate", "height_gain"):
+            rollout["next", f"diagnostic_{name}"] = torch.tensor(
+                [[[0.0]] * 5 + [[99.0]]]
+            )
+        # Crossing +/-pi is a small positive turn, not a reversed full turn.
+        rollout["next", "diagnostic_heading"] = torch.tensor(
+            [[[3.0], [3.1], [-3.0831853], [-2.9831853], [-2.8831853], [0.0]]]
+        )
+        metrics = ppo.microduck_metrics(rollout, jumping=True)
+        assert metrics["airborne_fraction"] == pytest.approx(0.4)
+        assert metrics["drift_speed"] == 0.0
+        assert metrics["heading_rate"] == pytest.approx(0.1)
+        assert metrics["takeoffs_per_episode"] == 2.0
+        assert metrics["landings_per_episode"] == 2.0
+        assert metrics["head_pitch_abs_p95"] == 0.0
+
     def test_microduck_example_gait_metrics_count_swing_phases(self):
         gait = self._load_example("heuristic_gait")
         steps = 40

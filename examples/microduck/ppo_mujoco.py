@@ -685,6 +685,8 @@ def microduck_metrics(
             values = trajectories["next", f"diagnostic_{name}"][..., 0]
             metrics[name] = float(values[mask].mean())
             metrics[f"{name}_abs"] = float(values[mask].abs().mean())
+            if name != "yaw_rate":
+                metrics[f"{name}_abs_p95"] = float(values[mask].abs().quantile(0.95))
         height = trajectories["next", "diagnostic_height_gain"][..., 0]
         metrics["hop_height_max"] = float(height.masked_fill(~mask, 0).amax(-1).mean())
         metrics["planar_speed"] = float(velocity.norm(dim=-1)[mask].mean())
@@ -696,6 +698,23 @@ def microduck_metrics(
         metrics["hopping_episode_fraction"] = float(
             ((takeoffs.sum(-1) >= 2) & (landings.sum(-1) >= 2)).float().mean()
         )
+    if ("next", "diagnostic_position_x") in trajectories.keys(True):
+        # Net drift is distinct from the back-and-forth velocity of a hop.
+        displacement = []
+        for name in ("position_x", "position_y", "time"):
+            values = trajectories["next", f"diagnostic_{name}"][..., 0]
+            displacement.append(
+                values.gather(-1, (lengths - 1).unsqueeze(-1)).squeeze(-1)
+                - values[..., 0]
+            )
+        elapsed = displacement[2].clamp_min(1e-6)
+        drift = torch.stack(displacement[:2], -1).norm(dim=-1) / elapsed
+        metrics["drift_speed"] = float(drift.mean())
+        heading = trajectories["next", "diagnostic_heading"][..., 0]
+        delta = heading[..., 1:] - heading[..., :-1]
+        delta = torch.atan2(delta.sin(), delta.cos())
+        delta = delta * (mask[..., 1:] & mask[..., :-1])
+        metrics["heading_rate"] = float((delta.sum(-1) / elapsed).mean())
     return metrics
 
 
