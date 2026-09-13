@@ -616,6 +616,12 @@ def microduck_metrics(
     for walking and sidestepping, stillness for standing, and with
     ``jumping=True`` the fraction of time with both feet off the ground
     (which needs the env's ``diagnostics``).
+
+    With position diagnostics, ``drift_speed`` is net displacement divided
+    by elapsed time in m/s; ``displacement_max`` also reports the largest
+    excursion in metres, including trajectories that return to the start.
+    Heading rates in rad/s are unwrapped per episode, with extrema exposing
+    episodes that turn in the wrong direction despite a correct mean.
     """
     mask = trajectories["collector", "mask"]
     lengths = mask.sum(-1)
@@ -666,8 +672,11 @@ def microduck_metrics(
     if ("next", "diagnostic_position_x") in trajectories.keys(True):
         # Net drift is distinct from the back-and-forth velocity of a hop.
         displacement = []
+        offsets = []
         for name in ("position_x", "position_y", "time"):
             values = trajectories["next", f"diagnostic_{name}"][..., 0]
+            if name != "time":
+                offsets.append(values - values[..., :1])
             displacement.append(
                 values.gather(-1, (lengths - 1).unsqueeze(-1)).squeeze(-1)
                 - values[..., 0]
@@ -675,11 +684,18 @@ def microduck_metrics(
         elapsed = displacement[2].clamp_min(1e-6)
         drift = torch.stack(displacement[:2], -1).norm(dim=-1) / elapsed
         metrics["drift_speed"] = float(drift.mean())
+        metrics["drift_speed_max"] = float(drift.max())
+        # Returning to the starting point must not hide a large excursion.
+        distance = torch.stack(offsets, -1).norm(dim=-1).masked_fill(~mask, 0)
+        metrics["displacement_max"] = float(distance.max())
         heading = trajectories["next", "diagnostic_heading"][..., 0]
         delta = heading[..., 1:] - heading[..., :-1]
         delta = torch.atan2(delta.sin(), delta.cos())
         delta = delta * (mask[..., 1:] & mask[..., :-1])
-        metrics["heading_rate"] = float((delta.sum(-1) / elapsed).mean())
+        heading_rate = delta.sum(-1) / elapsed
+        metrics["heading_rate"] = float(heading_rate.mean())
+        metrics["heading_rate_min"] = float(heading_rate.min())
+        metrics["heading_rate_max"] = float(heading_rate.max())
     return metrics
 
 
