@@ -570,7 +570,41 @@ intact, through `MJLabWrapper(log_extras=True)` so mjlab's episode metrics are
 logged alongside the PPO losses. It requires a CUDA GPU and the pinned
 `microduck_rl` environment; see the module docstring for the `uv run` command.
 
-### Nine-skill prior
+## Nine-skill prior
+
+The validated [checkpoint](https://huggingface.co/torchrl/microduck-skills/blob/01ebcefca08850231edc0eb428a0151474559a85/priors/nine-skills-20260913/walker.ckpt)
+and labeled [video](https://huggingface.co/torchrl/microduck-skills/resolve/01ebcefca08850231edc0eb428a0151474559a85/priors/nine-skills-20260913/videos/skills.mp4)
+are published at immutable revision `01ebcefca08850231edc0eb428a0151474559a85`,
+under `priors/nine-skills-20260913/`. The same directory contains
+[held-out metrics](https://huggingface.co/torchrl/microduck-skills/blob/01ebcefca08850231edc0eb428a0151474559a85/priors/nine-skills-20260913/skills.json),
+ordered task definitions, training configuration, phase history and file hashes.
+
+All 288 held-out episodes survived (32 per skill, 500 steps). Standing head
+pitch/yaw absolute 95th percentiles are 1.08/0.37 degrees. Forward hopping reaches
+0.285 m/s with 43.8% airtime; hopping in place reaches 44.0% airtime and 0.0436 m/s
+net drift (0.0462 m/s heading-relative ground drift). Both repeatedly take off
+and land in every episode. Left/right turns rotate at +1.016/-0.802 rad/s.
+In-place hopping still travels up to 0.445 m over ten seconds. These results
+cover the flat native MuJoCo scene, not football or navigation with this prior.
+
+```python
+from huggingface_hub import hf_hub_download
+from torchrl.render import load_checkpoint
+from examples.microduck.train_skills import load_walker
+
+path = hf_hub_download(
+    "torchrl/microduck-skills",
+    "priors/nine-skills-20260913/walker.ckpt",
+    revision="01ebcefca08850231edc0eb428a0151474559a85",
+)
+walker, skill_tasks = load_walker(load_checkpoint(path, weights_only=True))
+```
+
+Checkpoint SHA-256: `9fbf1e15b25dd1ce65fcceeb2d854240028be703b72f37b5af05b9b50f115876`.
+The actor-only export follows 16,629,760 additional PPO transitions on a MacBook
+with 16 native MuJoCo workers, initialized from the original six-skill release.
+The initial 12M budget was extended to meet the in-place drift target. The model
+card records reward refinements across phases; this was not a fixed-reward run.
 
 The training recipe retains standing, four walking directions and forward hopping
 at indices 0-5, then appends left turning, right turning and hopping in place.

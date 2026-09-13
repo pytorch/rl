@@ -32,9 +32,16 @@ Watch the learned skills
 
 This recorded grid streams from
 `torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
-The top row shows standing / forward / backward; the bottom row shows left /
-right / jumping. Notice the sideways drift while walking and forward drift
-while jumping. These are learned policies from the companion training tutorial;
+The rows show standing / forward / backward, sidestep left / sidestep right /
+hop forward, then turn left / turn right / hop in place. The camera follows
+position while keeping its orientation fixed, so the turning skills visibly
+change heading. Head pitch is labeled in every tile.
+
+This nine-skill prior survived all 288 held-out ten-second episodes. Both hops
+repeatedly take off and land, with 43.8% and 44.0% airtime; forward hopping
+reaches 0.285 m/s. In-place hopping still drifts at 0.044 m/s. The
+`model card <https://huggingface.co/torchrl/microduck-skills>`_ records the
+evaluation, training history and limitations. These are learned policies;
 the gait controller we will run here is hand-written.
 
 You can play the recording now, before running any code.
@@ -46,7 +53,8 @@ from IPython.display import Video
 
 Video(
     url="https://huggingface.co/torchrl/microduck-skills/resolve/"
-    "4191d7d25c4fd58a5c6e6395fcf8217459fdd073/videos/skills.mp4",
+    "01ebcefca08850231edc0eb428a0151474559a85/"
+    "priors/nine-skills-20260913/videos/skills.mp4",
     width=800,
     html_attributes='controls muted loop playsinline preload="metadata" '
     'style="max-width: 100%"',

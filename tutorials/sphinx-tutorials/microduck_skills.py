@@ -7,7 +7,7 @@ MicroDuck: train skills, then compose behaviors
 .. _microduck_skills_tuto:
 
 Our duck needs two kinds of practice: moving its legs, and choosing where to
-go. We'll teach it to stand, walk, sidestep and jump, then give it a destination.
+go. We'll teach it to stand, walk, sidestep, hop and turn, then give it a destination.
 A second policy will learn when to use each of those skills to get there.
 Both policies learn with :class:`~torchrl.trainers.algorithms.PPOTrainer`.
 
@@ -175,9 +175,28 @@ low_trainer.train()
 # A few updates won't make an accomplished walker. We've saved one that has
 # practiced for ten million steps in
 # `torchrl/microduck-skills <https://huggingface.co/torchrl/microduck-skills>`_.
-# It stayed upright in all 48 ten-second evaluation episodes. It still drifts
-# and doesn't always match the requested speed, as the skill videos show.
-# Our next policy will have to work with the movements it actually learned.
+# This original six-skill walker stayed upright in all 48 ten-second evaluation
+# episodes. We retain it here because the published navigation selector was
+# trained with this exact walker. Its gaits still drift and vary in speed.
+#
+# The expanded nine-skill prior in :doc:`microduck` also turns and hops in place,
+# with a calibrated level-head reward. It survived all 288 held-out episodes
+# after 16,629,760 additional transitions. To train a new selector for that
+# prior, download its pinned checkpoint and set the override below:
+#
+# .. code-block:: python
+#
+#    path = hf_hub_download(
+#        "torchrl/microduck-skills",
+#        "priors/nine-skills-20260913/walker.ckpt",
+#        revision="01ebcefca08850231edc0eb428a0151474559a85",
+#    )
+#    os.environ["MICRODUCK_WALKER_CHECKPOINT"] = path
+#
+# The existing navigation selector has six outputs and cannot use the new
+# nine-skill walker. With an override, this tutorial keeps its newly trained
+# selector; the brief training run demonstrates the pipeline, not navigation
+# quality. Full metrics and the video are linked from the model card.
 #
 # ``load_walker`` restores the trained network and its task library, then freezes
 # its weights. Keeping the original task order matters: skill 1 must still mean
@@ -240,7 +259,7 @@ check_env_specs(training_env)
 # The controller owns the walker's GRU state and gait clock under ``_controller``.
 
 assert training_env.action_key == "skill"
-assert training_env.full_action_spec["skill"].n == 6
+assert training_env.full_action_spec["skill"].n == len(skill_tasks)
 assert training_env.observation_spec["observation"].shape[-1] == 62
 
 # %%
