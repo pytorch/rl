@@ -90,7 +90,7 @@ Memory-Efficient RL Training
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7fed68a903b0>
+    <torch._C.Generator object at 0x7f34903c8430>
 
 
 
@@ -387,8 +387,8 @@ trajectory id changes (or where the trajectory ended):
 
  .. code-block:: none
 
-    rows with NaN next-obs:                 [39]
-    rows flagged as trajectory boundaries:  [39]
+    rows with NaN next-obs:                 [19, 39]
+    rows flagged as trajectory boundaries:  [19, 39]
 
 
 

@@ -58,7 +58,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fed68a903b0>
+<torch._C.Generator object at 0x7f34903c8430>
 ```
 
 ## The problem
@@ -287,8 +287,8 @@ print(
 ```
 
 ```
-rows with NaN next-obs: [39]
-rows flagged as trajectory boundaries: [39]
+rows with NaN next-obs: [19, 39]
+rows flagged as trajectory boundaries: [19, 39]
 ```
 
 ## Knob 3 -- Lossy delta compression, boundary-preserving
