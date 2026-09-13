@@ -847,9 +847,7 @@ _CROSS_DEVICE_PARAMS = [
         "cuda",
         marks=[
             pytest.mark.gpu,
-            pytest.mark.skipif(
-                not torch.cuda.is_available(), reason="needs CUDA"
-            ),
+            pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA"),
         ],
     ),
     pytest.param(
@@ -906,6 +904,37 @@ class TestKLModuleDevice:
         assert log_probs.shape == (2, 4)
 
     @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_retrieve_log_prob_to_accelerator_does_not_recast_input(self, accelerator):
+        transform = RetrieveLogProb(
+            _MockLLMModule(), assistant_only=False, device="cpu"
+        ).to(accelerator)
+        td = TensorDict(
+            {
+                ("tokens", "full"): torch.ones(
+                    2, 4, dtype=torch.long, device=accelerator
+                )
+            },
+            batch_size=[2],
+            device=accelerator,
+        )
+        out = transform(td)
+        log_probs = out.get(("log_probs", "full"))
+        assert torch.isfinite(log_probs).all()
+        assert log_probs.device.type == torch.device(accelerator).type
+
+    def test_retrieve_log_prob_to_meta_does_not_recast_input(self):
+        transform = RetrieveLogProb(
+            _MockLLMModule(), assistant_only=False, device="cpu"
+        ).to("meta")
+        td = TensorDict(
+            {("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="meta")},
+            batch_size=[2],
+            device="meta",
+        )
+        out = transform(td)
+        assert out.get(("log_probs", "full")).device.type == "meta"
+
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
     def test_kl_reward_transform_constructor_device_moves_cpu_input(self, accelerator):
         model = _MockLLMModule(device=accelerator)
         transform = KLRewardTransform(model, device=accelerator)
@@ -932,6 +961,61 @@ class TestKLModuleDevice:
         assert torch.isfinite(out["kl_penalty"]).all()
         assert out["kl_penalty"].device.type == "cpu"
         assert out["ref_log_probs"].device.type == "cpu"
+
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_kl_reward_transform_to_accelerator_does_not_recast_input(
+        self, accelerator
+    ):
+        transform = KLRewardTransform(_MockLLMModule(), device="cpu").to(accelerator)
+        # Transform.to() clears the parent cache; attach after the device move.
+        transform.__dict__["_parent"] = _DummyTokensParent()
+        td = TensorDict(
+            {
+                ("tokens", "full"): torch.ones(
+                    2, 4, dtype=torch.long, device=accelerator
+                ),
+                ("log_probs", "full"): torch.zeros(2, 4, device=accelerator),
+                ("masks", "all_assistant_mask"): torch.ones(
+                    2, 4, dtype=torch.bool, device=accelerator
+                ),
+                "next": TensorDict(
+                    {"reward": torch.zeros(2, 4, 1, device=accelerator)},
+                    batch_size=[2],
+                    device=accelerator,
+                ),
+            },
+            batch_size=[2],
+            device=accelerator,
+        )
+        out = transform(td)["next"]
+        assert out.device.type == torch.device(accelerator).type
+        assert torch.isfinite(out["kl_penalty"]).all()
+        assert out["kl_penalty"].device.type == torch.device(accelerator).type
+        assert out["ref_log_probs"].device.type == torch.device(accelerator).type
+
+    def test_kl_reward_transform_to_meta_does_not_recast_input(self):
+        transform = KLRewardTransform(_MockLLMModule(), device="cpu").to("meta")
+        # Transform.to() clears the parent cache; attach after the device move.
+        transform.__dict__["_parent"] = _DummyTokensParent()
+        td = TensorDict(
+            {
+                ("tokens", "full"): torch.ones(2, 4, dtype=torch.long, device="meta"),
+                ("log_probs", "full"): torch.zeros(2, 4, device="meta"),
+                ("masks", "all_assistant_mask"): torch.ones(
+                    2, 4, dtype=torch.bool, device="meta"
+                ),
+                "next": TensorDict(
+                    {"reward": torch.zeros(2, 4, 1, device="meta")},
+                    batch_size=[2],
+                    device="meta",
+                ),
+            },
+            batch_size=[2],
+            device="meta",
+        )
+        out = transform(td)["next"]
+        assert out["kl_penalty"].device.type == "meta"
+        assert out["ref_log_probs"].device.type == "meta"
 
 
 if __name__ == "__main__":

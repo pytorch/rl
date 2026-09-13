@@ -16,7 +16,7 @@ from torchrl._utils import _RayServiceMetaClass, logger as torchrl_logger
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Transform
-from torchrl.envs.transforms.utils import _DeprecatedIODevice
+from torchrl.envs.transforms.utils import _DeprecatedIODevice, _update_io_device_from_to
 
 if TYPE_CHECKING:
     from torchrl.weight_update import WeightSyncScheme
@@ -133,9 +133,11 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
             construction time. Until v0.17 this value is also the explicit
             input/output tensordict placement policy: incoming tensordicts are
             moved to this device for the call (TensorDict ``.to()`` copy-back).
-            :attr:`ModuleTransform.device` returns this value and will be removed
-            in v0.17. Defaults to `None` (the module is left where it is and
-            incoming tensordicts are not moved).
+            A later ``.to(device)`` updates this policy to the same destination;
+            a dtype-only ``.to()`` does not. :attr:`ModuleTransform.device`
+            returns this value and will be removed in v0.17. Defaults to `None`
+            (the module is left where it is and incoming tensordicts are not
+            moved).
         use_ray_service (bool, optional): Whether to use Ray service. Default is `False`.
         num_gpus (int, optional): The number of GPUs to use if using Ray. Default is `None`.
         num_cpus (int, optional): The number of CPUs to use if using Ray. Default is `None`.
@@ -163,7 +165,8 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         location of the wrapped module. Setting it moves incoming tensordicts to
         that device for the call (TensorDict ``.to()`` copy-back). The
         constructor ``device=`` argument places the module at initialization and,
-        until v0.17, also sets this I/O policy.
+        until v0.17, also sets this I/O policy. A later ``.to(device)`` updates
+        the policy to that destination.
     """
 
     _RayServiceClass = RayModuleTransform
@@ -218,6 +221,12 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
         self.reward_spec_transform = reward_spec_transform
         self.done_spec_transform = done_spec_transform
         self.state_spec_transform = state_spec_transform
+
+    def to(self, *args, **kwargs):
+        # Follow an explicit to(device) with the retained constructor I/O policy.
+        result = super().to(*args, **kwargs)
+        _update_io_device_from_to(result, *args, **kwargs)
+        return result
 
     @property
     def in_keys(self) -> list[str]:

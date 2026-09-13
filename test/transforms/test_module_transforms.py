@@ -64,9 +64,7 @@ _CROSS_DEVICE_PARAMS = [
         "cuda",
         marks=[
             pytest.mark.gpu,
-            pytest.mark.skipif(
-                not torch.cuda.is_available(), reason="needs CUDA"
-            ),
+            pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA"),
         ],
     ),
     pytest.param(
@@ -195,6 +193,34 @@ class TestModuleTransform(TransformBase):
         assert torch.isfinite(out["y"]).all()
         assert out["y"].shape == (1, 2)
         assert td["y"].device.type == "cpu"
+
+    @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
+    def test_to_accelerator_does_not_recast_input(self, accelerator):
+        module = TensorDictModule(nn.Linear(2, 2), in_keys=["x"], out_keys=["y"])
+        transform = ModuleTransform(module=module, device="cpu").to(accelerator)
+        td = TensorDict(
+            {"x": torch.ones(1, 2, device=accelerator)},
+            batch_size=[1],
+            device=accelerator,
+        )
+        out = transform(td)
+        assert torch.isfinite(out["y"]).all()
+        assert out["y"].shape == (1, 2)
+        assert out["y"].device.type == torch.device(accelerator).type
+
+    def test_to_meta_does_not_recast_input(self):
+        module = TensorDictModule(
+            nn.Linear(3, 2), in_keys=["observation"], out_keys=["embedding"]
+        )
+        transform = ModuleTransform(module=module, device="cpu").to("meta")
+        td = TensorDict(
+            {"observation": torch.ones(2, 3, device="meta")},
+            batch_size=[2],
+            device="meta",
+        )
+        out = transform(td)
+        assert out["embedding"].device.type == "meta"
+        assert out["embedding"].shape == (2, 2)
 
     @pytest.mark.parametrize("accelerator", _CROSS_DEVICE_PARAMS)
     def test_does_not_move_split_module_inputs(self, accelerator):

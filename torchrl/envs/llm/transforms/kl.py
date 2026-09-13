@@ -24,6 +24,7 @@ from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import (
     _DeprecatedIODevice,
     _set_missing_tolerance,
+    _update_io_device_from_to,
 )
 from torchrl.modules.llm.policies.common import LLMWrapperBase
 
@@ -195,10 +196,11 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
             construction time. Until v0.17 this value is also the explicit
             input/output tensordict placement policy: incoming tensordicts are
             moved to this device for the call and results are restored to the
-            original tensordict device. :attr:`KLRewardTransform.device`
-            returns this value and will be removed in v0.17. When using Ray
-            service, this device is forwarded to the remote actor. Defaults
-            to `None`.
+            original tensordict device. A later ``.to(device)`` updates this
+            policy to the same destination; a dtype-only ``.to()`` does not.
+            :attr:`KLRewardTransform.device` returns this value and will be
+            removed in v0.17. When using Ray service, this device is forwarded
+            to the remote actor. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         use_ray_service (bool, optional): whether to use Ray service. Defaults to `False`.
         actor_name (str, optional): the name of the Ray actor to use. Defaults to `None`.
@@ -210,6 +212,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
         to that device for the call and restores results to the original
         tensordict device. The constructor ``device=`` argument places the
         model at initialization and, until v0.17, also sets this I/O policy.
+        A later ``.to(device)`` updates the policy to that destination.
 
     Examples:
         >>> # Legacy usage (not recommended for new code)
@@ -312,6 +315,12 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
             raise ValueError(
                 "The ref_model must be configured to use tokens as input. Please set the `input_mode` argument to `tokens`."
             )
+
+    def to(self, *args, **kwargs):
+        # Follow an explicit to(device) with the retained constructor I/O policy.
+        result = super().to(*args, **kwargs)
+        _update_io_device_from_to(result, *args, **kwargs)
+        return result
 
     @property
     def pad_output(self):
@@ -608,8 +617,10 @@ class RetrieveLogProb(Transform):
         device (torch.device): Device used to place the model at construction time.
             Until v0.17 this value is also the explicit input/output tensordict
             placement policy: incoming tensordicts are moved to this device for
-            the call. :attr:`RetrieveLogProb.device` returns this value and will
-            be removed in v0.17. Defaults to `None`.
+            the call. A later ``.to(device)`` updates this policy to the same
+            destination; a dtype-only ``.to()`` does not.
+            :attr:`RetrieveLogProb.device` returns this value and will be
+            removed in v0.17. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
 
     .. warning::
@@ -618,6 +629,7 @@ class RetrieveLogProb(Transform):
         location of the wrapped model. Setting it moves incoming tensordicts to
         that device for the call. The constructor ``device=`` argument places
         the model at initialization and, until v0.17, also sets this I/O policy.
+        A later ``.to(device)`` updates the policy to that destination.
 
     Examples:
         >>> from torchrl.data.llm import History
@@ -752,6 +764,12 @@ class RetrieveLogProb(Transform):
 
         # Validate model configuration (after setting assistant_only)
         self._validate_model_config(model)
+
+    def to(self, *args, **kwargs):
+        # Follow an explicit to(device) with the retained constructor I/O policy.
+        result = super().to(*args, **kwargs)
+        _update_io_device_from_to(result, *args, **kwargs)
+        return result
 
     def _validate_model_config(self, model: LLMWrapperBase):
         """Validate model configuration."""

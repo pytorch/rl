@@ -107,6 +107,20 @@ def _warn_deprecated_io_device(cls_name: str, *, stacklevel: int = 3) -> None:
     )
 
 
+def _update_io_device_from_to(obj: object, *args, **kwargs) -> None:
+    """Follow an explicit ``to(device)`` with the retained constructor I/O policy.
+
+    A dtype-only move leaves the policy unchanged. Objects without a retained
+    ``_io_device`` are left alone. Uses ``object.__setattr__`` so the
+    deprecated ``device`` descriptor does not warn on the internal update.
+    """
+    if getattr(obj, "_io_device", None) is None:
+        return
+    device, *_ = torch._C._nn._parse_to(*args, **kwargs)
+    if device is not None:
+        object.__setattr__(obj, "_io_device", torch.device(device))
+
+
 class _DeprecatedIODevice:
     """Deprecated public ``device`` attribute for an explicit I/O placement policy.
 
