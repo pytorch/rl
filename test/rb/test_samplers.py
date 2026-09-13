@@ -2996,9 +2996,11 @@ def test_prioritized_slice_sampler_episodes(device):
     for _ in range(10):
         sample = rb.sample()
         episodes.append(sample["episode"])
-    assert {1, 3} == set(
-        torch.cat(episodes).cpu().tolist()
-    ), "after priority update, only episode 1 and 3 are expected to be sampled"
+    sampled_episodes = torch.cat(episodes).cpu()
+    assert {1, 3}.issubset(set(sampled_episodes.tolist()))
+    # Epsilon gives zero-priority episodes a small but nonzero probability.
+    preferred = (sampled_episodes == 1) | (sampled_episodes == 3)
+    assert preferred.float().mean() > 0.95
 
 
 @pytest.mark.parametrize("alpha", [0.6, torch.tensor(1.0)])

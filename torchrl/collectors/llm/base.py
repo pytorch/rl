@@ -335,9 +335,7 @@ class LLMCollector(Collector):
     def _in_flight_dialog_turns(self) -> int:
         """Turns collected but not yet charged by :meth:`iterator`."""
         pending = sum(td.numel() for td in self._trajectory_queue)
-        in_progress = sum(
-            td.numel() for queue in self._yield_queues for td in queue
-        )
+        in_progress = sum(td.numel() for queue in self._yield_queues for td in queue)
         return pending + in_progress
 
     def _async_send(self, next_output: TensorDictBase) -> None:
