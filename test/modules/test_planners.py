@@ -33,8 +33,10 @@ class _TwoSequenceEnv(EnvBase):
 
     Dying pays ``DIE_REWARD``. ``terminated`` follows ``done`` only when
     ``terminate_on_done``. ``done_layout`` is ``"root"``, ``"nested"``
-    (flags only under ``agent``), or ``"both"``. With ``"both"``, root
-    ``done`` stays false so a finished nested agent does not end the env.
+    (flags only under ``agent``), ``"both"``, or ``"nested_parent"``
+    (the ``"both"`` layout nested under ``team``). With ``"both"`` or
+    ``"nested_parent"``, the parent ``done`` stays false so a finished
+    nested agent does not end the env.
     """
 
     @classmethod
@@ -46,7 +48,7 @@ class _TwoSequenceEnv(EnvBase):
         device="cpu",
         *,
         terminate_on_done: bool = True,
-        done_layout: Literal["root", "nested", "both"] = "root",
+        done_layout: Literal["root", "nested", "both", "nested_parent"] = "root",
     ):
         super().__init__(device=device)
         self.observation_spec = Composite(
@@ -59,25 +61,41 @@ class _TwoSequenceEnv(EnvBase):
         self.done_layout = done_layout
         if done_layout != "root":
             flag = Categorical(2, dtype=torch.bool, shape=(1,), device=device)
-            nested = Composite(
+            agent = Composite(
                 {"done": flag.clone(), "terminated": flag.clone()},
                 shape=(),
                 device=device,
             )
-            spec = {"agent": nested}
-            if done_layout == "both":
-                spec["done"] = flag.clone()
-                spec["terminated"] = flag.clone()
+            if done_layout == "nested_parent":
+                spec = {
+                    "team": Composite(
+                        {
+                            "done": flag.clone(),
+                            "terminated": flag.clone(),
+                            "agent": agent,
+                        },
+                        shape=(),
+                        device=device,
+                    )
+                }
+            else:
+                spec = {"agent": agent}
+                if done_layout == "both":
+                    spec["done"] = flag.clone()
+                    spec["terminated"] = flag.clone()
             self.done_spec = Composite(spec, shape=(), device=device)
 
     def _done_payload(self, done, terminated):
         if self.done_layout == "root":
             return {"done": done, "terminated": terminated}
-        nested = {"agent": {"done": done, "terminated": terminated}}
+        child = {"done": done, "terminated": terminated}
         if self.done_layout == "nested":
-            return nested
+            return {"agent": child}
         false = torch.zeros_like(done)
-        return {"done": false, "terminated": false, **nested}
+        parent = {"done": false, "terminated": false, "agent": child}
+        if self.done_layout == "nested_parent":
+            return {"team": parent}
+        return parent
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is None:
@@ -277,7 +295,7 @@ class TestPlanner:
 class TestPlannerDoneMask:
     @pytest.mark.parametrize("planner_name", ["cem", "mppi"])
     @pytest.mark.parametrize("terminate_on_done", [True, False])
-    @pytest.mark.parametrize("done_layout", ["root", "nested", "both"])
+    @pytest.mark.parametrize("done_layout", ["root", "nested", "both", "nested_parent"])
     def test_planner_picks_higher_masked_sequence(
         self, device, planner_name, terminate_on_done, done_layout
     ):
@@ -288,13 +306,17 @@ class TestPlannerDoneMask:
         )
         has_root = "done" in env.done_keys
         has_nested = ("agent", "done") in env.done_keys
-        assert has_root is (done_layout != "nested")
-        assert has_nested is (done_layout != "root")
-        # Root done stays false when both groups exist, so the jackpot return
-        # is the env return and must beat the steady live sequence.
+        has_team = ("team", "done") in env.done_keys
+        has_team_agent = ("team", "agent", "done") in env.done_keys
+        assert has_root is (done_layout in ("root", "both"))
+        assert has_nested is (done_layout in ("nested", "both"))
+        assert has_team is (done_layout == "nested_parent")
+        assert has_team_agent is (done_layout == "nested_parent")
+        # Parent done stays false when a parent and child group coexist, so
+        # the jackpot return is the env return and must beat the live sequence.
         expected = (
             _die_then_jackpot_sequence(device)[0]
-            if done_layout == "both"
+            if done_layout in ("both", "nested_parent")
             else _steady_live_sequence(device)[0]
         )
         _assert_planner_selects(env, planner_name, device, expected)
