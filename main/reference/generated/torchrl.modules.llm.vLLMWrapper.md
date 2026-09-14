@@ -58,7 +58,23 @@ Warning
 This argument is under development and may change in the future.
 - **generate** (*bool**,**optional*) - Whether to enable text generation. If True, the model will generate text based on the input.
 If False, only log probabilities will be computed. Defaults to True.
-- **return_log_probs** (*bool**,**optional*) - Whether to return log probabilities. Defaults to True.
+- **return_log_probs** (*bool**,**optional*) -
+
+Whether to return log probabilities. Defaults to True.
+
+When `generate=True`, response log-probabilities come from vLLM
+token logprobs. Prompt log-probabilities are attached only if the
+engine actually returned `prompt_logprobs`. If it did not (common
+on the vLLM V1 generate path even when `SamplingParams.prompt_logprobs`
+is set), `prompt`
+is left unset. `full`
+is still prompt-length plus response-length so it stays aligned
+with `full` and
+with the assistant masks used by [`GRPOLoss`](torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss)
+and KL transforms. The prompt slice of `full` is a non-finite
+alignment pad, not a fabricated `0.0` score (`0.0` is a
+valid log-probability of 1). GRPO and KL skip those positions.
+To score a prompt, call the wrapper with `generate=False`.
 - **generate_kwargs** (*dict**|**None**,**optional*) -
 
 Additional arguments to pass to the model's generate method. Defaults to None.
