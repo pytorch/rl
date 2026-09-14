@@ -363,12 +363,16 @@ plt.show()
 # Reuse the deployment for 5-vs-5 football
 # ----------------------------------------
 #
-# Given a football environment exposing ten agents under ``"agents"``, the
+# The optional `rl-zoo <https://github.com/vmoens/rl-zoo>`_ owns football and
+# the other games. Given its football environment exposing ten agents under
+# ``"agents"``, the
 # same weights can control every player, with independent recurrent state:
 #
 # .. code-block:: python
 #
 #    from torchrl.envs import microduck_skill_env
+#    from torchrl_zoo.microduck import MicroDuckFootballEnv
+#    football_env = MicroDuckFootballEnv(download=True, players_per_team=5)
 #
 #    football_training_env = microduck_skill_env(
 #        football_env, walker, skill_tasks,

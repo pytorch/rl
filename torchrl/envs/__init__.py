@@ -8,7 +8,6 @@ from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import (
     AntEnv,
-    build_football_scene,
     ChessEnv,
     CubeBowlEnv,
     FinancialRegimeEnv,
@@ -18,7 +17,6 @@ from .custom import (
     microduck_skill_env,
     MicroDuckController,
     MicroDuckEnv,
-    MicroDuckFootballEnv,
     MicroDuckTask,
     MicroDuckTaskSampler,
     MujocoEnv,
@@ -40,6 +38,7 @@ from .custom.mujoco._ur_primitives import (
     URScriptPrimitive,
     URScriptPrimitiveTransform,
 )
+from .custom.mujoco.skill_loading import load_microduck_walker
 from .env_creator import env_creator, EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
 from .libs import (
@@ -199,6 +198,7 @@ from .utils import (
 )
 
 __all__ = [
+    "load_microduck_walker",
     "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
@@ -289,9 +289,7 @@ __all__ = [
     "ModelBasedEnvBase",
     "MicroDuckController",
     "microduck_skill_env",
-    "build_football_scene",
     "MicroDuckEnv",
-    "MicroDuckFootballEnv",
     "MicroDuckTask",
     "MicroDuckTaskSampler",
     "MujocoEnv",

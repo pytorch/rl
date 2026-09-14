@@ -1132,7 +1132,10 @@ class PPOLoss(LossModule):
             log_weight = log_weight + log_is_weight
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss})
-        td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
+        td_out.set(
+            "kl_approx",
+            self._reduce_loss(kl_approx.detach(), tensordict, reduction="mean"),
+        )  # for logging
         if self.entropy_bonus:
             entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
@@ -1638,7 +1641,10 @@ class ClipPPOLoss(PPOLoss):
         gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
         td_out = TensorDict({"loss_objective": -gain})
         td_out.set("clip_fraction", clip_fraction)
-        td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
+        td_out.set(
+            "kl_approx",
+            self._reduce_loss(kl_approx.detach(), tensordict, reduction="mean"),
+        )  # for logging
 
         if self.entropy_bonus:
             entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])

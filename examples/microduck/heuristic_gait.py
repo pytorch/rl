@@ -19,158 +19,25 @@ Validate the default gait from a TorchRL checkout::
 from __future__ import annotations
 
 import argparse
-import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase
+
 from torchrl import torchrl_logger
 from torchrl.envs import MicroDuckEnv
 from torchrl.envs.custom.mujoco._backends import BackendName
+from torchrl.envs.custom.mujoco._skill_models import (
+    MicroDuckGaitActor,
+    MicroDuckGaitConfig,
+)
 
 MIN_SINGLE_SUPPORT_STEPS = 4
 MIN_SWING_PHASES = 4
 MAX_WALKING_PITCH = 0.2
-
-
-@dataclass(frozen=True)
-class MicroDuckGaitConfig:
-    """Parameters of the closed-form MicroDuck gait.
-
-    Amplitudes are normalized actions: an amplitude of one is a full
-    ``action_scale`` offset around the MJCF ``STAND`` actuator target. The
-    oscillator drives mirrored leg joints half a cycle apart, and pitch
-    feedback acts through the hip and ankle targets. The clock parameters are
-    forwarded to :class:`~torchrl.envs.MicroDuckEnv` through :meth:`env_kwargs`
-    so the gait phase read from the observation matches this configuration.
-    """
-
-    frequency_hz: float = 1.8913
-    hip_amplitude: float = 0.999
-    knee_amplitude: float = 0.9097
-    ankle_amplitude: float = 0.0317
-    lateral_amplitude: float = 0.9584
-    lateral_phase_offset: float = -0.1624
-    phase_offset: float = -1.5237
-    pitch_kp: float = -9.9495
-    pitch_kd: float = -0.6119
-    ankle_pitch_kp: float = 10.9934
-    ankle_pitch_kd: float = 0.6033
-    ramp_duration_s: float = 0.4
-
-    def task_kwargs(self) -> dict[str, float]:
-        """Return the :class:`~torchrl.envs.MicroDuckTask` gait-clock overrides.
-
-        The phase offset and the ramp duration are class constants of
-        :class:`~torchrl.envs.MicroDuckEnv` and must match the config.
-        """
-        if (self.phase_offset, self.ramp_duration_s) != (
-            MicroDuckEnv.GAIT_PHASE_OFFSET,
-            MicroDuckEnv.GAIT_RAMP_DURATION_S,
-        ):
-            raise ValueError(
-                "The gait clock offset and ramp are fixed by MicroDuckEnv: "
-                f"{MicroDuckEnv.GAIT_PHASE_OFFSET}, {MicroDuckEnv.GAIT_RAMP_DURATION_S}."
-            )
-        return {"gait_frequency_hz": self.frequency_hz}
-
-
-class MicroDuckGaitActor(TensorDictModuleBase):
-    """Closed-form MicroDuck walking gait as a TensorDict policy.
-
-    A bilateral phase oscillator drives the hip, knee, ankle and lateral
-    targets while proportional-derivative feedback on the torso pitch acts
-    through the hip and ankle targets. Everything is read from the
-    :class:`~torchrl.envs.MicroDuckEnv` observation: projected gravity, body
-    angular velocity, the velocity command and the gait clock. The command sign
-    sets the walking direction; a zero command keeps only the balance feedback.
-
-    Args:
-        config: gait parameters, as a :class:`MicroDuckGaitConfig` or a mapping
-            of its fields. Defaults to the tuned gait.
-        in_keys: the observation key. Defaults to ``["observation"]``.
-        out_keys: the action key. Defaults to ``["action"]``.
-
-    Examples:
-        >>> from torchrl.envs import MicroDuckEnv
-        >>> config = MicroDuckGaitConfig()
-        >>> env = MicroDuckEnv(download=True, tasks=MicroDuckEnv.tracking_task(0.03, **config.task_kwargs()))
-        >>> rollout = env.rollout(100, MicroDuckGaitActor(config))
-        >>> rollout["action"].shape
-        torch.Size([1, 100, 14])
-    """
-
-    def __init__(
-        self,
-        config: MicroDuckGaitConfig | Mapping[str, float] | None = None,
-        *,
-        in_keys: Sequence[str] = ("observation",),
-        out_keys: Sequence[str] = ("action",),
-    ):
-        super().__init__()
-        if isinstance(config, Mapping):
-            config = MicroDuckGaitConfig(**config)
-        self.config = MicroDuckGaitConfig() if config is None else config
-        self.in_keys = list(in_keys)
-        self.out_keys = list(out_keys)
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict.set(
-            self.out_keys[0], self.gait_action(tensordict.get(self.in_keys[0]))
-        )
-        return tensordict
-
-    def gait_action(self, observation: torch.Tensor) -> torch.Tensor:
-        """Compute the normalized gait action from a MicroDuck observation.
-
-        Args:
-            observation: tensor of shape ``(*, MicroDuckEnv.observation_dim)``.
-
-        Returns:
-            A tensor of normalized actions in ``[-1, 1]`` with shape ``(*, 14)``.
-        """
-        config = self.config
-        phase_start = MicroDuckEnv.GAIT_PHASE_START
-        pitch = observation[..., 0:1].clamp(-1.0, 1.0).asin()
-        pitch_rate = observation[..., 4:5]
-        command_start = MicroDuckEnv.COMMAND_START
-        direction = observation[..., command_start : command_start + 1].sign()
-        gait_sin = direction * observation[..., phase_start : phase_start + 1]
-        gait_cos = direction * observation[..., phase_start + 1 : phase_start + 2]
-        ramp = observation[..., phase_start + 2 : phase_start + 3]
-
-        pitch_correction = (
-            config.pitch_kp * pitch + config.pitch_kd * pitch_rate
-        ).clamp(-0.95, 0.95)
-        ankle_pitch_correction = (
-            config.ankle_pitch_kp * pitch + config.ankle_pitch_kd * pitch_rate
-        ).clamp(-1.0, 1.0)
-        gait_wave = ramp * gait_sin
-        left_swing = ramp * gait_sin.clamp_min(0.0)
-        right_swing = ramp * (-gait_sin).clamp_min(0.0)
-        lateral_wave = ramp * (
-            gait_sin * math.cos(config.lateral_phase_offset)
-            + gait_cos * math.sin(config.lateral_phase_offset)
-        )
-
-        action = observation.new_zeros(*observation.shape[:-1], MicroDuckEnv.NUM_JOINTS)
-        # A common hip-pitch oscillation produces opposite physical leg motion
-        # because the left and right joints use opposite sign conventions.
-        action[..., 2:3] = -pitch_correction - config.hip_amplitude * gait_wave
-        action[..., 11:12] = pitch_correction - config.hip_amplitude * gait_wave
-        action[..., 3:4] = config.knee_amplitude * left_swing
-        action[..., 12:13] = -config.knee_amplitude * right_swing
-        action[..., 4:5] = ankle_pitch_correction - config.ankle_amplitude * left_swing
-        action[..., 13:14] = (
-            -ankle_pitch_correction + config.ankle_amplitude * right_swing
-        )
-        action[..., 1:2] = config.lateral_amplitude * lateral_wave
-        action[..., 10:11] = config.lateral_amplitude * lateral_wave
-        return action.clamp(-1.0, 1.0)
 
 
 def gait_metrics(rollout: TensorDictBase) -> TensorDict:

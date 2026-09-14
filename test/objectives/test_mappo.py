@@ -9,6 +9,7 @@ MARL env (VMAS / PettingZoo). They follow the layout pattern from
 ``test/test_cost.py::TestQMixer`` — per-agent observations under
 ``("agents", "observation")`` and team-shared reward / done at the root.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -25,7 +26,7 @@ from torchrl.modules import (
     ValueNorm,
 )
 from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
-from torchrl.objectives import IPPOLoss, MAPPOLoss
+from torchrl.objectives import ClipPPOLoss, IPPOLoss, MAPPOLoss, PPOLoss
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import GAE, MultiAgentGAE
 
@@ -116,6 +117,34 @@ def _attach_action_and_logprob(td: TensorDict, actor: ProbabilisticActor, loss):
 # --------------------------------------------------------------------------
 # MultiAgentGAE
 # --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("loss_cls", [PPOLoss, ClipPPOLoss])
+def test_frozen_opponents_do_not_affect_ppo_losses_or_adaptive_kl(loss_cls):
+    actor = _make_actor(n_agents=2)
+    critic = _make_critic(n_agents=2, centralized=False)
+    loss = loss_cls(actor, critic, normalize_advantage=False)
+    loss.set_keys(action=("agents", "action"), value=("agents", "state_value"))
+    loss.loss_mask_key = ("agents", "train_mask")
+    batch = _make_data(n_agents=2)
+    batch = _attach_action_and_logprob(batch, actor, loss)
+    batch["advantage"] = torch.randn(2, 10, 2, 1)
+    batch["value_target"] = torch.randn(2, 10, 2, 1)
+    mask = torch.ones(2, 10, 2, 1, dtype=torch.bool)
+    mask[..., 1, :] = False
+    batch["agents", "train_mask"] = mask
+    changed = batch.clone()
+    changed["agents", "observation"][..., 1, :] += 100
+    changed[loss.tensor_keys.sample_log_prob][..., 1] += 100
+    changed["advantage"][..., 1, :] *= 100
+    changed["value_target"][..., 1, :] += 100
+    # TanhNormal's entropy estimate samples, so compare with the same RNG.
+    torch.manual_seed(12)
+    expected = loss(batch)
+    torch.manual_seed(12)
+    actual = loss(changed)
+    for key in ("loss_objective", "loss_critic", "loss_entropy", "kl_approx"):
+        torch.testing.assert_close(actual[key], expected[key])
 
 
 class TestMultiAgentGAE:

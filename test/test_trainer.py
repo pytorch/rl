@@ -2130,7 +2130,9 @@ class TestOnPolicyTargetNetUpdater:
     # ClipPPOLoss(delay_actor=True) an EWMA of the policy (PPO-EWMA)
 
     @staticmethod
-    def _make_trainer(updater_cls, **updater_kwargs):
+    def _make_trainer(
+        updater_cls, *, collector=None, weight_update_map=None, **updater_kwargs
+    ):
         torch.manual_seed(0)
         actor = ProbabilisticTensorDictSequential(
             TensorDictModule(
@@ -2154,13 +2156,14 @@ class TestOnPolicyTargetNetUpdater:
             # the on-policy trainers warn that they are experimental
             warnings.simplefilter("ignore", UserWarning)
             trainer = PPOTrainer(
-                collector=MockingCollector(),
+                collector=MockingCollector() if collector is None else collector,
                 total_frames=None,
                 frame_skip=1,
                 optim_steps_per_batch=3,
                 loss_module=loss_module,
                 optimizer=torch.optim.SGD(loss_module.parameters(), lr=0.1),
                 target_net_updater=updater,
+                weight_update_map=weight_update_map,
                 num_epochs=1,
                 add_gae=False,
                 progress_bar=False,
@@ -2178,6 +2181,34 @@ class TestOnPolicyTargetNetUpdater:
             [8],
         )
         return trainer, loss_module, updater, batch
+
+    def test_local_collection_policy_mapping_preserves_opponent(self):
+        class LocalCollector(MockingCollector):
+            def update_policy_weights_(self, policy=None, *, weights_dict=None):
+                weights_dict["policy"].to_module(self.policy)
+
+        collector = LocalCollector()
+        trainer, loss, _, _ = self._make_trainer(
+            SoftUpdate,
+            eps=0.5,
+            collector=collector,
+            weight_update_map={"policy": "collection_policy"},
+        )
+        trainer.collection_policy = nn.ModuleDict(
+            {
+                "actor": loss.actor_network,
+                "opponent": deepcopy(loss.actor_network).requires_grad_(False),
+            }
+        )
+        collector.policy = deepcopy(trainer.collection_policy)
+        before = deepcopy(collector.policy.state_dict())
+        with torch.no_grad():
+            for parameter in loss.actor_network.parameters():
+                parameter.add_(1)
+        trainer._post_steps_hook()
+        for key, value in collector.policy.state_dict().items():
+            expected = before[key] + 1 if key.startswith("actor.") else before[key]
+            torch.testing.assert_close(value, expected)
 
     def test_updater_steps_once_per_optim_step(self):
         trainer, loss_module, updater, batch = self._make_trainer(

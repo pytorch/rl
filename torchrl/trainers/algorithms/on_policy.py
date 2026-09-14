@@ -300,16 +300,13 @@ class OnPolicyTrainer(Trainer):
                 weight_update_map=weight_update_map,
                 trainer=self,
             )
+        elif weight_update_map is not None:
+            # Local collectors can receive explicit destinations through their
+            # fallback updater too (for example an actor/opponent wrapper).
+            update_weights = UpdateWeights(
+                self.collector, 1, weight_update_map=weight_update_map, trainer=self
+            )
         else:
-            # Fall back to legacy approach for backward compatibility
-            if weight_update_map is not None:
-                warnings.warn(
-                    "weight_update_map was provided but collector has no weight_sync_schemes. "
-                    "Ignoring weight_update_map and using legacy policy_weights_getter.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
             policy_weights_getter = partial(
                 TensorDict.from_module, self.loss_module.actor_network
             )
