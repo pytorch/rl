@@ -9,15 +9,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import hydra
-from hydra.core.hydra_config import HydraConfig
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.checkpoint import Checkpoint, resolve_checkpoint_path
+from torchrl.checkpoint import Checkpoint, resolve_checkpoint_path, resume_config
+from torchrl.checkpoint._hydra import _CONFIG_COMPONENT, _hydra_task_overrides
 from torchrl.trainers.trainers import Trainer
-
-_CONFIG_COMPONENT = "config"
 
 
 def instantiate_trainer(
@@ -28,15 +26,14 @@ def instantiate_trainer(
     Without ``resume`` this is :func:`hydra.utils.instantiate` on ``cfg.trainer``
     plus registration of the composed configuration on the trainer checkpoint.
     With ``resume`` set to a checkpoint or a
-    :class:`~torchrl.checkpoint.CheckpointRotation` directory, the saved
-    configuration becomes the base and the current command-line overrides apply
-    on top (config-group overrides cannot apply to a saved configuration and are
-    ignored with a warning); the saved logger run is reattached before the
-    logger is constructed (W&B resumes the saved id with ``resume="must"``, CSV
-    and TensorBoard keep the saved directory); checkpoints keep accumulating in
-    the resumed rotation directory unless ``checkpoint_rotation.directory`` is
-    overridden; and :meth:`~torchrl.trainers.Trainer.load_from_file` restores
-    the trainer state.
+    :class:`~torchrl.checkpoint.CheckpointRotation` directory,
+    :func:`~torchrl.checkpoint.resume_config` rebuilds the configuration from
+    the saved one with the current command-line overrides on top; the saved
+    logger run is reattached before the logger is constructed (W&B resumes the
+    saved id with ``resume="must"``, CSV and TensorBoard keep the saved
+    directory); checkpoints keep accumulating in the resumed rotation directory
+    unless ``checkpoint_rotation.directory`` is overridden; and
+    :meth:`~torchrl.trainers.Trainer.load_from_file` restores the trainer state.
 
     Args:
         cfg (DictConfig): the composed Hydra configuration. It must hold a
@@ -63,23 +60,13 @@ def instantiate_trainer(
 
     resume_path = pathlib.Path(to_absolute_path(str(resume)))
     checkpoint_path = resolve_checkpoint_path(resume_path)
-    saved_components = set(Checkpoint.manifest(checkpoint_path)["components"])
     if overrides is None:
         overrides = _hydra_task_overrides()
-    if _CONFIG_COMPONENT in saved_components:
-        saved = Checkpoint.read_component(checkpoint_path, _CONFIG_COMPONENT)
-        cfg = _apply_overrides(OmegaConf.create(saved), overrides)
-    else:
-        torchrl_logger.warning(
-            "Checkpoint %s has no saved configuration; the current configuration "
-            "is used as is.",
-            checkpoint_path,
-        )
+    cfg = resume_config(cfg, checkpoint_path, overrides=overrides)
     logger_cfg = cfg.trainer.get("logger", None)
-    if "logger" in saved_components and logger_cfg is not None:
-        _reattach_logger(
-            logger_cfg, Checkpoint.read_component(checkpoint_path, "logger")
-        )
+    saved_logger = Checkpoint.read_component(checkpoint_path, "logger", default=None)
+    if logger_cfg is not None and saved_logger is not None:
+        _reattach_logger(logger_cfg, saved_logger)
     _continue_rotation(cfg, resume_path, checkpoint_path, overrides)
     trainer = hydra.utils.instantiate(cfg.trainer)
     try:
@@ -105,39 +92,6 @@ def _register_config(trainer: Trainer, cfg: DictConfig) -> None:
         checkpoint.register(
             _CONFIG_COMPONENT, OmegaConf.to_container(cfg, resolve=False)
         )
-
-
-def _hydra_task_overrides() -> list[str]:
-    try:
-        return list(HydraConfig.get().overrides.task)
-    except ValueError:
-        # Not running under @hydra.main.
-        return []
-
-
-def _apply_overrides(base: DictConfig, overrides: Sequence[str]) -> DictConfig:
-    dotlist = []
-    for override in overrides:
-        key, separator, value = override.partition("=")
-        if key.startswith("~") or not separator:
-            torchrl_logger.warning(
-                "Override %r is ignored on resume: only key=value overrides apply "
-                "to a saved configuration.",
-                override,
-            )
-            continue
-        key = key.lstrip("+")
-        if "@" in key or "/" in key:
-            torchrl_logger.warning(
-                "Config-group override %r cannot be applied to a saved "
-                "configuration and is ignored on resume.",
-                override,
-            )
-            continue
-        dotlist.append(f"{key}={value}")
-    if not dotlist:
-        return base
-    return OmegaConf.merge(base, OmegaConf.from_dotlist(dotlist))
 
 
 def _reattach_logger(logger_cfg: DictConfig, saved_logger: Mapping[str, Any]) -> None:

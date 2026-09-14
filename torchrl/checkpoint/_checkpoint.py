@@ -41,6 +41,7 @@ CheckpointMetricMode = Literal["min", "max"]
 CheckpointBest = tuple[str, CheckpointMetricMode]
 
 _MANIFEST_NAME = "manifest.json"
+_NO_DEFAULT = object()
 _FORMAT_NAME = "torchrl.checkpoint"
 _FORMAT_VERSION = 1
 
@@ -1146,7 +1147,12 @@ class Checkpoint:
 
     @classmethod
     def read_component(
-        cls, path: str | Path, name: str, *, map_location: Any = None
+        cls,
+        path: str | Path,
+        name: str,
+        *,
+        map_location: Any = None,
+        default: Any = _NO_DEFAULT,
     ) -> Any:
         """Return one component's stored payload without a live object.
 
@@ -1161,18 +1167,23 @@ class Checkpoint:
             path: Directory or archive checkpoint.
             name: Manifest component name.
             map_location: Device mapping used while reading tensor payloads.
+            default: Value returned instead of raising when the component is
+                absent.
 
         Returns:
             The state dict or JSON value stored for ``name``.
 
         Raises:
-            KeyError: If the checkpoint has no component named ``name``.
+            KeyError: If the checkpoint has no component named ``name`` and no
+                ``default`` is given.
             CheckpointError: If the component cannot be read without an object.
         """
         source = cls._local_path(path)
         manifest = cls.manifest(source)
         components: Mapping[str, Any] = manifest["components"]
         if name not in components:
+            if default is not _NO_DEFAULT:
+                return default
             raise KeyError(
                 f"Checkpoint {source} has no component {name!r}; available "
                 f"components: {sorted(components)}."
@@ -1819,3 +1830,116 @@ def resolve_checkpoint_path(path: str | Path, *, prefix: str = "checkpoint") -> 
         if latest is not None:
             return latest
     raise FileNotFoundError(f"No checkpoint was found at {candidate}.")
+
+
+class RunCheckpointer:
+    """Save a training script's :class:`Checkpoint` at loop boundaries and restore it on resume.
+
+    ``save(step)`` writes a rotated checkpoint to ``directory`` every
+    ``interval`` steps and ``save(step, force=True)`` writes a final one when
+    the loop ends. ``restore()`` loads every component but ``config`` and
+    ``rng``, then ``rng`` last, so random numbers drawn while the script built
+    its objects do not change the restored RNG state.
+
+    Args:
+        checkpoint (Checkpoint): the run's components.
+        directory (str or Path or None): rotation directory for scheduled
+            saves. ``None`` disables saving. When resuming, checkpoints keep
+            accumulating next to the resumed checkpoint instead.
+        interval (int): steps between scheduled saves.
+        keep_last (int, optional): checkpoints retained by the rotation.
+            Defaults to ``2``.
+        exclude (Collection[str], optional): components left out of every save,
+            for example ``("replay_buffer",)``. Defaults to none.
+        optional (Collection[str], optional): components restored only when the
+            checkpoint holds them. Defaults to ``("logger", "replay_buffer")``.
+        resume_path (str or Path, optional): checkpoint or rotation directory to
+            restore from, see :func:`resolve_checkpoint_path`.
+
+    Examples:
+        >>> import tempfile
+        >>> import torch
+        >>> from torchrl.checkpoint import Checkpoint, RunCheckpointer
+        >>> checkpoint = Checkpoint(policy=torch.nn.Linear(2, 1), run_state={"step": 0})
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     run = RunCheckpointer(checkpoint, directory=tmpdir, interval=10)
+        ...     run.save(5) is None, run.save(10) is not None
+        (True, True)
+    """
+
+    def __init__(
+        self,
+        checkpoint: Checkpoint,
+        *,
+        directory: str | Path | None,
+        interval: int,
+        keep_last: int = 2,
+        exclude: Collection[str] = (),
+        optional: Collection[str] = ("logger", "replay_buffer"),
+        resume_path: str | Path | None = None,
+    ) -> None:
+        self.checkpoint = checkpoint
+        self.interval = interval
+        self.exclude = frozenset(exclude)
+        self.optional = frozenset(optional)
+        self.resume_path = (
+            None if resume_path is None else resolve_checkpoint_path(resume_path)
+        )
+        if directory and self.resume_path is not None:
+            directory = self.resume_path.parent
+        self.rotation = (
+            CheckpointRotation(directory, keep_last=keep_last) if directory else None
+        )
+        self._last_step = 0
+
+    def restore(self, *, map_location: Any = None) -> bool:
+        """Restore the run from ``resume_path``; return whether anything was restored."""
+        if self.resume_path is None:
+            return False
+        manifest = Checkpoint.manifest(self.resume_path)
+        saved = set(manifest["components"])
+        components = {
+            name
+            for name in self.checkpoint.components
+            if name not in ("config", "rng")
+            and (name not in self.optional or name in saved)
+        }
+        self.checkpoint.load(
+            self.resume_path, components=components, map_location=map_location
+        )
+        if "rng" in self.checkpoint.components and "rng" in saved:
+            self.checkpoint.load(self.resume_path, components={"rng"})
+        self._last_step = int(manifest["metadata"].get("step", 0))
+        torchrl_logger.info(
+            "Resumed from %s at step %s.", self.resume_path, self._last_step
+        )
+        return True
+
+    def save(self, step: int, *, force: bool = False) -> Path | None:
+        """Save when ``interval`` steps have passed since the last save.
+
+        Args:
+            step (int): the current step, used as the rotation step.
+            force (bool, optional): save regardless of the interval, unless a
+                checkpoint was already written for this exact step. Use it
+                when the loop ends. Defaults to ``False``.
+
+        Returns:
+            The written checkpoint path, or ``None`` when nothing was saved.
+        """
+        if self.rotation is None:
+            return None
+        if force:
+            if step == self._last_step:
+                return None
+        elif step - self._last_step < self.interval:
+            return None
+        path = self.rotation.save(
+            self.checkpoint,
+            step=step,
+            components=set(self.checkpoint.components) - self.exclude,
+            metadata={"step": step},
+        )
+        self._last_step = step
+        torchrl_logger.info("Saved checkpoint to %s", path)
+        return path
