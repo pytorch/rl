@@ -35,7 +35,7 @@ jobs:
       - name: Install this TorchRL revision and the pinned optional zoo
         run: |
           python -m pip install --no-build-isolation .
-          python -m pip install 'torchrl-zoo @ https://github.com/vmoens/rl-zoo/archive/07a15233de6ab4c543872cf647d3cb49001360c9.zip'
+          python -m pip install 'torchrl-zoo @ https://github.com/vmoens/rl-zoo/archive/d9b68f5c72ec29c1627c3126638609b1b2f76740.zip'
       - name: Execute the installed-package tutorial
         working-directory: /tmp
         timeout-minutes: 3
@@ -51,3 +51,8 @@ jobs:
         timeout-minutes: 3
         run: |
           python -m examples.microduck.ppo_mujoco env.download=true smoke=true observations=proprioception_vision algorithm=ppo_ewma save_trainer_file=/tmp/prior-sensors.ckpt
+      - name: Smoke the installed visual game consumer
+        working-directory: /tmp
+        timeout-minutes: 3
+        run: |
+          python -m torchrl_zoo.microduck.train game=tag observations=proprioception_vision algorithm=ppo_ewma env.download=true smoke=true
