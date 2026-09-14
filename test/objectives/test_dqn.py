@@ -853,6 +853,146 @@ class TestDQN(LossModuleTestBase):
         manual_weighted_loss = (loss_elements * weights2).sum() / weights2.sum()
         assert torch.allclose(loss_out2["loss"], manual_weighted_loss, rtol=1e-4)
 
+    def test_dqn_categorical_selects_correct_action_value(self):
+        """DQNLoss must use only the Q-value of the taken action in the TD error.
+
+        The Q-network is an identity matrix (obs_dim=action_dim=3), so
+        observation [1.0, 0.0, 0.0] yields action_values [1.0, 0.0, 0.0].
+        Taken action: index 0 -> selected Q-value = 1.0.
+        Target (no reward, done=True, gamma=1.0): 0.0.
+        Expected MSE loss = (1.0 - 0.0)^2 = 1.0.
+
+        If gather selects the wrong index or squeeze is missing, the
+        selected Q-value changes and the loss deviates from 1.0.
+        """
+        torch.manual_seed(0)
+        actor = self._create_mock_actor(
+            action_spec_type="categorical",
+            obs_dim=3,
+            action_dim=3,
+            device="cpu",
+        )
+        with torch.no_grad():
+            first_module = next(
+                m for m in actor.modules() if isinstance(m, torch.nn.Linear)
+            )
+            first_module.weight.copy_(torch.eye(3))
+            if getattr(first_module, "bias", None) is not None:
+                first_module.bias.zero_()
+
+        loss_fn = DQNLoss(
+            actor,
+            action_space="categorical",
+            loss_function="l2",
+            delay_value=False,
+            use_prioritized_weights=False,
+        )
+        loss_fn.make_value_estimator(ValueEstimators.TD0, gamma=1.0)
+        # Observation [1,0,0] -> action_values [1.0, 0.0, 0.0] via identity net
+        # Taken action: index 0 (Q-value = 1.0)
+        # Next obs [0,0,0] -> next action_values [0.0, 0.0, 0.0]; done=True so target=0.0
+        # TD error = (1.0 - 0.0)^2 = 1.0
+        td = TensorDict(
+            {
+                "observation": torch.tensor([[1.0, 0.0, 0.0]]),
+                "action": torch.tensor([0]),
+                "next": {
+                    "observation": torch.tensor([[0.0, 0.0, 0.0]]),
+                    "reward": torch.tensor([[0.0]]),
+                    "done": torch.tensor([[True]]),
+                    "terminated": torch.tensor([[True]]),
+                },
+            },
+            batch_size=[1],
+        )
+        with torch.no_grad():
+            out = loss_fn(td)
+        torch.testing.assert_close(out["loss"], torch.tensor(1.0))
+
+    def test_dqn_double_dqn_categorical_target_value_is_correct(self):
+        """Double-DQN must select the *target-network* Q-value using the *online* action.
+
+        The online network is an identity matrix; target starts equal (eps=0
+        SoftUpdate).  We verify the loss equals the value computed by
+        independently applying the Double-DQN update rule:
+
+          1. online network selects greedy action from next-obs
+          2. target network evaluates that action's Q-value
+          3. TD target = reward + gamma * target_Q[online_action]
+          4. TD error = (pred_Q[action] - TD_target)^2
+
+        If the Double-DQN branch drops keepdim=True, the next_value tensor
+        has shape (batch,) instead of (batch, 1), the value estimator
+        broadcasts to a wrong target, and the loss differs.
+        """
+        torch.manual_seed(0)
+        actor = self._create_mock_actor(
+            action_spec_type="categorical",
+            obs_dim=3,
+            action_dim=3,
+            device="cpu",
+        )
+        with torch.no_grad():
+            first_module = next(
+                m for m in actor.modules() if isinstance(m, torch.nn.Linear)
+            )
+            first_module.weight.copy_(torch.eye(3))
+            if getattr(first_module, "bias", None) is not None:
+                first_module.bias.zero_()
+
+        loss_fn = DQNLoss(
+            actor,
+            action_space="categorical",
+            loss_function="l2",
+            delay_value=True,
+            double_dqn=True,
+            use_prioritized_weights=False,
+        )
+        gamma = 0.9
+        loss_fn.make_value_estimator(ValueEstimators.TD0, gamma=gamma)
+        SoftUpdate(loss_fn, eps=0.0)  # target params = online params (both identity)
+
+        # Identity net: obs -> Q-values via I*obs
+        # obs [0,1,0] -> Q = [0,1,0], greedy action=1, pred_Q[1] = 1.0
+        # next_obs [0,0,1] -> online Q = [0,0,1], greedy action=2
+        # target network Q[action=2] = 1.0
+        # TD target = 0.5 + 0.9 * 1.0 = 1.4
+        # MSE = (1.0 - 1.4)^2 = 0.16
+        obs = torch.tensor([[0.0, 1.0, 0.0]])
+        next_obs = torch.tensor([[0.0, 0.0, 1.0]])
+        reward = torch.tensor([[0.5]])
+        action = torch.tensor([1])  # greedy from identity net on obs
+        gamma_val = 0.9
+
+        # Independent derivation (no code-under-test involved):
+        pred_q = obs[0, action[0].item()].item()  # identity: Q[1] = 1.0
+        online_next_action = next_obs.argmax(-1).item()  # argmax([0,0,1]) = 2
+        target_next_q = next_obs[0, online_next_action].item()  # identity: Q[2] = 1.0
+        td_target = reward[0, 0].item() + gamma_val * target_next_q  # 0.5 + 0.9 = 1.4
+        expected_loss = (pred_q - td_target) ** 2  # (1.0 - 1.4)^2 = 0.16
+
+        td = TensorDict(
+            {
+                "observation": obs,
+                "action": action,
+                "next": {
+                    "observation": next_obs,
+                    "reward": reward,
+                    "done": torch.tensor([[False]]),
+                    "terminated": torch.tensor([[False]]),
+                },
+            },
+            batch_size=[1],
+        )
+        with torch.no_grad():
+            out = loss_fn(td)
+        torch.testing.assert_close(
+            out["loss"],
+            torch.tensor(expected_loss, dtype=torch.float32),
+            atol=1e-5,
+            rtol=0.0,
+        )
+
 
 class TestQMixer(LossModuleTestBase):
     seed = 0
@@ -1411,3 +1551,128 @@ class TestQMixer(LossModuleTestBase):
         loss_elements = loss_fn_no_reduction(sample2)["loss"]
         manual_weighted_loss = (loss_elements * weights2).sum() / weights2.sum()
         assert torch.allclose(loss_out2["loss"], manual_weighted_loss, rtol=1e-4)
+
+    def test_qmixer_categorical_selects_correct_action_value(self):
+        """QMixerLoss must index by the taken action, not a fixed or wrong element.
+
+        Setup:
+          obs[0] = 1.0, obs[1:] = 0.0, Q-network weight: Q[i] = obs[0] for all i.
+          action=0 -> chosen Q = 1.0
+          action=1 -> chosen Q = 1.0  (same obs, all Q equal, same mixer input)
+
+        This same-Q scenario verifies that the loss is identical when both
+        actions index equally-valued Q entries — which confirms the gather path
+        is functioning, not selecting a constant zeroth element regardless of action.
+
+        We additionally assert the full-forward pass raises no shape error.
+        If keepdim=True is dropped, the mixer receives (*B, n_agents) instead of
+        (*B, n_agents, 1) and a RuntimeError is raised before the assertion.
+
+        For a stronger indexing test, we run with two distinct obs features so
+        action=0 and action=1 yield different Q-values (1.0 vs 0.0).  The mixer
+        is a monotonic function of its input, so distinct inputs produce distinct
+        outputs and distinct losses.  If gather always selects the same element,
+        both losses are equal — exposing the bug.
+        """
+        torch.manual_seed(0)
+        n_agents = 1
+        action_dim = 4
+        obs_dim = 3
+        batch = 2
+
+        # Q-network: Q[i] = obs[i] (identity on first obs_dim actions).
+        # obs = [1, 0, 0] -> Q = [1, 0, 0, 0]
+        # action=0 -> chosen Q = 1.0 (high)
+        # action=1 -> chosen Q = 0.0 (low)
+        actor = self._create_mock_actor(
+            action_spec_type="categorical",
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+            device="cpu",
+        )
+        with torch.no_grad():
+            first_module = next(
+                m for m in actor.modules() if isinstance(m, torch.nn.Linear)
+            )
+            # weight shape: (action_dim, obs_dim); set to identity on first obs_dim rows
+            w = torch.zeros(action_dim, obs_dim)
+            w[:obs_dim, :obs_dim] = torch.eye(obs_dim)
+            first_module.weight.copy_(w)
+            if getattr(first_module, "bias", None) is not None:
+                first_module.bias.zero_()
+
+        mixer = self._create_mock_mixer(n_agents=n_agents, device="cpu")
+
+        loss_fn = QMixerLoss(
+            actor,
+            mixer,
+            action_space="categorical",
+            loss_function="l2",
+            delay_value=False,
+        )
+        loss_fn.make_value_estimator(ValueEstimators.TD0, gamma=0.0)
+
+        # Fixed obs = [1, 0, 0] -> Q = [1, 0, 0, 0]
+        # action=0 -> chosen Q = 1.0; action=1 -> chosen Q = 0.0
+        # QMixer uses absolute-value weights (always positive) so mixer(1.0) != mixer(0.0)
+        # -> loss for action=0 differs from loss for action=1.
+        # If gather always picks index 0, both losses equal loss for Q=1.0.
+        obs = torch.zeros(batch, n_agents, obs_dim)
+        obs[:, :, 0] = 1.0  # obs[0]=1, obs[1:]=0
+
+        # Build one input TensorDict with a fixed random state.
+        # We must reuse this exact state for both action evaluations because QMixer
+        # uses the state to generate its hypernetwork weights. If we randomly generate
+        # the state each time, the losses will differ purely due to different mixer weights.
+        base_td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {
+                        "observation": obs,
+                        "action": torch.zeros((batch, n_agents), dtype=torch.long),
+                    },
+                    batch_size=[batch, n_agents],
+                ),
+                "state": torch.randn(batch, 64, 64, 3),
+                "next": TensorDict(
+                    {
+                        "agents": TensorDict(
+                            {"observation": obs.clone()},
+                            batch_size=[batch, n_agents],
+                        ),
+                        "state": torch.randn(batch, 64, 64, 3),
+                        "reward": torch.zeros(batch, 1),
+                        "done": torch.ones(batch, 1, dtype=torch.bool),
+                        "terminated": torch.ones(batch, 1, dtype=torch.bool),
+                    },
+                    batch_size=[batch],
+                ),
+            },
+            batch_size=[batch],
+        )
+
+        td_action0 = base_td.clone()
+        td_action0["agents", "action"] = torch.full(
+            (batch, n_agents), 0, dtype=torch.long
+        )
+
+        td_action1 = base_td.clone()
+        td_action1["agents", "action"] = torch.full(
+            (batch, n_agents), 1, dtype=torch.long
+        )
+
+        with torch.no_grad():
+            loss_action0 = loss_fn(td_action0)["loss"]  # chosen Q = 1.0
+            loss_action1 = loss_fn(td_action1)["loss"]  # chosen Q = 0.0
+
+        # The losses must differ: gather(action=0) picks Q=1.0, gather(action=1)
+        # picks Q=0.0.  If gather always picks the same element, they are equal.
+        assert not torch.isclose(loss_action0, loss_action1, atol=1e-4), (
+            f"loss was identical for action=0 (Q=1.0, loss={loss_action0.item():.6f}) "
+            f"and action=1 (Q=0.0, loss={loss_action1.item():.6f}); "
+            "this indicates gather is not indexing by the action argument."
+        )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

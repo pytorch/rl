@@ -24,6 +24,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _select_action_value,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -332,14 +333,9 @@ class QMixerLoss(LossModule):
             self.tensor_keys.action_value
         )  # [*B, n_agents, n_actions]
 
-        if self.action_space == "categorical":
-            if action.shape != pred_val.shape:
-                # unsqueeze the action if it lacks on trailing singleton dim
-                action = action.unsqueeze(-1)
-            pred_val_index = torch.gather(pred_val, -1, index=action)
-        else:
-            action = action.to(torch.float)
-            pred_val_index = (pred_val * action).sum(-1, keepdim=True)
+        pred_val_index = _select_action_value(
+            self.action_space, action, pred_val, keepdim=True
+        )
 
         td_copy.set(self.tensor_keys.local_value, pred_val_index)  # [*B, n_agents, 1]
         with self.mixer_network_params.to_module(
