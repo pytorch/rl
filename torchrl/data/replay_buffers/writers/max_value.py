@@ -356,11 +356,15 @@ class TensorDictMaxValueWriter(Writer):
             self._rank_key = metadata["rank_key"]
             shape = torch.Size(metadata["shape"])
             dtype = metadata["dtype"]
-        self._current_top_values = MemoryMappedTensor.from_filename(
+        top_values = MemoryMappedTensor.from_filename(
             filename=path / "current_top_values.memmap",
             dtype=_STRDTYPE2DTYPE[dtype],
             shape=shape,
         ).tolist()
+        # The heap holds (rank, storage index) tuples, but the tensor round trip
+        # returns [rank, index] lists with a float index. heapq cannot compare
+        # those lists with the tuples pushed by later writes.
+        self._current_top_values = [(rank, int(index)) for rank, index in top_values]
 
     def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError

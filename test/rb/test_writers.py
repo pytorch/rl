@@ -146,6 +146,32 @@ class TestMaxValueWriter:
             torch.tensor(other._current_top_values),
         )
 
+    def test_max_value_writer_loads_then_writes(self, tmpdir):
+        def make_rb():
+            return TensorDictReplayBuffer(
+                storage=LazyTensorStorage(4),
+                writer=TensorDictMaxValueWriter(rank_key="key"),
+            )
+
+        def data(keys, obs):
+            return TensorDict(
+                {"key": torch.tensor(keys), "obs": torch.tensor(obs)},
+                batch_size=[len(keys)],
+            )
+
+        rb = make_rb()
+        rb.extend(data([1.0, 5.0, 3.0], [0, 1, 2]))
+        rb.dumps(tmpdir)
+        restored = make_rb()
+        restored.loads(tmpdir)
+        # the restored buffer keeps ranking new data against the loaded entries,
+        # first into its free slot, then by replacing the lowest ranked entry
+        for buffer in (rb, restored):
+            buffer.extend(data([2.0], [3]))
+            buffer.add(TensorDict({"key": torch.tensor(4.0), "obs": torch.tensor(10)}))
+            buffer.extend(data([0.5, 6.0], [11, 12]))
+            assert sorted(buffer[:]["obs"].tolist()) == [1, 2, 10, 12]
+
     @pytest.mark.parametrize("size", [[], [1], [2, 3]])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("reduction", ["max", "min", "mean", "median", "sum"])
