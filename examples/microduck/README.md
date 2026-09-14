@@ -215,7 +215,7 @@ Gaussian head trained end to end from scratch. `policy.from_prior=true` is a
 quick debugging start: the head then adds a bounded, zero-initialized residual
 to the closed-form gait, so training starts from a walking controller, but
 that prior only knows forward walking. Data flows through standard TorchRL
-components:
+components, with `PPOTrainer` owning every optimizer update:
 
 1. a `Collector` with `trajs_per_batch=1` writes every finished episode as a
    whole, unpadded sequence into a `TensorDictReplayBuffer`;
@@ -259,6 +259,30 @@ it is off by default because video storage on the logger side is not free,
 and W&B needs `moviepy` for it. Checkpoints are unified TorchRL
 checkpoints written with `save_render_checkpoint`, which `rlrender` and
 `policy.init_from` read directly.
+
+The Hydra `trainer` factory builds the collector, loss, optimizer and hooks.
+Select `algorithm=ppo` (default) or `algorithm=ppo_ewma` in this same recipe:
+
+```bash
+python -m examples.microduck.ppo_mujoco env.download=true smoke=true algorithm=ppo_ewma
+python -m examples.microduck.ppo_mujoco env.download=true algorithm=ppo_ewma \
+  env.backend=mujoco env.device=cpu env.num_envs=4 logger.backend=csv \
+  resume=microduck_prior.trainer.ckpt
+```
+
+PPO-EWMA keeps a separate proximal actor, updated with `SoftUpdate` after each
+successful optimizer update (`target_net_updater.eps=0.99`). Evaluation and
+gradient accumulation without an optimizer step leave it unchanged. Whole
+episodes and reset masks are used to recompute both recurrent actors during
+optimization. The KL-adaptive scheduler receives the loss's proximal-policy KL.
+
+`save_trainer_file` writes resumable trainer checkpoints, including the live
+learner and critic, optimizer, proximal actor/updater, RNG, scheduler and
+evaluation-hook state. Use the same algorithm and architecture when resuming.
+Collection starts from fresh episodes after a restart; simulator continuation
+is not bit-exact. Best/latest inference exports remain separate so exporting
+the best actor never pairs it with the latest optimizer state. Skills and prior
+training require no zoo installation.
 
 ### Backends
 

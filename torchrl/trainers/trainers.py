@@ -754,6 +754,7 @@ class Trainer:
 
         self._log_dict = defaultdict(list)
         self._stop_training = False
+        self._optimizer_step_completed = False
         self._stop_reason = None
 
         # Hook collections for different stages of the training loop
@@ -1948,8 +1949,14 @@ class Trainer:
                     break
 
                 if self.optimization_stepper is not None:
+                    step_count = getattr(
+                        self.optimization_stepper, "optimizer_step_count", None
+                    )
                     losses_detached = self.optimization_stepper.step(self, sub_batch)
-                    self._post_optim_hook()
+                    self._optimizer_step_completed = (
+                        step_count is None
+                        or self.optimization_stepper.optimizer_step_count > step_count
+                    )
                 else:
                     losses_td = self.loss_module(sub_batch)
                     self._post_loss_hook(sub_batch)
@@ -1957,8 +1964,12 @@ class Trainer:
                     losses_td = self._process_loss_hook(sub_batch, losses_td)
 
                     losses_detached = self._optimizer_hook(losses_td)
-                    self._post_optim_hook()
+                    self._optimizer_step_completed = True
                     del losses_td
+                try:
+                    self._post_optim_hook()
+                finally:
+                    self._optimizer_step_completed = False
 
                 # LOGGING POINT 4: Post-optimization step logging (e.g., gradient norms, step-specific metrics)
                 self._post_optim_log(sub_batch)
@@ -3234,6 +3245,13 @@ def flatten_dict(d):
 class TargetNetUpdaterHook(TrainerHookBase):
     """A hook for target parameters update.
 
+    Args:
+        target_params_updater: Target network updater attached to the loss.
+        trainer: Optional owning trainer. When provided, only completed
+            optimizer updates advance the target. Steppers exposing
+            ``optimizer_step_count`` exclude accumulation and skipped updates;
+            other steppers perform one update per call.
+
     Examples:
         >>> # define a loss module
         >>> loss_module = SACLoss(actor_network, qvalue_network)
@@ -3245,19 +3263,25 @@ class TargetNetUpdaterHook(TrainerHookBase):
         >>> trainer.register_op("post_optim", target_net_updater_hook)
     """
 
-    def __init__(self, target_params_updater: TargetNetUpdater):
+    def __init__(
+        self, target_params_updater: TargetNetUpdater, *, trainer: Trainer | None = None
+    ):
         if not isinstance(target_params_updater, TargetNetUpdater):
             raise ValueError(
                 f"Expected a target network updater, got {type(target_params_updater)=}"
             )
         self.target_params_updater = target_params_updater
+        self.trainer = trainer
 
     def __call__(self, tensordict: TensorCollection | None = None):
-        self.target_params_updater.step()
+        if self.trainer is None or self.trainer._optimizer_step_completed:
+            self.target_params_updater.step()
         return tensordict
 
     def register(self, trainer: Trainer, name: str):
-        trainer.register_op("post_steps", self)
+        trainer.register_op(
+            "post_optim" if self.trainer is not None else "post_steps", self
+        )
 
 
 class ValueEstimatorHook(TrainerHookBase):

@@ -7,6 +7,8 @@ on:
       - "torchrl/envs/__init__.py"
       - "torchrl/trainers/**"
       - "torchrl/objectives/ppo.py"
+      - "examples/microduck/**"
+      - "test/libs/test_mujoco.py"
       - "tutorials/sphinx-tutorials/microduck_games.py"
       - ".github/workflows/test-microduck-zoo.yml"
   workflow_dispatch:
@@ -33,10 +35,15 @@ jobs:
       - name: Install this TorchRL revision and the pinned optional zoo
         run: |
           python -m pip install --no-build-isolation .
-          python -m pip install 'torchrl-zoo @ https://github.com/vmoens/rl-zoo/archive/dd0dcb5bc7be41a4e4e842133dc5d224bce5cfa8.zip'
+          python -m pip install 'torchrl-zoo @ https://github.com/vmoens/rl-zoo/archive/07a15233de6ab4c543872cf647d3cb49001360c9.zip'
       - name: Execute the installed-package tutorial
         working-directory: /tmp
         timeout-minutes: 3
         run: |
           python -c "import importlib.util; import torchrl; import torchrl_zoo; assert importlib.util.find_spec('examples') is None"
           python "$GITHUB_WORKSPACE/tutorials/sphinx-tutorials/microduck_games.py"
+      - name: Smoke the prior PPOTrainer recipes
+        timeout-minutes: 3
+        run: |
+          python -m examples.microduck.ppo_mujoco env.download=true smoke=true algorithm=ppo save_trainer_file=/tmp/prior-ppo.ckpt
+          python -m examples.microduck.ppo_mujoco env.download=true smoke=true algorithm=ppo_ewma save_trainer_file=/tmp/prior-ewma.ckpt

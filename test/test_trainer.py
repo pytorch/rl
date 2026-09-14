@@ -2244,6 +2244,33 @@ class TestOnPolicyTargetNetUpdater:
             not torch.allclose(after.get(key), current.get(key)) for key in before
         )
 
+    def test_proximal_update_skips_accumulation_nonfinite_and_evaluation(self):
+        trainer, loss, updater, batch = self._make_trainer(
+            HardUpdate, value_network_update_interval=100
+        )
+        stepper = MixedPrecisionOptimizationStepper(
+            trainer.optimizer, gradient_accumulation_steps=2
+        )
+        trainer.optimization_stepper = stepper
+        trainer.optim_steps_per_batch = 1
+        before = loss.target_actor_network_params.clone()
+        trainer.optim_steps(batch)
+        assert updater.counter == 0
+        poisoned = batch.clone()
+        poisoned["advantage"].fill_(float("nan"))
+        trainer.optim_steps(poisoned)
+        assert updater.counter == 0
+        for _ in range(4):
+            trainer.optim_steps(batch)
+        assert stepper.optimizer_step_count == 2
+        assert updater.counter == 2
+        with torch.no_grad():
+            loss.actor_network(batch.clone())
+        trainer._post_optim_hook()
+        assert updater.counter == 2
+        for key, value in before.items(True, True):
+            torch.testing.assert_close(loss.target_actor_network_params[key], value)
+
 
 class TestValueEstimatorHook:
     class _RecordingEstimator:

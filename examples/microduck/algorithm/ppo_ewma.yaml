@@ -1,0 +1,8 @@
+# @package _global_
+loss:
+  delay_actor: true
+  max_importance_ratio: 100.0
+target_net_updater:
+  _target_: torchrl.objectives.SoftUpdate
+  _partial_: true
+  eps: 0.99
