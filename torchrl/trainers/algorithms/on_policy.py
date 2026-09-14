@@ -231,7 +231,9 @@ class OnPolicyTrainer(Trainer):
             # stepped after every optimizer step, as the PPO-EWMA proximal
             # policy requires (a post_steps registration would only step it
             # once per collected batch)
-            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
+            self.register_op(
+                "post_optim", TargetNetUpdaterHook(target_net_updater, trainer=self)
+            )
 
         if hasattr(self.loss_module, "set_keys"):
             self.loss_module.set_keys(

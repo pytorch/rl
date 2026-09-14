@@ -1,0 +1,4 @@
+# @package _global_
+loss:
+  delay_actor: false
+target_net_updater: null

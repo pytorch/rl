@@ -7,6 +7,8 @@ on:
       - "torchrl/envs/__init__.py"
       - "torchrl/trainers/**"
       - "torchrl/objectives/ppo.py"
+      - "examples/microduck/**"
+      - "test/libs/test_mujoco.py"
       - "tutorials/sphinx-tutorials/microduck_games.py"
       - ".github/workflows/test-microduck-zoo.yml"
   workflow_dispatch:
@@ -40,3 +42,8 @@ jobs:
         run: |
           python -c "import importlib.util; import torchrl; import torchrl_zoo; assert importlib.util.find_spec('examples') is None"
           python "$GITHUB_WORKSPACE/tutorials/sphinx-tutorials/microduck_games.py"
+      - name: Smoke the prior PPOTrainer recipes
+        timeout-minutes: 3
+        run: |
+          python -m examples.microduck.ppo_mujoco env.download=true smoke=true algorithm=ppo save_trainer_file=/tmp/prior-ppo.ckpt
+          python -m examples.microduck.ppo_mujoco env.download=true smoke=true algorithm=ppo_ewma save_trainer_file=/tmp/prior-ewma.ckpt

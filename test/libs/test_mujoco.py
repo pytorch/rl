@@ -8,12 +8,14 @@ satellite) across the three physics backends."""
 from __future__ import annotations
 
 import argparse
+import functools as ft
 import hashlib
 import importlib.util
 import math
 import os
 import shutil
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -71,6 +73,8 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules import set_recurrent_mode
+from torchrl.objectives import SoftUpdate
 from torchrl.render import load_checkpoint, save_render_checkpoint
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
@@ -1319,6 +1323,106 @@ class TestMujoco:
                 torch.testing.assert_close(actual["action"], expected["action"])
         finally:
             env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_prior_ewma_recurrent_update_and_resume(self, tmp_path):
+        ppo = self._load_example("ppo_mujoco")
+        torch.manual_seed(3)
+        env = ppo.make_env(
+            {
+                "microduck_root": str(self._write_microduck_fixture(tmp_path)),
+                "backend": "mujoco",
+                "parallel": False,
+                "num_envs": 2,
+                "seed": 3,
+                "max_episode_steps": 12,
+                "device": "cpu",
+                "tasks": [
+                    {"preset": "standing_task"},
+                    {"preset": "tracking_task", "speed": 0.03},
+                ],
+            }
+        )
+        actor, critic = ppo.make_models(env, hidden_size=8)
+        trainer = ppo.make_trainer(
+            env,
+            actor,
+            critic,
+            total_transitions=192,
+            transitions_per_update=96,
+            max_episode_steps=12,
+            epochs=1,
+            minibatch_trajectories=2,
+            loss_kwargs={"delay_actor": True},
+            target_net_updater=ft.partial(SoftUpdate, eps=0.9),
+        )
+        try:
+            batch = next(iter(trainer.collector)).clone()
+            trainer.prior_hooks.prepare(batch.clone())
+            data = trainer.prior_hooks.replay_buffer[:].refine_names("time")
+            assert data["shifted_valid"].all()
+            task_ids = data["task_id"].squeeze(-1)
+            assert task_ids.unique().numel() == 2
+            for task_id in task_ids.unique():
+                advantage = data["advantage"][task_ids == task_id]
+                torch.testing.assert_close(
+                    advantage.mean(), torch.tensor(0.0), atol=1e-5, rtol=0
+                )
+                torch.testing.assert_close(
+                    advantage.std(), torch.tensor(1.0), atol=1e-5, rtol=0
+                )
+            sample = trainer.prior_hooks.sample(batch)
+            # Every sampled episode starts from its own recurrent reset, and
+            # the last value bootstraps a truncation rather than a termination.
+            starts = sample["is_init"].squeeze(-1).nonzero().squeeze(-1)
+            assert starts.tolist() == [0, 12]
+            assert sample["next", "truncated"][[11, 23]].all()
+            with torch.no_grad(), set_recurrent_mode(True):
+                expected = trainer.loss_module(sample.clone())
+            # The recipe itself enters sequence mode; callers must not need
+            # an outer context or silently recompute GRUs as independent steps.
+            actual = trainer.loss_module(sample.clone())
+            for key in ("loss_objective", "loss_critic", "kl_approx"):
+                torch.testing.assert_close(actual[key], expected[key])
+            proximal_before = trainer.loss_module.target_actor_network_params.clone()
+            trainer.collected_frames = batch.numel()
+            trainer.optim_steps(batch)
+            trainer._post_steps_hook()
+            proximal = trainer.loss_module.target_actor_network_params
+            assert any(
+                not torch.equal(old, new)
+                for old, new in zip(
+                    proximal_before.values(True, True), proximal.values(True, True)
+                )
+            )
+            saved_proximal = proximal.clone()
+            with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
+                actor(env.reset())
+            for old, new in zip(
+                saved_proximal.values(True, True), proximal.values(True, True)
+            ):
+                torch.testing.assert_close(old, new, rtol=0, atol=0)
+            checkpoint = tmp_path / "prior.trainer.ckpt"
+            trainer.checkpoint.save(checkpoint)
+            results = []
+            for _ in range(2):
+                trainer.load_from_file(checkpoint)
+                trainer.prior_hooks.replay_buffer.extend(batch.clone())
+                trainer.prior_hooks.prepare(batch.clone())
+                trainer.collected_frames += batch.numel()
+                trainer.optim_steps(batch)
+                trainer._post_steps_hook()
+                results.append(deepcopy(trainer.state_dict()))
+            for key, value in results[0]["loss_module"].items():
+                torch.testing.assert_close(
+                    value, results[1]["loss_module"][key], rtol=0, atol=0
+                )
+            assert (
+                results[0]["prior_hooks"]["scheduler"]
+                == results[1]["prior_hooks"]["scheduler"]
+            )
+        finally:
+            trainer.collector.shutdown(close_env=True)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_example_recurrent_ppo_trains_on_whole_episodes(self, tmp_path):

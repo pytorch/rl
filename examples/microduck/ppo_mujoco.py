@@ -13,6 +13,7 @@ closed-form gait from ``heuristic_gait.py``, so the first policy already walks
 forward, but that prior only knows forward walking and never learns to
 sidestep or hop.
 
+Optimization is owned by :class:`~torchrl.trainers.algorithms.PPOTrainer`.
 Data flows through the standard TorchRL pieces: a
 :class:`~torchrl.collectors.Collector` writes every finished episode as a
 whole, unpadded sequence into a
@@ -59,12 +60,13 @@ from typing import Any
 
 import hydra
 import torch
+from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictSequential
-from torch import nn
 
 from torchrl import timeit, torchrl_logger
+from torchrl.checkpoint import Checkpoint, GlobalRNGState
 from torchrl.collectors import Collector, Evaluator
 from torchrl.data import LazyTensorStorage, SliceSampler, TensorDictReplayBuffer
 from torchrl.envs import (
@@ -87,6 +89,7 @@ from torchrl.objectives.value import GAE
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 from torchrl.render import load_checkpoint, save_render_checkpoint
+from torchrl.trainers.algorithms import PPOTrainer
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 if str(PACKAGE_DIR.parent.parent) not in sys.path:
@@ -646,7 +649,222 @@ def _collection_metrics(data: TensorDictBase) -> tuple[dict[str, float], int]:
     return metrics, int(unique_ids.numel())
 
 
-def train_ppo(
+class _PriorCollector(Collector):
+    """Yield the requested transition budget using complete episodes only."""
+
+    transitions_per_update: int
+
+    def __iter__(self):
+        iterator = super().__iter__()
+        try:
+            while True:
+                timeit.reset()
+                with timeit("collect"):
+                    while len(self.replay_buffer) < self.transitions_per_update:
+                        next(iterator)
+                yield self.replay_buffer[:].refine_names("time")
+        finally:
+            iterator.close()
+
+    def shutdown(self, timeout=None, close_env=False, raise_on_error=True):
+        # The recipe/caller owns the environment, including legacy train_ppo
+        # callers that evaluate or start another run with it afterwards.
+        return super().shutdown(timeout, close_env, raise_on_error)
+
+
+class _PriorTrainingHooks:
+    """Whole-episode preparation, evaluation and checkpoint state for the prior."""
+
+    def __init__(
+        self,
+        trainer,
+        actor,
+        critic,
+        replay_buffer,
+        advantage,
+        *,
+        minibatch_trajectories,
+        scheduler,
+        evaluators,
+        evaluation_interval,
+        video_recorder,
+        video_interval,
+        best_checkpoint_path,
+        latest_checkpoint_path,
+        policy_kwargs,
+        config,
+        logger,
+    ):
+        self.trainer = trainer
+        self.actor, self.critic = actor, critic
+        self.replay_buffer, self.advantage = replay_buffer, advantage
+        self.minibatch_trajectories, self.scheduler = minibatch_trajectories, scheduler
+        self.evaluators, self.evaluation_interval = evaluators, evaluation_interval
+        self.video_recorder, self.video_interval = video_recorder, video_interval
+        self.best_checkpoint_path, self.latest_checkpoint_path = (
+            best_checkpoint_path,
+            latest_checkpoint_path,
+        )
+        self.policy_kwargs, self.config, self.logger = policy_kwargs, config, logger
+        self.iteration = self.evaluations = 0
+        self.best_score = self.best_state = None
+        self.history, self.updates = [], []
+        self.metrics = {}
+        self.video_env = None
+        self.env = None
+
+    def setup(self):
+        if self.evaluation_interval is not None and self.evaluations == 0:
+            self.log(self.evaluate())
+
+    @torch.no_grad()
+    def prepare(self, data):
+        self.iteration += 1
+        self.metrics, trajectories = _collection_metrics(data)
+        self.metrics["collection/transitions"] = float(data.numel())
+        self.metrics["collection/trajectories"] = float(trajectories)
+        self.trainer.optim_steps_per_batch = max(
+            1, math.ceil(trajectories / self.minibatch_trajectories)
+        )
+        self.updates = []
+        self.trained_transitions = 0
+        with timeit("advantage"), set_recurrent_mode(True):
+            processed = data.to(next(self.actor.parameters()).device)
+            # Every complete episode may need a terminal bootstrap observation.
+            # A fixed one-row shifted budget would discard the end of this
+            # concatenated batch whenever multiple episodes truncate.
+            self.advantage.shifted_budget = trajectories
+            self.advantage(processed)
+            self.replay_buffer[: data.numel()] = processed.cpu()
+        target = processed["value_target"]
+        self.metrics["value/explained_variance"] = float(
+            1
+            - (target - processed["state_value"]).var()
+            / target.var().clamp_min(torch.finfo(target.dtype).eps)
+        )
+        return data
+
+    def sample(self, batch):
+        sample = (
+            self.replay_buffer.sample()
+            .to(next(self.actor.parameters()).device)
+            .refine_names("time")
+        )
+        self.trained_transitions += sample.numel()
+        return sample
+
+    def process_loss(self, batch, losses):
+        self.updates.append(
+            {key: float(value.detach().mean()) for key, value in losses.items()}
+        )
+        return losses
+
+    def finish_batch(self):
+        metrics = self.metrics
+        for key in self.updates[0]:
+            metrics[f"ppo/{key}"] = sum(row[key] for row in self.updates) / len(
+                self.updates
+            )
+        if self.scheduler is not None:
+            self.scheduler.step(metrics["ppo/kl_approx"])
+        metrics["ppo/learning_rate"] = self.trainer.optimizer.param_groups[0]["lr"]
+        self.replay_buffer.empty()
+        # OnPolicyTrainer synchronized collection weights before this hook.
+        self.trainer.collector.reset()
+        metrics["progress/transitions"] = float(self.trainer.collected_frames)
+        timings = timeit.todict(prefix="time")
+        metrics.update(timings)
+        metrics["throughput/collection_transitions_per_second"] = metrics[
+            "collection/transitions"
+        ] / max(timings["time/collect"], 1e-9)
+        if self.evaluation_interval is not None and (
+            self.iteration % self.evaluation_interval == 0
+            or self.trainer.collected_frames >= self.trainer.total_frames
+        ):
+            metrics.update(self.evaluate())
+        self.history.append(dict(metrics))
+        self.log(metrics)
+        torchrl_logger.info(
+            "MicroDuck PPO transitions=%d/%d reward=%+.4f lr=%.2e",
+            self.trainer.collected_frames,
+            self.trainer.total_frames,
+            metrics["collection/reward_mean"],
+            metrics["ppo/learning_rate"],
+        )
+
+    def evaluate(self):
+        step = self.trainer.collected_frames
+        results = [
+            evaluator.evaluate(weights=self.actor, step=step)
+            for evaluator in self.evaluators
+        ]
+        if (
+            self.video_recorder is not None
+            and self.evaluations % self.video_interval == 0
+        ):
+            self.video_recorder(step)
+        self.evaluations += 1
+        metrics, score = evaluation_metrics(results), evaluation_score(results)
+        is_best = self.best_score is None or score > self.best_score
+        if is_best:
+            self.best_score = score
+            self.best_state = (
+                deepcopy(self.actor.state_dict()),
+                deepcopy(self.critic.state_dict()),
+            )
+        paths = [self.latest_checkpoint_path]
+        if is_best:
+            paths.append(self.best_checkpoint_path)
+        for path in paths:
+            if path is not None:
+                save_checkpoint(
+                    path,
+                    self.actor,
+                    self.critic,
+                    transitions=step,
+                    policy_kwargs=self.policy_kwargs,
+                    metrics={**metrics, "evaluation_score": list(score)},
+                    config=self.config,
+                )
+        metrics["evaluation/is_best"] = float(is_best)
+        return metrics
+
+    def log(self, metrics):
+        if self.logger is not None:
+            for key, value in metrics.items():
+                self.logger.log_scalar(key, value, step=self.trainer.collected_frames)
+
+    def close(self):
+        for evaluator in self.evaluators or ():
+            evaluator.shutdown()
+        self.evaluators = []
+        if self.video_env is not None and not self.video_env.is_closed:
+            self.video_env.close()
+        if self.env is not None and not self.env.is_closed:
+            self.env.close()
+        if self.logger is not None and hasattr(self.logger.experiment, "finish"):
+            self.logger.experiment.finish()
+            self.logger = None
+
+    def state_dict(self):
+        return {
+            "iteration": self.iteration,
+            "evaluations": self.evaluations,
+            "best_score": self.best_score,
+            "best_state": self.best_state,
+            "scheduler": self.scheduler.state_dict()
+            if self.scheduler is not None
+            else None,
+        }
+
+    def load_state_dict(self, state):
+        self.iteration, self.evaluations = state["iteration"], state["evaluations"]
+        self.best_score, self.best_state = state["best_score"], state["best_state"]
+        if self.scheduler is not None:
+            self.scheduler.load_state_dict(state["scheduler"])
+
+
+def make_trainer(
     env: TransformedEnv,
     actor: ProbabilisticActor,
     critic: TensorDictSequential,
@@ -673,38 +891,18 @@ def train_ppo(
     policy_kwargs: Mapping[str, Any] | None = None,
     config: Mapping[str, Any] | None = None,
     logger: Logger | None = None,
-) -> list[dict[str, float]]:
-    """Train the recurrent policy with PPO on whole episodes.
+    loss_kwargs: Mapping[str, Any] | None = None,
+    target_net_updater: Callable | None = None,
+    save_trainer_file: str | Path | None = None,
+) -> PPOTrainer:
+    """Build the prior PPOTrainer around complete episodes and recurrent minibatches.
 
-    Each iteration collects at least ``transitions_per_update`` transitions of
-    complete episodes into the replay buffer, computes GAE once over the buffer
-    in recurrent mode, runs ``epochs`` passes of whole-episode minibatches, then
-    empties the buffer and drops the collector's in-flight episodes so the next
-    collection only contains data from the updated policy.
-
-    With ``per_task_advantage`` the GAE standardizes advantages within each
-    task of the library (its ``group_key`` is the ``task_id``) rather than the
-    loss over the whole minibatch, so the tasks whose rewards vary least
-    (standing, a hop that has not happened yet) keep a learning signal next to
-    the walking tasks.
-
-    Every ``video_interval`` evaluations, ``video_recorder`` is called with
-    the transition count, for a video logged alongside the metrics (see
-    :func:`record_task_grid`); it is off by default because video storage on
-    the logger side is not free.
-
-    Every ``evaluation_interval`` iterations the ``evaluators`` (one per
-    task of the library, see :func:`make_evaluator`) run the actor's current
-    weights. ``best_checkpoint_path`` receives the best-scoring parameters and
-    ``latest_checkpoint_path`` the current ones at every evaluation, so
-    training progress can be rendered while the best checkpoint protects
-    against regressions. Checkpoints record ``policy_kwargs`` and the Hydra
-    ``config`` so ``rlrender`` rebuilds the actor and the env through
-    :func:`make_render_policy` and :func:`make_env`.
-
-    Returns:
-        One metrics dictionary per iteration. When evaluation is enabled the
-        actor and critic end up holding the best-scoring parameters.
+    All optimization is owned by PPOTrainer. Collection waits for at least the
+    requested transition count in complete episodes; GAE normalizes per task
+    before whole-episode sampling. Each update discards in-flight episodes after
+    synchronizing the collector. Best/latest exports are separate from resumable
+    optimizer, proximal actor, scheduler, RNG and evaluation-hook state.
+    The caller owns the supplied environment and evaluation resources.
     """
     if (
         min(total_transitions, transitions_per_update, epochs, minibatch_trajectories)
@@ -745,7 +943,7 @@ def train_ppo(
         ),
         batch_size=minibatch_trajectories * max_episode_steps,
     )
-    collector = Collector(
+    collector = _PriorCollector(
         env,
         actor,
         frames_per_batch=num_envs * min(50, max_episode_steps),
@@ -755,6 +953,7 @@ def train_ppo(
         trajs_per_write=1,
         storing_device="cpu",
     )
+    collector.transitions_per_update = transitions_per_update
     # Advantages standardized within each task of the library, so tasks whose
     # rewards vary least keep a learning signal next to the walking tasks.
     advantage = GAE(
@@ -776,181 +975,86 @@ def train_ppo(
         critic_coeff=critic_coeff,
         loss_critic_type="smooth_l1",
         normalize_advantage=not per_task_advantage,
+        **dict(loss_kwargs or {}),
     )
+    # Recompute every recurrent distribution from complete sequences, including
+    # the distinct proximal actor. Collector inference remains sequential.
+    loss_module.forward = set_recurrent_mode(True)(loss_module.forward)
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=learning_rate)
     scheduler = (
         KLAdaptiveLR(optimizer, target_kl=target_kl) if target_kl is not None else None
     )
 
-    history: list[dict[str, float]] = []
-    collected = 0
-    iteration = 0
-    best_score: tuple[float, ...] | None = None
-    best_state: tuple[dict, dict] | None = None
+    updater = (
+        target_net_updater(loss_module) if target_net_updater is not None else None
+    )
+    trainer = PPOTrainer(
+        collector=collector,
+        total_frames=total_transitions,
+        frame_skip=1,
+        optim_steps_per_batch=1,
+        num_epochs=epochs,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_net_updater=updater,
+        clip_norm=max_grad_norm,
+        add_gae=False,
+        enable_logging=False,
+        progress_bar=False,
+        auto_log_optim_steps=False,
+        checkpoint=Checkpoint(rng=GlobalRNGState()),
+        save_trainer_file=save_trainer_file,
+        save_trainer_interval=transitions_per_update,
+    )
+    hooks = _PriorTrainingHooks(
+        trainer,
+        actor,
+        critic,
+        replay_buffer,
+        advantage,
+        minibatch_trajectories=minibatch_trajectories,
+        scheduler=scheduler,
+        evaluators=evaluators,
+        evaluation_interval=evaluation_interval,
+        video_recorder=video_recorder,
+        video_interval=video_interval,
+        best_checkpoint_path=best_checkpoint_path,
+        latest_checkpoint_path=latest_checkpoint_path,
+        policy_kwargs=policy_kwargs,
+        config=config,
+        logger=logger,
+    )
+    trainer.prior_hooks = hooks
+    trainer.register_module("prior_hooks", hooks)
+    trainer.register_op("setup", hooks.setup)
+    trainer.register_op("batch_process", hooks.prepare)
+    trainer.register_op("process_optim_batch", hooks.sample)
+    trainer.register_op("process_loss", hooks.process_loss)
+    trainer.register_op("post_steps", hooks.finish_batch)
+    return trainer
 
-    def checkpoint(path: str | Path | None, step: int, metrics, score) -> None:
-        if path is None:
-            return
-        save_checkpoint(
-            path,
-            actor,
-            critic,
-            transitions=step,
-            policy_kwargs=policy_kwargs,
-            metrics={**metrics, "evaluation_score": list(score)},
-            config=config,
-        )
 
-    evaluations = 0
+def train_ppo(
+    env: TransformedEnv,
+    actor: ProbabilisticActor,
+    critic: TensorDictSequential,
+    **kwargs: Any,
+) -> list[dict[str, float]]:
+    """Run the prior PPOTrainer, retaining the legacy best-actor return behavior.
 
-    def evaluate(step: int) -> dict[str, float]:
-        nonlocal best_score, best_state, evaluations
-        results = [
-            evaluator.evaluate(weights=actor, step=step) for evaluator in evaluators
-        ]
-        if video_recorder is not None and evaluations % video_interval == 0:
-            with timeit("video"):
-                video_recorder(step)
-        evaluations += 1
-        metrics = evaluation_metrics(results)
-        score = evaluation_score(results)
-        checkpoint(latest_checkpoint_path, step, metrics, score)
-        if best_score is None or score > best_score:
-            best_score = score
-            best_state = (deepcopy(actor.state_dict()), deepcopy(critic.state_dict()))
-            checkpoint(best_checkpoint_path, step, metrics, score)
-        metrics["evaluation/is_best"] = float(score == best_score)
-        torchrl_logger.info(
-            "MicroDuck evaluation transitions=%d survival=%.2f length=%.1f "
-            "forward_speed=%+.4f tracking_error=%.4f",
-            step,
-            metrics["evaluation/survival_rate"],
-            metrics["evaluation/episode_length"],
-            metrics["evaluation/forward_speed"],
-            metrics["evaluation/tracking_error"],
-        )
-        return metrics
-
-    def log(metrics: Mapping[str, float], step: int) -> None:
-        if logger is None:
-            return
-        for key, value in metrics.items():
-            logger.log_scalar(key, value, step=step)
-
-    if evaluation_interval is not None:
-        log(evaluate(0), step=0)
-
-    collector_iterator = iter(collector)
+    The caller owns the environment and evaluation resources. New resumable
+    recipes use :func:`make_trainer` so the live actor stays paired with its
+    optimizer; best/latest inference exports remain separate.
+    """
+    trainer = make_trainer(env, actor, critic, **kwargs)
     try:
-        while collected < total_transitions:
-            iteration += 1
-            timeit.reset()
-            with timeit("collect"):
-                while len(replay_buffer) < transitions_per_update:
-                    next(collector_iterator)
-            data = replay_buffer[:]
-            num_transitions = data.numel()
-            collected += num_transitions
-            metrics, num_trajectories = _collection_metrics(data)
-
-            with timeit("advantage"), torch.no_grad(), set_recurrent_mode(True):
-                processed = data.to(device)
-                advantage(processed)
-                replay_buffer[:num_transitions] = processed.to("cpu")
-            value_target = processed["value_target"]
-            metrics["value/explained_variance"] = float(
-                1.0
-                - (value_target - processed["state_value"]).var()
-                / value_target.var().clamp_min(torch.finfo(value_target.dtype).eps)
-            )
-
-            updates_per_epoch = max(
-                1, math.ceil(num_trajectories / minibatch_trajectories)
-            )
-            updates = []
-            trained_transitions = 0
-            with timeit("train"):
-                for _ in range(epochs):
-                    for _ in range(updates_per_epoch):
-                        sample = replay_buffer.sample().to(device)
-                        trained_transitions += sample.numel()
-                        with set_recurrent_mode(True):
-                            losses = loss_module(sample)
-                        loss = (
-                            losses["loss_objective"]
-                            + losses["loss_critic"]
-                            + losses["loss_entropy"]
-                        )
-                        optimizer.zero_grad(set_to_none=True)
-                        loss.backward()
-                        grad_norm = nn.utils.clip_grad_norm_(
-                            loss_module.parameters(), max_grad_norm
-                        )
-                        optimizer.step()
-                        updates.append(
-                            losses.select(
-                                "loss_objective",
-                                "loss_critic",
-                                "loss_entropy",
-                                "entropy",
-                                "kl_approx",
-                                "clip_fraction",
-                                "ESS",
-                            )
-                            .detach()
-                            .set("grad_norm", grad_norm)
-                        )
-                # Average the per-update loss tensordicts over the epoch passes.
-                for key, value in torch.stack(updates).mean(dim=0).items():
-                    metrics[f"ppo/{key}"] = float(value)
-                if scheduler is not None:
-                    scheduler.step(metrics["ppo/kl_approx"])
-                metrics["ppo/learning_rate"] = optimizer.param_groups[0]["lr"]
-            replay_buffer.empty()
-            collector.update_policy_weights_()
-            collector.reset()
-
-            timings = timeit.todict(prefix="time")
-            metrics.update(timings)
-            metrics.update(
-                {
-                    "collection/transitions": float(num_transitions),
-                    "collection/trajectories": float(num_trajectories),
-                    "progress/transitions": float(collected),
-                    "throughput/collection_transitions_per_second": num_transitions
-                    / timings["time/collect"],
-                    "throughput/training_transitions_per_second": trained_transitions
-                    / timings["time/train"],
-                }
-            )
-            if evaluation_interval is not None and (
-                iteration % evaluation_interval == 0 or collected >= total_transitions
-            ):
-                with timeit("evaluate"):
-                    metrics.update(evaluate(collected))
-                metrics.update(timeit.todict(prefix="time"))
-            history.append(metrics)
-            log(metrics, step=collected)
-            torchrl_logger.info(
-                "MicroDuck PPO transitions=%d/%d trajectories=%d reward=%+.4f "
-                "return=%+.2f survival=%.2f collect=%.0f/s train=%.0f/s lr=%.2e",
-                collected,
-                total_transitions,
-                num_trajectories,
-                metrics["collection/reward_mean"],
-                metrics["episode/return_mean"],
-                metrics["episode/survival_rate"],
-                metrics["throughput/collection_transitions_per_second"],
-                metrics["throughput/training_transitions_per_second"],
-                metrics["ppo/learning_rate"],
-            )
+        trainer.train()
     finally:
-        replay_buffer.empty()
-        collector.shutdown(close_env=False)
-    if best_state is not None:
-        actor.load_state_dict(best_state[0])
-        critic.load_state_dict(best_state[1])
-    return history
+        trainer.collector.shutdown(close_env=False)
+    if trainer.prior_hooks.best_state is not None:
+        actor.load_state_dict(trainer.prior_hooks.best_state[0])
+        critic.load_state_dict(trainer.prior_hooks.best_state[1])
+    return trainer.prior_hooks.history
 
 
 # ----------------------------------------------------------------------
@@ -958,8 +1062,9 @@ def train_ppo(
 # ----------------------------------------------------------------------
 
 
-@hydra.main(config_path="", config_name="config", version_base="1.3")
-def main(cfg: DictConfig) -> None:
+def make_training(recipe: DictConfig) -> PPOTrainer:
+    """Build the configured skill/prior trainer and its owned evaluation resources."""
+    cfg = recipe
     if cfg.smoke:
         # One native simulator on CPU: a pipeline check, not a speed test.
         cfg.env.backend = "mujoco"
@@ -1068,7 +1173,7 @@ def main(cfg: DictConfig) -> None:
 
             video_callback = _video_callback
 
-        train_ppo(
+        trainer = make_trainer(
             env,
             actor,
             critic,
@@ -1083,8 +1188,19 @@ def main(cfg: DictConfig) -> None:
             policy_kwargs=policy_kwargs,
             config=config,
             logger=logger,
+            loss_kwargs=config.get("loss"),
+            target_net_updater=instantiate(cfg.target_net_updater)
+            if cfg.get("target_net_updater")
+            else None,
+            save_trainer_file=cfg.save_trainer_file,
         )
-    finally:
+        trainer.prior_hooks.env = env
+        trainer.prior_hooks.video_env = video_env
+        trainer.register_op("shutdown", trainer.prior_hooks.close)
+        if cfg.resume:
+            trainer.load_from_file(cfg.resume)
+        return trainer
+    except BaseException:
         if logger is not None and hasattr(logger.experiment, "finish"):
             logger.experiment.finish()
         for evaluator in evaluators:
@@ -1093,6 +1209,18 @@ def main(cfg: DictConfig) -> None:
             video_env.close()
         if not env.is_closed:
             env.close()
+        raise
+
+
+@hydra.main(config_path="", config_name="config", version_base="1.3")
+def main(cfg: DictConfig) -> None:
+    """Instantiate the prior recipe and run the shared TorchRL trainer."""
+    trainer = instantiate(cfg.trainer, recipe=cfg, _recursive_=False)
+    try:
+        trainer.train()
+    finally:
+        trainer.prior_hooks.close()
+        trainer.collector.shutdown(close_env=False)
 
 
 if __name__ == "__main__":
