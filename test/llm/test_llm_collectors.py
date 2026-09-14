@@ -522,6 +522,8 @@ class _DummyAssistantPolicy(TensorDictModuleBase):
     out_keys = [("history", "full")]
 
     def forward(self, tensordict):
+        # Match the lazy batches returned by LLM wrappers, including env indices.
+        tensordict = tensordict.to_lazystack(0)
         prompt = tensordict.get(("history", "prompt"))
         response = History(content="ok", role="assistant")
         env_batch = prompt.batch_size[:-1]

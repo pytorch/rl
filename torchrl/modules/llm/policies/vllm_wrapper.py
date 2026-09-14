@@ -2347,7 +2347,7 @@ def _nan_like_prompt_tokens(
     prompt_tokens: torch.Tensor | list[torch.Tensor],
     response_lp: torch.Tensor | list[torch.Tensor],
 ) -> torch.Tensor | list[torch.Tensor]:
-    """NaNs matching prompt token shapes for ``LogProbs.full`` alignment.
+    """Create NaN pads matching prompt token shapes for ``LogProbs.full`` alignment.
 
     These are not engine prompt scores. ``0.0`` is a valid log-prob of 1
     and must not be used as a pad. Callers must leave

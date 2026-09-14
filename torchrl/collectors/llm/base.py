@@ -357,7 +357,8 @@ class LLMCollector(Collector):
         if remaining:
             prefetch = next_output
         elif not self._trajectory_queue and self._async_outstanding == 0:
-            prefetch = next_output[0]
+            # Keep the pool dimension so unbind(0) preserves the child batch.
+            prefetch = next_output[:1]
         else:
             return
         self._async_send(prefetch)
