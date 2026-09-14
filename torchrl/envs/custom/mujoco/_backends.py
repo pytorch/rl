@@ -22,6 +22,7 @@ import abc
 import functools as ft
 import importlib.util
 import urllib.request
+from collections import OrderedDict
 from collections.abc import Sequence
 from copy import copy
 from pathlib import Path
@@ -672,8 +673,8 @@ class _MujocoBackend(_PhysicsBackend):
         backend._d = self._mujoco.MjData(backend._m)
         _copy_mujoco_data(backend._d, self._d)
         self._mujoco.mj_forward(backend._m, backend._d)
-        if hasattr(backend, "_renderer"):
-            delattr(backend, "_renderer")
+        backend.__dict__.pop("_renderer", None)
+        backend.__dict__.pop("_renderers", None)
         return backend
 
     def set_batch(self, index: Any, source: _PhysicsBackend) -> None:
@@ -745,16 +746,21 @@ class _MujocoBackend(_PhysicsBackend):
         import mujoco
         import numpy as np
 
-        if (
-            not hasattr(self, "_renderer")
-            or self._renderer.height != height
-            or self._renderer.width != width
-        ):
-            if hasattr(self, "_renderer"):
-                self._renderer.close()
+        if not hasattr(self, "_renderers"):
+            self._renderers = OrderedDict()
+        key = (width, height)
+        renderer = self._renderers.pop(key, None)
+        if renderer is None:
+            # A policy camera and a spectator video commonly alternate sizes.
+            # Keep their contexts warm, but bound arbitrary resize requests.
+            if len(self._renderers) == 2:
+                _, expired = self._renderers.popitem(last=False)
+                expired.close()
             self._m.vis.global_.offwidth = max(self._m.vis.global_.offwidth, width)
             self._m.vis.global_.offheight = max(self._m.vis.global_.offheight, height)
-            self._renderer = mujoco.Renderer(self._m, height=height, width=width)
+            renderer = mujoco.Renderer(self._m, height=height, width=width)
+        self._renderers[key] = renderer
+        self._renderer = renderer
         self._renderer.update_scene(self._d, camera=camera_id)
         rgb = self._renderer.render()  # (H, W, 3) uint8 numpy
         if background is not None:

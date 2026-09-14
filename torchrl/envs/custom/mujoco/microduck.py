@@ -61,7 +61,10 @@ from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import Binary, Bounded, Categorical, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
-from torchrl.envs.custom.mujoco._sensors import _MicroDuckSensors
+from torchrl.envs.custom.mujoco._sensors import (
+    _align_microduck_cameras,
+    _MicroDuckSensors,
+)
 from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
 from torchrl.envs.transforms.transforms import Transform
 
@@ -1322,6 +1325,7 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         import mujoco
 
         model = self._backend.mj_model
+        _align_microduck_cameras(model)
         if (model.nq, model.nv, model.nu) != (21, 20, self.NUM_JOINTS):
             raise ValueError(
                 "Expected the 14-actuator MicroDuck walking model with "

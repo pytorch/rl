@@ -214,7 +214,9 @@ perturbations, not measured sensor calibration.
 Vision adds `camera_pixels` (uint8 RGB, HWC), `camera_age` (seconds) and
 `camera_valid`. The default is a 64-square centred crop of a 16:9 image with
 62-degree horizontal field of view, sampled at 30 Hz in simulator time from
-the MJCF head-camera mount. Configure these through `env.sensor_kwargs`;
+the MJCF lens position and the matching camera site’s outward/up axes.
+The pinned asset’s backward-facing camera quaternion is corrected from that
+site without moving the lens. Configure these through `env.sensor_kwargs`;
 `camera_delay_s` and `camera_dropout` hold the last received frame and expose
 its age. Before a first valid frame, pixels are black and validity is false.
 Each episode reset clears its camera history. Cameras currently require native
@@ -233,7 +235,7 @@ The stock profile is based on the upstream
 [camera geometry](https://github.com/pollen-robotics/microduck/blob/4d40c85fef63a3b9465099c1e3107eef7cdf2911/mediad/src/camera.rs)
 and [IMU implementation](https://github.com/pollen-robotics/microduck/blob/4d40c85fef63a3b9465099c1e3107eef7cdf2911/duck-control/src/imu.rs):
 IMX219 at 1920x1080/30 Hz and the LSM6DSV16X board. This simulator uses centred
-ideal intrinsics and the asset's camera mount; real lens distortion, principal
+ideal intrinsics and the asset's camera site; real lens distortion, principal
 point, mounting calibration and processing latency need robot-specific data.
 The upstream deployed 15-servo/61-value contract also differs from this legacy
 14-actuator model. These recipes establish a simulation sensor interface;

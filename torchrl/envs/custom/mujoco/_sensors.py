@@ -5,15 +5,45 @@
 
 from __future__ import annotations
 
+import importlib
 import math
 from collections import deque
 from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
+import numpy as np
 import torch
 from tensordict import TensorDictBase
 from torchrl.data.tensor_specs import Binary, Composite, Unbounded
+
+_has_mujoco = importlib.util.find_spec("mujoco") is not None
+
+
+def _align_microduck_cameras(model: Any):
+    """Convert head-camera sites (+X forward, +Z up) to MuJoCo optical axes.
+
+    The pinned asset's camera quaternion looks backward into its own head.
+    Retain its lens position and rigid mounting body, taking orientation from
+    the matching site. Custom cameras without that site remain unchanged.
+    """
+    mujoco = importlib.import_module("mujoco")
+    for index in range(model.ncam):
+        camera = model.camera(index)
+        if camera.name.rsplit("/", 1)[-1] != "head_camera":
+            continue
+        try:
+            site = model.site(camera.name)
+        except KeyError:
+            continue
+        if model.site_bodyid[site.id] != model.cam_bodyid[index]:
+            raise ValueError("MicroDuck camera and matching site must share a body.")
+        rotation = np.empty(9)
+        mujoco.mju_quat2Mat(rotation, site.quat)
+        rotation = rotation.reshape(3, 3)
+        # Camera right=-site Y, up=site Z, back=-site X.
+        optical = np.column_stack((-rotation[:, 1], rotation[:, 2], -rotation[:, 0]))
+        mujoco.mju_mat2Quat(camera.quat, optical.ravel())
 
 
 class _MicroDuckSensors:
@@ -29,7 +59,8 @@ class _MicroDuckSensors:
 
     The stock IMX219 profile uses approximately 62 degrees horizontal FOV at
     16:9. Square policy images are the centred crop, retaining the corresponding
-    vertical FOV. MJCF head-camera mounting is preserved. Camera samples use
+    vertical FOV. The lens position is preserved and the matching head-camera
+    site's axes define its outward view. Camera samples use
     simulator time at 30 Hz, with explicit age/validity and optional delay or
     dropout; a missing first frame is black/invalid. Native cameras are ordered
     exactly as the supplied names. Spectator rendering is independent.
@@ -99,6 +130,7 @@ class _MicroDuckSensors:
         self.camera_ids = []
         if vision:
             model = env._backend.mj_model
+            _align_microduck_cameras(model)
             vfov = math.degrees(
                 2 * math.atan(math.tan(math.radians(camera_hfov) / 2) * 9 / 16)
             )

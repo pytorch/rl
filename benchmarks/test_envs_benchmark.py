@@ -90,6 +90,22 @@ def test_microduck_sensor_collection(benchmark, observations):
         env.close()
 
 
+@pytest.mark.skipif(importlib.util.find_spec("mujoco") is None, reason="needs MuJoCo")
+def test_microduck_camera_and_spectator_rendering(benchmark):
+    env = MicroDuckEnv(download=True, backend="mujoco", seed=0)
+    try:
+        env.reset()
+
+        def render_views():
+            env.render(width=64, height=64)
+            env.render(width=160, height=90)
+
+        render_views()
+        benchmark.pedantic(render_views, rounds=5, iterations=5)
+    finally:
+        env.close()
+
+
 def make_simple_env():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = DMControlEnv("cheetah", "run", device=device)

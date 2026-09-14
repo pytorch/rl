@@ -171,7 +171,10 @@ class TestMujoco:
             '  <worldbody><geom type="plane" size="1 1 0.1" contype="1" conaffinity="1"/>',
             '    <body name="torso" pos="0 0 0.12"><freejoint name="root"/>',
             '      <geom type="sphere" size="0.02" mass="0.1"/>',
-            '      <camera name="head_camera" pos="0.03 0 0.02" xyaxes="0 -1 0 0 0 1"/>',
+            '      <body name="camera_mount" pos="0.03 0 0.02" quat="0.707107 0 -0.707107 0">',
+            '        <site name="head_camera" quat="0.707107 0 0.707107 0"/>',
+            '        <camera name="head_camera" quat="0 0 -1 0" fovy="90"/>',
+            "      </body>",
             '      <site name="head_imu" pos="0 0 0.02" quat="0.707107 0 -0.707107 0"/>',
             '      <site name="mouth_tip" pos="0.0266783 0 -0.00332564"/>',
         ]
@@ -1378,6 +1381,17 @@ class TestMujoco:
             for _ in range(3):
                 td = env.rand_step(td)["next"]
             clone = env[0]
+            model, data = env._backend.mj_model, env._backend._d
+            camera = model.camera("head_camera").id
+            site = model.site("head_camera").id
+            rotation = torch.as_tensor(data.cam_xmat[camera].copy()).reshape(3, 3)
+            site_rotation = torch.as_tensor(data.site_xmat[site].copy()).reshape(3, 3)
+            torch.testing.assert_close(-rotation[:, 2], site_rotation[:, 0])
+            torch.testing.assert_close(rotation[:, 1], site_rotation[:, 2])
+            torch.testing.assert_close(
+                torch.as_tensor(data.cam_xpos[camera].copy()),
+                torch.as_tensor(data.site_xpos[site].copy()),
+            )
             saved = env._sensors._pixels.clone()
             assert clone._sensors.env is clone
             clone.reset()
@@ -1396,8 +1410,9 @@ class TestMujoco:
     @pytest.mark.parametrize(
         "sensor_mode", ["state", "proprioception", "proprioception_vision"]
     )
+    @pytest.mark.parametrize("critic_observation", ["state", "actor"])
     def test_microduck_prior_ewma_recurrent_update_and_resume(
-        self, tmp_path, sensor_mode
+        self, tmp_path, sensor_mode, critic_observation
     ):
         ppo = self._load_example("ppo_mujoco")
         torch.manual_seed(3)
@@ -1417,7 +1432,12 @@ class TestMujoco:
                 ],
             }
         )
-        actor, critic = ppo.make_models(env, hidden_size=8, sensor_mode=sensor_mode)
+        actor, critic = ppo.make_models(
+            env,
+            hidden_size=8,
+            sensor_mode=sensor_mode,
+            critic_observation=critic_observation,
+        )
         trainer = ppo.make_trainer(
             env,
             actor,
@@ -2713,6 +2733,38 @@ class TestMujoco:
             assert rgb.shape == torch.Size([n, height, width, 3])
             assert rgb.float().std() > 0
         env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_native_camera_resize_cache_and_snapshot_ownership(self):
+        env = SatelliteEnv(num_cmgs=4, num_envs=1, seed=0, backend="mujoco")
+        clone = None
+        try:
+            env.reset()
+            original = env.render(width=32, height=32)
+            small = env._backend._renderer
+            env.render(width=96, height=64)
+            wide = env._backend._renderer
+            torch.testing.assert_close(
+                env.render(width=32, height=32), original, rtol=0, atol=0
+            )
+            assert env._backend._renderer is small
+            clone = env[0]
+            torch.testing.assert_close(
+                clone.render(width=32, height=32), original, rtol=0, atol=0
+            )
+            clone.close()
+            torch.testing.assert_close(
+                env.render(width=32, height=32), original, rtol=0, atol=0
+            )
+            env.render(width=48, height=48)
+            assert wide._mjr_context is None
+            renderers = list(env._backend._renderers.values())
+            env.close()
+            assert all(renderer._mjr_context is None for renderer in renderers)
+        finally:
+            if clone is not None:
+                clone.close(raise_if_closed=False)
+            env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_render_every(self, backend):
