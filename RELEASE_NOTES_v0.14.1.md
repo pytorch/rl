@@ -1,6 +1,6 @@
 # TorchRL v0.14.1
 
-TorchRL 0.14.1 is a maintenance release with 14 bug fixes covering environment resets, planning, trainer construction, and LLM workflows. It also corrects transform device handling and introduces the v0.17 device deprecations described below.
+TorchRL 0.14.1 is a maintenance release with 17 bug fixes covering environment resets, replay buffers, planning, training, and LLM workflows. It also corrects transform device handling and introduces the v0.17 device deprecations described below.
 
 ## Compatibility and installation
 
@@ -23,14 +23,17 @@ pip install "torch==2.14.0" "torchrl==0.14.1" "tensordict>=0.14.2,<0.15.0"
 - `GymEnv` imports `ale_py` before resolving Atari `NoFrameskip` IDs and `ale_py:`-prefixed IDs, as well as the existing `ALE/` namespace. This fixes environment registration where plugins are not loaded automatically. [#4358](https://github.com/pytorch/rl/pull/4358) by @YeonwooSung.
 - Minari dataset conversion allocates separate non-tensor storage for current and next observations. Mission text now stays aligned with each transition instead of being overwritten through shared storage. [#4256](https://github.com/pytorch/rl/pull/4256) by @YeonwooSung.
 
-### Planning and trainers
+### Replay buffers, planning, and training
 
+- `TensorDictMaxValueWriter` restores checkpointed heap entries with the types required for subsequent writes. Restored replay buffers can continue adding data and replacing their lowest-ranked entries without comparison errors. [#4370](https://github.com/pytorch/rl/pull/4370) by @yupengtang.
 - `CEMPlanner` and `MPPIPlanner` retain the full planning horizon while excluding rewards after the first termination or truncation from trajectory scores. The reward on the done step is retained, and nested done groups follow environment precedence. [#4359](https://github.com/pytorch/rl/pull/4359) by @YeonwooSung.
 - `SACLossConfig` forwards only the fields accepted by the selected continuous or discrete SAC loss, preventing constructor errors from variant-specific arguments. [#4338](https://github.com/pytorch/rl/pull/4338) by @yupengtang.
+- `CrossQLoss.set_keys` works after a value estimator has been created. Renamed reward, done, and terminated keys propagate to the estimator without accessing a nonexistent value key. [#4372](https://github.com/pytorch/rl/pull/4372) by @yupengtang.
 - TD3 trainer construction works with multiprocessing collectors that do not expose an `env` attribute when the loss partial supplies `action_spec` or `bounds`. Explicit action domains are preserved; collectors with an environment still provide inferred bounds when needed. [#4368](https://github.com/pytorch/rl/pull/4368) by @aswanth-07.
 
 ### LLM workflows and transforms
 
+- `vLLMWrapper` no longer fills missing prompt log-probabilities with invented zero scores or exposes response-only scores as a full sequence. Full-sequence alignment and GRPO/KL masking remain correct when vLLM generation omits prompt scores. [#4255](https://github.com/pytorch/rl/pull/4255) by @YeonwooSung.
 - `LLMCollector(yield_only_last_steps=True)` counts intermediate dialog turns toward `total_dialog_turns`, even though it returns only final steps. Asynchronous prefetch also accounts for pending and in-progress turns when deciding whether to launch more work. [#4354](https://github.com/pytorch/rl/pull/4354) by @YeonwooSung.
 - `ChatEnv.reset` preserves roles and conversation structure when its query contains a `History` or chat-message list. Existing conversations, including batched non-tensor wrappers, receive the configured system prompt correctly. [#4355](https://github.com/pytorch/rl/pull/4355) by @YeonwooSung.
 - `IncrementalTokenizer` derives the reusable full-token key from the complete configured `NestedKey`, preserving deep prefixes and handling string and single-component keys consistently. [#4351](https://github.com/pytorch/rl/pull/4351) by @YeonwooSung.
@@ -39,6 +42,7 @@ pip install "torch==2.14.0" "torchrl==0.14.1" "tensordict>=0.14.2,<0.15.0"
 
 ## Migration and deprecations
 
+- When vLLM generation omits usable prompt scores, `LogProbs.prompt` remains unset (`None`) and `LogProbs.full` contains `NaN` at unavailable prompt positions while retaining prompt-plus-response length. Custom consumers should mask these alignment entries; `GRPOLoss` and `KLComputation` exclude unavailable prompt positions from their computations. Use `generate=False` when prompt scores are required. [#4255](https://github.com/pytorch/rl/pull/4255) by @YeonwooSung.
 - `TicTacToeEnv.win` now returns a boolean tensor with shape `[..., 1]` instead of a Python boolean. Direct callers should handle the batch-shaped result; use `.item()` only when a scalar result is required. [#4349](https://github.com/pytorch/rl/pull/4349) by @YeonwooSung.
 - `Tokenizer.device` is deprecated and will be removed in **v0.17**. Use `Tokenizer.out_device`, which follows the parent environment; `None` leaves outputs on the tokenizer's chosen device. [#4352](https://github.com/pytorch/rl/pull/4352) by @YeonwooSung.
 - The `device` attributes of `ModuleTransform`, `KLRewardTransform`, and `RetrieveLogProb` are deprecated and will be removed in **v0.17**. They describe an explicit input/output placement policy, not every parameter or buffer's location. Place models with the constructor `device=` argument or `.to(device)`, inspect individual tensors when checking placement, and let wrapped modules own device routing. Until v0.17, constructor `device=` retains the I/O policy and later `.to(device)` updates it; dtype-only moves leave it unchanged. [#4353](https://github.com/pytorch/rl/pull/4353) by @YeonwooSung.
