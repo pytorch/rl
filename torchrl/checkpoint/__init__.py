@@ -18,6 +18,7 @@ from ._checkpoint import (
     DumpLoadCheckpointAdapter,
     GlobalRNGState,
     JSONCheckpointAdapter,
+    resolve_checkpoint_path,
     StateDictCheckpointAdapter,
     StateDictFormat,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "DumpLoadCheckpointAdapter",
     "GlobalRNGState",
     "JSONCheckpointAdapter",
+    "resolve_checkpoint_path",
     "StateDictCheckpointAdapter",
     "StateDictFormat",
 ]

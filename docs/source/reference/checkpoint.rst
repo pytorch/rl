@@ -117,6 +117,12 @@ Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
 checkpoints. The Trainer uses ``collected_frames`` as the checkpoint step and
 adds ``collected_frames`` and ``optim_steps`` to the manifest metadata.
 
+The Trainer registers the process-global RNG state under ``rng`` and restores
+it after every other component. ``Trainer.load_from_file`` accepts a checkpoint
+path or a rotation directory, in which case the newest retained checkpoint is
+restored. Scheduled saves in asynchronous collection mode pause the collector
+while the checkpoint is written.
+
 .. code-block:: python
 
     trainer = SACTrainer(
@@ -181,3 +187,9 @@ API
     JSONCheckpointAdapter
     StateDictCheckpointAdapter
     StateDictFormat
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    resolve_checkpoint_path
