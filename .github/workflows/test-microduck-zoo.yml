@@ -65,5 +65,5 @@ jobs:
           python -m pip install pytest
           for version in 3.10.0 3.8.1; do
             python -m pip install "mujoco==$version"
-            xvfb-run -a python -m pytest test/libs/test_mujoco.py -k 'render or pixels' -o addopts= -q
+            xvfb-run -a python -m pytest test/libs/test_mujoco.py -k 'render or pixels or native_camera_resize_cache' -o addopts= -q
           done
