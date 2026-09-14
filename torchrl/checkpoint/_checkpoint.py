@@ -761,6 +761,35 @@ class StopOnSignal:
         self._previous_handlers.clear()
 
 
+class _StateDictCapture:
+    """Receive a restored state dict without owning a live component."""
+
+    def __init__(self) -> None:
+        self.state: Any = None
+
+    def load_state_dict(self, state: Any) -> None:
+        self.state = state
+
+
+def _clone_tensors_(value: Any) -> Any:
+    """Replace tensors with clones, in place for mutable containers."""
+    if isinstance(value, torch.Tensor):
+        return value.clone()
+    if isinstance(value, MutableMapping):
+        for key, item in value.items():
+            value[key] = _clone_tensors_(item)
+        return value
+    if isinstance(value, list):
+        value[:] = [_clone_tensors_(item) for item in value]
+        return value
+    if isinstance(value, tuple):
+        items = [_clone_tensors_(item) for item in value]
+        if hasattr(value, "_fields"):
+            return type(value)(*items)
+        return type(value)(items)
+    return value
+
+
 @dataclass
 class _Component:
     value: Any
@@ -1066,17 +1095,9 @@ class Checkpoint:
                 result.incompatible[name] = str(error)
                 continue
             record = manifest_components[name]
-            if record["adapter"] != adapter.adapter_id:
-                result.incompatible[name] = (
-                    f"manifest adapter is {record['adapter']!r}, target adapter is "
-                    f"{adapter.adapter_id!r}"
-                )
-                continue
-            if record["adapter_version"] != adapter.format_version:
-                result.incompatible[name] = (
-                    f"manifest adapter version is {record['adapter_version']}, target "
-                    f"adapter version is {adapter.format_version}"
-                )
+            mismatch = self._record_mismatch(record, adapter)
+            if mismatch is not None:
+                result.incompatible[name] = mismatch
                 continue
             adapters[name] = adapter
         self._handle_load_issues(result, load_strict)
@@ -1122,6 +1143,67 @@ class Checkpoint:
         except (CheckpointError, OSError, TypeError, ValueError):
             return False
         return True
+
+    @classmethod
+    def read_component(
+        cls, path: str | Path, name: str, *, map_location: Any = None
+    ) -> Any:
+        """Return one component's stored payload without a live object.
+
+        State-dict components return the decoded state dict and JSON
+        components return the stored value, so a checkpoint can be inspected
+        before the objects it belongs to exist, for example to read the saved
+        logger state or configuration. Tensors are copied out of the
+        checkpoint. Components stored through ``dump``/``load`` or a custom
+        adapter require a live object and are rejected.
+
+        Args:
+            path: Directory or archive checkpoint.
+            name: Manifest component name.
+            map_location: Device mapping used while reading tensor payloads.
+
+        Returns:
+            The state dict or JSON value stored for ``name``.
+
+        Raises:
+            KeyError: If the checkpoint has no component named ``name``.
+            CheckpointError: If the component cannot be read without an object.
+        """
+        source = cls._local_path(path)
+        manifest = cls.manifest(source)
+        components: Mapping[str, Any] = manifest["components"]
+        if name not in components:
+            raise KeyError(
+                f"Checkpoint {source} has no component {name!r}; available "
+                f"components: {sorted(components)}."
+            )
+        record = components[name]
+        adapters: dict[str, CheckpointAdapter] = {
+            StateDictCheckpointAdapter.adapter_id: StateDictCheckpointAdapter(),
+            JSONCheckpointAdapter.adapter_id: JSONCheckpointAdapter(),
+        }
+        adapter = adapters.get(record["adapter"])
+        if adapter is None:
+            raise CheckpointError(
+                f"Component {name!r} uses adapter {record['adapter']!r}, which "
+                "requires a live object to restore into."
+            )
+        mismatch = cls._record_mismatch(record, adapter)
+        if mismatch is not None:
+            raise CheckpointError(f"Component {name!r}: {mismatch}.")
+        capture = _StateDictCapture()
+        with cls._materialize(source, manifest, {name: record}) as root:
+            value = adapter.load(
+                capture,
+                root / record["path"].replace("\\", "/"),
+                map_location=map_location,
+                tensor_load_kwargs={},
+                args=(),
+                kwargs={},
+            )
+            if record["adapter"] == StateDictCheckpointAdapter.adapter_id:
+                value = capture.state
+            return _clone_tensors_(value)
 
     @classmethod
     def register_migration(
@@ -1287,6 +1369,22 @@ class Checkpoint:
             yield temporary
         finally:
             cls._remove_path(temporary)
+
+    @staticmethod
+    def _record_mismatch(
+        record: Mapping[str, Any], adapter: CheckpointAdapter
+    ) -> str | None:
+        if record["adapter"] != adapter.adapter_id:
+            return (
+                f"manifest adapter is {record['adapter']!r}, target adapter is "
+                f"{adapter.adapter_id!r}"
+            )
+        if record["adapter_version"] != adapter.format_version:
+            return (
+                f"manifest adapter version is {record['adapter_version']}, target "
+                f"adapter version is {adapter.format_version}"
+            )
+        return None
 
     @staticmethod
     def _handle_load_issues(
