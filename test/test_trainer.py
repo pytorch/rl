@@ -36,6 +36,8 @@ from tensordict.nn import (
 )
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.data import (
+    Bounded,
+    Composite,
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
@@ -45,8 +47,15 @@ from torchrl.data import (
 )
 from torchrl.envs import Compose, RenameTransform, SerialEnv, TransformedEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.modules import GRUModule, ProbabilisticActor, TanhNormal
-from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
+from torchrl.modules import GRUModule, ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.objectives import (
+    ClipPPOLoss,
+    CQLLoss,
+    HardUpdate,
+    LossModule,
+    SACLoss,
+    SoftUpdate,
+)
 from torchrl.record.loggers.common import PrefixLogger
 from torchrl.testing import PONG_VERSIONED
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
@@ -145,8 +154,107 @@ class MockingIterableCollector(MockingCollector):
         self.shutdown_calls += 1
 
 
+class ActionSpecCollector(MockingCollector):
+    def __init__(self, source_policy, action_spec):
+        super().__init__(source_policy)
+        self.action_spec = action_spec
+        self.action_spec_queries = 0
+
+    def getattr_env(self, name):
+        assert name == "full_action_spec_unbatched"
+        self.action_spec_queries += 1
+        return Composite(action=self.action_spec)
+
+
 class MockingLossModule(nn.Module):
     pass
+
+
+class TestEntropyTrainerActionSpec:
+    @staticmethod
+    def _make_loss(loss_cls, *, target_entropy, actor_has_spec):
+        action_spec = Bounded(-torch.ones(2), torch.ones(2), (2,))
+        actor_module = TensorDictModule(
+            nn.Sequential(nn.Linear(3, 4), NormalParamExtractor()),
+            in_keys=["observation"],
+            out_keys=["loc", "scale"],
+        )
+        actor = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            spec=action_spec if actor_has_spec else None,
+        )
+
+        class QValue(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(5, 1)
+
+            def forward(self, observation, action):
+                return self.linear(torch.cat([observation, action], -1))
+
+        qvalue = ValueOperator(QValue(), in_keys=["observation", "action"])
+        loss = loss_cls(actor, qvalue, target_entropy=target_entropy)
+        return loss, action_spec
+
+    @staticmethod
+    def _make_trainer(trainer_cls, loss, collector):
+        with pytest.warns(UserWarning, match="experimental/prototype"):
+            return trainer_cls(
+                collector=collector,
+                total_frames=1,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss,
+                optimizer=None,
+                target_net_updater=SoftUpdate(loss, eps=0.99),
+                progress_bar=False,
+                enable_logging=False,
+            )
+
+    @pytest.mark.parametrize(
+        "trainer_cls,loss_cls", [(SACTrainer, SACLoss), (CQLTrainer, CQLLoss)]
+    )
+    @pytest.mark.parametrize(
+        "target_entropy,actor_has_spec,expected_target_entropy",
+        [(0.0, False, 0.0), ("auto", True, -2.0)],
+    )
+    def test_resolved_target_entropy_does_not_require_collector_env(
+        self,
+        trainer_cls,
+        loss_cls,
+        target_entropy,
+        actor_has_spec,
+        expected_target_entropy,
+    ):
+        loss, _ = self._make_loss(
+            loss_cls,
+            target_entropy=target_entropy,
+            actor_has_spec=actor_has_spec,
+        )
+        collector = MockingCollector(source_policy=loss.actor_network)
+
+        trainer = self._make_trainer(trainer_cls, loss, collector)
+
+        torch.testing.assert_close(
+            trainer.loss_module.target_entropy,
+            torch.tensor(expected_target_entropy),
+        )
+
+    def test_sac_uses_collector_spec_when_target_entropy_cannot_be_resolved(self):
+        loss, action_spec = self._make_loss(
+            SACLoss, target_entropy="auto", actor_has_spec=False
+        )
+        collector = ActionSpecCollector(loss.actor_network, action_spec)
+
+        trainer = self._make_trainer(SACTrainer, loss, collector)
+
+        torch.testing.assert_close(
+            trainer.loss_module.target_entropy, torch.tensor(-2.0)
+        )
+        assert collector.action_spec_queries == 1
 
 
 class MockingLogger:
