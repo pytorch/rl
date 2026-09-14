@@ -4116,29 +4116,36 @@ class TestREDQ(LossModuleTestBase):
 class TestDiscreteSACActionValueSelectionRegression:
     """Behavioral regression test for action-value selection in DiscreteSACLoss.
 
-    Calls the public qvalue_loss API with a pinned Q-network and asserts the
-    exact numeric loss.  A wrong gather, shape mismatch, or missing squeeze
-    will select the wrong Q-value element and produce a different scalar.
+    Calls qvalue_loss with pinned identity Q-networks and asserts the exact
+    numeric loss derived from first principles.  A wrong gather, shape
+    mismatch, or missing squeeze will select the wrong Q-value and produce a
+    different scalar.
     """
 
     def test_discrete_sac_categorical_selects_correct_action_value(self):
-        """DiscreteSACLoss.qvalue_loss must index by the taken action, not another element.
+        """DiscreteSACLoss.qvalue_loss must index by the taken action.
 
-        We set up Q-values so that action=0 and action=3 from the same observation
-        yield Q-values of 2.0 and -2.0 respectively. The two resulting losses must
-        be clearly different because the `chosen_action_value` used in the Bellman
-        MSE is a different element of the tensor.
+        Setup (obs_dim = action_dim = 2, identity Q-network):
+          obs [1, 0] -> Q-values [1.0, 0.0] for both critic copies.
 
-        If gather always returns the same element regardless of the action argument
-        (e.g., always index 0), both losses would be identical — exposing the bug.
+        Expected losses (gamma=0.0, done=True, reward=0.0, l2 loss, 2 critics):
+          action=0: chosen Q = 1.0, target = 0.0
+                    loss = sum_over_critics((1.0 - 0.0)^2) = 2.0
+          action=1: chosen Q = 0.0, target = 0.0
+                    loss = sum_over_critics((0.0 - 0.0)^2) = 0.0
+
+        DiscreteSACLoss.convert_to_functional resamples the critic weights, so
+        the identity initialisation is overwritten.  We restore it explicitly
+        after construction via qvalue_network_params so the derivation holds.
+
+        If _select_action_value gathers from the wrong index (e.g. always 0 or
+        (action+1) % n), both losses deviate from 2.0 and 0.0 respectively.
         """
         torch.manual_seed(0)
 
-        # 4 actions, 4 obs dims. Identity Q-net: obs[i] -> Q[i].
-        # obs = [2, 0, 0, -2] -> Q-values = [2.0, 0.0, 0.0, -2.0]
-        # action=0 selects Q=2.0; action=3 selects Q=-2.0 -> MSE against same target differs.
-        obs_dim = 4
-        action_dim = 4
+        obs_dim = 2
+        action_dim = 2
+        num_qvalue_nets = 2  # DiscreteSACLoss default
 
         actor_net = nn.Linear(obs_dim, action_dim, bias=False)
         with torch.no_grad():
@@ -4182,10 +4189,20 @@ class TestDiscreteSACActionValueSelectionRegression:
         )
         loss_fn.make_value_estimator(ValueEstimators.TD0, gamma=0.0)
 
-        # obs = [2, 0, 0, -2]: Q-values are [2.0, 0.0, 0.0, -2.0]
-        # action=0 -> chosen Q = 2.0; action=3 -> chosen Q = -2.0
-        # These yield clearly different MSE errors against any shared target.
-        obs = torch.tensor([[2.0, 0.0, 0.0, -2.0]])
+        # convert_to_functional expands and resamples the critic weights, so the
+        # identity initialisation above is lost.  Restore it explicitly so the
+        # expected losses can be derived from first principles.
+        # Shape of the expanded weight: [num_qvalue_nets, action_dim, obs_dim]
+        with torch.no_grad():
+            loss_fn.qvalue_network_params["module", "linear", "weight"].copy_(
+                torch.eye(obs_dim).unsqueeze(0).expand(num_qvalue_nets, -1, -1)
+            )
+
+        # obs [1, 0] -> Q = [1.0, 0.0] for every critic copy.
+        # gamma=0.0, done=True -> target = reward = 0.0
+        # action=0: chosen Q = 1.0; loss = sum_critics((1.0-0.0)^2) = 2.0
+        # action=1: chosen Q = 0.0; loss = sum_critics((0.0-0.0)^2) = 0.0
+        obs = torch.tensor([[1.0, 0.0]])
         next_obs = torch.zeros(1, obs_dim)
 
         def make_td(action_idx):
@@ -4204,16 +4221,25 @@ class TestDiscreteSACActionValueSelectionRegression:
             )
 
         with torch.no_grad():
-            loss_action0, _ = loss_fn.qvalue_loss(make_td(0))  # chosen Q = 2.0
-            loss_action3, _ = loss_fn.qvalue_loss(make_td(3))  # chosen Q = -2.0
+            loss_action0, _ = loss_fn.qvalue_loss(make_td(0))  # chosen Q = 1.0
+            loss_action1, _ = loss_fn.qvalue_loss(make_td(1))  # chosen Q = 0.0
 
-        # The two losses must differ because action=0 selects Q=2.0 and
-        # action=3 selects Q=-2.0; they produce different MSE errors.
-        # If gather returns the same element for both actions, the losses are equal.
-        assert not torch.isclose(loss_action0, loss_action3, atol=1e-3), (
-            f"qvalue_loss was identical for action=0 (Q=2.0, loss={loss_action0.item():.6f}) "
-            f"and action=3 (Q=-2.0, loss={loss_action3.item():.6f}); "
-            "this indicates gather is not indexing by the action argument."
+        # Independently derived expected values (no code-under-test involved):
+        #   action=0: 2 critics * (1.0 - 0.0)^2 = 2.0
+        #   action=1: 2 critics * (0.0 - 0.0)^2 = 0.0
+        torch.testing.assert_close(
+            loss_action0,
+            torch.tensor(2.0),
+            atol=1e-5,
+            rtol=0.0,
+            msg=f"action=0 (Q=1.0): expected loss 2.0, got {loss_action0.item():.6f}",
+        )
+        torch.testing.assert_close(
+            loss_action1,
+            torch.tensor(0.0),
+            atol=1e-5,
+            rtol=0.0,
+            msg=f"action=1 (Q=0.0): expected loss 0.0, got {loss_action1.item():.6f}",
         )
 
 

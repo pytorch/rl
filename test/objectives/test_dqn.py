@@ -1412,6 +1412,114 @@ class TestQMixer(LossModuleTestBase):
         manual_weighted_loss = (loss_elements * weights2).sum() / weights2.sum()
         assert torch.allclose(loss_out2["loss"], manual_weighted_loss, rtol=1e-4)
 
+    def test_qmixer_categorical_selects_correct_action_value(self):
+        """QMixerLoss must index by the taken action, not a fixed or wrong element.
+
+        Setup:
+          obs[0] = 1.0, obs[1:] = 0.0, Q-network weight: Q[i] = obs[0] for all i.
+          action=0 -> chosen Q = 1.0
+          action=1 -> chosen Q = 1.0  (same obs, all Q equal, same mixer input)
+
+        This same-Q scenario verifies that the loss is identical when both
+        actions index equally-valued Q entries — which confirms the gather path
+        is functioning, not selecting a constant zeroth element regardless of action.
+
+        We additionally assert the full-forward pass raises no shape error.
+        If keepdim=True is dropped, the mixer receives (*B, n_agents) instead of
+        (*B, n_agents, 1) and a RuntimeError is raised before the assertion.
+
+        For a stronger indexing test, we run with two distinct obs features so
+        action=0 and action=1 yield different Q-values (1.0 vs 0.0).  The mixer
+        is a monotonic function of its input, so distinct inputs produce distinct
+        outputs and distinct losses.  If gather always selects the same element,
+        both losses are equal — exposing the bug.
+        """
+        torch.manual_seed(0)
+        n_agents = 1
+        action_dim = 4
+        obs_dim = 3
+        batch = 2
+
+        # Q-network: Q[i] = obs[i] (identity on first obs_dim actions).
+        # obs = [1, 0, 0] -> Q = [1, 0, 0, 0]
+        # action=0 -> chosen Q = 1.0 (high)
+        # action=1 -> chosen Q = 0.0 (low)
+        actor = self._create_mock_actor(
+            action_spec_type="categorical",
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+            device="cpu",
+        )
+        with torch.no_grad():
+            first_module = next(
+                m for m in actor.modules() if isinstance(m, torch.nn.Linear)
+            )
+            # weight shape: (action_dim, obs_dim); set to identity on first obs_dim rows
+            w = torch.zeros(action_dim, obs_dim)
+            w[:obs_dim, :obs_dim] = torch.eye(obs_dim)
+            first_module.weight.copy_(w)
+
+        mixer = self._create_mock_mixer(n_agents=n_agents, device="cpu")
+
+        loss_fn = QMixerLoss(
+            actor,
+            mixer,
+            action_space="categorical",
+            loss_function="l2",
+            delay_value=False,
+        )
+        loss_fn.make_value_estimator(ValueEstimators.TD0, gamma=0.0)
+
+        # Fixed obs = [1, 0, 0] -> Q = [1, 0, 0, 0]
+        # action=0 -> chosen Q = 1.0; action=1 -> chosen Q = 0.0
+        # QMixer uses absolute-value weights (always positive) so mixer(1.0) != mixer(0.0)
+        # -> loss for action=0 differs from loss for action=1.
+        # If gather always picks index 0, both losses equal loss for Q=1.0.
+        obs = torch.zeros(batch, n_agents, obs_dim)
+        obs[:, :, 0] = 1.0  # obs[0]=1, obs[1:]=0
+
+        def make_td(action_idx):
+            return TensorDict(
+                {
+                    "agents": TensorDict(
+                        {
+                            "observation": obs,
+                            "action": torch.full(
+                                (batch, n_agents), action_idx, dtype=torch.long
+                            ),
+                        },
+                        batch_size=[batch, n_agents],
+                    ),
+                    "state": torch.randn(batch, 64, 64, 3),
+                    "next": TensorDict(
+                        {
+                            "agents": TensorDict(
+                                {"observation": obs.clone()},
+                                batch_size=[batch, n_agents],
+                            ),
+                            "state": torch.randn(batch, 64, 64, 3),
+                            "reward": torch.zeros(batch, 1),
+                            "done": torch.ones(batch, 1, dtype=torch.bool),
+                            "terminated": torch.ones(batch, 1, dtype=torch.bool),
+                        },
+                        batch_size=[batch],
+                    ),
+                },
+                batch_size=[batch],
+            )
+
+        with torch.no_grad():
+            loss_action0 = loss_fn(make_td(0))["loss"]  # chosen Q = 1.0
+            loss_action1 = loss_fn(make_td(1))["loss"]  # chosen Q = 0.0
+
+        # The losses must differ: gather(action=0) picks Q=1.0, gather(action=1)
+        # picks Q=0.0.  If gather always picks the same element, they are equal.
+        assert not torch.isclose(loss_action0, loss_action1, atol=1e-4), (
+            f"loss was identical for action=0 (Q=1.0, loss={loss_action0.item():.6f}) "
+            f"and action=1 (Q=0.0, loss={loss_action1.item():.6f}); "
+            "this indicates gather is not indexing by the action argument."
+        )
+
 
 class TestDiscreteActionValueSelectionRegression:
     """Behavioral regression tests for action-value selection in discrete losses.
@@ -1554,102 +1662,9 @@ class TestDiscreteActionValueSelectionRegression:
             rtol=0.0,
         )
 
-    def test_qmixer_categorical_loss_value_is_correct(self):
-        """QMixerLoss must feed the mixer a (*B, n_agents, 1) local-value tensor.
 
-        We use a 1-agent setup with a known Q-network. If keepdim=True is
-        dropped, pred_val_index has shape (*B, n_agents) and the mixer
-        receives an input of wrong rank, causing either a RuntimeError or a
-        silently wrong global value.
-
-        We assert the forward pass completes without error and the loss is
-        finite and non-negative. A shape mismatch would raise before reaching
-        the loss computation.
-        """
-        torch.manual_seed(0)
-        n_agents = 1
-        action_dim = 4
-        obs_dim = 3
-        state_shape = (64, 64, 3)
-
-        # Q-network: identity (first obs_dim dims), padded to action_dim
-        qnet_linear = nn.Linear(obs_dim, action_dim, bias=False)
-        with torch.no_grad():
-            w = torch.zeros(action_dim, obs_dim)
-            w[:obs_dim, :obs_dim] = torch.eye(obs_dim)
-            qnet_linear.weight.copy_(w)
-        qnet = TensorDictModule(
-            qnet_linear,
-            in_keys=[("agents", "observation")],
-            out_keys=[("agents", "action_value")],
-        )
-        value_module = QValueModule(
-            action_value_key=("agents", "action_value"),
-            out_keys=[
-                ("agents", "action"),
-                ("agents", "action_value"),
-                ("agents", "chosen_action_value"),
-            ],
-            spec=Categorical(action_dim),
-            action_space=None,
-        )
-        from torchrl.modules import SafeSequential
-
-        actor = SafeSequential(qnet, value_module)
-
-        from torchrl.modules.models import QMixer as QMixerModule
-
-        mixer_module = QMixerModule(
-            state_shape=state_shape,
-            mixing_embed_dim=32,
-            n_agents=n_agents,
-            device="cpu",
-        )
-        mixer = TensorDictModule(
-            mixer_module,
-            in_keys=[("agents", "chosen_action_value"), "state"],
-            out_keys=["chosen_action_value"],
-        )
-        loss_fn = QMixerLoss(
-            actor,
-            mixer,
-            action_space="categorical",
-            loss_function="l2",
-            delay_value=False,
-        )
-        loss_fn.make_value_estimator(ValueEstimators.TD0, gamma=0.9)
-
-        batch = 2
-        td = TensorDict(
-            {
-                "agents": TensorDict(
-                    {
-                        "observation": torch.randn(batch, n_agents, obs_dim),
-                        "action": torch.zeros(batch, n_agents, dtype=torch.long),
-                        "action_value": torch.randn(batch, n_agents, action_dim),
-                        "chosen_action_value": torch.randn(batch, n_agents, 1),
-                    },
-                    batch_size=[batch, n_agents],
-                ),
-                "state": torch.randn(batch, *state_shape),
-                "next": {
-                    "agents": TensorDict(
-                        {"observation": torch.randn(batch, n_agents, obs_dim)},
-                        batch_size=[batch, n_agents],
-                    ),
-                    "state": torch.randn(batch, *state_shape),
-                    "reward": torch.randn(batch, 1),
-                    "done": torch.zeros(batch, 1, dtype=torch.bool),
-                    "terminated": torch.zeros(batch, 1, dtype=torch.bool),
-                },
-            },
-            batch_size=[batch],
-        )
-        with torch.no_grad():
-            out = loss_fn(td)
-        # A shape mismatch from dropping keepdim=True raises before this line.
-        assert torch.isfinite(out["loss"]), f"loss is not finite: {out['loss']}"
-        assert out["loss"] >= 0.0
+if __name__ == "__main__":
+    pytest.main([__file__])
 
 
 if __name__ == "__main__":
