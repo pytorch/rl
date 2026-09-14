@@ -1,0 +1,42 @@
+name: MicroDuck zoo integration
+
+on:
+  pull_request:
+    paths:
+      - "torchrl/envs/custom/mujoco/**"
+      - "torchrl/envs/__init__.py"
+      - "torchrl/trainers/**"
+      - "torchrl/objectives/ppo.py"
+      - "tutorials/sphinx-tutorials/microduck_games.py"
+      - ".github/workflows/test-microduck-zoo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MUJOCO_GL: egl
+      MAX_JOBS: "2"
+      SETUPTOOLS_SCM_PRETEND_VERSION: "0.14.0.dev0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1-mesa-dri ffmpeg
+      - run: python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install 'tensordict==0.14.2' 'mujoco==3.10.0' 'hydra-core>=1.3,<1.4' 'torchcodec==0.16.0' setuptools wheel ninja pyvers hoptorch
+      - name: Install this TorchRL revision and the pinned optional zoo
+        run: |
+          python -m pip install --no-build-isolation .
+          python -m pip install 'torchrl-zoo @ https://github.com/vmoens/rl-zoo/archive/dd0dcb5bc7be41a4e4e842133dc5d224bce5cfa8.zip'
+      - name: Execute the installed-package tutorial
+        working-directory: /tmp
+        timeout-minutes: 3
+        run: |
+          python -c "import importlib.util; import torchrl; import torchrl_zoo; assert importlib.util.find_spec('examples') is None"
+          python "$GITHUB_WORKSPACE/tutorials/sphinx-tutorials/microduck_games.py"
