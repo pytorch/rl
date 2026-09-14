@@ -388,6 +388,27 @@ class GRPOLoss(LossModule):
 
         The masking strategy must match the strategy used for advantage computation to avoid shape mismatches.
 
+    .. note::
+        The mask actually selected depends on both the masking strategy and the input mode of the
+        actor network. For a transformers based actor the following holds:
+
+        * ``tokens`` input: ``"sft"`` masks the prompt positions using ``("tokens", "prompt")``,
+          ``"generic"`` masks padding positions using the attention mask, and ``"rlhf"`` uses a
+          caller supplied ``("masks", "all_assistant_mask")`` when the tensordict carries one and
+          raises a ``ValueError`` only when it does not.
+        * ``history`` input: the assistant mask is computed from the chat template. ``"rlhf"`` uses
+          it directly, and ``"sft"`` falls back to it whenever ``("tokens", "prompt")`` is not
+          available, which makes ``"sft"`` and ``"rlhf"`` select the same tokens in this mode.
+        * ``"generic"`` always uses the attention mask regardless of the input mode.
+
+        In every supported combination the masks are ``(B, T)`` tensors over the
+        full padded sequence, interpreted as booleans, and the distribution log
+        probabilities have the same shape. The loss
+        module turns the log probabilities into a log weight of shape ``(B, T, 1)``, and it is the
+        log weight the advantage broadcasts against: a per trajectory advantage of shape
+        ``(B, 1, 1)`` or a per token advantage of shape ``(B, T, 1)``. ``forward`` requires the
+        advantage to have the same rank as the log weight.
+
     Keyword Args:
         clip_epsilon (float | tuple[float, float], optional): clipping threshold(s) for the clipped surrogate.
             - float x: symmetric clipping [1 - x, 1 + x] (default: 0.2)
