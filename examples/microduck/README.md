@@ -190,6 +190,55 @@ so the env swaps collision-class meshes for tight box proxies at load time
 Contact-based gait metrics are available through `env.foot_contacts()` and
 `env.foot_heights()` on every backend.
 
+## Sensor policies
+
+The Hydra prior recipe accepts `observations=state` (the unchanged 56-value
+walker), `observations=proprioception`, and `observations=proprioception_vision`.
+The latter two train a fresh sensor actor; they cannot reuse the weights of a
+legacy state actor. All task definitions and the nine-skill ordering remain
+in TorchRL. For example:
+
+```bash
+python -m examples.microduck.ppo_mujoco env.download=true smoke=true \
+    observations=proprioception_vision algorithm=ppo_ewma
+```
+
+The 53-value `proprioception` vector is ordered as projected gravity (3),
+trunk gyro (3), commanded planar velocity (2), joint position errors (14),
+joint velocities (14), gait clock (3), and previous motor action (14).
+It excludes simulator linear velocity, world position, absolute heading and
+contacts. Gravity/gyro are ideal trunk-frame IMU estimates and joint velocity
+is an ideal encoder derivative. Noise settings are explicit simulation
+perturbations, not measured sensor calibration.
+
+Vision adds `camera_pixels` (uint8 RGB, HWC), `camera_age` (seconds) and
+`camera_valid`. The default is a 64-square centred crop of a 16:9 image with
+62-degree horizontal field of view, sampled at 30 Hz in simulator time from
+the MJCF head-camera mount. Configure these through `env.sensor_kwargs`;
+`camera_delay_s` and `camera_dropout` hold the last received frame and expose
+its age. Before a first valid frame, pixels are black and validity is false.
+Each episode reset clears its camera history. Cameras currently require native
+MuJoCo; each parallel worker owns its simulator and image cache.
+
+The sensor actor reads only these inputs, `task_id`, recurrent memory and
+`is_init`. The default `policy.critic_observation=state` trains a separate
+privileged critic; `actor` gives it the actor's sensor features. Complete
+trajectories are recomputed through the GRU at each PPO update, including the
+EWMA proximal actor. The encoder and hidden state remain independent between
+simulators. Checkpoints record the sensor mode, camera settings, critic mode,
+ordered tasks and architecture; `load_microduck_walker` and
+`MicroDuckController` also accept these sensor actors.
+
+The stock profile is based on the upstream
+[camera geometry](https://github.com/pollen-robotics/microduck/blob/4d40c85fef63a3b9465099c1e3107eef7cdf2911/mediad/src/camera.rs)
+and [IMU implementation](https://github.com/pollen-robotics/microduck/blob/4d40c85fef63a3b9465099c1e3107eef7cdf2911/duck-control/src/imu.rs):
+IMX219 at 1920x1080/30 Hz and the LSM6DSV16X board. This simulator uses centred
+ideal intrinsics and the asset's camera mount; real lens distortion, principal
+point, mounting calibration and processing latency need robot-specific data.
+The upstream deployed 15-servo/61-value contract also differs from this legacy
+14-actuator model. These recipes establish a simulation sensor interface;
+onboard-compatible control has not been validated.
+
 ## Closed-form gait
 
 `MicroDuckGaitActor` in `heuristic_gait.py` is a `TensorDictModuleBase` that

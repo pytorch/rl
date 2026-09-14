@@ -54,13 +54,14 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import torch
 from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.data.tensor_specs import Binary, Bounded, Categorical, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
+from torchrl.envs.custom.mujoco._sensors import _MicroDuckSensors
 from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
 from torchrl.envs.transforms.transforms import Transform
 
@@ -478,6 +479,21 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             term and pose diagnostics to the observation spec under
             ``diagnostic_*`` keys. Off by default because it roughly doubles
             the per-step task cost.
+        observations (str, optional): ``"state"`` (default) preserves the legacy
+            56-value observation. ``"proprioception"`` additionally exposes a
+            53-value ``proprioception`` vector without simulator linear velocity.
+            ``"proprioception_vision"`` also supplies native-MuJoCo head-camera
+            ``camera_pixels`` (uint8 HWC), ``camera_age`` (seconds), and
+            ``camera_valid``. The legacy state remains available to a privileged
+            critic; actor input keys determine which readings it can access.
+        sensor_kwargs (Mapping, optional): sensor settings: ``image_size`` (64,
+            minimum 32), ``camera_fps`` (30), ``camera_hfov`` (62 degrees before
+            a centred 16:9-to-square crop), ``camera_delay_s`` (0),
+            ``camera_dropout`` (0), and Gaussian ``gyro_noise_std``,
+            ``joint_position_noise_std``, ``joint_velocity_noise_std`` (all 0).
+            Values describe simulation perturbations, not robot calibration.
+            Gravity and gyro are ideal trunk-frame IMU estimates. Camera history
+            resets per episode and is independent in environment snapshots.
         root (str or Path, optional): directory holding downloaded
             ``microduck_rl`` checkouts. Defaults to
             ``~/.cache/torchrl/microduck``.
@@ -698,6 +714,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         download: bool | str = False,
         backend: BackendName = "mujoco-torch",
         low_cost_collisions: bool = True,
+        observations: Literal[
+            "state", "proprioception", "proprioception_vision"
+        ] = "state",
+        sensor_kwargs: Mapping[str, Any] | None = None,
         max_episode_steps: int = 500,
         **kwargs: Any,
     ) -> None:
@@ -712,6 +732,11 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         self.tasks = self.stack_tasks(tasks)
         self.action_scale = float(action_scale)
         self.diagnostics = bool(diagnostics)
+        if observations not in ("state", "proprioception", "proprioception_vision"):
+            raise ValueError(f"Unknown observation mode {observations!r}.")
+        self.observations = observations
+        self.sensor_kwargs = dict(sensor_kwargs or {})
+        self._sensors = None
         self.scene_path = self.resolve_scene(
             microduck_root, root=root, download=download
         )
@@ -1380,6 +1405,13 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             shape=(self.num_envs,),
             device=self.device,
         )
+        if self.observations != "state":
+            self._sensors = _MicroDuckSensors(
+                self,
+                vision=self.observations == "proprioception_vision",
+                **self.sensor_kwargs,
+            )
+            self._sensors.add_specs(spec)
         if not self.diagnostics:
             return spec
         for name in self.REWARD_TERMS:
@@ -1400,6 +1432,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         observation = super()._build_obs_dict(state)
         observation["command"] = self._command.clone()
         observation["task_id"] = self._task_id.unsqueeze(-1).clone()
+        if self._sensors is not None:
+            observation = self._sensors.update(
+                TensorDict(observation, self.batch_size, device=self.device)
+            )
         if self.diagnostics:
             observation.update(self._diagnostics(state, self._observation_action))
         return observation
@@ -1551,6 +1587,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         return task_id, task, self._sample_command(task, tensordict)
 
     def _on_reset_all(self, tensordict: TensorDictBase | None = None) -> None:
+        if self._sensors is not None:
+            self._sensors.reset()
         self._previous_action.zero_()
         self._observation_action.zero_()
         self._task_id, self._task, self._command = self._consume_pending(tensordict)
@@ -1564,6 +1602,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         tensordict: TensorDictBase | None = None,
     ) -> None:
         mask = mask.squeeze(-1) if mask.ndim == 2 else mask
+        if self._sensors is not None and self._sensors.vision:
+            self._sensors.reset()
         column = mask.unsqueeze(-1)
         task_id, task, command = self._consume_pending(tensordict)
         self._previous_action = torch.where(
@@ -1789,6 +1829,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         }
 
     def _load_indexed_extra_state(self, state: dict[str, Any]) -> None:
+        if self._sensors is not None:
+            self._sensors = self._sensors.clone_for(self)
         self._previous_action = state["previous_action"].clone()
         self._observation_action = self._previous_action.clone()
         self._task_id = state["task_id"].clone()
@@ -1807,6 +1849,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             raise TypeError(
                 "MicroDuckEnv snapshots can only be restored from a MicroDuckEnv."
             )
+        if self._sensors is not None and self._sensors.vision:
+            self._sensors = source._sensors.clone_for(self)
         self._previous_action[index] = source._previous_action.to(self.device)
         self._observation_action[index] = source._observation_action.to(self.device)
         self._task_id[index] = source._task_id.to(self.device)

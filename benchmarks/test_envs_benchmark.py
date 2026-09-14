@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import importlib.util
 import os
 import statistics
 import time
@@ -17,6 +18,7 @@ from torchrl.data import Bounded, Composite
 from torchrl.envs import (
     AsyncEnvPool,
     ClosedLoopMultiAction,
+    MicroDuckEnv,
     MultiAction,
     ParallelEnv,
     SerialEnv,
@@ -62,6 +64,27 @@ def test_controller_deployment(benchmark, steps, closed_loop):
     try:
         benchmark.pedantic(
             env.rollout, args=(25,), kwargs={"policy": policy}, iterations=1, rounds=10
+        )
+    finally:
+        env.close()
+
+
+@pytest.mark.skipif(importlib.util.find_spec("mujoco") is None, reason="needs MuJoCo")
+@pytest.mark.parametrize(
+    "observations", ["state", "proprioception", "proprioception_vision"]
+)
+def test_microduck_sensor_collection(benchmark, observations):
+    env = MicroDuckEnv(
+        download=True, backend="mujoco", observations=observations, seed=0
+    )
+    try:
+        env.rollout(5, break_when_any_done=False)
+        benchmark.pedantic(
+            env.rollout,
+            args=(25,),
+            kwargs={"break_when_any_done": False},
+            rounds=5,
+            iterations=1,
         )
     finally:
         env.close()

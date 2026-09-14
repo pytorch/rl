@@ -47,3 +47,7 @@ jobs:
         run: |
           python -m examples.microduck.ppo_mujoco env.download=true smoke=true algorithm=ppo save_trainer_file=/tmp/prior-ppo.ckpt
           python -m examples.microduck.ppo_mujoco env.download=true smoke=true algorithm=ppo_ewma save_trainer_file=/tmp/prior-ewma.ckpt
+      - name: Smoke the sensor prior PPOTrainer recipe
+        timeout-minutes: 3
+        run: |
+          python -m examples.microduck.ppo_mujoco env.download=true smoke=true observations=proprioception_vision algorithm=ppo_ewma save_trainer_file=/tmp/prior-sensors.ckpt

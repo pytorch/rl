@@ -171,6 +171,7 @@ class TestMujoco:
             '  <worldbody><geom type="plane" size="1 1 0.1" contype="1" conaffinity="1"/>',
             '    <body name="torso" pos="0 0 0.12"><freejoint name="root"/>',
             '      <geom type="sphere" size="0.02" mass="0.1"/>',
+            '      <camera name="head_camera" pos="0.03 0 0.02" xyaxes="0 -1 0 0 0 1"/>',
             '      <site name="head_imu" pos="0 0 0.02" quat="0.707107 0 -0.707107 0"/>',
             '      <site name="mouth_tip" pos="0.0266783 0 -0.00332564"/>',
         ]
@@ -1325,13 +1326,86 @@ class TestMujoco:
             env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
-    def test_microduck_prior_ewma_recurrent_update_and_resume(self, tmp_path):
+    def test_microduck_camera_delay_and_partial_reset(self, tmp_path):
+        env = MicroDuckEnv(
+            self._write_microduck_fixture(tmp_path),
+            backend="mujoco",
+            num_envs=2,
+            parallel=False,
+            observations="proprioception_vision",
+            sensor_kwargs={"camera_fps": 10, "camera_delay_s": 0.04},
+            seed=0,
+        )
+        try:
+            check_env_specs(env)
+            td = env.reset()
+            assert not td["camera_valid"].any()
+            assert not td["camera_pixels"].any()
+            for index in range(3):
+                td = env.rand_step(td)["next"]
+                assert bool(td["camera_valid"].all()) == (index >= 1)
+            held = td["camera_pixels"].clone()
+            torch.testing.assert_close(
+                td["camera_age"], torch.full_like(td["camera_age"], 0.06)
+            )
+            td["_reset"] = torch.zeros((*env.batch_size, 1), dtype=torch.bool)
+            td["_reset"][0] = True
+            reset = env.reset(td)
+            assert not reset["camera_valid"][0].any()
+            assert reset["camera_valid"][1].all()
+            torch.testing.assert_close(reset["camera_pixels"][1], held[1])
+            torch.testing.assert_close(
+                reset["proprioception"][..., :6], reset["observation"][..., :6]
+            )
+            torch.testing.assert_close(
+                reset["proprioception"][..., 6:], reset["observation"][..., 9:]
+            )
+        finally:
+            env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_camera_snapshot_preserves_history(self, tmp_path):
+        env = MicroDuckEnv(
+            self._write_microduck_fixture(tmp_path),
+            backend="mujoco",
+            observations="proprioception_vision",
+            sensor_kwargs={"camera_fps": 10, "camera_delay_s": 0.04},
+            seed=0,
+        )
+        clone = None
+        try:
+            td = env.reset()
+            for _ in range(3):
+                td = env.rand_step(td)["next"]
+            clone = env[0]
+            saved = env._sensors._pixels.clone()
+            assert clone._sensors.env is clone
+            clone.reset()
+            assert not clone._sensors._valid.any()
+            assert env._sensors._valid.all()
+            torch.testing.assert_close(env._sensors._pixels, saved)
+            env[0] = clone
+            assert not env._sensors._valid.any()
+            assert env._sensors.env is env
+        finally:
+            if clone is not None:
+                clone.close()
+            env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.parametrize(
+        "sensor_mode", ["state", "proprioception", "proprioception_vision"]
+    )
+    def test_microduck_prior_ewma_recurrent_update_and_resume(
+        self, tmp_path, sensor_mode
+    ):
         ppo = self._load_example("ppo_mujoco")
         torch.manual_seed(3)
         env = ppo.make_env(
             {
                 "microduck_root": str(self._write_microduck_fixture(tmp_path)),
                 "backend": "mujoco",
+                "observations": sensor_mode,
                 "parallel": False,
                 "num_envs": 2,
                 "seed": 3,
@@ -1343,7 +1417,7 @@ class TestMujoco:
                 ],
             }
         )
-        actor, critic = ppo.make_models(env, hidden_size=8)
+        actor, critic = ppo.make_models(env, hidden_size=8, sensor_mode=sensor_mode)
         trainer = ppo.make_trainer(
             env,
             actor,
@@ -3302,7 +3376,7 @@ class TestMujoco:
 
 
 class _MicroDuckDeploymentEnv(EnvBase):
-    def __init__(self):
+    def __init__(self, sensor=False):
         super().__init__(batch_size=(2,))
         self.observation_spec = Composite(
             agents=Composite(
@@ -3312,6 +3386,9 @@ class _MicroDuckDeploymentEnv(EnvBase):
             ),
             shape=(2,),
         )
+        self.sensor = sensor
+        if sensor:
+            self.observation_spec["agents", "proprioception"] = Unbounded((2, 3, 53))
         self.action_spec = Composite(
             agents=Composite(action=Unbounded((2, 3, 14)), shape=(2, 3)), shape=(2,)
         )
@@ -3330,6 +3407,10 @@ class _MicroDuckDeploymentEnv(EnvBase):
         result = td.select(*self.observation_spec.keys(True, True)).clone()
         obs = result["agents", "observation"]
         obs[..., 0] += 1
+        if self.sensor:
+            result["agents", "proprioception"] = torch.cat(
+                (obs[..., :6], obs[..., 9:56]), -1
+            )
         # Raw fall on step 2; step 3 must not reset this row again.
         result["agents", "fallen"].zero_()
         result["agents", "fallen"][:, 0, 0] = obs[:, 0, 0] == 2
@@ -3342,18 +3423,27 @@ class _MicroDuckRecordingPolicy(TensorDictModuleBase):
     in_keys = ["observation", "task_id", "memory", "is_init"]
     out_keys = ["action", ("next", "memory")]
 
+    def __init__(self, sensor=False):
+        super().__init__()
+        self.sensor = sensor
+        self.in_keys = [
+            "proprioception" if sensor else "observation",
+            "task_id",
+            "memory",
+            "is_init",
+        ]
+
     def make_tensordict_primer(self):
         return TensorDictPrimer(memory=Unbounded((1,)), default_value=7)
 
     def forward(self, td):
         # Expose adapter values as actions so the independent reference can
         # check task IDs, commands, phase, ramp, and nonzero reset defaults.
-        obs = td["observation"]
-        start = MicroDuckEnv.GAIT_PHASE_START
+        obs = td["proprioception" if self.sensor else "observation"]
+        start = MicroDuckEnv.GAIT_PHASE_START - (3 if self.sensor else 0)
+        command = MicroDuckEnv.COMMAND_START - (3 if self.sensor else 0)
         action = obs.new_zeros((*td.batch_size, 14))
-        action[..., :2] = obs[
-            ..., MicroDuckEnv.COMMAND_START : MicroDuckEnv.COMMAND_START + 2
-        ]
+        action[..., :2] = obs[..., command : command + 2]
         action[..., 2:3] = td["task_id"]
         action[..., 3:6] = obs[..., start : start + 3]
         action[..., 6:7] = td["memory"]
@@ -3363,8 +3453,18 @@ class _MicroDuckRecordingPolicy(TensorDictModuleBase):
 
 
 class TestMicroDuckController:
-    @pytest.mark.parametrize("num_tasks", [7, 9])
-    def test_installed_walker_loading_preserves_inference(self, tmp_path, num_tasks):
+    @pytest.mark.parametrize(
+        "num_tasks,sensor_mode",
+        [
+            (7, "state"),
+            (9, "state"),
+            (9, "proprioception"),
+            (9, "proprioception_vision"),
+        ],
+    )
+    def test_installed_walker_loading_preserves_inference(
+        self, tmp_path, num_tasks, sensor_mode
+    ):
         config = {
             "env": {
                 "action_scale": 1.0,
@@ -3375,12 +3475,17 @@ class TestMicroDuckController:
             }
         }
         actor, _ = make_actor_critic(
-            MicroDuckEnv.OBSERVATION_DIM, num_tasks, hidden_size=16
+            MicroDuckEnv.OBSERVATION_DIM,
+            num_tasks,
+            hidden_size=16,
+            sensor_mode=sensor_mode,
         )
         path = save_render_checkpoint(
             tmp_path / "walker.ckpt",
             actor,
-            env_metadata={"policy_kwargs": {"hidden_size": 16}},
+            env_metadata={
+                "policy_kwargs": {"hidden_size": 16, "sensor_mode": sensor_mode}
+            },
             config=config,
             format="archive",
         )
@@ -3400,12 +3505,31 @@ class TestMicroDuckController:
             },
             [num_tasks],
         )
+        if sensor_mode != "state":
+            inputs["proprioception"] = torch.randn(num_tasks, 53)
+            if sensor_mode == "proprioception_vision":
+                inputs["camera_pixels"] = torch.randint(
+                    256, (num_tasks, 64, 64, 3), dtype=torch.uint8
+                )
+                inputs["camera_age"] = torch.zeros(num_tasks, 1)
+                inputs["camera_valid"] = torch.ones(num_tasks, 1, dtype=torch.bool)
         with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
             expected, actual = actor(inputs.clone()), restored(inputs.clone())
         torch.testing.assert_close(actual["action"], expected["action"])
         torch.testing.assert_close(
             actual["next", "recurrent_state"], expected["next", "recurrent_state"]
         )
+        if sensor_mode != "state":
+            assert "observation" not in restored.in_keys
+            allowed = inputs.select(*restored.in_keys, strict=False)
+            with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
+                isolated = restored(allowed.clone())
+                poisoned = inputs.clone()
+                poisoned["observation"].fill_(float("nan"))
+                poisoned = restored(poisoned)
+            for key in ("action", ("next", "recurrent_state")):
+                torch.testing.assert_close(isolated[key], actual[key])
+                torch.testing.assert_close(poisoned[key], actual[key])
         with pytest.raises(ValueError, match="action_scale"):
             load_microduck_walker(path, action_scale=0.35)
         with pytest.raises(ValueError, match="SHA-256"):
@@ -3432,7 +3556,10 @@ class TestMicroDuckController:
         env.close()
 
     @pytest.mark.parametrize("parameterized", [False, True])
-    def test_deployment_matches_commands_clocks_and_respawns(self, parameterized):
+    @pytest.mark.parametrize("sensor", [False, True])
+    def test_deployment_matches_commands_clocks_and_respawns(
+        self, parameterized, sensor
+    ):
         tasks = [
             MicroDuckEnv.standing_task(),
             MicroDuckEnv.speed_range_task(0.1, 0.3),
@@ -3441,8 +3568,8 @@ class TestMicroDuckController:
         selected = [2, 1]
         argument_key = ("command", "argument") if parameterized else None
         env = microduck_skill_env(
-            _MicroDuckDeploymentEnv(),
-            _MicroDuckRecordingPolicy(),
+            _MicroDuckDeploymentEnv(sensor=sensor),
+            _MicroDuckRecordingPolicy(sensor=sensor),
             tasks,
             skills=selected,
             steps=3,

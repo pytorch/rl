@@ -25,15 +25,16 @@ from torchrl.modules.tensordict_module.controllers import LowLevelController
 
 
 class _MicroDuckAdapter(TensorDictModuleBase):
-    def __init__(self, tasks, skills, argument_key, control_period_s):
+    def __init__(self, tasks, skills, argument_key, control_period_s, observation_key):
         super().__init__()
         self.argument_key = argument_key
         self.control_period_s = control_period_s
-        self.in_keys = ["observation", "skill", "gait_phase", "gait_elapsed"]
+        self.observation_key = observation_key
+        self.in_keys = [observation_key, "skill", "gait_phase", "gait_elapsed"]
         if argument_key is not None:
             self.in_keys.append(argument_key)
         self.out_keys = [
-            "observation",
+            observation_key,
             "task_id",
             ("next", "gait_phase"),
             ("next", "gait_elapsed"),
@@ -66,11 +67,14 @@ class _MicroDuckAdapter(TensorDictModuleBase):
             if self.argument_key is None
             else low + 0.5 * (td.get(self.argument_key) + 1) * (high - low)
         )
-        observation = td["observation"][..., : MicroDuckEnv.OBSERVATION_DIM].clone()
+        sensor = self.observation_key == "proprioception"
+        observation = td[self.observation_key][
+            ..., : 53 if sensor else MicroDuckEnv.OBSERVATION_DIM
+        ].clone()
         phase, elapsed = td["gait_phase"], td["gait_elapsed"]
-        start = MicroDuckEnv.COMMAND_START
+        start = MicroDuckEnv.COMMAND_START - (3 if sensor else 0)
         observation[..., start : start + 2] = command
-        start = MicroDuckEnv.GAIT_PHASE_START
+        start = MicroDuckEnv.GAIT_PHASE_START - (3 if sensor else 0)
         observation[..., start] = phase.sin()
         observation[..., start + 1] = phase.cos()
         observation[..., start + 2] = (
@@ -79,7 +83,7 @@ class _MicroDuckAdapter(TensorDictModuleBase):
         frequency = self.gait_frequency_hz[skill] + self.gait_frequency_per_mps[
             skill
         ] * command.norm(dim=-1)
-        td["observation"] = observation
+        td[self.observation_key] = observation
         td["task_id"] = self.skill_task_ids[skill].unsqueeze(-1)
         td["next", "gait_phase"] = (
             phase + 2 * math.pi * frequency * self.control_period_s
@@ -168,7 +172,13 @@ class MicroDuckController(LowLevelController):
             walker,
             decision_spec,
             adapter=_MicroDuckAdapter(
-                library, skill_ids, argument_key, control_period_s
+                library,
+                skill_ids,
+                argument_key,
+                control_period_s,
+                "proprioception"
+                if "proprioception" in walker.in_keys
+                else "observation",
             ),
             group_key=group_key,
             reset_key=reset_key,
@@ -315,6 +325,14 @@ def microduck_skill_env(
         raise ValueError(
             "The task observation must start with the MicroDuck observation."
         )
+    for key in walker.in_keys:
+        if (
+            key in ("proprioception", "camera_pixels", "camera_age", "camera_valid")
+            and key not in spec.keys()
+        ):
+            raise ValueError(
+                f"The walker requires sensor input {key!r}; use its matching observation schema."
+            )
     num_skills = controller.decision_spec["skill"].n
     result = ClosedLoopMultiAction.from_env(env, controller, steps=steps)
     result.insert_transform(-1, _MicroDuckSkillHistory(env, group_key, num_skills))

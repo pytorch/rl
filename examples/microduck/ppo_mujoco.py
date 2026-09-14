@@ -56,7 +56,7 @@ from copy import deepcopy
 from dataclasses import asdict, replace
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import hydra
 import torch
@@ -191,6 +191,8 @@ def make_env(
         "tasks": tasks,
         "action_scale": env_cfg["action_scale"],
         "diagnostics": env_cfg["diagnostics"],
+        "observations": env_cfg.get("observations", "state"),
+        "sensor_kwargs": env_cfg.get("sensor_kwargs"),
         "num_envs": env_cfg["num_envs"],
         # MuJoCo state is float64, which MPS does not support: CUDA or CPU.
         "device": torch.device(
@@ -285,6 +287,8 @@ def make_models(
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
     residual_scale: float = 0.2,
     initial_policy_scale: float = 0.05,
+    sensor_mode: Literal["state", "proprioception", "proprioception_vision"] = "state",
+    critic_observation: Literal["state", "actor"] = "state",
 ) -> tuple[ProbabilisticActor, TensorDictSequential]:
     """Create the GRU actor and the critic that shares its backbone.
 
@@ -306,6 +310,8 @@ def make_models(
         gait=gait,
         residual_scale=residual_scale,
         initial_policy_scale=initial_policy_scale,
+        sensor_mode=sensor_mode,
+        critic_observation=critic_observation,
     )
     env.append_transform(get_primers_from_module(actor))
     return actor, critic
@@ -1098,6 +1104,8 @@ def make_training(recipe: DictConfig) -> PPOTrainer:
     policy_head = "gait-residual" if cfg.policy.from_prior else "gaussian"
     policy_kwargs = {
         "hidden_size": cfg.policy.hidden_size,
+        "sensor_mode": cfg.env.observations,
+        "critic_observation": cfg.policy.critic_observation,
         "policy_head": policy_head,
         "gait": asdict(gait),
         "residual_scale": cfg.policy.residual_scale,
