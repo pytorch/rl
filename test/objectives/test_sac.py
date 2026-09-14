@@ -2923,6 +2923,32 @@ class TestCrossQ(LossModuleTestBase):
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_crossq_set_keys_after_value_estimator(self, td_est):
+        torch.manual_seed(self.seed)
+        loss_fn = CrossQLoss(self._create_mock_actor(), self._create_mock_qvalue())
+        loss_fn.make_value_estimator(td_est)
+        renamed_loss_fn = deepcopy(loss_fn)
+        renamed_loss_fn.set_keys(
+            reward="reward2", done="done2", terminated="terminated2"
+        )
+
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_crossq()
+        torch.manual_seed(self.seed)
+        renamed_td = self._create_mock_data_crossq(
+            reward_key="reward2", done_key="done2", terminated_key="terminated2"
+        )
+
+        torch.manual_seed(self.seed)
+        loss = loss_fn(td)
+        torch.manual_seed(self.seed)
+        renamed_loss = renamed_loss_fn(renamed_td)
+        for key in ("loss_actor", "loss_qvalue", "loss_alpha"):
+            torch.testing.assert_close(renamed_loss[key], loss[key])
+
     @pytest.mark.parametrize("action_key", ["action", "action2"])
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
