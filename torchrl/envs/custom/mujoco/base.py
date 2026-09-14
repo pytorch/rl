@@ -882,7 +882,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         backend = self.__dict__.get("_backend")
         if backend is not None and self.backend_name == "mujoco":
             for renderer in getattr(backend, "_renderers", {}).values():
-                renderer.close()
+                backend._close_renderer(renderer)
             backend.__dict__.pop("_renderers", None)
             backend.__dict__.pop("_renderer", None)
         super().close(raise_if_closed=raise_if_closed)

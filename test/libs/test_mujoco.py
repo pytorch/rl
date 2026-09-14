@@ -2752,12 +2752,17 @@ class TestMujoco:
             torch.testing.assert_close(
                 clone.render(width=32, height=32), original, rtol=0, atol=0
             )
+            # Close the clone while the parent's GL context is current.
+            env.render(width=32, height=32)
             clone.close()
             torch.testing.assert_close(
                 env.render(width=32, height=32), original, rtol=0, atol=0
             )
             env.render(width=48, height=48)
             assert wide._mjr_context is None
+            torch.testing.assert_close(
+                env.render(width=32, height=32), original, rtol=0, atol=0
+            )
             renderers = list(env._backend._renderers.values())
             env.close()
             assert all(renderer._mjr_context is None for renderer in renderers)

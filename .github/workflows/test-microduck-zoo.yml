@@ -35,7 +35,7 @@ jobs:
       - name: Install this TorchRL revision and the pinned optional zoo
         run: |
           python -m pip install --no-build-isolation .
-          python -m pip install 'torchrl-zoo @ https://github.com/vmoens/rl-zoo/archive/3a9132afae38819680ba32a2f112a0164b9d2341.zip'
+          python -m pip install 'torchrl-zoo @ https://github.com/vmoens/rl-zoo/archive/b1a4dcbdfd232f7c84ccf5190ea7ac4493842f2e.zip'
       - name: Execute the installed-package tutorial
         working-directory: /tmp
         timeout-minutes: 3

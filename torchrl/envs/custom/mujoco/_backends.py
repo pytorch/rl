@@ -735,6 +735,18 @@ class _MujocoBackend(_PhysicsBackend):
             dtype=torch.float32,
         ).reshape(1, len(site_ids), 3, 3)
 
+    @staticmethod
+    def _close_renderer(renderer) -> None:
+        # Release GPU objects under their owning GL context. Renderer.close()
+        # frees the GL context first, which can delete another live renderer's
+        # objects on drivers that restore a different current context.
+        if renderer._gl_context is not None:
+            renderer._gl_context.make_current()
+        if renderer._mjr_context is not None:
+            renderer._mjr_context.free()
+            renderer._mjr_context = None
+        renderer.close()
+
     def render(
         self,
         *,
@@ -755,7 +767,7 @@ class _MujocoBackend(_PhysicsBackend):
             # Keep their contexts warm, but bound arbitrary resize requests.
             if len(self._renderers) == 2:
                 _, expired = self._renderers.popitem(last=False)
-                expired.close()
+                self._close_renderer(expired)
             self._m.vis.global_.offwidth = max(self._m.vis.global_.offwidth, width)
             self._m.vis.global_.offheight = max(self._m.vis.global_.offheight, height)
             renderer = mujoco.Renderer(self._m, height=height, width=width)
