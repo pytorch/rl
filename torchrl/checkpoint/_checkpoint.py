@@ -11,7 +11,9 @@ import math
 import os
 import random
 import shutil
+import signal
 import tempfile
+import threading
 import uuid
 import zipfile
 from collections import OrderedDict
@@ -689,6 +691,74 @@ class GlobalRNGState:
                     "Checkpoint contains MPS RNG state but MPS is unavailable."
                 )
             mps.set_rng_state(state_dict["torch_mps"].cpu())
+
+
+class StopOnSignal:
+    """Turn termination signals into a stop request checked at loop boundaries.
+
+    The first handled signal records a request so a training loop can finish
+    the current batch, save a checkpoint and exit cleanly. A second signal
+    raises :class:`KeyboardInterrupt` so a loop that cannot reach a boundary
+    can still be interrupted. Handlers are installed when the context is
+    entered and the previous handlers are restored on exit. Python only
+    accepts signal handlers in the main thread, so entering the context from
+    another thread leaves the handlers untouched and logs a warning.
+
+    Args:
+        signals (Collection[int], optional): signal numbers to handle.
+            Defaults to ``SIGINT`` and ``SIGTERM``.
+        on_request (Callable[[str], None], optional): callback invoked with the
+            signal name when the first signal arrives.
+
+    Examples:
+        >>> from torchrl.checkpoint import StopOnSignal
+        >>> with StopOnSignal() as stop:
+        ...     for _ in range(3):
+        ...         if stop.requested:
+        ...             break
+        >>> stop.requested
+        False
+    """
+
+    def __init__(
+        self,
+        signals: Collection[int] = (signal.SIGINT, signal.SIGTERM),
+        *,
+        on_request: Callable[[str], None] | None = None,
+    ) -> None:
+        self.signals = tuple(signals)
+        self.on_request = on_request
+        self.signal_name: str | None = None
+        self._previous_handlers: dict[int, Any] = {}
+
+    @property
+    def requested(self) -> bool:
+        """Whether a handled signal has been received."""
+        return self.signal_name is not None
+
+    def __call__(self, signal_number: int, frame: Any) -> None:
+        name = signal.Signals(signal_number).name
+        if self.signal_name is not None:
+            raise KeyboardInterrupt(f"Received {name} twice; interrupting.")
+        self.signal_name = name
+        if self.on_request is not None:
+            self.on_request(name)
+
+    def __enter__(self) -> StopOnSignal:
+        if threading.current_thread() is not threading.main_thread():
+            torchrl_logger.warning(
+                "StopOnSignal only installs handlers in the main thread; signals "
+                "will not request a stop."
+            )
+            return self
+        for signal_number in self.signals:
+            self._previous_handlers[signal_number] = signal.signal(signal_number, self)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        for signal_number, handler in self._previous_handlers.items():
+            signal.signal(signal_number, signal.SIG_DFL if handler is None else handler)
+        self._previous_handlers.clear()
 
 
 @dataclass

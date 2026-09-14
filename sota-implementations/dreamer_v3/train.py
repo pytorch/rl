@@ -22,9 +22,8 @@ import copy
 import functools as ft
 import gc
 import math
-import signal
 from collections.abc import Callable
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from typing import NamedTuple
 
@@ -61,7 +60,12 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl import timeit
 from torchrl._utils import get_available_device, logger as torchrl_logger
-from torchrl.checkpoint import Checkpoint, CheckpointRotation, GlobalRNGState
+from torchrl.checkpoint import (
+    Checkpoint,
+    CheckpointRotation,
+    GlobalRNGState,
+    StopOnSignal,
+)
 from torchrl.collectors import AsyncBatchedCollector, Collector
 from torchrl.data import (
     LazyTensorStorage,
@@ -104,16 +108,6 @@ class _ElapsedTimer:
 
     def elapsed(self) -> float:
         return self.offset + self.timer.elapsed()
-
-
-class _ShutdownRequest:
-    """Handle termination after completing the current collection/update batch."""
-
-    def __init__(self):
-        self.signal_number: int | None = None
-
-    def __call__(self, signal_number: int, _frame) -> None:
-        self.signal_number = signal_number
 
 
 def _resolve_resume_path(requested: str | None) -> Path | None:
@@ -1112,11 +1106,9 @@ def main(cfg: DictConfig):
             replay_restored,
         )
     next_checkpoint = update_step + checkpoint_every if checkpoint_every else None
-    shutdown_request = _ShutdownRequest()
-    previous_handlers = {
-        signum: signal.signal(signum, shutdown_request)
-        for signum in (signal.SIGINT, signal.SIGTERM)
-    }
+    # SIGINT/SIGTERM stop after the current batch; a second signal interrupts.
+    signal_handlers = ExitStack()
+    stop_request = signal_handlers.enter_context(StopOnSignal())
 
     def save_checkpoint() -> None:
         if rotation is None:
@@ -1184,7 +1176,7 @@ def main(cfg: DictConfig):
                 completed_milestones,
             )
 
-            if shutdown_request.signal_number is not None:
+            if stop_request.requested:
                 break
             if (
                 cfg.optimization.max_time is not None
@@ -1316,8 +1308,7 @@ def main(cfg: DictConfig):
     finally:
         # Let setup cycles be collected between Hydra multirun jobs.
         gc.unfreeze()
-        for signum, handler in previous_handlers.items():
-            signal.signal(signum, handler)
+        signal_handlers.close()
         try:
             collector.shutdown()
         finally:

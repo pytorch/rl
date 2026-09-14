@@ -11,12 +11,13 @@ import itertools
 import json
 import math
 import pathlib
+import signal
 import sys
 import time
 import warnings
 import weakref
 from collections import defaultdict, OrderedDict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Literal
@@ -44,6 +45,7 @@ from torchrl.checkpoint import (
     CheckpointRotation,
     GlobalRNGState,
     resolve_checkpoint_path,
+    StopOnSignal,
 )
 from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
@@ -1096,6 +1098,33 @@ class Trainer:
         """Signal that training should stop at the next loop boundary."""
         self._stop_training = True
         self._stop_reason = reason
+
+    @contextlib.contextmanager
+    def stop_on_signal(
+        self, signals: Collection[int] = (signal.SIGINT, signal.SIGTERM)
+    ):
+        """Stop training cleanly when the process receives a termination signal.
+
+        Wrap :meth:`train` in this context. The first signal calls
+        :meth:`request_stop`, so the loop finishes the current batch, writes a
+        final checkpoint when a save destination is configured, shuts the
+        collector down and returns. A second signal raises
+        :class:`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+        Args:
+            signals (Collection[int], optional): signal numbers to handle.
+                Defaults to ``SIGINT`` and ``SIGTERM``.
+
+        Examples:
+            >>> with trainer.stop_on_signal():  # doctest: +SKIP
+            ...     trainer.train()
+
+        """
+        with StopOnSignal(
+            signals,
+            on_request=lambda name: self.request_stop(f"received {name}"),
+        ) as stop:
+            yield stop
 
     def _save_trainer(self) -> None:
         if self.checkpoint is not None:

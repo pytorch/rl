@@ -21,6 +21,7 @@ from ._checkpoint import (
     resolve_checkpoint_path,
     StateDictCheckpointAdapter,
     StateDictFormat,
+    StopOnSignal,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "resolve_checkpoint_path",
     "StateDictCheckpointAdapter",
     "StateDictFormat",
+    "StopOnSignal",
 ]

@@ -9,6 +9,8 @@ import contextlib
 import importlib.util
 import inspect
 import os
+import signal
+import sys
 import tempfile
 import warnings
 from argparse import Namespace
@@ -451,6 +453,54 @@ class TestTrainerResume:
 
         trainer.register_op("batch_process", fail)
         with pytest.raises(RuntimeError, match="hook failure"):
+            trainer.train()
+        assert collector.shutdown_calls == 1
+
+
+def _reward_batches(count):
+    return [
+        TensorDict({("next", "reward"): torch.tensor([1.0])}, [1]) for _ in range(count)
+    ]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal delivery")
+class TestStopOnSignal:
+    def test_saves_and_stops(self, tmp_path):
+        collector = MockingIterableCollector(batches=_reward_batches(5))
+        trainer = _loop_trainer(collector, tmp_path / "checkpoint")
+
+        def interrupt(batch):
+            # Delivered while the second batch is processed: the loop finishes
+            # that batch, saves and stops instead of running the remaining three.
+            if trainer.collected_frames == 1:
+                signal.raise_signal(signal.SIGINT)
+
+        trainer.register_op("batch_process", interrupt)
+        previous = signal.getsignal(signal.SIGINT)
+        with trainer.stop_on_signal() as stop:
+            trainer.train()
+        assert signal.getsignal(signal.SIGINT) is previous
+        assert stop.requested
+        assert trainer._stop_reason == "received SIGINT"
+        assert trainer.collected_frames == 2
+        assert collector.shutdown_calls == 1
+
+        restored = _loop_trainer(
+            MockingIterableCollector(batches=[]), tmp_path / "checkpoint"
+        )
+        restored.load_from_file(tmp_path / "checkpoint")
+        assert restored.collected_frames == 2
+
+    def test_second_signal(self):
+        collector = MockingIterableCollector(batches=_reward_batches(5))
+        trainer = _loop_trainer(collector)
+
+        def interrupt(batch):
+            signal.raise_signal(signal.SIGINT)
+            signal.raise_signal(signal.SIGINT)
+
+        trainer.register_op("batch_process", interrupt)
+        with pytest.raises(KeyboardInterrupt), trainer.stop_on_signal():
             trainer.train()
         assert collector.shutdown_calls == 1
 
