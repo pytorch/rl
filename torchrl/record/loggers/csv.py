@@ -107,8 +107,8 @@ class CSVExperiment:
 
     def add_text(self, tag, text, global_step: int | None = None):
         if global_step is None:
-            global_step = self.videos_counter[tag]
-            self.videos_counter[tag] += 1
+            global_step = self.text_counter[tag]
+            self.text_counter[tag] += 1
         filepath = os.path.join(
             self.log_dir, "texts", "".join([tag, str(global_step)]) + ".txt"
         )

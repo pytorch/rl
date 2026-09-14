@@ -219,6 +219,24 @@ class TestCSVLogger:
         assert restored.experiment.scalars["reward"] == [(0, 2.0)]
         assert restored.experiment.videos_counter["evaluation"] == 3
 
+    def test_text_and_video_steps_are_counted_separately(self, tmp_path):
+        logger = CSVLogger(log_dir=tmp_path, exp_name="counters")
+        video = torch.zeros(1, 2, 3, 4, 4, dtype=torch.uint8)
+        logger.log_video("demo", video)
+        logger.log_video("demo", video)
+        logger.experiment.add_text("demo", "note")
+        logger.log_hparams({"lr": 0.1})
+        exp_dir = tmp_path / "counters"
+        assert sorted(os.listdir(exp_dir / "videos")) == ["demo_0.pt", "demo_1.pt"]
+        assert sorted(os.listdir(exp_dir / "texts")) == ["demo0.txt", "hparams0.txt"]
+
+        # a resumed logger keeps numbering the texts after the saved ones
+        resumed = CSVLogger(log_dir=tmp_path, exp_name="counters")
+        resumed.load_state_dict(logger.state_dict())
+        resumed.log_hparams({"lr": 0.2})
+        assert (exp_dir / "texts" / "hparams0.txt").read_text() == "lr: 0.1"
+        assert (exp_dir / "texts" / "hparams1.txt").read_text() == "lr: 0.2"
+
     def test_factory_resume_appends_same_run(self, tmp_path):
         logger = get_logger("csv", str(tmp_path), "saved")
         logger.log_scalar("reward", 1.0)
