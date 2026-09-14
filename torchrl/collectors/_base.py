@@ -989,6 +989,15 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         trained weights. It supports both local and remote weight updates, depending on
         the collector configuration.
 
+        This call is conservative good practice, and is required whenever the
+        training and inference policies do not share parameter storage. Examples
+        include policies created in workers by ``policy_factory``, copies placed
+        on another device, and remote policies. Passing ``policy_device`` or
+        ``device`` only creates a copy when the requested device differs from the
+        policy's current device. :class:`~torchrl.objectives.LossModule` does not
+        copy the policy either (see :ref:`ref_lossmodule_weight_sharing` and
+        :ref:`ref_collectors_weightsync`).
+
         The method accepts weights in multiple forms for convenience:
 
         Examples:
