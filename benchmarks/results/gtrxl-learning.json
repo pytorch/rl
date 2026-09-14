@@ -1,0 +1,277 @@
+{
+  "implementation_commit": "5a482b92f",
+  "tensordict_commit": "786fab0440d0476c1b6f9f5d558c3791614d5723",
+  "hardware": "Apple M5 Max, 64 GiB RAM",
+  "platform": "macOS 26.6.2 arm64",
+  "torch_version": "2.11.0",
+  "description": "Three CPU runs, one PyTorch thread each. Timings came from concurrent learning runs and are not throughput benchmarks.",
+  "runs": [
+    {
+      "config": {
+        "seed": 0,
+        "num_threads": 1,
+        "device": "cpu",
+        "network": {
+          "container": "ttd",
+          "hidden_size": 32,
+          "num_layers": 2,
+          "num_heads": 4,
+          "memory_len": 16
+        },
+        "env": {
+          "num_envs": 16
+        },
+        "collector": {
+          "steps_per_batch": 128,
+          "total_frames": 500000
+        },
+        "replay": {
+          "window_length": 32,
+          "batch_size": 16,
+          "storage": "tensor",
+          "scratch_dir": null
+        },
+        "loss": {
+          "epochs": 4,
+          "gamma": 0.99,
+          "gae_lambda": 0.95,
+          "clip_epsilon": 0.2,
+          "entropy_coeff": 0.01
+        },
+        "optim": {
+          "lr": 0.0003,
+          "max_grad_norm": 0.5
+        },
+        "logger": {
+          "backend": null,
+          "eval_interval": 50000,
+          "eval_envs": 4,
+          "output": "outputs/gtrxl/seed-0.json"
+        }
+      },
+      "initial_return": 9.25,
+      "metrics": {
+        "frames": [
+          51200,
+          102400,
+          153600,
+          204800,
+          256000,
+          307200,
+          358400,
+          409600,
+          460800,
+          501760
+        ],
+        "return": [
+          9.5,
+          10.75,
+          26.75,
+          59.25,
+          9.5,
+          55.25,
+          100.25,
+          56.25,
+          9.5,
+          53.25
+        ],
+        "loss": [
+          4.862602710723877,
+          4.370466709136963,
+          5.130545616149902,
+          4.977789878845215,
+          5.444373607635498,
+          5.660358428955078,
+          6.738858699798584,
+          6.5233988761901855,
+          7.022916316986084,
+          6.996979236602783
+        ]
+      },
+      "timings": {
+        "gtrxl/advantages": 0.005448660558583787,
+        "gtrxl/training": 0.38516404580096847
+      },
+      "replay_state_bytes": 262144,
+      "per_step_state_bytes": 8388608
+    },
+    {
+      "config": {
+        "seed": 1,
+        "num_threads": 1,
+        "device": "cpu",
+        "network": {
+          "container": "ttd",
+          "hidden_size": 32,
+          "num_layers": 2,
+          "num_heads": 4,
+          "memory_len": 16
+        },
+        "env": {
+          "num_envs": 16
+        },
+        "collector": {
+          "steps_per_batch": 128,
+          "total_frames": 500000
+        },
+        "replay": {
+          "window_length": 32,
+          "batch_size": 16,
+          "storage": "tensor",
+          "scratch_dir": null
+        },
+        "loss": {
+          "epochs": 4,
+          "gamma": 0.99,
+          "gae_lambda": 0.95,
+          "clip_epsilon": 0.2,
+          "entropy_coeff": 0.01
+        },
+        "optim": {
+          "lr": 0.0003,
+          "max_grad_norm": 0.5
+        },
+        "logger": {
+          "backend": null,
+          "eval_interval": 50000,
+          "eval_envs": 4,
+          "output": "outputs/gtrxl/seed-1.json"
+        }
+      },
+      "initial_return": 9.75,
+      "metrics": {
+        "frames": [
+          51200,
+          102400,
+          153600,
+          204800,
+          256000,
+          307200,
+          358400,
+          409600,
+          460800,
+          501760
+        ],
+        "return": [
+          10.0,
+          10.0,
+          30.5,
+          8.75,
+          80.25,
+          69.0,
+          8.75,
+          84.5,
+          8.75,
+          46.25
+        ],
+        "loss": [
+          4.767746925354004,
+          5.264762878417969,
+          3.8658130168914795,
+          4.556636810302734,
+          4.731344223022461,
+          5.555939197540283,
+          5.852109432220459,
+          5.954525470733643,
+          6.320104122161865,
+          6.919946193695068
+        ]
+      },
+      "timings": {
+        "gtrxl/advantages": 0.005340505132869802,
+        "gtrxl/training": 0.2584573570562869
+      },
+      "replay_state_bytes": 262144,
+      "per_step_state_bytes": 8388608
+    },
+    {
+      "config": {
+        "seed": 2,
+        "num_threads": 1,
+        "device": "cpu",
+        "network": {
+          "container": "ttd",
+          "hidden_size": 32,
+          "num_layers": 2,
+          "num_heads": 4,
+          "memory_len": 16
+        },
+        "env": {
+          "num_envs": 16
+        },
+        "collector": {
+          "steps_per_batch": 128,
+          "total_frames": 500000
+        },
+        "replay": {
+          "window_length": 32,
+          "batch_size": 16,
+          "storage": "tensor",
+          "scratch_dir": null
+        },
+        "loss": {
+          "epochs": 4,
+          "gamma": 0.99,
+          "gae_lambda": 0.95,
+          "clip_epsilon": 0.2,
+          "entropy_coeff": 0.01
+        },
+        "optim": {
+          "lr": 0.0003,
+          "max_grad_norm": 0.5
+        },
+        "logger": {
+          "backend": null,
+          "eval_interval": 50000,
+          "eval_envs": 4,
+          "output": "outputs/gtrxl/seed-2.json"
+        }
+      },
+      "initial_return": 9.5,
+      "metrics": {
+        "frames": [
+          51200,
+          102400,
+          153600,
+          204800,
+          256000,
+          307200,
+          358400,
+          409600,
+          460800,
+          501760
+        ],
+        "return": [
+          9.5,
+          9.25,
+          31.0,
+          9.25,
+          37.75,
+          31.0,
+          25.25,
+          25.25,
+          25.5,
+          24.0
+        ],
+        "loss": [
+          5.573766231536865,
+          4.045589923858643,
+          4.948329448699951,
+          5.075080871582031,
+          5.7417449951171875,
+          6.016894817352295,
+          6.598330497741699,
+          6.227209091186523,
+          6.813776016235352,
+          6.8425679206848145
+        ]
+      },
+      "timings": {
+        "gtrxl/advantages": 0.00619588482136629,
+        "gtrxl/training": 0.25998669254536544
+      },
+      "replay_state_bytes": 262144,
+      "per_step_state_bytes": 8388608
+    }
+  ]
+}

@@ -311,4 +311,4 @@ python -m pytest test/tensorclass/test_typedtensordict.py -q
 - [Benchmark script](../ad_hoc/bench_recurrent_state.py)
 - [Window storage probe](../ad_hoc/probe_recurrent_window_storage.py)
 - [Private candidate fixtures](../../torchrl/testing/_state_candidates.py)
-- [Private GTrXL backbone](../../torchrl/modules/models/_gtrxl.py)
+- [GTrXL backbone](../../torchrl/modules/models/gtrxl.py)

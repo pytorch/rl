@@ -591,6 +591,94 @@ def test_gtrxl_explicit_state_numerics(container, batch_shape, device):
     assert not torch.allclose(module(retained)["embed"], module(empty)["embed"])
 
 
+@pytest.mark.parametrize("container", ["td", "tc", "ttd"])
+@pytest.mark.parametrize("batch_shape", [(2,), (2, 2)])
+@pytest.mark.parametrize("storage_cls", [LazyTensorStorage, LazyMemmapStorage])
+@pytest.mark.parametrize("length", [2, 8])
+def test_gtrxl_compact_window(container, batch_shape, storage_cls, length, tmp_path):
+    torch._dynamo.reset()
+    torch.manual_seed(0)
+    module = _make_candidate("gtrxl", container, memory_len=5)
+    spec = module.transformer.state_spec
+    state = spec.zero(batch_shape)
+    state.get("memory").normal_()
+    state.get("valid")[..., 1::2] = True
+    initial = state.clone()
+    steps = []
+    for t in range(length):
+        td = TensorDict(
+            {
+                "observation": torch.randn(*batch_shape, 7),
+                "is_init": torch.zeros(*batch_shape, 1, dtype=torch.bool),
+                ("agent", "state"): state,
+            },
+            batch_shape,
+        )
+        if t in (0, 3, 6):
+            td["is_init"][0] = True
+        module(td)
+        steps.append(td.clone())
+        state = td.get(("next", "agent", "state"))
+    full = torch.stack(steps, -1)
+    # A nested [*batch, T] child and [*batch] carry have independent dimensions.
+    records = TensorDict(
+        {
+            "transitions": full.exclude(("agent", "state"), ("next", "agent", "state")),
+            "initial_state": initial,
+        },
+        batch_shape,
+    ).reshape(-1)
+    kwargs = {"scratch_dir": tmp_path} if storage_cls is LazyMemmapStorage else {}
+    storage = storage_cls(records.numel(), **kwargs)
+    replay = TensorDictReplayBuffer(storage=storage, batch_size=records.numel())
+    replay.extend(records)
+    # Read all records in order so multidimensional environment batches survive.
+    sample = replay[:].clone().reshape(batch_shape)
+    assert type(sample["initial_state"]) is type(initial)
+    expected_bytes = (
+        initial.get("memory").numel() * initial.get("memory").element_size()
+    )
+    assert (
+        storage._storage.get(("initial_state", "memory")).untyped_storage().nbytes()
+        == expected_bytes
+    )
+    compact = TensorDict(
+        {
+            "observation": sample["transitions", "observation"],
+            "is_init": sample["transitions", "is_init"],
+            ("agent", "state"): sample["initial_state"],
+        },
+        batch_shape,
+    )
+    compact["observation"].requires_grad_()
+    memory = compact.get(("agent", "state")).get("memory").requires_grad_()
+    compiled = torch.compile(module, backend="aot_eager", fullgraph=True)
+    with set_recurrent_mode(True):
+        eager = module(compact.clone())
+        actual = compiled(compact)
+    torch.testing.assert_close(actual["embed"], full["embed"], atol=2e-5, rtol=2e-5)
+    torch.testing.assert_close(actual["embed"], eager["embed"])
+    final = actual.get(("next", "agent", "state"))
+    torch.testing.assert_close(final.get("valid"), state.get("valid"))
+    torch.testing.assert_close(
+        final.get("memory"),
+        state.get("memory").masked_fill(~state.get("valid")[..., None, :, None], 0),
+        atol=2e-5,
+        rtol=2e-5,
+    )
+    actual["embed"][..., -1, :].square().sum().backward()
+    assert memory.grad is None
+    grad = compact["observation"].grad
+    # The last reset blocks old observations, while gradients span the window
+    # on streams without a reset. The supplied initial memory is always detached.
+    if length == 8:
+        assert grad[0, ..., :6, :].count_nonzero() == 0
+    assert grad[1, ..., 0, :].abs().sum() > 0
+    assert all(
+        p.grad is not None and p.grad.isfinite().all() for p in module.parameters()
+    )
+
+
 @pytest.mark.parametrize("precision", ["float64", "bfloat16", "autocast"])
 def test_gtrxl_validity_and_precision(precision):
     module = _make_candidate("gtrxl", "ttd", memory_len=3)
@@ -618,6 +706,12 @@ def test_gtrxl_validity_and_precision(precision):
     with context:
         expected = module(td.clone())["embed"]
         actual = module(perturbed)["embed"]
+        compact = td.clone()
+        compact["observation"] = compact["observation"].unsqueeze(-2)
+        compact["is_init"] = compact["is_init"].unsqueeze(-2)
+        with set_recurrent_mode(True):
+            window = module(compact)["embed"].squeeze(-2)
+    torch.testing.assert_close(window, expected)
     torch.testing.assert_close(actual, expected)
     assert actual.isfinite().all()
     assert module.transformer.state_spec.zero().memory.dtype is dtype

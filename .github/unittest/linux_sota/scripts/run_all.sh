@@ -136,7 +136,8 @@ python -c "import functorch"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
+  # Draft dependency: TensorDict #1789; remove after it merges.
+  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git@2d252bfae380f150a6136930d7d7a5833d68ecf1
 else
   uv pip install --no-deps tensordict
 fi

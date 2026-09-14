@@ -22,6 +22,7 @@ from .exploration import (
     reset_noise,
 )
 from .gp import GPWorldModel
+from .gtrxl import GTrXL
 from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
@@ -98,6 +99,7 @@ __all__ = [
     "DuelingMlpDQNet",
     "GPT2RewardModel",
     "GPWorldModel",
+    "GTrXL",
     "MLP",
     "MultiAgentConvNet",
     "MultiAgentMLP",

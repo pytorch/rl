@@ -411,7 +411,7 @@ class TransformerModule(ModuleBase):
     ``is_init`` to rebuild positions and a block-diagonal causal mask over the
     window.
 
-    An experimental explicit-state backbone can instead expose
+    An explicit-state backbone such as :class:`~torchrl.modules.GTrXL` can expose
     ``forward_state(features, state, is_init, *, recurrent) -> (out, next_state)``
     and a ``state_spec`` :class:`~torchrl.data.Composite`. The wrapper passes
     flattened environment batches with shape ``[B, T]`` and preserves the
@@ -421,6 +421,14 @@ class TransformerModule(ModuleBase):
     never reads or updates the module-owned cache. In recurrent mode the
     backbone must initialize from stored state at the window start and each
     ``is_init`` boundary, including boundaries inserted by a slice sampler.
+    For compact replay, a ``[B]`` record can instead contain input features
+    ``[B, T, F]``, ``is_init`` markers ``[B, T, 1]`` and one state with batch
+    ``[B]``. In recurrent mode the backbone receives this single initial state
+    and returns one final state. Output features have shape ``[B, T, H]``.
+    With GTrXL this runs parallel masked attention and ``is_init`` marks real
+    episode resets only. Sample whole records to keep state and observations
+    aligned; a slice sampler cannot recover missing intermediate carries.
+
     The episode-alignment and ``max_seq_len`` restrictions below concern the
     reference module-owned-cache path.
 
@@ -763,6 +771,25 @@ class TransformerModule(ModuleBase):
         only their single-step collection path runs under ``torch.no_grad``.
         """
         shape = tensordict.shape
+        value = tensordict.get(self.in_keys[0])
+        if (
+            self._explicit_state
+            and self.recurrent_mode
+            and value.ndim == tensordict.ndim + 2
+        ):
+            # Dense replay can store [B] records containing [B, T, F] features
+            # and a single [B] carry. Time is a feature dimension of the outer
+            # record, not a batch dimension shared by its initial state.
+            flat = tensordict.reshape(-1)
+            out, next_state = self.transformer.forward_state(
+                flat.get(self.in_keys[0]),
+                flat.get(self.in_keys[1]),
+                flat.get("is_init").squeeze(-1),
+                recurrent=True,
+            )
+            tensordict.set(self.out_keys[0], out.reshape(*shape, *out.shape[1:]))
+            tensordict.set(self.out_keys[1], next_state.reshape(shape))
+            return tensordict
         if self.recurrent_mode:
             td_ndim = tensordict.ndim
             if td_ndim == 0:

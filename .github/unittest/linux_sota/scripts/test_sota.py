@@ -17,6 +17,16 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "gtrxl_ppo": """python sota-implementations/gtrxl/gtrxl_ppo.py \
+  env.num_envs=2 \
+  collector.steps_per_batch=9 \
+  collector.total_frames=36 \
+  replay.window_length=4 \
+  replay.batch_size=3 \
+  replay.storage=memmap \
+  loss.epochs=2 \
+  logger.eval_envs=2
+""",
     "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
   collector.groups_per_iter=2 \
   collector.group_size=2 \
