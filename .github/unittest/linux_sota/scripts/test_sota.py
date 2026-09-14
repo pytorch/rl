@@ -17,6 +17,19 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "dqn_trainer_resume": """python sota-implementations/dqn_trainer/train.py \
+  collector.total_frames=2000 \
+  collector.frames_per_batch=1000 \
+  collector.init_random_frames=1000 \
+  trainer.optim_steps_per_batch=2 \
+  trainer.progress_bar=false \
+  hydra.run.dir=outputs/sota_dqn_trainer \
+&& python sota-implementations/dqn_trainer/train.py \
+  resume=outputs/sota_dqn_trainer/checkpoints \
+  collector.total_frames=3000 \
+  trainer.progress_bar=false \
+  hydra.run.dir=outputs/sota_dqn_trainer_resumed
+""",
     "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
   collector.groups_per_iter=2 \
   collector.group_size=2 \

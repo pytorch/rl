@@ -16,6 +16,8 @@ defaults:
   - loss@mixer_loss: mixer
   - target_net_updater@qmix_target_net_updater: soft
   - logger@logger: csv
+  - checkpoint@checkpoint: base
+  - checkpoint_rotation@checkpoint_rotation: base
   - _self_
 
 seed: 0
@@ -160,6 +162,14 @@ optimizer:
 logger:
   exp_name: qmix_vmas_${env.scenario_name}
 
+# Checkpoints are saved every trainer.save_trainer_interval frames under the run
+# directory; pass resume=<checkpoint or rotation directory> to continue a run.
+resume: null
+
+checkpoint_rotation:
+  directory: checkpoints
+  keep_last: 2
+
 trainer:
   collector: ${collector}
   optimizer: ${optimizer}
@@ -177,6 +187,8 @@ trainer:
   save_trainer_interval: 25000
   log_interval: 25000
   save_trainer_file: null
+  checkpoint: ${checkpoint}
+  checkpoint_rotation: ${checkpoint_rotation}
   optim_steps_per_batch: ${train.num_epochs}
   eps_init: ${exploration.eps_init}
   eps_end: ${exploration.eps_end}

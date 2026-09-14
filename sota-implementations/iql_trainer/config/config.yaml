@@ -30,6 +30,8 @@ defaults:
   - loss@loss: iql
   - target_net_updater@target_net_updater: soft
   - logger@logger: csv
+  - checkpoint@checkpoint: base
+  - checkpoint_rotation@checkpoint_rotation: base
   - _self_
 
 # Network configurations
@@ -131,6 +133,14 @@ replay_buffer:
 logger:
   exp_name: iql_halfcheetah_v4
 
+# Checkpoints are saved every trainer.save_trainer_interval frames under the run
+# directory; pass resume=<checkpoint or rotation directory> to continue a run.
+resume: null
+
+checkpoint_rotation:
+  directory: checkpoints
+  keep_last: 2
+
 # Trainer configuration
 trainer:
   collector: ${collector}
@@ -148,6 +158,8 @@ trainer:
   save_trainer_interval: 25000
   log_interval: 25000
   save_trainer_file: null
+  checkpoint: ${checkpoint}
+  checkpoint_rotation: ${checkpoint_rotation}
   optim_steps_per_batch: 64
   async_collection: false
 

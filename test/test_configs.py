@@ -15,6 +15,7 @@ import os
 import pkgutil
 import subprocess
 import sys
+import types
 import typing
 import warnings
 from functools import partial
@@ -25,6 +26,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl import logger as torchrl_logger, trainers as trainers_module
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
@@ -150,6 +152,47 @@ def _resolve_wrapped_class(target_path: str) -> type | None:
         if inspect.isclass(return_type):
             return return_type
     return None
+
+
+class _ResumeTestCollector:
+    """Minimal collector for instantiate_trainer tests."""
+
+    init_random_frames = 0
+
+    def __iter__(self):
+        return iter(())
+
+    def set_seed(self, seed, **kwargs):
+        return seed
+
+    def update_policy_weights_(self, policy=None):
+        pass
+
+    def shutdown(self):
+        pass
+
+    def state_dict(self):
+        return {}
+
+    def load_state_dict(self, state_dict):
+        pass
+
+
+def _make_resume_test_trainer(
+    total_frames, checkpoint, checkpoint_rotation, logger=None
+):
+    return Trainer(
+        collector=_ResumeTestCollector(),
+        total_frames=total_frames,
+        frame_skip=1,
+        optim_steps_per_batch=1,
+        loss_module=torch.nn.Module(),
+        optimizer=None,
+        logger=logger,
+        progress_bar=False,
+        checkpoint=checkpoint,
+        checkpoint_rotation=checkpoint_rotation,
+    )
 
 
 _CONFIG_PARITY_UNRESOLVED = {
@@ -2392,6 +2435,137 @@ class TestTrainerConfigs:
         field = getattr(algorithm_configs, config_name).__dataclass_fields__[field_name]
         assert field.default is None
 
+    def test_checkpoint_configs(self, tmp_path):
+        from hydra.utils import instantiate
+        from torchrl.checkpoint import Checkpoint, CheckpointRotation
+        from torchrl.trainers.algorithms.configs.checkpoint import (
+            CheckpointConfig,
+            CheckpointRotationConfig,
+        )
+
+        checkpoint = instantiate(CheckpointConfig(format="archive", strict="warn"))
+        assert isinstance(checkpoint, Checkpoint)
+        assert checkpoint.format == "archive"
+        assert checkpoint.strict == "warn"
+        rotation = instantiate(
+            CheckpointRotationConfig(
+                directory=str(tmp_path), keep_last=3, keep_best=["reward", "max"]
+            )
+        )
+        assert isinstance(rotation, CheckpointRotation)
+        assert rotation.keep_last == 3
+        assert rotation.keep_best == ("reward", "max")
+
+    @staticmethod
+    def _resume_cfg(rotation_dir, budget, logger, resume=None):
+        from omegaconf import OmegaConf
+
+        return OmegaConf.create(
+            {
+                "resume": resume,
+                "budget": budget,
+                "checkpoint": {"_target_": "torchrl.checkpoint.Checkpoint"},
+                "checkpoint_rotation": {
+                    "_target_": "torchrl.checkpoint.CheckpointRotation",
+                    "directory": str(rotation_dir),
+                    "keep_last": 2,
+                },
+                "logger": logger,
+                "trainer": {
+                    "_target_": "_torchrl_resume_targets.make_trainer",
+                    "total_frames": "${budget}",
+                    "checkpoint": "${checkpoint}",
+                    "checkpoint_rotation": "${checkpoint_rotation}",
+                    "logger": "${logger}",
+                },
+            }
+        )
+
+    @pytest.fixture
+    def resume_targets(self, monkeypatch):
+        module = types.ModuleType("_torchrl_resume_targets")
+        module.make_trainer = _make_resume_test_trainer
+        monkeypatch.setitem(sys.modules, "_torchrl_resume_targets", module)
+
+    def test_resume_saved_config(self, tmp_path, monkeypatch, resume_targets):
+        from torchrl.trainers.algorithms.configs import instantiate_trainer
+
+        rotation_dir = tmp_path / "checkpoints"
+        csv_logger = {
+            "_target_": "torchrl.record.loggers.csv.CSVLogger",
+            "exp_name": "run",
+            "log_dir": "logs",
+        }
+        monkeypatch.chdir(tmp_path)
+        trainer = instantiate_trainer(self._resume_cfg(rotation_dir, 100, csv_logger))
+        assert "config" in trainer.checkpoint.components
+        trainer.collected_frames = 7
+        trainer.logger.log_scalar("reward", 1.0)
+        trainer.save_trainer(force_save=True)
+
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        # The current file disagrees with the saved run (budget 999): the saved
+        # configuration wins, and group overrides cannot apply to it.
+        restored = instantiate_trainer(
+            self._resume_cfg(rotation_dir, 999, csv_logger, resume=str(rotation_dir)),
+            overrides=[f"resume={rotation_dir}", "logger@logger=wandb"],
+        )
+        assert restored.total_frames == 100
+        assert restored.collected_frames == 7
+        assert restored.checkpoint_rotation.directory == rotation_dir.resolve()
+        # CSV logging continues in the saved directory, not the new run dir.
+        assert os.path.abspath(restored.logger.log_dir) == str(tmp_path / "logs")
+        assert restored.logger.experiment.scalars["reward"] == [(0, 1.0)]
+
+        # A value override applies through the saved interpolation.
+        extended = instantiate_trainer(
+            self._resume_cfg(rotation_dir, 999, csv_logger, resume=str(rotation_dir)),
+            overrides=[f"resume={rotation_dir}", "budget=200"],
+        )
+        assert extended.total_frames == 200
+        assert extended.collected_frames == 7
+        extended.save_trainer(force_save=True)
+        saved = Checkpoint.read_component(
+            extended.checkpoint_rotation.latest(), "config"
+        )
+        assert saved["budget"] == 200
+
+    def test_resume_wandb(self, tmp_path, monkeypatch, resume_targets):
+        from torchrl.trainers.algorithms.configs import instantiate_trainer
+
+        initializations = []
+
+        def init(**kwargs):
+            initializations.append(kwargs)
+            return argparse.Namespace(
+                config={},
+                define_metric=MagicMock(),
+                id=kwargs.get("id") or "generated-run",
+                log=MagicMock(),
+            )
+
+        monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+        monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+        rotation_dir = tmp_path / "checkpoints"
+        wandb_logger = {
+            "_target_": "torchrl.trainers.algorithms.configs.logging._make_wandb_logger",
+            "exp_name": "run",
+            "log_env_packages": False,
+        }
+        trainer = instantiate_trainer(self._resume_cfg(rotation_dir, 100, wandb_logger))
+        trainer.save_trainer(force_save=True)
+        assert initializations[-1].get("id") is None
+
+        restored = instantiate_trainer(
+            self._resume_cfg(rotation_dir, 100, wandb_logger, resume=str(rotation_dir)),
+            overrides=[f"resume={rotation_dir}"],
+        )
+        assert initializations[-1]["id"] == "generated-run"
+        assert initializations[-1]["resume"] == "must"
+        assert restored.logger.id == "generated-run"
+
     def test_nested_key_normalization_for_hydra_lists(self):
         from omegaconf import ListConfig
         from torchrl.trainers.algorithms.configs.common import (
@@ -2852,6 +3026,120 @@ class TestTrainerConfigs:
 
         torch.testing.assert_close(trainer.loss_module.min_action, torch.tensor(-1.0))
         torch.testing.assert_close(trainer.loss_module.max_action, torch.tensor(1.0))
+
+
+_DQN_TRAINER_YAML = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.qvalue_model: qvalue
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: dqn
+  - optimizer@optimizer: adam
+  - loss@loss: dqn
+  - target_net_updater@target_net_updater: hard
+  - logger@logger: csv
+  - _self_
+
+networks:
+  qvalue_network:
+    out_features: 2
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  qvalue_model:
+    in_keys: ["observation"]
+    action_space: "one-hot"
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 500
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+loss:
+  value_network: ${models.qvalue_model}
+  loss_function: l2
+  delay_value: true
+  action_space: "one-hot"
+  reward_key: reward
+  done_key: done
+  terminated_key: terminated
+  action_key: action
+  action_value_key: action_value
+  value_key: chosen_action_value
+
+target_net_updater:
+  value_network_update_interval: 50
+
+optimizer:
+  lr: 2.5e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.qvalue_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_dqn
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  value_network: ${models.qvalue_model}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 10.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
 
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
@@ -3626,122 +3914,56 @@ trainer:
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_dqn_trainer_parsing_with_file(self, tmpdir):
         """Test DQN trainer parsing with Hydra config."""
-        yaml_config = """
-defaults:
-  - transform@transform0: step_counter
-  - transform@transform1: reward_sum
-  - env@training_env: batched_env
-  - env@training_env.create_env_fn: transformed_env
-  - env@training_env.create_env_fn.base_env: gym
-  - transform@training_env.create_env_fn.transform: compose
-  - model@models.qvalue_model: qvalue
-  - network@networks.qvalue_network: mlp
-  - collector@collector: sync
-  - replay_buffer@replay_buffer: base
-  - storage@replay_buffer.storage: lazy_tensor
-  - writer@replay_buffer.writer: round_robin
-  - sampler@replay_buffer.sampler: random
-  - trainer@trainer: dqn
-  - optimizer@optimizer: adam
-  - loss@loss: dqn
-  - target_net_updater@target_net_updater: hard
-  - logger@logger: csv
-  - _self_
-
-networks:
-  qvalue_network:
-    out_features: 2
-    in_features: 4
-    num_cells: [64, 64]
-
-models:
-  qvalue_model:
-    in_keys: ["observation"]
-    action_space: "one-hot"
-    network: ${networks.qvalue_network}
-
-transform0:
-  max_steps: 500
-  step_count_key: "step_count"
-
-transform1:
-  in_keys: ["reward"]
-  out_keys: ["reward_sum"]
-
-training_env:
-  num_workers: 1
-  create_env_fn:
-    base_env:
-      env_name: CartPole-v1
-    transform:
-      transforms:
-        - ${transform0}
-        - ${transform1}
-    _partial_: true
-
-loss:
-  value_network: ${models.qvalue_model}
-  loss_function: l2
-  delay_value: true
-  action_space: "one-hot"
-  reward_key: reward
-  done_key: done
-  terminated_key: terminated
-  action_key: action
-  action_value_key: action_value
-  value_key: chosen_action_value
-
-target_net_updater:
-  value_network_update_interval: 50
-
-optimizer:
-  lr: 2.5e-4
-
-collector:
-  create_env_fn: ${training_env}
-  policy: ${models.qvalue_model}
-  total_frames: 500
-  frames_per_batch: 100
-  init_random_frames: 100
-  _partial_: true
-
-replay_buffer:
-  storage:
-    max_size: 1000
-    device: cpu
-    ndim: 1
-  sampler:
-  writer:
-    compilable: false
-  batch_size: 32
-
-logger:
-  exp_name: test_dqn
-
-trainer:
-  collector: ${collector}
-  optimizer: ${optimizer}
-  replay_buffer: ${replay_buffer}
-  target_net_updater: ${target_net_updater}
-  loss_module: ${loss}
-  value_network: ${models.qvalue_model}
-  logger: ${logger}
-  total_frames: ${collector.total_frames}
-  frame_skip: 1
-  clip_grad_norm: true
-  clip_norm: 10.0
-  progress_bar: false
-  seed: 42
-  save_trainer_interval: 10000
-  log_interval: 10000
-  save_trainer_file: null
-  optim_steps_per_batch: 2
-  async_collection: false
-"""
+        yaml_config = _DQN_TRAINER_YAML
 
         test_code = """
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+    trainer.shutdown()
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_resume(self, tmpdir):
+        """Train, then resume from the rotation directory in a fresh trainer."""
+        yaml_config = (
+            _DQN_TRAINER_YAML.replace(
+                "  - _self_\n",
+                "  - checkpoint@checkpoint: base\n"
+                "  - checkpoint_rotation@checkpoint_rotation: base\n"
+                "  - _self_\n",
+            )
+            .replace(
+                "\ntrainer:\n",
+                "\nresume: null\n\ncheckpoint_rotation:\n"
+                "  directory: checkpoints\n  keep_last: 2\n\ntrainer:\n",
+            )
+            .replace(
+                "  save_trainer_file: null\n",
+                "  save_trainer_file: null\n"
+                "  checkpoint: ${checkpoint}\n"
+                "  checkpoint_rotation: ${checkpoint_rotation}\n",
+            )
+        )
+
+        test_code = """
+    from torchrl.trainers.algorithms.configs import instantiate_trainer
+    trainer = instantiate_trainer(cfg)
+    assert {"config", "rng", "replay_buffer"} <= set(trainer.checkpoint.components)
+    trainer.train()
+    assert trainer.collected_frames == 500
+    assert trainer.checkpoint_rotation.latest() is not None
+    cfg.resume = "checkpoints"
+    restored = instantiate_trainer(
+        cfg, overrides=["resume=checkpoints", "collector.total_frames=800"]
+    )
+    assert restored.collected_frames == 500
+    assert restored.total_frames == 800
+    assert len(restored.replay_buffer) == 500
+    restored.train()
+    assert restored.collected_frames == 800
+    assert restored.checkpoint_rotation.directory == trainer.checkpoint_rotation.directory
 """
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
