@@ -79,15 +79,9 @@ fi
 # smoke test
 python -c "import tensordict"
 
-# ============================================================================================ #
-# ================================ TorchRL Installation ====================================== #
-# ============================================================================================ #
-
-printf "* Installing torchrl\n"
-uv pip install -e . --no-build-isolation --no-deps
-
-# smoke test
-python -c "import torchrl"
+# Defer TorchRL until after the backend dependency check. Remove an earlier
+# install if this environment is reused.
+uv pip uninstall torchrl
 
 # ============================================================================================ #
 # ================================ SGLang Installation ======================================= #
@@ -138,7 +132,15 @@ else
 fi
 printf "* Installing hoptorch\n"
 uv pip install "hoptorch>=0.1.1"
+
+# PR jobs intentionally test TensorDict main, whose git version may be below
+# TorchRL's released dependency floor. Check the resolved backend dependencies
+# before installing TorchRL with --no-deps; the workflow separately verifies
+# TensorDict's source and runs the integration tests. Release jobs also perform
+# a full dependency check after installing TorchRL below.
+uv pip check
 uv pip install --reinstall -e . --no-build-isolation --no-deps
+python -c "import torchrl"
 
 # Verify installations
 deno --version || echo "Warning: Deno not installed"
@@ -169,4 +171,6 @@ import torchvision
 print(f"torch CUDA: {torch.version.cuda}; torchvision: {torchvision.__version__}")
 PY
 
-uv pip check
+if [[ "$RELEASE" != 0 ]]; then
+    uv pip check
+fi
