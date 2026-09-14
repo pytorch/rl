@@ -458,8 +458,9 @@ class CrossQLoss(LossModule):
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
+            # CrossQ passes the next state-action value to value_estimate()
+            # directly, so the estimator's value key is never read.
             self._value_estimator.set_keys(
-                value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
                 terminated=self.tensor_keys.terminated,
