@@ -3,6 +3,7 @@
 defaults:
   - _self_
   - algorithm: ppo
+  - observations: state
 
 trainer:
   _target_: examples.microduck.ppo_mujoco.make_training
@@ -10,6 +11,8 @@ resume: null
 save_trainer_file: microduck_prior.trainer.ckpt
 
 env:
+  observations: state
+  sensor_kwargs: {}
   microduck_root: null      # microduck_rl checkout; MICRODUCK_RL_ROOT or `download` otherwise
   root: null                # cache directory for downloads (~/.cache/torchrl/microduck)
   download: false
@@ -30,6 +33,7 @@ env:
   task_id: null             # pin one task of the library at every reset (evaluation, rendering)
 
 policy:
+  critic_observation: state
   from_prior: false         # true: quick debugging start, a bounded residual around the closed-form gait
   hidden_size: 128
   residual_scale: 0.2       # bound of the learned residual when starting from the prior

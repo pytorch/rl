@@ -21,6 +21,7 @@ from tensordict.nn import (
 from torch import nn
 
 from torchrl.data.tensor_specs import Bounded
+from torchrl.envs.custom.mujoco._sensor_models import _MicroDuckSensorEncoder
 from torchrl.envs.custom.mujoco.microduck import MicroDuckEnv, MicroDuckTask
 from torchrl.modules import GRUModule, ProbabilisticActor, TanhNormal, ValueOperator
 
@@ -298,6 +299,8 @@ def make_actor_critic(
     gait: MicroDuckGaitConfig | Mapping[str, float] | None = None,
     residual_scale: float = 0.2,
     initial_policy_scale: float = 0.05,
+    sensor_mode: Literal["state", "proprioception", "proprioception_vision"] = "state",
+    critic_observation: Literal["state", "actor"] = "state",
 ) -> tuple[ProbabilisticActor, TensorDictSequential]:
     """Create the actor and critic of :func:`make_models` from their sizes alone.
 
@@ -322,6 +325,39 @@ def make_actor_critic(
         in_keys=["observation", "task_id"],
         out_keys=["embed"],
     )
+    if sensor_mode not in (
+        "state",
+        "proprioception",
+        "proprioception_vision",
+    ) or critic_observation not in ("state", "actor"):
+        raise ValueError("Unknown actor or critic observation mode.")
+    sensor = sensor_mode != "state"
+    if sensor:
+        if policy_head != "gaussian":
+            raise ValueError(
+                "Sensor priors use the Gaussian head; the legacy gait residual expects privileged-layout inputs."
+            )
+        sensor_keys = ["proprioception"]
+        if sensor_mode == "proprioception_vision":
+            sensor_keys += ["camera_pixels", "camera_age", "camera_valid"]
+        embed = TensorDictSequential(
+            TensorDictModule(
+                _MicroDuckSensorEncoder(
+                    hidden_size,
+                    vision=sensor_mode == "proprioception_vision",
+                    device=device,
+                ),
+                in_keys=sensor_keys,
+                out_keys=["sensor_features"],
+            ),
+            TensorDictModule(
+                TaskConditionedEncoder(
+                    hidden_size, num_tasks, hidden_size, device=device
+                ),
+                in_keys=["sensor_features", "task_id"],
+                out_keys=["embed"],
+            ),
+        )
     gru = GRUModule(
         input_size=hidden_size,
         hidden_size=hidden_size,
@@ -369,4 +405,27 @@ def make_actor_critic(
         ),
         in_keys=["features"],
     )
-    return actor, TensorDictSequential(backbone, value_head)
+    if sensor and critic_observation == "state":
+        # The privileged critic has its own encoder/memory. Actor exports need
+        # no simulator-only input, even when trained with this critic.
+        critic_backbone = TensorDictSequential(
+            TensorDictModule(
+                TaskConditionedEncoder(
+                    observation_dim, num_tasks, hidden_size, device=device
+                ),
+                in_keys=["observation", "task_id"],
+                out_keys=["critic_embed"],
+            ),
+            GRUModule(
+                input_size=hidden_size,
+                hidden_size=hidden_size,
+                num_layers=1,
+                in_keys=["critic_embed", "critic_recurrent_state", "is_init"],
+                out_keys=["critic_features", ("next", "critic_recurrent_state")],
+                device=device,
+            ),
+        )
+        value_head.in_keys = ["critic_features"]
+    else:
+        critic_backbone = backbone
+    return actor, TensorDictSequential(critic_backbone, value_head)

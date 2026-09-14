@@ -877,6 +877,16 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         rng.manual_seed(int(seed))
         self.rng = rng
 
+    def close(self, *, raise_if_closed: bool = True) -> None:
+        """Close the environment and release its native camera contexts."""
+        backend = self.__dict__.get("_backend")
+        if backend is not None and self.backend_name == "mujoco":
+            for renderer in getattr(backend, "_renderers", {}).values():
+                backend._close_renderer(renderer)
+            backend.__dict__.pop("_renderers", None)
+            backend.__dict__.pop("_renderer", None)
+        super().close(raise_if_closed=raise_if_closed)
+
     def render(
         self,
         *,
