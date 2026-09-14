@@ -431,7 +431,7 @@ jobs:
       - tests-optdeps
       - tests-stable-gpu
       - tests-stable-gpu-distributed
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
