@@ -9,6 +9,7 @@ import copy
 import functools as ft
 import importlib.util
 import sys
+from contextlib import contextmanager
 from unittest import mock
 
 import pytest
@@ -55,6 +56,29 @@ from torchrl.trainers.algorithms import DreamerV3UpdateRatio
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _compile_backend = "eager" if sys.platform == "win32" else "inductor"
+
+
+@contextmanager
+def _ieee_float32_matmul():
+    """Force IEEE fp32 matmul so the PyTorch reference matches Triton.
+
+    ``DreamerV3BlockGRU``'s reference path uses ``F.linear`` (TF32 on Ampere+).
+    The Triton kernels request ``input_precision="ieee"``. Comparing the two
+    at atol=3e-4 is borderline when cuBLAS may pick a TF32 algorithm
+    (#3865 ``[SiLU-4-1-2-3-dtype4-48]``).
+    """
+    previous_precision = torch.get_float32_matmul_precision()
+    previous_allow_tf32 = torch.backends.cuda.matmul.allow_tf32
+    previous_cudnn_tf32 = torch.backends.cudnn.allow_tf32
+    torch.set_float32_matmul_precision("highest")
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    try:
+        yield
+    finally:
+        torch.set_float32_matmul_precision(previous_precision)
+        torch.backends.cuda.matmul.allow_tf32 = previous_allow_tf32
+        torch.backends.cudnn.allow_tf32 = previous_cudnn_tf32
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1330,19 +1354,22 @@ def test_public_block_gru_triton_gradient_parity(
             {name: parameter.grad for name, parameter in module.named_parameters()},
         )
 
-    expected = run(reference)
-    tolerance = (
-        {"atol": 4e-2, "rtol": 6e-2}
-        if dtype is torch.bfloat16
-        else {"atol": 3e-4, "rtol": 3e-4}
-    )
-    for _ in range(3):
-        actual = run(triton_module)
-        for expected_value, actual_value in zip(expected[:4], actual[:4]):
-            torch.testing.assert_close(actual_value, expected_value, **tolerance)
-        assert actual[4].keys() == expected[4].keys()
-        for name in expected[4]:
-            torch.testing.assert_close(actual[4][name], expected[4][name], **tolerance)
+    with _ieee_float32_matmul():
+        expected = run(reference)
+        tolerance = (
+            {"atol": 4e-2, "rtol": 6e-2}
+            if dtype is torch.bfloat16
+            else {"atol": 3e-4, "rtol": 3e-4}
+        )
+        for _ in range(3):
+            actual = run(triton_module)
+            for expected_value, actual_value in zip(expected[:4], actual[:4]):
+                torch.testing.assert_close(actual_value, expected_value, **tolerance)
+            assert actual[4].keys() == expected[4].keys()
+            for name in expected[4]:
+                torch.testing.assert_close(
+                    actual[4][name], expected[4][name], **tolerance
+                )
 
 
 @pytest.mark.gpu
