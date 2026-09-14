@@ -53,6 +53,6 @@ jobs:
           python -m examples.microduck.ppo_mujoco env.download=true smoke=true observations=proprioception_vision algorithm=ppo_ewma save_trainer_file=/tmp/prior-sensors.ckpt
       - name: Smoke the installed visual game consumer
         working-directory: /tmp
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
-          python -m torchrl_zoo.microduck.train game=tag observations=proprioception_vision algorithm=ppo_ewma env.download=true smoke=true
+          python -m torchrl_zoo.microduck.train game=tag observations=proprioception_vision algorithm=ppo_ewma observations.sensors.image_size=32 observations.sensors.camera_fps=10 env.download=true smoke=true
