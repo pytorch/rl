@@ -58,7 +58,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fb873f044d0>
+<torch._C.Generator object at 0x7fa6e2444410>
 ```
 
 ## The problem

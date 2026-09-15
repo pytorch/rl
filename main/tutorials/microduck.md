@@ -111,10 +111,10 @@ for name, weights in zip(tasks.name, tasks.reward_weights):
 ```
 
 ```
-standing {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
-tracking+0.20 {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'air_time': 3.0, 'swing_height': 2.0, 'phase_contact': 3.0, 'double_support': -1.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
-sidestep+0.15 {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'air_time': 3.0, 'swing_height': 2.0, 'phase_contact': 3.0, 'double_support': -1.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
-jump {'tracking': 2.0, 'yaw_rate': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'ang_vel_xy': -0.05, 'action_rate': -0.1, 'joint_velocity': -0.0, 'drift': -5.0, 'hop_rhythm': 1.0, 'launch': 30.0, 'jump': 10.0, 'termination': -4.0}
+standing {'tracking': 2.0, 'yaw_rate': 1.0, 'head_level': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
+tracking+0.20 {'tracking': 2.0, 'yaw_rate': 1.0, 'head_level': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'air_time': 3.0, 'swing_height': 2.0, 'phase_contact': 3.0, 'double_support': -1.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
+sidestep+0.15 {'tracking': 2.0, 'yaw_rate': 1.0, 'head_level': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'air_time': 3.0, 'swing_height': 2.0, 'phase_contact': 3.0, 'double_support': -1.0, 'ang_vel_xy': -0.05, 'lin_vel_z': -2.0, 'action_rate': -0.1, 'joint_velocity': -0.0, 'termination': -4.0}
+jump {'tracking': 2.0, 'yaw_rate': 1.0, 'head_level': 1.0, 'upright': 2.0, 'pose': 1.0, 'progress': 2.0, 'ang_vel_xy': -0.05, 'action_rate': -0.1, 'joint_velocity': -0.0, 'drift': -5.0, 'hop_rhythm': 1.0, 'launch': 30.0, 'jump': 10.0, 'termination': -4.0}
 ```
 
 ## One row per simulator
@@ -319,8 +319,8 @@ for task_id, name in enumerate(tasks.name[:2]):
 ```
 
 ```
-standing per-task: mean=+0.000 std=0.995 | pooled: mean=-0.121 std=1.014
-tracking+0.20 per-task: mean=-0.000 std=0.995 | pooled: mean=+0.121 std=0.976
+standing per-task: mean=-0.000 std=0.995 | pooled: mean=-0.126 std=1.005
+tracking+0.20 per-task: mean=+0.000 std=0.995 | pooled: mean=+0.126 std=0.984
 ```
 
 The example's `ppo.per_task_advantage` option is exactly
@@ -356,7 +356,7 @@ print("params:", sorted(steady.params.keys()))
 
 ```
 heading weight: 1.0 (the newest term is the last entry)
-params: ['air_time_max', 'air_time_min', 'drift_speed_scale', 'gait_progress_floor', 'heading_std', 'hop_velocity_amplitude', 'jump_target_height', 'launch_velocity_scale', 'pose_std', 'swing_target_height', 'tracking_off_axis_std', 'tracking_std', 'upright_std', 'yaw_rate_std']
+params: ['air_time_max', 'air_time_min', 'drift_speed_scale', 'gait_progress_floor', 'head_level_std', 'head_pitch_target', 'heading_std', 'hop_velocity_amplitude', 'jump_target_height', 'launch_velocity_scale', 'pose_std', 'swing_target_height', 'tracking_off_axis_std', 'tracking_std', 'turn_rate', 'turn_rate_std', 'upright_std', 'yaw_rate_std']
 ```
 
 Tasks built before a registration have a shorter weight vector and are
@@ -384,7 +384,7 @@ diag_env.close()
 ```
 
 ```
-heading term per step: 0.0015320081729441881 | total reward: 0.015446546487510204
+heading term per step: 0.0015320081729441881 | total reward: 0.02838006615638733
 ```
 
 ## Training end to end
@@ -428,7 +428,7 @@ for every field and preset.
 - `examples/microduck/README.md` for the training recipe and the results
 of the multi-task runs.
 
-**Total running time of the script:** (0 minutes 52.572 seconds)
+**Total running time of the script:** (0 minutes 52.659 seconds)
 
 [`Download Jupyter notebook: microduck.ipynb`](../_downloads/87abf301cfa889a7c2c1c1bbc88875ef/microduck.ipynb)
 
