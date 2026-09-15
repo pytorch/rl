@@ -685,51 +685,15 @@ Module
 
 Checks if a module is compatible with TensorDictModule API.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 

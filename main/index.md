@@ -140,6 +140,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Checkpoint rotation](reference/checkpoint.html#checkpoint-rotation)
 - [Trainer integration](reference/checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](reference/checkpoint.html#stopping-at-a-safe-boundary)
+- [Resuming Hydra trainer recipes](reference/checkpoint.html#resuming-hydra-trainer-recipes)
 - [Compatibility](reference/checkpoint.html#compatibility)
 - [API](reference/checkpoint.html#api)
 - [torchrl.data package](reference/data.html)

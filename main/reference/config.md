@@ -57,6 +57,8 @@ TorchRL organizes configurations into several categories using the `@` syntax fo
 - `optimizer@<target>`: Optimizer configurations
 - `loss@<target>`: Loss function configurations
 - `logger@<target>`: Logging configurations
+- `checkpoint@<target>`: Checkpoint container configurations
+- `checkpoint_rotation@<target>`: Checkpoint retention configurations
 
 The `@<target>` syntax allows you to assign configurations to specific locations in your config structure.
 
@@ -490,6 +492,41 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`TensorboardLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig)(exp_name, log_dir, ...) | Hydra configuration for `TensorboardLogger`. |
 | [`TrackioLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig)(exp_name, project, ...) | Hydra configuration for `TrackioLogger`. |
 | [`CSVLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig)(exp_name, log_dir, ...) | Hydra configuration for `CSVLogger`. |
+
+### Checkpoint Configurations
+
+| [`CheckpointConfig`](generated/torchrl.trainers.algorithms.configs.checkpoint.CheckpointConfig.html#torchrl.trainers.algorithms.configs.checkpoint.CheckpointConfig)([format, strict, ...]) | Hydra configuration for [`Checkpoint`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint). |
+| --- | --- |
+| [`CheckpointRotationConfig`](generated/torchrl.trainers.algorithms.configs.checkpoint.CheckpointRotationConfig.html#torchrl.trainers.algorithms.configs.checkpoint.CheckpointRotationConfig)(directory, keep_last) | Hydra configuration for [`CheckpointRotation`](generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation). |
+
+The trainer recipes pass both to the trainer, which then saves rotated
+checkpoints every `save_trainer_interval` frames and when the run stops:
+
+```
+defaults:
+ - checkpoint@checkpoint: base
+ - checkpoint_rotation@checkpoint_rotation: base
+ - _self_
+
+resume: null
+
+checkpoint_rotation:
+ directory: checkpoints
+ keep_last: 2
+
+trainer:
+ checkpoint: ${checkpoint}
+ checkpoint_rotation: ${checkpoint_rotation}
+```
+
+### Resuming a recipe
+
+| [`instantiate_trainer`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer)(cfg, *[, overrides]) | Instantiate `cfg.trainer`, resuming from `cfg.resume` when it is set. |
+| --- | --- |
+
+[`instantiate_trainer()`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer) replaces `hydra.utils.instantiate(cfg.trainer)` in
+the recipe entrypoints and implements `resume=`; the flow is described in
+[Checkpointing](checkpoint.html).
 
 ## Creating Custom Configurations
 

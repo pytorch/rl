@@ -26,6 +26,7 @@
 - [Checkpoint rotation](checkpoint.html#checkpoint-rotation)
 - [Trainer integration](checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](checkpoint.html#stopping-at-a-safe-boundary)
+- [Resuming Hydra trainer recipes](checkpoint.html#resuming-hydra-trainer-recipes)
 - [Compatibility](checkpoint.html#compatibility)
 - [API](checkpoint.html#api)
 
@@ -335,6 +336,8 @@
 - [Training and Optimization Configurations](config.html#training-and-optimization-configurations)
 - [Trainer Hook Configurations](config.html#trainer-hook-configurations)
 - [Logging Configurations](config.html#logging-configurations)
+- [Checkpoint Configurations](config.html#checkpoint-configurations)
+- [Resuming a recipe](config.html#resuming-a-recipe)
 - [Creating Custom Configurations](config.html#creating-custom-configurations)
 - [Best Practices](config.html#best-practices)
 - [Supported Algorithms](config.html#supported-algorithms)

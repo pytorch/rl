@@ -170,6 +170,26 @@ with StopOnSignal() as stop:
  rotation.save(checkpoint, step=step)
 ```
 
+## Resuming Hydra trainer recipes
+
+The `sota-implementations/*_trainer` recipes save rotated checkpoints under
+`checkpoints/` in their Hydra run directory and stop cleanly on `SIGINT` or
+`SIGTERM`. A run continues from its checkpoint directory with a single
+override; the saved configuration is the base and further overrides apply on
+top of it:
+
+```
+python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints
+python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
+```
+
+[`instantiate_trainer()`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer) implements
+this flow. It reads the saved `config` and `logger` components with
+[`Checkpoint.read_component()`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.read_component) before constructing anything, so a W&B
+logger reopens the saved run with `resume="must"` and CSV or TensorBoard
+loggers keep appending to the saved directory. [`resolve_checkpoint_path()`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)
+maps a rotation directory to its newest checkpoint for standalone scripts.
+
 ## Compatibility
 
 The manifest records the checkpoint format version, adapter versions, component

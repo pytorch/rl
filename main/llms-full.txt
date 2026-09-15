@@ -147,6 +147,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Checkpoint rotation](reference/checkpoint.html#checkpoint-rotation)
 - [Trainer integration](reference/checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](reference/checkpoint.html#stopping-at-a-safe-boundary)
+- [Resuming Hydra trainer recipes](reference/checkpoint.html#resuming-hydra-trainer-recipes)
 - [Compatibility](reference/checkpoint.html#compatibility)
 - [API](reference/checkpoint.html#api)
 - [torchrl.data package](reference/data.html)
@@ -469,6 +470,26 @@ with StopOnSignal() as stop:
  break
  rotation.save(checkpoint, step=step)
 ```
+
+## Resuming Hydra trainer recipes
+
+The `sota-implementations/*_trainer` recipes save rotated checkpoints under
+`checkpoints/` in their Hydra run directory and stop cleanly on `SIGINT` or
+`SIGTERM`. A run continues from its checkpoint directory with a single
+override; the saved configuration is the base and further overrides apply on
+top of it:
+
+```
+python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints
+python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
+```
+
+[`instantiate_trainer()`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer) implements
+this flow. It reads the saved `config` and `logger` components with
+[`Checkpoint.read_component()`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.read_component) before constructing anything, so a W&B
+logger reopens the saved run with `resume="must"` and CSV or TensorBoard
+loggers keep appending to the saved directory. [`resolve_checkpoint_path()`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)
+maps a rotation directory to its newest checkpoint for standalone scripts.
 
 ## Compatibility
 
@@ -2999,6 +3020,8 @@ TorchRL organizes configurations into several categories using the `@` syntax fo
 - `optimizer@<target>`: Optimizer configurations
 - `loss@<target>`: Loss function configurations
 - `logger@<target>`: Logging configurations
+- `checkpoint@<target>`: Checkpoint container configurations
+- `checkpoint_rotation@<target>`: Checkpoint retention configurations
 
 The `@<target>` syntax allows you to assign configurations to specific locations in your config structure.
 
@@ -3432,6 +3455,41 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`TensorboardLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig)(exp_name, log_dir, ...) | Hydra configuration for `TensorboardLogger`. |
 | [`TrackioLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig)(exp_name, project, ...) | Hydra configuration for `TrackioLogger`. |
 | [`CSVLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig)(exp_name, log_dir, ...) | Hydra configuration for `CSVLogger`. |
+
+### Checkpoint Configurations
+
+| [`CheckpointConfig`](generated/torchrl.trainers.algorithms.configs.checkpoint.CheckpointConfig.html#torchrl.trainers.algorithms.configs.checkpoint.CheckpointConfig)([format, strict, ...]) | Hydra configuration for [`Checkpoint`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint). |
+| --- | --- |
+| [`CheckpointRotationConfig`](generated/torchrl.trainers.algorithms.configs.checkpoint.CheckpointRotationConfig.html#torchrl.trainers.algorithms.configs.checkpoint.CheckpointRotationConfig)(directory, keep_last) | Hydra configuration for [`CheckpointRotation`](generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation). |
+
+The trainer recipes pass both to the trainer, which then saves rotated
+checkpoints every `save_trainer_interval` frames and when the run stops:
+
+```
+defaults:
+ - checkpoint@checkpoint: base
+ - checkpoint_rotation@checkpoint_rotation: base
+ - _self_
+
+resume: null
+
+checkpoint_rotation:
+ directory: checkpoints
+ keep_last: 2
+
+trainer:
+ checkpoint: ${checkpoint}
+ checkpoint_rotation: ${checkpoint_rotation}
+```
+
+### Resuming a recipe
+
+| [`instantiate_trainer`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer)(cfg, *[, overrides]) | Instantiate `cfg.trainer`, resuming from `cfg.resume` when it is set. |
+| --- | --- |
+
+[`instantiate_trainer()`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer) replaces `hydra.utils.instantiate(cfg.trainer)` in
+the recipe entrypoints and implements `resume=`; the flow is described in
+[Checkpointing](checkpoint.html).
 
 ## Creating Custom Configurations
 
@@ -34403,7 +34461,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f6bcd71dd50>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f686a4439c0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47720,7 +47778,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f6bd0679440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f686d0b9440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -236381,51 +236439,15 @@ a tensordict with these values along with the "alpha" value and the "entropy" va
 To see what keys are expected in the input tensordict and what keys are expected as output, check the
 class's "in_keys" and "out_keys" attributes.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/crossq.html#CrossQLoss.make_value_estimator)
 
@@ -239619,6 +239641,16 @@ Note
 
 if the module is not functional, no copy is made.
 
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/common.html#LossModule.load_state_dict)
+
+Load a state dict, building the default value estimator first when the state carries one.
+
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
+
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 
 Which input entry marks the positions that contribute to the loss.
@@ -241168,51 +241200,15 @@ A new tensordict with no batch dimension containing various loss scalars which w
 is essential that the losses are returned with this name as they will be read by the trainer before
 backpropagation.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/sac.html#SACLoss.make_value_estimator)
 
@@ -242703,51 +242699,15 @@ Module
 
 Checks if a module is compatible with TensorDictModule API.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 
@@ -245647,51 +245607,15 @@ Module
 
 Checks if a module is compatible with TensorDictModule API.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 
@@ -248778,51 +248702,15 @@ Module
 
 Checks if a module is compatible with TensorDictModule API.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 
@@ -251780,51 +251668,15 @@ Module
 
 Checks if a module is compatible with TensorDictModule API.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 
@@ -259452,51 +259304,15 @@ Module
 
 Checks if a module is compatible with TensorDictModule API.
 
-load_state_dict(*state_dict: Mapping[str, Any]*, *strict: bool = True*, *assign: bool = False*)
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
-Copy parameters and buffers from `state_dict` into this module and its descendants.
+Load a state dict, building the default value estimator first when the state carries one.
 
-If `strict` is `True`, then
-the keys of `state_dict` must exactly match the keys returned
-by this module's [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function.
-
-Warning
-
-If `assign` is `True` the optimizer must be created after
-the call to `load_state_dict` unless
-[`get_swap_module_params_on_conversion()`](https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion) is `True`.
-
-Parameters:
-
-- **state_dict** (*dict*) - a dict containing parameters and
-persistent buffers.
-- **strict** (*bool**,**optional*) - whether to strictly enforce that the keys
-in `state_dict` match the keys returned by this module's
-[`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** (*bool**,**optional*) - When set to `False`, the properties of the tensors
-in the current module are preserved whereas setting it to `True` preserves
-properties of the Tensors in the state dict. The only
-exception is the `requires_grad` field of `Parameter`
-for which the value from the module is preserved. Default: `False`
-
-Returns:
-
-- `missing_keys` is a list of str containing any keys that are expected
-
-by this module but missing from the provided `state_dict`.
-- `unexpected_keys` is a list of str containing the keys that are not
-
-expected by this module but present in the provided `state_dict`.
-
-Return type:
-
-`NamedTuple` with `missing_keys` and `unexpected_keys` fields
-
-Note
-
-If a parameter or buffer is registered as `None` and its corresponding key
-exists in `state_dict`, `load_state_dict()` will raise a
-`RuntimeError`.
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
 
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 
@@ -268706,6 +268522,36 @@ Examples
 
 ---
 
+# torchrl.trainers.algorithms.configs.checkpoint.CheckpointConfig
+
+*class*torchrl.trainers.algorithms.configs.checkpoint.CheckpointConfig(*format: str = 'directory'*, *strict: str = 'error'*, *archive_compression: str = 'stored'*, *save_components: list[str] | None = None*, *_target_: str = 'torchrl.checkpoint.Checkpoint'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/checkpoint.html#CheckpointConfig)
+
+Hydra configuration for [`Checkpoint`](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint).
+
+Every kwarg accepted by `Checkpoint.__init__` is exposed as a field here.
+Components are registered by the trainer that receives the checkpoint.
+
+See also
+
+[`Checkpoint`](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint)
+
+---
+
+# torchrl.trainers.algorithms.configs.checkpoint.CheckpointRotationConfig
+
+*class*torchrl.trainers.algorithms.configs.checkpoint.CheckpointRotationConfig(*directory: str*, *keep_last: int*, *keep_best: list[str] | None = None*, *prefix: str = 'checkpoint'*, *_target_: str = 'torchrl.checkpoint.CheckpointRotation'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/checkpoint.html#CheckpointRotationConfig)
+
+Hydra configuration for [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation).
+
+`keep_best` is a two-item list `[metadata_key, mode]` with `mode` one
+of `"min"` or `"max"`.
+
+See also
+
+[`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+
+---
+
 # torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig
 
 *class*torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig(*create_env_fn: ~torchrl.trainers.algorithms.configs.common.ConfigBase = <factory>*, *policy: ~typing.Any = None*, *policy_factory: ~typing.Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = 0*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *split_trajs: bool = False*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *set_truncated: bool = False*, *use_buffers: bool = False*, *replay_buffer: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *extend_buffer: bool = False*, *trust_policy: bool = True*, *compile_policy: ~typing.Any = None*, *cudagraph_policy: ~typing.Any = None*, *no_cuda_sync: bool = False*, *weight_updater: ~typing.Any = None*, *weight_sync_schemes: ~typing.Any = None*, *track_policy_version: bool = False*, *_target_: str = 'torchrl.collectors.AsyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#AsyncCollectorConfig)
@@ -269226,6 +269072,49 @@ Examples
 >>> from torchrl.trainers.algorithms.configs.hooks import SelectKeysConfig
 >>> from hydra.utils import instantiate
 >>> hook = instantiate(SelectKeysConfig(keys=["observation", "action"]))
+```
+
+---
+
+# instantiate_trainer
+
+torchrl.trainers.algorithms.configs.instantiate_trainer(*cfg: DictConfig*, ***, *overrides: Sequence[str] | None = None*) → [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)[[source]](../../_modules/torchrl/trainers/algorithms/configs/entrypoint.html#instantiate_trainer)
+
+Instantiate `cfg.trainer`, resuming from `cfg.resume` when it is set.
+
+Without `resume` this is `hydra.utils.instantiate()` on `cfg.trainer`
+plus registration of the composed configuration on the trainer checkpoint.
+With `resume` set to a checkpoint or a
+[`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation) directory, the saved
+configuration becomes the base and the current command-line overrides apply
+on top (config-group overrides cannot apply to a saved configuration and are
+ignored with a warning); the saved logger run is reattached before the
+logger is constructed (W&B resumes the saved id with `resume="must"`, CSV
+and TensorBoard keep the saved directory); checkpoints keep accumulating in
+the resumed rotation directory unless `checkpoint_rotation.directory` is
+overridden; and [`load_from_file()`](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file) restores
+the trainer state.
+
+Parameters:
+
+- **cfg** (*DictConfig*) - the composed Hydra configuration. It must hold a
+`trainer` node and may hold `resume`.
+- **overrides** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**str**]**,**optional*) - command-line overrides applied over
+the saved configuration. Defaults to the task overrides of the
+current Hydra run, or none outside a Hydra application.
+
+Returns:
+
+The instantiated trainer, restored from the checkpoint when resuming.
+
+Examples
+
+```
+>>> @hydra.main(config_path="config", config_name="config", version_base="1.3") 
+... def main(cfg):
+... trainer = instantiate_trainer(cfg)
+... with trainer.stop_on_signal():
+... trainer.train()
 ```
 
 ---
@@ -274819,6 +274708,7 @@ in the rollout loop
 - [Checkpoint rotation](checkpoint.html#checkpoint-rotation)
 - [Trainer integration](checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](checkpoint.html#stopping-at-a-safe-boundary)
+- [Resuming Hydra trainer recipes](checkpoint.html#resuming-hydra-trainer-recipes)
 - [Compatibility](checkpoint.html#compatibility)
 - [API](checkpoint.html#api)
 
@@ -275128,6 +275018,8 @@ in the rollout loop
 - [Training and Optimization Configurations](config.html#training-and-optimization-configurations)
 - [Trainer Hook Configurations](config.html#trainer-hook-configurations)
 - [Logging Configurations](config.html#logging-configurations)
+- [Checkpoint Configurations](config.html#checkpoint-configurations)
+- [Resuming a recipe](config.html#resuming-a-recipe)
 - [Creating Custom Configurations](config.html#creating-custom-configurations)
 - [Best Practices](config.html#best-practices)
 - [Supported Algorithms](config.html#supported-algorithms)

@@ -173,6 +173,16 @@ Note
 
 if the module is not functional, no copy is made.
 
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/common.html#LossModule.load_state_dict)
+
+Load a state dict, building the default value estimator first when the state carries one.
+
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
+
 *property*loss_mask_key*: NestedKey | Literal['auto'] | None*
 
 Which input entry marks the positions that contribute to the loss.
