@@ -152,15 +152,25 @@ class PPOTrainer(OnPolicyTrainer):
         frames_per_env = math.ceil(frames_per_batch / num_envs)
         collected_batch_size = frames_per_env * num_envs
         minibatch_size = min(minibatch_size, collected_batch_size)
-        if sub_traj_len is not None and (
-            sub_traj_len < 1
-            or sub_traj_len > frames_per_env
-            or minibatch_size % sub_traj_len
-        ):
-            raise ValueError(
-                "sub_traj_len must fit within the collected time dimension and "
-                "divide minibatch_size."
-            )
+        if sub_traj_len is not None:
+            if env.batch_dims == 0:
+                raise ValueError(
+                    "sub_traj_len requires a batched environment: an unbatched "
+                    "env yields 1-D time-only collector batches, and "
+                    "BatchSubSampler would fall back to shuffling single "
+                    "transitions instead of returning contiguous windows. "
+                    "Wrap the env (e.g. SerialEnv(1, ...)) or drop "
+                    "sub_traj_len for feedforward PPO."
+                )
+            if (
+                sub_traj_len < 1
+                or sub_traj_len > frames_per_env
+                or minibatch_size % sub_traj_len
+            ):
+                raise ValueError(
+                    "sub_traj_len must fit within the collected time dimension and "
+                    "divide minibatch_size."
+                )
 
         if "action_key" not in trainer_kwargs:
             trainer_kwargs["action_key"] = env.action_key

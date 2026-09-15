@@ -2325,6 +2325,41 @@ class TestPPOFromEnv:
             for x, y in zip(before_resume, restored_actor.parameters())
         )
 
+    def test_sub_traj_len_rejected_on_unbatched_env(self):
+        # Without a batch dim the collector returns 1-D batches and
+        # BatchSubSampler would fall back to shuffling transitions, silently
+        # breaking recurrent-mode GAE. Reject before constructing the trainer.
+        env = ContinuousActionVecMockEnv()
+        assert env.batch_dims == 0
+        actor = ProbabilisticActor(
+            TensorDictModule(
+                nn.Sequential(
+                    nn.Linear(env.observation_spec["observation"].shape[-1], 8),
+                    NormalParamExtractor(),
+                ),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+        )
+        critic = TensorDictModule(
+            nn.Linear(env.observation_spec["observation"].shape[-1], 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        with pytest.raises(ValueError, match="sub_traj_len requires a batched"):
+            PPOTrainer.from_env(
+                env,
+                actor=actor,
+                critic=critic,
+                total_frames=64,
+                frames_per_batch=32,
+                minibatch_size=16,
+                sub_traj_len=4,
+            )
+
 
 class TestOnPolicyTargetNetUpdater:
     # OnPolicyTrainer(target_net_updater=...) must step the updater after every
