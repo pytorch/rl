@@ -138,6 +138,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Custom components](reference/checkpoint.html#custom-components)
 - [Checkpoint rotation](reference/checkpoint.html#checkpoint-rotation)
 - [Trainer integration](reference/checkpoint.html#trainer-integration)
+- [Stopping at a safe boundary](reference/checkpoint.html#stopping-at-a-safe-boundary)
 - [Compatibility](reference/checkpoint.html#compatibility)
 - [API](reference/checkpoint.html#api)
 - [torchrl.data package](reference/data.html)

@@ -145,6 +145,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Custom components](reference/checkpoint.html#custom-components)
 - [Checkpoint rotation](reference/checkpoint.html#checkpoint-rotation)
 - [Trainer integration](reference/checkpoint.html#trainer-integration)
+- [Stopping at a safe boundary](reference/checkpoint.html#stopping-at-a-safe-boundary)
 - [Compatibility](reference/checkpoint.html#compatibility)
 - [API](reference/checkpoint.html#api)
 - [torchrl.data package](reference/data.html)
@@ -432,6 +433,31 @@ The metadata callback runs immediately before each save. Metrics used by
 `keep_best` should describe the checkpoint being saved rather than an older
 evaluation.
 
+## Stopping at a safe boundary
+
+[`StopOnSignal`](generated/torchrl.checkpoint.StopOnSignal.html#torchrl.checkpoint.StopOnSignal) turns `SIGINT` and `SIGTERM` into a stop request that
+a training loop checks between batches, so the current batch completes and a
+final checkpoint is written before the process exits. A second signal raises
+`KeyboardInterrupt` for loops that cannot reach a boundary. Previous handlers
+are restored when the context exits. `Trainer.stop_on_signal` wraps the same
+helper and calls `Trainer.request_stop`:
+
+```
+with trainer.stop_on_signal():
+ trainer.train()
+```
+
+Standalone scripts use the helper directly:
+
+```
+with StopOnSignal() as stop:
+ for batch in collector:
+ ...
+ if stop.requested:
+ break
+ rotation.save(checkpoint, step=step)
+```
+
 ## Compatibility
 
 The manifest records the checkpoint format version, adapter versions, component
@@ -472,6 +498,7 @@ the default changes in v0.15.
 | [`JSONCheckpointAdapter`](generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter)() | Adapter for JSON-compatible configuration, metrics, and metadata. |
 | [`StateDictCheckpointAdapter`](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter)([payload_format, ...]) | Adapter for `state_dict` / `load_state_dict` objects. |
 | [`StateDictFormat`](generated/torchrl.checkpoint.StateDictFormat.html#torchrl.checkpoint.StateDictFormat) | alias of `Literal`['directory', 'archive', 'consolidated', 'torch'] |
+| [`StopOnSignal`](generated/torchrl.checkpoint.StopOnSignal.html#torchrl.checkpoint.StopOnSignal)([signals, on_request]) | Turn termination signals into a stop request checked at loop boundaries. |
 
 | [`resolve_checkpoint_path`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)(path, *[, prefix]) | Return the checkpoint at `path` or the newest checkpoint of a rotation directory. |
 | --- | --- |
@@ -9646,6 +9673,45 @@ Save `component` below `path`.
 torchrl.checkpoint.StateDictFormat
 
 alias of `Literal`['directory', 'archive', 'consolidated', 'torch']
+
+---
+
+# StopOnSignal
+
+*class*torchrl.checkpoint.StopOnSignal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*, ***, *on_request: Callable[[str], None] | None = None*)[[source]](../../_modules/torchrl/checkpoint/_checkpoint.html#StopOnSignal)
+
+Turn termination signals into a stop request checked at loop boundaries.
+
+The first handled signal records a request so a training loop can finish
+the current batch, save a checkpoint and exit cleanly. A second signal
+raises `KeyboardInterrupt` so a loop that cannot reach a boundary
+can still be interrupted. Handlers are installed when the context is
+entered and the previous handlers are restored on exit. Python only
+accepts signal handlers in the main thread, so entering the context from
+another thread leaves the handlers untouched and logs a warning.
+
+Parameters:
+
+- **signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+- **on_request** (*Callable**[**[**str**]**,**None**]**,**optional*) - callback invoked with the
+signal name when the first signal arrives.
+
+Examples
+
+```
+>>> from torchrl.checkpoint import StopOnSignal
+>>> with StopOnSignal() as stop:
+... for _ in range(3):
+... if stop.requested:
+... break
+>>> stop.requested
+False
+```
+
+*property*requested*: bool*
+
+Whether a handled signal has been received.
 
 ---
 
@@ -34299,7 +34365,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f28ea383880>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f52d1d76ac0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47616,7 +47682,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f28ed119440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f52d4ccd440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -266318,6 +266384,28 @@ request_stop(*reason: str | None = None*) → None[[source]](../../_modules/torc
 
 Signal that training should stop at the next loop boundary.
 
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)[[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.stop_on_signal)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
+
 ---
 
 # TrainerHookBase
@@ -266621,6 +266709,28 @@ request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
 
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
+
 ---
 
 # CQLTrainer
@@ -266726,6 +266836,28 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -266842,6 +266974,28 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -267007,6 +267161,28 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -267431,6 +267607,28 @@ request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
 
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
+
 ---
 
 # IQLTrainer
@@ -267540,6 +267738,28 @@ request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
 
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
+
 ---
 
 # OfflineToOnlineTrainer
@@ -267634,6 +267854,28 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -267768,6 +268010,28 @@ request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
 
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
+
 ---
 
 # PPOTrainer
@@ -267862,6 +268126,28 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -267959,6 +268245,28 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -268107,6 +268415,28 @@ request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
 
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
+
 ---
 
 # TD3Trainer
@@ -268222,6 +268552,28 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -274427,6 +274779,7 @@ in the rollout loop
 - [Custom components](checkpoint.html#custom-components)
 - [Checkpoint rotation](checkpoint.html#checkpoint-rotation)
 - [Trainer integration](checkpoint.html#trainer-integration)
+- [Stopping at a safe boundary](checkpoint.html#stopping-at-a-safe-boundary)
 - [Compatibility](checkpoint.html#compatibility)
 - [API](checkpoint.html#api)
 
@@ -274443,6 +274796,7 @@ in the rollout loop
 - [JSONCheckpointAdapter](generated/torchrl.checkpoint.JSONCheckpointAdapter.html)
 - [StateDictCheckpointAdapter](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html)
 - [StateDictFormat](generated/torchrl.checkpoint.StateDictFormat.html)
+- [StopOnSignal](generated/torchrl.checkpoint.StopOnSignal.html)
 - [resolve_checkpoint_path](generated/torchrl.checkpoint.resolve_checkpoint_path.html)
 - [torchrl.data package](data.html)
 

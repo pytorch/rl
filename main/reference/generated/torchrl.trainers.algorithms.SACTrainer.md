@@ -142,3 +142,25 @@ directory, in which case its newest checkpoint is restored.
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```

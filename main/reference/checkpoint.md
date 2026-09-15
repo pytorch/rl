@@ -134,6 +134,31 @@ The metadata callback runs immediately before each save. Metrics used by
 `keep_best` should describe the checkpoint being saved rather than an older
 evaluation.
 
+## Stopping at a safe boundary
+
+[`StopOnSignal`](generated/torchrl.checkpoint.StopOnSignal.html#torchrl.checkpoint.StopOnSignal) turns `SIGINT` and `SIGTERM` into a stop request that
+a training loop checks between batches, so the current batch completes and a
+final checkpoint is written before the process exits. A second signal raises
+`KeyboardInterrupt` for loops that cannot reach a boundary. Previous handlers
+are restored when the context exits. `Trainer.stop_on_signal` wraps the same
+helper and calls `Trainer.request_stop`:
+
+```
+with trainer.stop_on_signal():
+ trainer.train()
+```
+
+Standalone scripts use the helper directly:
+
+```
+with StopOnSignal() as stop:
+ for batch in collector:
+ ...
+ if stop.requested:
+ break
+ rotation.save(checkpoint, step=step)
+```
+
 ## Compatibility
 
 The manifest records the checkpoint format version, adapter versions, component
@@ -174,6 +199,7 @@ the default changes in v0.15.
 | [`JSONCheckpointAdapter`](generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter)() | Adapter for JSON-compatible configuration, metrics, and metadata. |
 | [`StateDictCheckpointAdapter`](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter)([payload_format, ...]) | Adapter for `state_dict` / `load_state_dict` objects. |
 | [`StateDictFormat`](generated/torchrl.checkpoint.StateDictFormat.html#torchrl.checkpoint.StateDictFormat) | alias of `Literal`['directory', 'archive', 'consolidated', 'torch'] |
+| [`StopOnSignal`](generated/torchrl.checkpoint.StopOnSignal.html#torchrl.checkpoint.StopOnSignal)([signals, on_request]) | Turn termination signals into a stop request checked at loop boundaries. |
 
 | [`resolve_checkpoint_path`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)(path, *[, prefix]) | Return the checkpoint at `path` or the newest checkpoint of a rotation directory. |
 | --- | --- |

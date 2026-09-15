@@ -58,6 +58,7 @@
 - [JSONCheckpointAdapter](reference/generated/torchrl.checkpoint.JSONCheckpointAdapter.md)
 - [StateDictCheckpointAdapter](reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.md)
 - [StateDictFormat](reference/generated/torchrl.checkpoint.StateDictFormat.md)
+- [StopOnSignal](reference/generated/torchrl.checkpoint.StopOnSignal.md)
 - [resolve_checkpoint_path](reference/generated/torchrl.checkpoint.resolve_checkpoint_path.md)
 - [AsyncBatchedCollector](reference/generated/torchrl.collectors.AsyncBatchedCollector.md)
 - [AsyncCollector](reference/generated/torchrl.collectors.AsyncCollector.md)

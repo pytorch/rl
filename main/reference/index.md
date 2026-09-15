@@ -24,6 +24,7 @@
 - [Custom components](checkpoint.html#custom-components)
 - [Checkpoint rotation](checkpoint.html#checkpoint-rotation)
 - [Trainer integration](checkpoint.html#trainer-integration)
+- [Stopping at a safe boundary](checkpoint.html#stopping-at-a-safe-boundary)
 - [Compatibility](checkpoint.html#compatibility)
 - [API](checkpoint.html#api)
 
@@ -40,6 +41,7 @@
 - [JSONCheckpointAdapter](generated/torchrl.checkpoint.JSONCheckpointAdapter.html)
 - [StateDictCheckpointAdapter](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html)
 - [StateDictFormat](generated/torchrl.checkpoint.StateDictFormat.html)
+- [StopOnSignal](generated/torchrl.checkpoint.StopOnSignal.html)
 - [resolve_checkpoint_path](generated/torchrl.checkpoint.resolve_checkpoint_path.html)
 - [torchrl.data package](data.html)
 
