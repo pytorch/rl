@@ -407,6 +407,12 @@ Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
 checkpoints. The Trainer uses `collected_frames` as the checkpoint step and
 adds `collected_frames` and `optim_steps` to the manifest metadata.
 
+The Trainer registers the process-global RNG state under `rng` and restores
+it after every other component. `Trainer.load_from_file` accepts a checkpoint
+path or a rotation directory, in which case the newest retained checkpoint is
+restored. Scheduled saves in asynchronous collection mode pause the collector
+while the checkpoint is written.
+
 ```
 trainer = SACTrainer(
  ...,
@@ -466,6 +472,9 @@ the default changes in v0.15.
 | [`JSONCheckpointAdapter`](generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter)() | Adapter for JSON-compatible configuration, metrics, and metadata. |
 | [`StateDictCheckpointAdapter`](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter)([payload_format, ...]) | Adapter for `state_dict` / `load_state_dict` objects. |
 | [`StateDictFormat`](generated/torchrl.checkpoint.StateDictFormat.html#torchrl.checkpoint.StateDictFormat) | alias of `Literal`['directory', 'archive', 'consolidated', 'torch'] |
+
+| [`resolve_checkpoint_path`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)(path, *[, prefix]) | Return the checkpoint at `path` or the newest checkpoint of a rotation directory. |
+| --- | --- |
 
 ---
 
@@ -9637,6 +9646,43 @@ Save `component` below `path`.
 torchrl.checkpoint.StateDictFormat
 
 alias of `Literal`['directory', 'archive', 'consolidated', 'torch']
+
+---
+
+# resolve_checkpoint_path
+
+torchrl.checkpoint.resolve_checkpoint_path(*path: str | Path*, ***, *prefix: str = 'checkpoint'*) → Path[[source]](../../_modules/torchrl/checkpoint/_checkpoint.html#resolve_checkpoint_path)
+
+Return the checkpoint at `path` or the newest checkpoint of a rotation directory.
+
+Parameters:
+
+- **path** - A checkpoint directory or archive, or a directory managed by
+[`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation).
+- **prefix** - Filename prefix of the rotated checkpoints. Defaults to
+`"checkpoint"`.
+
+Returns:
+
+The resolved checkpoint path.
+
+Raises:
+
+**FileNotFoundError** - If `path` is neither a checkpoint nor a directory
+ containing rotated checkpoints.
+
+Examples
+
+```
+>>> import tempfile
+>>> from torchrl.checkpoint import Checkpoint, CheckpointRotation
+>>> from torchrl.checkpoint import resolve_checkpoint_path
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... rotation = CheckpointRotation(tmpdir, keep_last=1)
+... path = rotation.save(Checkpoint(value={"step": 1}), step=1)
+... resolve_checkpoint_path(tmpdir) == path
+True
+```
 
 ---
 
@@ -34253,7 +34299,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fedc1117650>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f28ea383880>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47570,7 +47616,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fedc4235440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f28ed119440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -266186,7 +266232,9 @@ in frame count. Default is 10000.
 Default is None (no saving)
 - **checkpoint** ([*Checkpoint*](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint)*,**optional*) - unified checkpoint object used for
 scheduled saves and restores. The trainer registers any missing
-standard components on this object. When omitted, the legacy
+standard components on this object, including the process-global
+RNG state under `"rng"`, which `load_from_file()` restores
+after every other component. When omitted, the legacy
 `CKPT_BACKEND` path is retained during the compatibility window.
 - **checkpoint_rotation** ([*CheckpointRotation*](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)*,**optional*) - retention policy used
 for scheduled unified checkpoints. Requires `checkpoint` and cannot
@@ -266260,6 +266308,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None[[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.request_stop)
 
@@ -266559,6 +266612,11 @@ After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
 
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
@@ -266659,6 +266717,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None
 
@@ -266770,6 +266833,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None
 
@@ -266930,6 +266998,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None
 
@@ -267349,6 +267422,11 @@ After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
 
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
@@ -267453,6 +267531,11 @@ After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
 
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
@@ -267542,6 +267625,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None
 
@@ -267671,6 +267759,11 @@ After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
 
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
@@ -267760,6 +267853,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None
 
@@ -267852,6 +267950,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None
 
@@ -267995,6 +268098,11 @@ After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
 
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
@@ -268105,6 +268213,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None
 
@@ -274330,6 +274443,7 @@ in the rollout loop
 - [JSONCheckpointAdapter](generated/torchrl.checkpoint.JSONCheckpointAdapter.html)
 - [StateDictCheckpointAdapter](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html)
 - [StateDictFormat](generated/torchrl.checkpoint.StateDictFormat.html)
+- [resolve_checkpoint_path](generated/torchrl.checkpoint.resolve_checkpoint_path.html)
 - [torchrl.data package](data.html)
 
 - [Key Features](data.html#key-features)

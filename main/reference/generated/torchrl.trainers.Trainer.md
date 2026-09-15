@@ -48,7 +48,9 @@ in frame count. Default is 10000.
 Default is None (no saving)
 - **checkpoint** ([*Checkpoint*](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint)*,**optional*) - unified checkpoint object used for
 scheduled saves and restores. The trainer registers any missing
-standard components on this object. When omitted, the legacy
+standard components on this object, including the process-global
+RNG state under `"rng"`, which `load_from_file()` restores
+after every other component. When omitted, the legacy
 `CKPT_BACKEND` path is retained during the compatibility window.
 - **checkpoint_rotation** ([*CheckpointRotation*](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)*,**optional*) - retention policy used
 for scheduled unified checkpoints. Requires `checkpoint` and cannot
@@ -122,6 +124,11 @@ Note
 After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
 
 request_stop(*reason: str | None = None*) → None[[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.request_stop)
 

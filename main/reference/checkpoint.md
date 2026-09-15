@@ -109,6 +109,12 @@ Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
 checkpoints. The Trainer uses `collected_frames` as the checkpoint step and
 adds `collected_frames` and `optim_steps` to the manifest metadata.
 
+The Trainer registers the process-global RNG state under `rng` and restores
+it after every other component. `Trainer.load_from_file` accepts a checkpoint
+path or a rotation directory, in which case the newest retained checkpoint is
+restored. Scheduled saves in asynchronous collection mode pause the collector
+while the checkpoint is written.
+
 ```
 trainer = SACTrainer(
  ...,
@@ -168,3 +174,6 @@ the default changes in v0.15.
 | [`JSONCheckpointAdapter`](generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter)() | Adapter for JSON-compatible configuration, metrics, and metadata. |
 | [`StateDictCheckpointAdapter`](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter)([payload_format, ...]) | Adapter for `state_dict` / `load_state_dict` objects. |
 | [`StateDictFormat`](generated/torchrl.checkpoint.StateDictFormat.html#torchrl.checkpoint.StateDictFormat) | alias of `Literal`['directory', 'archive', 'consolidated', 'torch'] |
+
+| [`resolve_checkpoint_path`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)(path, *[, prefix]) | Return the checkpoint at `path` or the newest checkpoint of a rotation directory. |
+| --- | --- |

@@ -165,6 +165,11 @@ After restoring an independently registered policy component, the
 trainer synchronizes the collector once so local policy copies and
 remote workers observe the restored learner weights.
 
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
 request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.

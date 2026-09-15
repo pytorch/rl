@@ -40,6 +40,7 @@
 - [JSONCheckpointAdapter](generated/torchrl.checkpoint.JSONCheckpointAdapter.html)
 - [StateDictCheckpointAdapter](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html)
 - [StateDictFormat](generated/torchrl.checkpoint.StateDictFormat.html)
+- [resolve_checkpoint_path](generated/torchrl.checkpoint.resolve_checkpoint_path.html)
 - [torchrl.data package](data.html)
 
 - [Key Features](data.html#key-features)
