@@ -820,6 +820,36 @@ class TestResolveCheckpointPath:
             resolve_checkpoint_path(tmp_path)
 
 
+class TestReadComponent:
+    @pytest.mark.parametrize("format", ["directory", "archive"])
+    def test_roundtrip(self, tmp_path, format):
+        policy = torch.nn.Linear(2, 1)
+        path = tmp_path / "checkpoint"
+        checkpoint = Checkpoint(
+            format=format, policy=policy, config={"lr": 0.1}, rng=GlobalRNGState()
+        )
+        checkpoint.register(
+            "dump",
+            DumpObject(),
+            options=CheckpointOptions(
+                save_args=("label",), save_kwargs={"enabled": True}
+            ),
+        )
+        checkpoint.save(path)
+
+        state = Checkpoint.read_component(path, "policy")
+        torch.testing.assert_close(state["weight"], policy.weight.detach())
+        assert not isinstance(state["weight"], MemoryMappedTensor)
+        assert Checkpoint.read_component(path, "config") == {"lr": 0.1}
+        rng = Checkpoint.read_component(path, "rng")
+        assert isinstance(rng["numpy"], tuple)
+        torch.testing.assert_close(rng["torch_cpu"], torch.random.get_rng_state())
+        with pytest.raises(KeyError, match="no component 'missing'"):
+            Checkpoint.read_component(path, "missing")
+        with pytest.raises(CheckpointError, match="requires a live object"):
+            Checkpoint.read_component(path, "dump")
+
+
 class TestStopOnSignal:
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal delivery")
     def test_request_then_interrupt(self):

@@ -496,6 +496,36 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     assert calls == [("login", base_url), ("init", base_url)] * 2
 
 
+class TestWandbIdentity:
+    def test_rejects_other_run(self, monkeypatch):
+        run_ids = iter(["run-a", "run-b", "run-a"])
+
+        def init(**kwargs):
+            return argparse.Namespace(
+                config={}, define_metric=mock.Mock(), id=next(run_ids), log=mock.Mock()
+            )
+
+        monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+        monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+
+        source = WandbLogger(exp_name="test", log_env_packages=False)
+        source.log_scalar("reward", 1.0)
+        state = source.state_dict()
+        assert state["local"]["id"] == "run-a"
+
+        # A logger attached to another run must not silently rebind its id while
+        # its metrics keep flowing to the new run.
+        other = WandbLogger(exp_name="test", log_env_packages=False)
+        with pytest.raises(RuntimeError, match="run 'run-b'.*run 'run-a'"):
+            other.load_state_dict(state)
+
+        same = WandbLogger(
+            exp_name="test", id="run-a", resume="must", log_env_packages=False
+        )
+        same.load_state_dict(state)
+        assert same._step_registry == source._step_registry
+
+
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
 class TestWandbLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])

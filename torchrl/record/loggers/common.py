@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import abc
 import importlib.util
+
+import os
 from collections.abc import Mapping, Sequence
 
 from typing import Any, TYPE_CHECKING
@@ -312,7 +314,7 @@ class Logger(metaclass=_RayServiceMetaClass):
         self.flush()
         state: dict[str, Any] = {
             "exp_name": self.exp_name,
-            "log_dir": str(self.log_dir),
+            "log_dir": None if self.log_dir is None else os.path.abspath(self.log_dir),
         }
         local_state = self._checkpoint_state()
         if local_state:
