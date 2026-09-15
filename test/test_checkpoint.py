@@ -8,6 +8,9 @@ import argparse
 import json
 import os
 import random
+import signal
+import sys
+import threading
 import zipfile
 from datetime import datetime, timezone
 from unittest.mock import Mock
@@ -27,6 +30,7 @@ from torchrl.checkpoint import (
     GlobalRNGState,
     resolve_checkpoint_path,
     StateDictCheckpointAdapter,
+    StopOnSignal,
 )
 from torchrl.data import CompressedListStorage, ReplayBuffer
 
@@ -814,6 +818,36 @@ class TestResolveCheckpointPath:
         assert resolve_checkpoint_path(tmp_path, prefix="ckpt") == latest
         with pytest.raises(FileNotFoundError, match="No checkpoint"):
             resolve_checkpoint_path(tmp_path)
+
+
+class TestStopOnSignal:
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal delivery")
+    def test_request_then_interrupt(self):
+        previous = signal.getsignal(signal.SIGINT)
+        requests = []
+        with StopOnSignal((signal.SIGINT,), on_request=requests.append) as stop:
+            assert not stop.requested
+            signal.raise_signal(signal.SIGINT)
+            assert stop.requested
+            assert stop.signal_name == "SIGINT"
+            assert requests == ["SIGINT"]
+            with pytest.raises(KeyboardInterrupt):
+                signal.raise_signal(signal.SIGINT)
+        assert signal.getsignal(signal.SIGINT) is previous
+
+    def test_non_main_thread(self):
+        previous = signal.getsignal(signal.SIGINT)
+        result = {}
+
+        def run():
+            with StopOnSignal() as stop:
+                result["requested"] = stop.requested
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        thread.join()
+        assert result == {"requested": False}
+        assert signal.getsignal(signal.SIGINT) is previous
 
 
 if __name__ == "__main__":

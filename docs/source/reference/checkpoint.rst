@@ -142,6 +142,32 @@ The metadata callback runs immediately before each save. Metrics used by
 ``keep_best`` should describe the checkpoint being saved rather than an older
 evaluation.
 
+Stopping at a safe boundary
+---------------------------
+
+:class:`StopOnSignal` turns ``SIGINT`` and ``SIGTERM`` into a stop request that
+a training loop checks between batches, so the current batch completes and a
+final checkpoint is written before the process exits. A second signal raises
+``KeyboardInterrupt`` for loops that cannot reach a boundary. Previous handlers
+are restored when the context exits. ``Trainer.stop_on_signal`` wraps the same
+helper and calls ``Trainer.request_stop``:
+
+.. code-block:: python
+
+    with trainer.stop_on_signal():
+        trainer.train()
+
+Standalone scripts use the helper directly:
+
+.. code-block:: python
+
+    with StopOnSignal() as stop:
+        for batch in collector:
+            ...
+            if stop.requested:
+                break
+        rotation.save(checkpoint, step=step)
+
 Compatibility
 -------------
 
@@ -187,6 +213,7 @@ API
     JSONCheckpointAdapter
     StateDictCheckpointAdapter
     StateDictFormat
+    StopOnSignal
 
 .. autosummary::
     :toctree: generated/
