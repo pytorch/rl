@@ -1610,3 +1610,39 @@ class CheckpointRotation:
             raise TypeError("step must be an integer.")
         if step < 0:
             raise ValueError("step must be non-negative.")
+
+
+def resolve_checkpoint_path(path: str | Path, *, prefix: str = "checkpoint") -> Path:
+    """Return the checkpoint at ``path`` or the newest checkpoint of a rotation directory.
+
+    Args:
+        path: A checkpoint directory or archive, or a directory managed by
+            :class:`CheckpointRotation`.
+        prefix: Filename prefix of the rotated checkpoints. Defaults to
+            ``"checkpoint"``.
+
+    Returns:
+        The resolved checkpoint path.
+
+    Raises:
+        FileNotFoundError: If ``path`` is neither a checkpoint nor a directory
+            containing rotated checkpoints.
+
+    Examples:
+        >>> import tempfile
+        >>> from torchrl.checkpoint import Checkpoint, CheckpointRotation
+        >>> from torchrl.checkpoint import resolve_checkpoint_path
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     rotation = CheckpointRotation(tmpdir, keep_last=1)
+        ...     path = rotation.save(Checkpoint(value={"step": 1}), step=1)
+        ...     resolve_checkpoint_path(tmpdir) == path
+        True
+    """
+    candidate = Path(path).expanduser()
+    if Checkpoint.is_checkpoint(candidate):
+        return candidate
+    if candidate.is_dir():
+        latest = CheckpointRotation(candidate, keep_last=1, prefix=prefix).latest()
+        if latest is not None:
+            return latest
+    raise FileNotFoundError(f"No checkpoint was found at {candidate}.")

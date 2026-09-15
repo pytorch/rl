@@ -291,9 +291,8 @@ def make_trainer(
             device=device,
         )
 
-        trainer.register_op("batch_process", rb_trainer.extend)
-        trainer.register_op("process_optim_batch", rb_trainer.sample)
-        trainer.register_op("post_loss", rb_trainer.update_priority)
+        # register() also exposes the buffer to trainer checkpoints.
+        rb_trainer.register(trainer)
     else:
         # trainer.register_op("batch_process", mask_batch)
         trainer.register_op(

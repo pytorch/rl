@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import inspect
 import os
@@ -294,6 +295,164 @@ def test_unified_trainer_checkpoint_rotation(tmp_path):
     restored.load_from_file(rotation.latest())
     assert restored.collected_frames == 30
     assert restored._optim_count == 15
+
+
+class _RNGConsumingModule:
+    """Trainer module whose restore draws a random number."""
+
+    def state_dict(self):
+        return {}
+
+    def load_state_dict(self, state_dict):
+        torch.rand(())
+
+
+class _PausableCollector(MockingIterableCollector):
+    def __init__(self):
+        super().__init__(batches=[])
+        self.pause_calls = 0
+        self.paused = False
+
+    @contextlib.contextmanager
+    def pause(self):
+        self.pause_calls += 1
+        self.paused = True
+        try:
+            yield
+        finally:
+            self.paused = False
+
+
+class _UnpausableCollector(MockingIterableCollector):
+    def __init__(self):
+        super().__init__(batches=[])
+
+    @contextlib.contextmanager
+    def pause(self):
+        # Mirrors BaseCollector.pause, which raises without yielding.
+        raise NotImplementedError("pause() is not implemented.")
+
+
+class _PauseProbe:
+    def __init__(self, collector):
+        self.collector = collector
+        self.paused_at_save = []
+
+    def state_dict(self):
+        self.paused_at_save.append(self.collector.paused)
+        return {}
+
+    def load_state_dict(self, state_dict):
+        pass
+
+
+def _loop_trainer(collector, path=None, **kwargs):
+    return Trainer(
+        collector=collector,
+        total_frames=100,
+        frame_skip=1,
+        optim_steps_per_batch=1,
+        loss_module=MockingLossModule(),
+        optimizer=None,
+        progress_bar=False,
+        save_trainer_file=path,
+        checkpoint=Checkpoint() if path is not None else None,
+        **kwargs,
+    )
+
+
+class TestTrainerResume:
+    def test_rng_last(self, tmp_path):
+        path = tmp_path / "trainer-checkpoint"
+        trainer = mocking_trainer(file=path, checkpoint=Checkpoint(), with_policy=True)
+        # Sorts after "rng": a single load pass would consume random numbers
+        # after the RNG state had been restored.
+        trainer.register_module("zz_consumer", _RNGConsumingModule())
+        assert "rng" in trainer.checkpoint.components
+        torch.manual_seed(0)
+        trainer.save_trainer(force_save=True)
+        expected = torch.rand(3)
+
+        torch.manual_seed(1)
+        restored = mocking_trainer(checkpoint=Checkpoint(), with_policy=True)
+        restored.register_module("zz_consumer", _RNGConsumingModule())
+        restored.load_from_file(path)
+        assert restored.collector.called_update_policy_weights_
+        torch.testing.assert_close(torch.rand(3), expected)
+
+    def test_no_rng(self, tmp_path):
+        # Checkpoints written before "rng" was registered load under
+        # strict="error" and leave the process RNG untouched.
+        path = tmp_path / "trainer-checkpoint"
+        trainer = mocking_trainer(checkpoint=Checkpoint())
+        trainer.collected_frames = 5
+        trainer.checkpoint.save(
+            path, components=set(trainer.checkpoint.components) - {"rng"}
+        )
+        torch.manual_seed(3)
+        expected = torch.rand(2)
+        torch.manual_seed(3)
+        restored = mocking_trainer(checkpoint=Checkpoint(strict="error"))
+        restored.load_from_file(path)
+        assert restored.collected_frames == 5
+        torch.testing.assert_close(torch.rand(2), expected)
+
+    def test_rotation_dir(self, tmp_path):
+        directory = tmp_path / "checkpoints"
+        rotation = CheckpointRotation(directory, keep_last=2)
+        trainer = mocking_trainer(checkpoint=Checkpoint(), checkpoint_rotation=rotation)
+        for frames in (10, 20):
+            trainer.collected_frames = frames
+            trainer.save_trainer(force_save=True)
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored.load_from_file(directory)
+        assert restored.collected_frames == 20
+
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        with pytest.raises(FileNotFoundError, match="No checkpoint"):
+            mocking_trainer(checkpoint=Checkpoint()).load_from_file(empty)
+
+    def test_async_pause(self, tmp_path):
+        collector = _PausableCollector()
+        trainer = _loop_trainer(
+            collector, tmp_path / "checkpoint", async_collection=True
+        )
+        probe = _PauseProbe(collector)
+        trainer.checkpoint.register("probe", probe)
+        trainer.collected_frames = 5
+        trainer._save_trainer_at_boundary()
+        assert collector.pause_calls == 0
+        trainer._save_trainer_at_boundary(force_save=True)
+        assert collector.pause_calls == 1
+        assert probe.paused_at_save == [True]
+        assert not collector.paused
+        assert Checkpoint.is_checkpoint(tmp_path / "checkpoint")
+
+        trainer.async_collection = False
+        trainer._save_trainer_at_boundary(force_save=True)
+        assert collector.pause_calls == 1
+
+        trainer = _loop_trainer(
+            _UnpausableCollector(), tmp_path / "unpausable", async_collection=True
+        )
+        trainer._save_trainer_at_boundary(force_save=True)
+        assert Checkpoint.is_checkpoint(tmp_path / "unpausable")
+        assert "collector.pause" in trainer._checkpoint_skip_warnings
+
+    def test_shutdown_on_error(self):
+        batch = TensorDict({("next", "reward"): torch.tensor([1.0])}, [1])
+        collector = MockingIterableCollector(batches=[batch])
+        trainer = _loop_trainer(collector)
+
+        def fail(batch):
+            raise RuntimeError("hook failure")
+
+        trainer.register_op("batch_process", fail)
+        with pytest.raises(RuntimeError, match="hook failure"):
+            trainer.train()
+        assert collector.shutdown_calls == 1
 
 
 def test_checkpoint_rotation_is_a_save_destination(tmp_path):

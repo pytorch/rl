@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import contextlib
 import itertools
 import json
 import math
@@ -38,7 +39,12 @@ from torchrl._utils import (
     VERBOSE,
 )
 
-from torchrl.checkpoint import Checkpoint, CheckpointRotation
+from torchrl.checkpoint import (
+    Checkpoint,
+    CheckpointRotation,
+    GlobalRNGState,
+    resolve_checkpoint_path,
+)
 from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
@@ -600,7 +606,9 @@ class Trainer:
             Default is None (no saving)
         checkpoint (Checkpoint, optional): unified checkpoint object used for
             scheduled saves and restores. The trainer registers any missing
-            standard components on this object. When omitted, the legacy
+            standard components on this object, including the process-global
+            RNG state under ``"rng"``, which :meth:`load_from_file` restores
+            after every other component. When omitted, the legacy
             ``CKPT_BACKEND`` path is retained during the compatibility window.
         checkpoint_rotation (CheckpointRotation, optional): retention policy used
             for scheduled unified checkpoints. Requires ``checkpoint`` and cannot
@@ -955,6 +963,7 @@ class Trainer:
             register("exploration", getattr(self, "exploration_module", None))
             for name, module in self._modules.items():
                 register(f"trainer_module.{name}", module)
+            register("rng", GlobalRNGState())
             register("learner_execution", self._execution_checkpoint_state)
             return checkpoint
 
@@ -985,6 +994,7 @@ class Trainer:
             if name in ("optimizer", "replay_buffer") and name in checkpoint:
                 continue
             register(f"trainer_module.{name}", module)
+        register("rng", GlobalRNGState())
         return checkpoint
 
     def _wrap_hook_with_timing(
@@ -1175,14 +1185,59 @@ class Trainer:
         )
         return metadata
 
+    def _save_interval_elapsed(self) -> bool:
+        return (self.collected_frames - self._last_save) > self.save_trainer_interval
+
+    def _save_due(self, force_save: bool = False) -> bool:
+        """Whether a destination is configured and a save is due now."""
+        return self._has_checkpoint_destination() and (
+            force_save or self._save_interval_elapsed()
+        )
+
     def save_trainer(self, force_save: bool = False) -> None:
-        _save = force_save
-        if self._has_checkpoint_destination():
-            if (self.collected_frames - self._last_save) > self.save_trainer_interval:
-                self._last_save = self.collected_frames
-                _save = True
-        if _save and self._has_checkpoint_destination():
-            self._save_trainer()
+        if not self._has_checkpoint_destination():
+            return
+        if self._save_interval_elapsed():
+            self._last_save = self.collected_frames
+        elif not force_save:
+            return
+        self._save_trainer()
+
+    def _save_trainer_at_boundary(self, *, force_save: bool = False) -> None:
+        """Save at a training-loop boundary, pausing free-running collection."""
+        if self._save_due(force_save):
+            with self._collection_paused():
+                self.save_trainer(force_save=force_save)
+
+    @contextlib.contextmanager
+    def _collection_paused(self):
+        """Pause an asynchronous collector while a checkpoint is written."""
+        pause = (
+            getattr(self.collector, "pause", None) if self.async_collection else None
+        )
+        with contextlib.ExitStack() as stack:
+            if pause is not None:
+                try:
+                    stack.enter_context(pause())
+                except NotImplementedError:
+                    if "collector.pause" not in self._checkpoint_skip_warnings:
+                        torchrl_logger.warning(
+                            "%s does not implement pause(); asynchronous checkpoints "
+                            "are written while collection continues.",
+                            type(self.collector).__name__,
+                        )
+                        self._checkpoint_skip_warnings.add("collector.pause")
+            yield
+
+    def _resolve_checkpoint_path(self, file: str | pathlib.Path) -> str | pathlib.Path:
+        """Map a rotation directory to its newest checkpoint; pass other inputs through."""
+        if not isinstance(file, (str, pathlib.PurePath)):
+            return file
+        path = pathlib.Path(file).expanduser()
+        if not path.is_dir() or (path / "state.json").exists():
+            # A file, an archive, or a legacy memmap trainer directory.
+            return file
+        return resolve_checkpoint_path(path)
 
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
         """Loads a file and its state-dict in the trainer.
@@ -1219,7 +1274,12 @@ class Trainer:
             trainer synchronizes the collector once so local policy copies and
             remote workers observe the restored learner weights.
 
+        .. note::
+            ``file`` may also be a :class:`~torchrl.checkpoint.CheckpointRotation`
+            directory, in which case its newest checkpoint is restored.
+
         """
+        file = self._resolve_checkpoint_path(file)
         if Checkpoint.is_checkpoint(file):
             checkpoint = self.checkpoint
             if checkpoint is None:
@@ -1229,10 +1289,19 @@ class Trainer:
             for key, value in _torch_load_defaults().items():
                 kwargs.setdefault(key, value)
             checkpoint = self._sync_checkpoint_components(checkpoint)
+            load_kwargs = {
+                "map_location": map_location,
+                "tensor_load_kwargs": kwargs,
+                "strict": strict,
+            }
+            registered = set(checkpoint.components)
+            load_rng = (
+                "rng" in registered and "rng" in Checkpoint.manifest(file)["components"]
+            )
+            registered.discard("rng")
             if self.learner_backend == "ray":
                 # Service owners must be restored before learner actors create
                 # rank-aware clients. The learner state is deliberately last.
-                registered = set(checkpoint.components)
                 ordered = [
                     name
                     for name in ("replay_buffer", "collector")
@@ -1249,22 +1318,11 @@ class Trainer:
                     ordered.append("learner_execution")
                 loaded = set()
                 for name in ordered:
-                    result = checkpoint.load(
-                        file,
-                        components=[name],
-                        map_location=map_location,
-                        tensor_load_kwargs=kwargs,
-                        strict=strict,
-                    )
+                    result = checkpoint.load(file, components=[name], **load_kwargs)
                     loaded.update(result.loaded)
             else:
-                result = checkpoint.load(
-                    file,
-                    map_location=map_location,
-                    tensor_load_kwargs=kwargs,
-                    strict=strict,
-                )
-                loaded = result.loaded
+                result = checkpoint.load(file, components=registered, **load_kwargs)
+                loaded = set(result.loaded)
             if "learner_execution" in loaded:
                 self._publish_execution_weights(force=True)
             elif "policy" in loaded:
@@ -1277,6 +1335,9 @@ class Trainer:
                     self.collector.update_policy_weights_()
                 else:
                     self.collector.update_policy_weights_(policy)
+            if load_rng:
+                result = checkpoint.load(file, components=["rng"], **load_kwargs)
+                loaded.update(result.loaded)
         elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
@@ -1665,71 +1726,79 @@ class Trainer:
         if self.learner_backend == "ray":
             return self._train_with_execution_backend()
         if self.progress_bar:
-            self._pbar = tqdm(total=self.total_frames)
+            self._pbar = tqdm(total=self.total_frames, initial=self.collected_frames)
             self._pbar_str = {}
 
-        if self.async_collection:
-            self.collector.start()
-            while self.collector.getattr_rb("write_count") == 0:
-                time.sleep(0.1)
+        setup_complete = False
+        try:
+            if self.async_collection:
+                self.collector.start()
+                while self.collector.getattr_rb("write_count") == 0:
+                    time.sleep(0.1)
 
-            # Create async iterator that monitors write_count progress
-            iterator = self._async_iterator()
-        else:
-            iterator = self.collector
-
-        self._setup_hook()
-
-        for batch in iterator:
-            if not self.async_collection and batch is not None:
-                batch = self._process_batch_hook(batch)
-                current_frames = (
-                    batch.get(("collector", "mask"), torch.tensor(batch.numel()))
-                    .sum()
-                    .item()
-                    * self.frame_skip
-                )
-                self.collected_frames += current_frames
+                # Create async iterator that monitors write_count progress
+                iterator = self._async_iterator()
             else:
-                # Batch is None: either async collection, or a synchronous
-                # collector that writes directly to the replay buffer (e.g.
-                # LLM collectors created with a replay_buffer). Frames are
-                # tracked via the buffer write count in both cases.
-                batch = None
-                cf = self.collected_frames
-                if self.replay_buffer is not None:
-                    self.collected_frames = self._replay_write_count()
+                iterator = self.collector
+
+            self._setup_hook()
+            setup_complete = True
+
+            for batch in iterator:
+                if not self.async_collection and batch is not None:
+                    batch = self._process_batch_hook(batch)
+                    current_frames = (
+                        batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                        .sum()
+                        .item()
+                        * self.frame_skip
+                    )
+                    self.collected_frames += current_frames
                 else:
-                    self.collected_frames = self.collector.getattr_rb("write_count")
-                current_frames = self.collected_frames - cf
+                    # Batch is None: either async collection, or a synchronous
+                    # collector that writes directly to the replay buffer (e.g.
+                    # LLM collectors created with a replay_buffer). Frames are
+                    # tracked via the buffer write count in both cases.
+                    batch = None
+                    cf = self.collected_frames
+                    if self.replay_buffer is not None:
+                        self.collected_frames = self._replay_write_count()
+                    else:
+                        self.collected_frames = self.collector.getattr_rb("write_count")
+                    current_frames = self.collected_frames - cf
 
-            # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
-            self._pre_steps_log_hook(batch)
+                # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
+                self._pre_steps_log_hook(batch)
 
-            if self.collected_frames >= self.collector.init_random_frames:
-                self.optim_steps(batch)
-            self._post_steps_hook()
+                if self.collected_frames >= self.collector.init_random_frames:
+                    self.optim_steps(batch)
+                self._post_steps_hook()
 
-            # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
-            self._post_steps_log_hook(batch)
+                # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
+                self._post_steps_log_hook(batch)
 
-            if self._stop_training:
-                if self._stop_reason and VERBOSE:
-                    torchrl_logger.info(f"Trainer stopping early: {self._stop_reason}")
-                self.save_trainer(force_save=True)
-                break
+                if self._stop_training:
+                    if self._stop_reason and VERBOSE:
+                        torchrl_logger.info(
+                            f"Trainer stopping early: {self._stop_reason}"
+                        )
+                    self._save_trainer_at_boundary(force_save=True)
+                    break
 
-            if self.progress_bar:
-                self._pbar.update(current_frames)
-                self._pbar_description()
+                if self.progress_bar:
+                    self._pbar.update(current_frames)
+                    self._pbar_description()
 
-            if self.collected_frames >= self.total_frames:
-                self.save_trainer(force_save=True)
-                break
-            self.save_trainer()
-
-        self._shutdown_hook()
-        self.collector.shutdown()
+                if self.collected_frames >= self.total_frames:
+                    self._save_trainer_at_boundary(force_save=True)
+                    break
+                self._save_trainer_at_boundary()
+        finally:
+            try:
+                if setup_complete:
+                    self._shutdown_hook()
+            finally:
+                self.collector.shutdown()
 
     def _train_with_execution_backend(self) -> None:
         """Run collection while the private backend owns optimization state."""
@@ -1822,12 +1891,7 @@ class Trainer:
     def _save_execution_checkpoint(
         self, *, force_save: bool = False, resume_collection: bool = True
     ) -> None:
-        if not self._has_checkpoint_destination():
-            return
-        if (
-            not force_save
-            and (self.collected_frames - self._last_save) <= self.save_trainer_interval
-        ):
+        if not self._save_due(force_save):
             return
         if self.async_collection:
             pause = getattr(self.collector, "pause", None)

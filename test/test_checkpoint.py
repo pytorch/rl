@@ -25,6 +25,7 @@ from torchrl.checkpoint import (
     CheckpointOptions,
     CheckpointRotation,
     GlobalRNGState,
+    resolve_checkpoint_path,
     StateDictCheckpointAdapter,
 )
 from torchrl.data import CompressedListStorage, ReplayBuffer
@@ -802,6 +803,17 @@ def test_cuda_map_location_and_rng(tmp_path):
 def test_reject_remote_path():
     with pytest.raises(ValueError, match="Only local"):
         Checkpoint(value={}).save("s3://bucket/checkpoint")
+
+
+class TestResolveCheckpointPath:
+    def test_rotation_dir(self, tmp_path):
+        rotation = CheckpointRotation(tmp_path, keep_last=2, prefix="ckpt")
+        first = rotation.save(Checkpoint(value={"step": 1}), step=1)
+        latest = rotation.save(Checkpoint(value={"step": 2}), step=2)
+        assert resolve_checkpoint_path(first) == first
+        assert resolve_checkpoint_path(tmp_path, prefix="ckpt") == latest
+        with pytest.raises(FileNotFoundError, match="No checkpoint"):
+            resolve_checkpoint_path(tmp_path)
 
 
 if __name__ == "__main__":
