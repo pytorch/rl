@@ -19,9 +19,19 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import compile_with_warmup, get_available_device, timeit
+from torchrl.checkpoint import (
+    Checkpoint,
+    GlobalRNGState,
+    resolve_checkpoint_path,
+    resume_config,
+    RunCheckpointer,
+    StopOnSignal,
+)
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -40,14 +50,20 @@ torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(version_base="1.3", config_path="", config_name="config")
-def main(cfg: DictConfig):  # noqa: F821
+def main(cfg: DictConfig):
+    # Resume: the saved configuration is the base, CLI overrides apply on top.
+    resume_path = None
+    if cfg.resume:
+        resume_path = resolve_checkpoint_path(to_absolute_path(cfg.resume))
+        cfg = resume_config(cfg, resume_path)
+
     device = (
         torch.device(cfg.network.device)
         if cfg.network.device
         else get_available_device()
     )
 
-    # Create logger
+    # Create logger, reattached to the saved run when resuming
     exp_name = generate_exp_name("SAC", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
@@ -55,6 +71,9 @@ def main(cfg: DictConfig):  # noqa: F821
             logger_type=cfg.logger.backend,
             logger_name="sac_logging",
             experiment_name=exp_name,
+            state_dict=Checkpoint.read_component(resume_path, "logger", default=None)
+            if resume_path
+            else None,
             wandb_kwargs={
                 "mode": cfg.logger.mode,
                 "config": dict(cfg),
@@ -107,6 +126,33 @@ def main(cfg: DictConfig):  # noqa: F821
     optimizer = group_optimizers(optimizer_actor, optimizer_critic, optimizer_alpha)
     del optimizer_actor, optimizer_critic, optimizer_alpha
 
+    # Checkpointing: the loss holds the online and target networks, so the
+    # policy is not saved a second time; the collector is resynchronized
+    # from the restored loss parameters.
+    run_state = {"collected_frames": 0}
+    checkpoint = Checkpoint(
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_updater=target_net_updater,
+        collector=collector,
+        replay_buffer=replay_buffer,
+        run_state=run_state,
+        rng=GlobalRNGState(),
+        config=OmegaConf.to_container(cfg, resolve=False),
+    )
+    if logger is not None:
+        checkpoint.register("logger", logger)
+    checkpointer = RunCheckpointer(
+        checkpoint,
+        directory=cfg.checkpoint.dir,
+        interval=cfg.checkpoint.interval,
+        keep_last=cfg.checkpoint.keep_last,
+        exclude=() if cfg.checkpoint.include_replay_buffer else ("replay_buffer",),
+        resume_path=resume_path,
+    )
+    if checkpointer.restore(map_location=device):
+        collector.update_policy_weights_()
+
     def update(sampled_tensordict):
         # Compute loss
         loss_td = loss_module(sampled_tensordict)
@@ -134,8 +180,8 @@ def main(cfg: DictConfig):  # noqa: F821
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
 
     # Main loop
-    collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    collected_frames = run_state["collected_frames"]
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames, initial=collected_frames)
 
     init_random_frames = cfg.collector.init_random_frames
     num_updates = int(cfg.collector.frames_per_batch * cfg.optim.utd_ratio)
@@ -147,92 +193,106 @@ def main(cfg: DictConfig):  # noqa: F821
     collector_iter = iter(collector)
     total_iter = len(collector)
 
-    for i in range(total_iter):
-        timeit.printevery(num_prints=1000, total_count=total_iter, erase=True)
+    # SIGINT/SIGTERM stop after the current batch; a second signal interrupts.
+    stop = StopOnSignal()
+    try:
+        with stop:
+            while True:
+                timeit.printevery(num_prints=1000, total_count=total_iter, erase=True)
 
-        with timeit("collect"):
-            tensordict = next(collector_iter)
+                with timeit("collect"):
+                    tensordict = next(collector_iter, None)
+                if tensordict is None:
+                    break
 
-        # Update weights of the inference policy
-        collector.update_policy_weights_()
+                # Update weights of the inference policy
+                collector.update_policy_weights_()
 
-        current_frames = tensordict.numel()
-        pbar.update(current_frames)
+                current_frames = tensordict.numel()
+                pbar.update(current_frames)
 
-        with timeit("rb - extend"):
-            # Add to replay buffer
-            tensordict = tensordict.reshape(-1)
-            replay_buffer.extend(tensordict)
+                with timeit("rb - extend"):
+                    # Add to replay buffer
+                    tensordict = tensordict.reshape(-1)
+                    replay_buffer.extend(tensordict)
 
-        collected_frames += current_frames
+                collected_frames += current_frames
 
-        # Optimization steps
-        with timeit("train"):
-            if collected_frames >= init_random_frames:
-                losses = TensorDict(batch_size=[num_updates])
-                for i in range(num_updates):
-                    with timeit("rb - sample"):
-                        # Sample from replay buffer
-                        sampled_tensordict = replay_buffer.sample()
+                # Optimization steps
+                with timeit("train"):
+                    if collected_frames >= init_random_frames:
+                        losses = TensorDict(batch_size=[num_updates])
+                        for i in range(num_updates):
+                            with timeit("rb - sample"):
+                                # Sample from replay buffer
+                                sampled_tensordict = replay_buffer.sample()
 
-                    with timeit("update"):
-                        torch.compiler.cudagraph_mark_step_begin()
-                        loss_td = update(sampled_tensordict).clone()
-                    losses[i] = loss_td.select(
-                        "loss_actor", "loss_qvalue", "loss_alpha"
-                    )
+                            with timeit("update"):
+                                torch.compiler.cudagraph_mark_step_begin()
+                                loss_td = update(sampled_tensordict).clone()
+                            losses[i] = loss_td.select(
+                                "loss_actor", "loss_qvalue", "loss_alpha"
+                            )
 
-                    # Update priority
-                    if prb:
-                        replay_buffer.update_priority(sampled_tensordict)
+                            # Update priority
+                            if prb:
+                                replay_buffer.update_priority(sampled_tensordict)
 
-        episode_end = (
-            tensordict["next", "done"]
-            if tensordict["next", "done"].any()
-            else tensordict["next", "truncated"]
-        )
-        episode_rewards = tensordict["next", "episode_reward"][episode_end]
-
-        # Logging
-        metrics_to_log = {}
-        if len(episode_rewards) > 0:
-            episode_length = tensordict["next", "step_count"][episode_end]
-            metrics_to_log["train/reward"] = episode_rewards
-            metrics_to_log["train/episode_length"] = episode_length.sum() / len(
-                episode_length
-            )
-        if collected_frames >= init_random_frames:
-            losses = losses.mean()
-            metrics_to_log["train/q_loss"] = losses.get("loss_qvalue")
-            metrics_to_log["train/actor_loss"] = losses.get("loss_actor")
-            metrics_to_log["train/alpha_loss"] = losses.get("loss_alpha")
-            metrics_to_log["train/alpha"] = loss_td["alpha"]
-            metrics_to_log["train/entropy"] = loss_td["entropy"]
-
-        # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(
-                ExplorationType.DETERMINISTIC
-            ), torch.no_grad(), timeit("eval"):
-                eval_rollout = eval_env.rollout(
-                    eval_rollout_steps,
-                    model[0],
-                    auto_cast_to_device=True,
-                    break_when_any_done=True,
+                episode_end = (
+                    tensordict["next", "done"]
+                    if tensordict["next", "done"].any()
+                    else tensordict["next", "truncated"]
                 )
-                eval_env.apply(dump_video)
-                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                metrics_to_log["eval/reward"] = eval_reward
-        if logger is not None:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            log_metrics(logger, metrics_to_log, collected_frames)
+                episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
-    collector.shutdown()
-    if not eval_env.is_closed:
-        eval_env.close()
-    if not train_env.is_closed:
-        train_env.close()
+                # Logging
+                metrics_to_log = {}
+                if len(episode_rewards) > 0:
+                    episode_length = tensordict["next", "step_count"][episode_end]
+                    metrics_to_log["train/reward"] = episode_rewards
+                    metrics_to_log["train/episode_length"] = episode_length.sum() / len(
+                        episode_length
+                    )
+                if collected_frames >= init_random_frames:
+                    losses = losses.mean()
+                    metrics_to_log["train/q_loss"] = losses.get("loss_qvalue")
+                    metrics_to_log["train/actor_loss"] = losses.get("loss_actor")
+                    metrics_to_log["train/alpha_loss"] = losses.get("loss_alpha")
+                    metrics_to_log["train/alpha"] = loss_td["alpha"]
+                    metrics_to_log["train/entropy"] = loss_td["entropy"]
+
+                # Evaluation
+                if abs(collected_frames % eval_iter) < frames_per_batch:
+                    with set_exploration_type(
+                        ExplorationType.DETERMINISTIC
+                    ), torch.no_grad(), timeit("eval"):
+                        eval_rollout = eval_env.rollout(
+                            eval_rollout_steps,
+                            model[0],
+                            auto_cast_to_device=True,
+                            break_when_any_done=True,
+                        )
+                        eval_env.apply(dump_video)
+                        eval_reward = (
+                            eval_rollout["next", "reward"].sum(-2).mean().item()
+                        )
+                        metrics_to_log["eval/reward"] = eval_reward
+                if logger is not None:
+                    metrics_to_log.update(timeit.todict(prefix="time"))
+                    metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+                    log_metrics(logger, metrics_to_log, collected_frames)
+
+                run_state["collected_frames"] = collected_frames
+                checkpointer.save(collected_frames)
+                if stop.requested:
+                    break
+        checkpointer.save(collected_frames, force=True)
+    finally:
+        collector.shutdown()
+        if not eval_env.is_closed:
+            eval_env.close()
+        if not train_env.is_closed:
+            train_env.close()
 
 
 if __name__ == "__main__":

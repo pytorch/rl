@@ -30,6 +30,57 @@ commands = {
   trainer.progress_bar=false \
   hydra.run.dir=outputs/sota_dqn_trainer_resumed
 """,
+    "sac_resume": """python sota-implementations/sac/sac.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  logger.backend= \
+  checkpoint.interval=16 \
+  hydra.run.dir=outputs/sota_sac \
+&& python sota-implementations/sac/sac.py \
+  resume=outputs/sota_sac/checkpoints \
+  collector.total_frames=80 \
+  hydra.run.dir=outputs/sota_sac_resumed
+""",
+    "td3_resume": """python sota-implementations/td3/td3.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.num_workers=4 \
+  collector.env_per_collector=2 \
+  logger.mode=offline \
+  env.name=Pendulum-v1 \
+  logger.backend= \
+  checkpoint.interval=16 \
+  hydra.run.dir=outputs/sota_td3 \
+&& python sota-implementations/td3/td3.py \
+  resume=outputs/sota_td3/checkpoints \
+  collector.total_frames=80 \
+  hydra.run.dir=outputs/sota_td3_resumed
+""",
+    "ddpg_resume": """python sota-implementations/ddpg/ddpg.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  logger.backend= \
+  checkpoint.interval=16 \
+  hydra.run.dir=outputs/sota_ddpg \
+&& python sota-implementations/ddpg/ddpg.py \
+  resume=outputs/sota_ddpg/checkpoints \
+  collector.total_frames=80 \
+  hydra.run.dir=outputs/sota_ddpg_resumed
+""",
     "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
   collector.groups_per_iter=2 \
   collector.group_size=2 \

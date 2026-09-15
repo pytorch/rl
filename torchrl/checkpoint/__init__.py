@@ -19,10 +19,12 @@ from ._checkpoint import (
     GlobalRNGState,
     JSONCheckpointAdapter,
     resolve_checkpoint_path,
+    RunCheckpointer,
     StateDictCheckpointAdapter,
     StateDictFormat,
     StopOnSignal,
 )
+from ._hydra import resume_config
 
 __all__ = [
     "Checkpoint",
@@ -39,6 +41,8 @@ __all__ = [
     "GlobalRNGState",
     "JSONCheckpointAdapter",
     "resolve_checkpoint_path",
+    "resume_config",
+    "RunCheckpointer",
     "StateDictCheckpointAdapter",
     "StateDictFormat",
     "StopOnSignal",
