@@ -569,6 +569,21 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
     benchmark(sample, rb)
 
 
+@pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
+@pytest.mark.parametrize("size", [10_000, 100_000])
+def test_rb_checkpoint_dump(benchmark, tmp_path, storage, size):
+    # Cost of one scheduled replay-buffer checkpoint; informs the default
+    # trainer save cadence when the buffer is included.
+    (rb,), _ = create_rb(
+        rb=TensorDictReplayBuffer,
+        storage=storage,
+        sampler=None,
+        populated=True,
+        size=size,
+    )()
+    benchmark(rb.dumps, tmp_path / "checkpoint")
+
+
 @pytest.mark.parametrize("size", [1_000, 100_000])
 def test_prompt_group_sampler_cached_sample(benchmark, size):
     rb = ReplayBuffer(

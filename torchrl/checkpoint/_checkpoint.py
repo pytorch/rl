@@ -17,7 +17,7 @@ import threading
 import uuid
 import zipfile
 from collections import OrderedDict
-from collections.abc import Callable, Collection, Mapping, MutableMapping
+from collections.abc import Callable, Collection, Mapping, MutableMapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -1554,13 +1554,18 @@ class CheckpointRotation:
         if "/" in prefix or "\\" in prefix:
             raise ValueError("prefix cannot contain path separators.")
         if keep_best is not None:
-            if not isinstance(keep_best, tuple) or len(keep_best) != 2:
-                raise TypeError("keep_best must be a (metadata_key, mode) tuple.")
+            if (
+                isinstance(keep_best, str)
+                or not isinstance(keep_best, Sequence)
+                or len(keep_best) != 2
+            ):
+                raise TypeError("keep_best must be a (metadata_key, mode) pair.")
             key, mode = keep_best
             if not isinstance(key, str) or not key:
                 raise ValueError("The keep_best metadata key must be non-empty.")
             if mode not in ("min", "max"):
                 raise ValueError("The keep_best mode must be 'min' or 'max'.")
+            keep_best = (key, mode)
         self.directory = Checkpoint._local_path(directory)
         self.keep_last = keep_last
         self.keep_best = keep_best

@@ -20,6 +20,10 @@ except ImportError as e:
         "Please install them with: pip install 'torchrl[utils]' or pip install hydra-core omegaconf"
     ) from e
 
+from torchrl.trainers.algorithms.configs.checkpoint import (
+    CheckpointConfig,
+    CheckpointRotationConfig,
+)
 from torchrl.trainers.algorithms.configs.collectors import (
     # New canonical config names
     AsyncCollectorConfig,
@@ -52,6 +56,7 @@ from torchrl.trainers.algorithms.configs.data import (
     TensorStorageConfig,
     TransitionConfig,
 )
+from torchrl.trainers.algorithms.configs.entrypoint import instantiate_trainer
 from torchrl.trainers.algorithms.configs.envs import (
     BatchedEnvConfig,
     EnvConfig,
@@ -470,6 +475,10 @@ __all__ = [
     "TensorboardLoggerConfig",
     "TrackioLoggerConfig",
     "WandbLoggerConfig",
+    # Checkpointing
+    "CheckpointConfig",
+    "CheckpointRotationConfig",
+    "instantiate_trainer",
     # Weight Updaters
     "WeightUpdaterConfig",
     "VanillaWeightUpdaterConfig",
@@ -821,6 +830,13 @@ def _register_configs():
     cs.store(group="logger", name="tensorboard", node=TensorboardLoggerConfig)
     cs.store(group="logger", name="trackio", node=TrackioLoggerConfig)
     cs.store(group="logger", name="csv", node=CSVLoggerConfig)
+
+    # =============================================================================
+    # Checkpoint Configurations
+    # =============================================================================
+
+    cs.store(group="checkpoint", name="base", node=CheckpointConfig)
+    cs.store(group="checkpoint_rotation", name="base", node=CheckpointRotationConfig)
     cs.store(group="logger", name="base", node=LoggerConfig)
 
     # =============================================================================

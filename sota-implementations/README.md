@@ -30,6 +30,22 @@ or similar. Hyperparameters can be easily changed by providing the arguments to 
 python sac.py collector.frames_per_batch=63
 ```
 
+## Stopping and resuming the trainer recipes
+
+The `*_trainer` recipes save rotated checkpoints under `checkpoints/` in their
+Hydra run directory and stop cleanly on Ctrl-C or SIGTERM. Continue a run from
+its checkpoint directory; the saved configuration is the base and other
+overrides apply on top:
+
+```
+python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
+```
+
+W&B reopens the original run, CSV and TensorBoard loggers keep appending to the
+original directory, and checkpoints keep accumulating in the resumed directory.
+`trainer.checkpoint_rotation=null` disables saving. The checkpointing page of
+the documentation describes the flow.
+
 [//]: # (# Results)
 
 [//]: # ()
