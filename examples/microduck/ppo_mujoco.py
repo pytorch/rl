@@ -79,11 +79,13 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     get_primers_from_module,
     GRUModule,
+    MicroDuckPolicy,
     ProbabilisticActor,
     set_recurrent_mode,
     TanhNormal,
     ValueOperator,
 )
+from torchrl.modules.tensordict_module.microduck_policy import TaskConditionedEncoder
 from torchrl.objectives import ClipPPOLoss, KLAdaptiveLR
 from torchrl.objectives.value import GAE
 from torchrl.record import VideoRecorder
@@ -306,32 +308,6 @@ def task_labels(tasks: Sequence[MicroDuckTask]) -> list[str]:
 # ----------------------------------------------------------------------
 
 
-class TaskConditionedEncoder(nn.Module):
-    """Observation encoder conditioned on the task index.
-
-    The observation carries the command but no other task parameter, so a
-    learned embedding of the task index tells the policy which task of the
-    library the env is in (for instance jumping, whose command is zero).
-    """
-
-    def __init__(
-        self,
-        observation_dim: int,
-        num_tasks: int,
-        hidden_size: int,
-        *,
-        device: torch.device | str = "cpu",
-    ):
-        super().__init__()
-        self.observation = nn.Linear(observation_dim, hidden_size, device=device)
-        self.task = nn.Embedding(num_tasks, hidden_size, device=device)
-
-    def forward(self, observation: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
-        return torch.tanh(
-            self.observation(observation) + self.task(task_id.squeeze(-1))
-        )
-
-
 class GaitResidualHead(nn.Module):
     """Gaussian policy head: closed-form gait plus a bounded learned residual.
 
@@ -370,34 +346,6 @@ class GaitResidualHead(nn.Module):
         return self.param_extractor(torch.cat((pre_tanh_mean, scale), dim=-1))
 
 
-class GaussianHead(nn.Module):
-    """Plain Gaussian policy head for training from scratch.
-
-    The mean starts near zero, which is the ``STAND`` pose, and the
-    state-independent exploration scale starts at ``initial_policy_scale``.
-    """
-
-    def __init__(
-        self,
-        hidden_size: int,
-        *,
-        initial_policy_scale: float,
-        device: torch.device | str = "cpu",
-    ):
-        super().__init__()
-        self.loc = nn.Linear(hidden_size, MicroDuckEnv.NUM_JOINTS, device=device)
-        nn.init.orthogonal_(self.loc.weight, gain=0.01)
-        nn.init.zeros_(self.loc.bias)
-        self.scale = nn.Parameter(torch.zeros(MicroDuckEnv.NUM_JOINTS, device=device))
-        self.param_extractor = NormalParamExtractor(
-            scale_mapping=f"biased_softplus_{initial_policy_scale}"
-        )
-
-    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        loc = self.loc(features)
-        return self.param_extractor(torch.cat((loc, self.scale.expand_as(loc)), -1))
-
-
 def make_models(
     env: EnvBase,
     *,
@@ -424,10 +372,59 @@ def make_models(
     if not math.isfinite(residual_scale) or residual_scale <= 0:
         raise ValueError("residual_scale must be finite and positive.")
     device = torch.device(device)
-    observation_dim = env.observation_spec["observation"].shape[-1]
+    if policy_head == "gaussian":
+        policy = MicroDuckPolicy(
+            hidden_size=hidden_size,
+            num_tasks=env.observation_spec["task_id"].n,
+            observation_dim=env.observation_spec["observation"].shape[-1],
+            num_actions=MicroDuckEnv.NUM_JOINTS,
+            initial_policy_scale=initial_policy_scale,
+            device=device,
+        )
+        actor = policy.actor
+    elif policy_head == "gait-residual":
+        backbone = _make_backbone(env, hidden_size=hidden_size, device=device)
+        actor_head = TensorDictModule(
+            GaitResidualHead(
+                hidden_size,
+                gait,
+                residual_scale=residual_scale,
+                initial_policy_scale=initial_policy_scale,
+                device=device,
+            ),
+            in_keys=["features", "observation"],
+            out_keys=["loc", "scale"],
+        )
+        actor = ProbabilisticActor(
+            module=TensorDictSequential(backbone, actor_head),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"low": -1.0, "high": 1.0},
+            return_log_prob=True,
+        )
+    else:
+        raise ValueError(f"Unknown policy_head {policy_head!r}.")
+    backbone = actor.module[0]
+    value_head = ValueOperator(
+        nn.Sequential(
+            nn.Linear(hidden_size, hidden_size, device=device),
+            nn.Tanh(),
+            nn.Linear(hidden_size, 1, device=device),
+        ),
+        in_keys=["features"],
+    )
+    critic = TensorDictSequential(backbone, value_head)
+    env.append_transform(get_primers_from_module(actor))
+    return actor, critic
+
+
+def _make_backbone(
+    env: EnvBase, *, hidden_size: int, device: torch.device
+) -> TensorDictSequential:
+    """Build the shared GRU backbone (embed + GRU) for actor and critic."""
     embed = TensorDictModule(
         TaskConditionedEncoder(
-            observation_dim,
+            env.observation_spec["observation"].shape[-1],
             env.observation_spec["task_id"].n,
             hidden_size,
             device=device,
@@ -443,48 +440,7 @@ def make_models(
         out_keys=["features", ("next", RECURRENT_STATE_KEY)],
         device=device,
     )
-    backbone = TensorDictSequential(embed, gru)
-    if policy_head == "gait-residual":
-        actor_head = TensorDictModule(
-            GaitResidualHead(
-                hidden_size,
-                gait,
-                residual_scale=residual_scale,
-                initial_policy_scale=initial_policy_scale,
-                device=device,
-            ),
-            in_keys=["features", "observation"],
-            out_keys=["loc", "scale"],
-        )
-    elif policy_head == "gaussian":
-        actor_head = TensorDictModule(
-            GaussianHead(
-                hidden_size, initial_policy_scale=initial_policy_scale, device=device
-            ),
-            in_keys=["features"],
-            out_keys=["loc", "scale"],
-        )
-    else:
-        raise ValueError(f"Unknown policy_head {policy_head!r}.")
-    actor = ProbabilisticActor(
-        module=TensorDictSequential(backbone, actor_head),
-        spec=env.action_spec_unbatched,
-        in_keys=["loc", "scale"],
-        distribution_class=TanhNormal,
-        distribution_kwargs={"low": -1.0, "high": 1.0},
-        return_log_prob=True,
-    )
-    value_head = ValueOperator(
-        nn.Sequential(
-            nn.Linear(hidden_size, hidden_size, device=device),
-            nn.Tanh(),
-            nn.Linear(hidden_size, 1, device=device),
-        ),
-        in_keys=["features"],
-    )
-    critic = TensorDictSequential(backbone, value_head)
-    env.append_transform(get_primers_from_module(actor))
-    return actor, critic
+    return TensorDictSequential(embed, gru)
 
 
 def make_render_policy(

@@ -267,6 +267,7 @@ def microduck_skill_env(
     control_period_s: float = 0.02,
     group_key: NestedKey | None = "agents",
     argument_key: NestedKey | None = None,
+    reset_key: NestedKey | None = "fallen",
 ) -> TransformedEnv:
     """Wrap a task with skill decisions, summed rewards, and MicroDuck observations.
 
@@ -294,6 +295,10 @@ def microduck_skill_env(
             ``command = low[skill] + 0.5 * (argument + 1) * (high[skill] - low[skill])``
 
             so ``argument = 0`` recovers the task's command-box midpoint.
+        reset_key (NestedKey, optional): per-agent respawn signal relative to the
+            group. Defaults to "fallen". For a single-controller env (e.g. plain
+            ``MicroDuckEnv``), pass ``None`` and let ordinary episode resets
+            handle falls.
 
     Returns:
         TransformedEnv: high-level task usable by ordinary collectors and losses.
@@ -310,6 +315,7 @@ def microduck_skill_env(
         group_key=group_key,
         argument_key=argument_key,
         control_period_s=control_period_s,
+        reset_key=reset_key,
     )
     # The caller supplied an env and policy; align their existing tensors.
     controller.to(env.device)

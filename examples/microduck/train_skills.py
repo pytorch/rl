@@ -37,7 +37,7 @@ from torchrl.collectors import Evaluator
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase, MicroDuckController, MicroDuckEnv, MicroDuckTask
 from torchrl.envs.transforms import ClosedLoopMultiAction
-from torchrl.modules import MLP, ProbabilisticActor
+from torchrl.modules import MicroDuckPolicy, MLP, ProbabilisticActor
 from torchrl.record.loggers import CSVLogger
 from torchrl.render import load_checkpoint
 from torchrl.trainers.algorithms import PPOTrainer
@@ -107,30 +107,17 @@ SKILL_PRESETS = [
 
 
 def load_walker(
-    checkpoint: Mapping[str, Any],
+    checkpoint: Mapping[str, Any] | str | Path,
 ) -> tuple[ProbabilisticActor, MicroDuckTask]:
     """Restore frozen inference weights and the exact ordered skill library.
 
-    Accepts the payload returned by ``torchrl.render.load_checkpoint``. The
-    recorded architecture may differ from the small tutorial network. Robot
-    assets are resolved on this machine, and reconstruction uses one CPU
-    simulator even when training used parallel workers or an accelerator.
+    Accepts the checkpoint payload returned by ``torchrl.render.load_checkpoint`` or
+    a path to the checkpoint file. Rebuilds the published walker via
+    :class:`~torchrl.modules.MicroDuckPolicy` and returns ``(actor, skill_tasks)``.
     Deployment must also use ``checkpoint["config"]["env"]["action_scale"]``.
     """
-    env = make_env(
-        checkpoint=checkpoint,
-        cfg={"backend": "mujoco", "device": "cpu", "parallel": False},
-        download=True,
-        num_envs=1,
-    )
-    try:
-        walker = make_render_policy(env, checkpoint=checkpoint)
-        walker.load_state_dict(checkpoint["model_state_dict"])
-        walker.eval().requires_grad_(False)
-    finally:
-        env.close()
-    tasks = torch.stack(make_tasks(checkpoint["config"]["env"]["tasks"]))
-    return walker, tasks
+    actor, tasks, _ = MicroDuckPolicy.from_checkpoint(checkpoint)
+    return actor, tasks
 
 
 class WaypointMicroDuck(MicroDuckEnv):

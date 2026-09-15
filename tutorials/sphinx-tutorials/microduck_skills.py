@@ -68,7 +68,6 @@ from torchrl.checkpoint import Checkpoint
 from torchrl.envs import MicroDuckController, MicroDuckEnv
 from torchrl.envs.transforms import ClosedLoopMultiAction
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
-from torchrl.render import load_checkpoint
 from torchrl.trainers.algorithms import PPOTrainer
 
 # The example shares task and network definitions with the full training run.
@@ -80,11 +79,11 @@ from examples.microduck.ppo_mujoco import (  # noqa: E402
     make_tasks,
 )
 from examples.microduck.train_skills import (  # noqa: E402
-    load_walker,
     make_navigation_models,
     SKILL_PRESETS,
     WaypointMicroDuck,
 )
+from torchrl.modules import MicroDuckPolicy  # noqa: E402
 
 # %%
 # Start with a little practice
@@ -203,14 +202,14 @@ low_trainer.train()
 # the same thing to the walker. We also keep its action scale. To try your own
 # walker, set ``MICRODUCK_WALKER_CHECKPOINT`` to its checkpoint path.
 
-checkpoint_path = os.environ.get("MICRODUCK_WALKER_CHECKPOINT") or hf_hub_download(
-    repo_id="torchrl/microduck-skills",
-    filename="walker.ckpt",
-    revision="4191d7d25c4fd58a5c6e6395fcf8217459fdd073",
-)
-checkpoint = load_checkpoint(checkpoint_path, weights_only=True)
-walker, skill_tasks = load_walker(checkpoint)
-action_scale = checkpoint["config"]["env"]["action_scale"]
+# MicroDuckPolicy.from_pretrained downloads the published walker once and rebuilds
+# it; pass a local checkpoint path through `MICRODUCK_WALKER_CHECKPOINT` to deploy
+# a custom walker instead.
+override = os.environ.get("MICRODUCK_WALKER_CHECKPOINT")
+if override:
+    walker, skill_tasks, action_scale = MicroDuckPolicy.from_checkpoint(override)
+else:
+    walker, skill_tasks, action_scale = MicroDuckPolicy.from_pretrained()
 
 # %%
 # 3. Give the walker a new task

@@ -1377,6 +1377,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 dtype=torch.long,
                 device=self.device,
             ),
+            fallen=Binary(
+                n=1,
+                shape=(self.num_envs, 1),
+                dtype=torch.bool,
+                device=self.device,
+            ),
             shape=(self.num_envs,),
             device=self.device,
         )
@@ -1400,6 +1406,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         observation = super()._build_obs_dict(state)
         observation["command"] = self._command.clone()
         observation["task_id"] = self._task_id.unsqueeze(-1).clone()
+        observation["fallen"] = self._fallen(
+            state["qpos"], state["qvel"]
+        ).unsqueeze(-1)
         if self.diagnostics:
             observation.update(self._diagnostics(state, self._observation_action))
         return observation
