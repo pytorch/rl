@@ -244,7 +244,7 @@ def main() -> None:
     if args.smoke:
         args.num_envs = 1
         args.low_level_frames = args.high_level_frames = 64
-    output_dir = args.output_dir.resolve()
+    output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(1)
     torch.manual_seed(args.seed)
