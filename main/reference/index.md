@@ -22,6 +22,7 @@
 - [Basic usage](checkpoint.html#basic-usage)
 - [State-dict payload formats](checkpoint.html#state-dict-payload-formats)
 - [Custom components](checkpoint.html#custom-components)
+- [Reading a component without its object](checkpoint.html#reading-a-component-without-its-object)
 - [Checkpoint rotation](checkpoint.html#checkpoint-rotation)
 - [Trainer integration](checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](checkpoint.html#stopping-at-a-safe-boundary)

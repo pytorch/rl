@@ -80,6 +80,13 @@ registered with a component are the baseline; operation-level keyword arguments
 override matching entries and explicitly supplied positional arguments replace
 the baseline tuple.
 
+## Reading a component without its object
+
+[`Checkpoint.read_component()`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.read_component) returns the stored payload of one state-dict
+or JSON component, so a checkpoint can be inspected before the objects it
+belongs to exist. Tensors are copied out of the checkpoint. Components stored
+through `dump` and `load` require a live object and are rejected.
+
 ## Checkpoint rotation
 
 [`CheckpointRotation`](generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation) retains the newest checkpoints and can preserve an
@@ -114,6 +121,10 @@ it after every other component. `Trainer.load_from_file` accepts a checkpoint
 path or a rotation directory, in which case the newest retained checkpoint is
 restored. Scheduled saves in asynchronous collection mode pause the collector
 while the checkpoint is written.
+
+A `WandbLogger` refuses to load state written by
+a different W&B run; construct it for the saved run, for example through
+`get_logger(..., state_dict=...)`, before loading the trainer.
 
 ```
 trainer = SACTrainer(

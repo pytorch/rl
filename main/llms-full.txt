@@ -143,6 +143,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Basic usage](reference/checkpoint.html#basic-usage)
 - [State-dict payload formats](reference/checkpoint.html#state-dict-payload-formats)
 - [Custom components](reference/checkpoint.html#custom-components)
+- [Reading a component without its object](reference/checkpoint.html#reading-a-component-without-its-object)
 - [Checkpoint rotation](reference/checkpoint.html#checkpoint-rotation)
 - [Trainer integration](reference/checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](reference/checkpoint.html#stopping-at-a-safe-boundary)
@@ -379,6 +380,13 @@ registered with a component are the baseline; operation-level keyword arguments
 override matching entries and explicitly supplied positional arguments replace
 the baseline tuple.
 
+## Reading a component without its object
+
+[`Checkpoint.read_component()`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.read_component) returns the stored payload of one state-dict
+or JSON component, so a checkpoint can be inspected before the objects it
+belongs to exist. Tensors are copied out of the checkpoint. Components stored
+through `dump` and `load` require a live object and are rejected.
+
 ## Checkpoint rotation
 
 [`CheckpointRotation`](generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation) retains the newest checkpoints and can preserve an
@@ -413,6 +421,10 @@ it after every other component. `Trainer.load_from_file` accepts a checkpoint
 path or a rotation directory, in which case the newest retained checkpoint is
 restored. Scheduled saves in asynchronous collection mode pause the collector
 while the checkpoint is written.
+
+A `WandbLogger` refuses to load state written by
+a different W&B run; construct it for the saved run, for example through
+`get_logger(..., state_dict=...)`, before loading the trainer.
 
 ```
 trainer = SACTrainer(
@@ -9310,6 +9322,32 @@ A structured component load report.
 *classmethod*manifest(*path: str | Path*) → dict[str, Any][[source]](../../_modules/torchrl/checkpoint/_checkpoint.html#Checkpoint.manifest)
 
 Read and validate a checkpoint manifest without loading payloads.
+
+*classmethod*read_component(*path: str | Path*, *name: str*, ***, *map_location: Any = None*) → Any[[source]](../../_modules/torchrl/checkpoint/_checkpoint.html#Checkpoint.read_component)
+
+Return one component's stored payload without a live object.
+
+State-dict components return the decoded state dict and JSON
+components return the stored value, so a checkpoint can be inspected
+before the objects it belongs to exist, for example to read the saved
+logger state or configuration. Tensors are copied out of the
+checkpoint. Components stored through `dump`/`load` or a custom
+adapter require a live object and are rejected.
+
+Parameters:
+
+- **path** - Directory or archive checkpoint.
+- **name** - Manifest component name.
+- **map_location** - Device mapping used while reading tensor payloads.
+
+Returns:
+
+The state dict or JSON value stored for `name`.
+
+Raises:
+
+- **KeyError** - If the checkpoint has no component named `name`.
+- [**CheckpointError**](torchrl.checkpoint.CheckpointError.html#torchrl.checkpoint.CheckpointError) - If the component cannot be read without an object.
 
 register(*name: str*, *component: Any*, ***, *adapter: [CheckpointAdapter](torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter) | None = None*, *options: [CheckpointOptions](torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions) | None = None*) → Checkpoint[[source]](../../_modules/torchrl/checkpoint/_checkpoint.html#Checkpoint.register)
 
@@ -34365,7 +34403,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f52d1d76ac0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f6bcd71dd50>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -47682,7 +47720,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f52d4ccd440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f6bd0679440>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -274777,6 +274815,7 @@ in the rollout loop
 - [Basic usage](checkpoint.html#basic-usage)
 - [State-dict payload formats](checkpoint.html#state-dict-payload-formats)
 - [Custom components](checkpoint.html#custom-components)
+- [Reading a component without its object](checkpoint.html#reading-a-component-without-its-object)
 - [Checkpoint rotation](checkpoint.html#checkpoint-rotation)
 - [Trainer integration](checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](checkpoint.html#stopping-at-a-safe-boundary)

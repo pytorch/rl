@@ -68,6 +68,32 @@ A structured component load report.
 
 Read and validate a checkpoint manifest without loading payloads.
 
+*classmethod*read_component(*path: str | Path*, *name: str*, ***, *map_location: Any = None*) → Any[[source]](../../_modules/torchrl/checkpoint/_checkpoint.html#Checkpoint.read_component)
+
+Return one component's stored payload without a live object.
+
+State-dict components return the decoded state dict and JSON
+components return the stored value, so a checkpoint can be inspected
+before the objects it belongs to exist, for example to read the saved
+logger state or configuration. Tensors are copied out of the
+checkpoint. Components stored through `dump`/`load` or a custom
+adapter require a live object and are rejected.
+
+Parameters:
+
+- **path** - Directory or archive checkpoint.
+- **name** - Manifest component name.
+- **map_location** - Device mapping used while reading tensor payloads.
+
+Returns:
+
+The state dict or JSON value stored for `name`.
+
+Raises:
+
+- **KeyError** - If the checkpoint has no component named `name`.
+- [**CheckpointError**](torchrl.checkpoint.CheckpointError.html#torchrl.checkpoint.CheckpointError) - If the component cannot be read without an object.
+
 register(*name: str*, *component: Any*, ***, *adapter: [CheckpointAdapter](torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter) | None = None*, *options: [CheckpointOptions](torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions) | None = None*) → Checkpoint[[source]](../../_modules/torchrl/checkpoint/_checkpoint.html#Checkpoint.register)
 
 Register a named component and return `self`.

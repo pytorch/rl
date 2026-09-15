@@ -136,6 +136,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Basic usage](reference/checkpoint.html#basic-usage)
 - [State-dict payload formats](reference/checkpoint.html#state-dict-payload-formats)
 - [Custom components](reference/checkpoint.html#custom-components)
+- [Reading a component without its object](reference/checkpoint.html#reading-a-component-without-its-object)
 - [Checkpoint rotation](reference/checkpoint.html#checkpoint-rotation)
 - [Trainer integration](reference/checkpoint.html#trainer-integration)
 - [Stopping at a safe boundary](reference/checkpoint.html#stopping-at-a-safe-boundary)
