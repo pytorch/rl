@@ -288,7 +288,12 @@ def microduck_skill_env(
         control_period_s (float, optional): physical step duration. Defaults to 0.02.
         group_key (NestedKey, optional): controller group. Defaults to "agents".
         argument_key (NestedKey, optional): normalized command argument key.
-            Defaults to None for discrete decisions.
+            Defaults to None for discrete decisions. When provided, the selected
+            task's command bounds are scaled by the argument:
+
+            ``command = low[skill] + 0.5 * (argument + 1) * (high[skill] - low[skill])``
+
+            so ``argument = 0`` recovers the task's command-box midpoint.
 
     Returns:
         TransformedEnv: high-level task usable by ordinary collectors and losses.
