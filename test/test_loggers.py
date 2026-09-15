@@ -237,6 +237,24 @@ class TestCSVLogger:
         assert (exp_dir / "texts" / "hparams0.txt").read_text() == "lr: 0.1"
         assert (exp_dir / "texts" / "hparams1.txt").read_text() == "lr: 0.2"
 
+    def test_resume_checkpoint_saved_without_text_counter(self, tmp_path):
+        logger = get_logger("csv", str(tmp_path), "legacy")
+        logger.log_hparams({"lr": 0.1})
+        state = logger.state_dict()
+        logger.close()
+        # checkpoints saved before texts had their own counter kept the text
+        # steps in videos_counter
+        state["local"]["videos_counter"] = state["local"]["text_counter"]
+        state["local"]["text_counter"] = {}
+        resumed = get_logger(
+            "csv", str(tmp_path / "unused"), "unused", state_dict=state
+        )
+        resumed.log_hparams({"lr": 0.2})
+        resumed.close()
+        texts = tmp_path / "legacy" / "texts"
+        assert (texts / "hparams0.txt").read_text() == "lr: 0.1"
+        assert (texts / "hparams1.txt").read_text() == "lr: 0.2"
+
     def test_factory_resume_appends_same_run(self, tmp_path):
         logger = get_logger("csv", str(tmp_path), "saved")
         logger.log_scalar("reward", 1.0)

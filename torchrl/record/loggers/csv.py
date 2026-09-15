@@ -181,6 +181,11 @@ class CSVLogger(Logger):
             target = getattr(self.experiment, name)
             target.clear()
             target.update(state_dict.get(name, {}))
+        if not state_dict.get("text_counter"):
+            # Checkpoints saved before texts had their own counter kept the text
+            # steps in ``videos_counter``. Continue after them so that resuming
+            # does not overwrite the text files that were already written.
+            self.experiment.text_counter.update(self.experiment.videos_counter)
 
     def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.
