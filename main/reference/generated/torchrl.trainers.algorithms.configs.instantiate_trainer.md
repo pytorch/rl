@@ -7,15 +7,14 @@ Instantiate `cfg.trainer`, resuming from `cfg.resume` when it is set.
 Without `resume` this is `hydra.utils.instantiate()` on `cfg.trainer`
 plus registration of the composed configuration on the trainer checkpoint.
 With `resume` set to a checkpoint or a
-[`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation) directory, the saved
-configuration becomes the base and the current command-line overrides apply
-on top (config-group overrides cannot apply to a saved configuration and are
-ignored with a warning); the saved logger run is reattached before the
-logger is constructed (W&B resumes the saved id with `resume="must"`, CSV
-and TensorBoard keep the saved directory); checkpoints keep accumulating in
-the resumed rotation directory unless `checkpoint_rotation.directory` is
-overridden; and [`load_from_file()`](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file) restores
-the trainer state.
+[`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation) directory,
+[`resume_config()`](torchrl.checkpoint.resume_config.html#torchrl.checkpoint.resume_config) rebuilds the configuration from
+the saved one with the current command-line overrides on top; the saved
+logger run is reattached before the logger is constructed (W&B resumes the
+saved id with `resume="must"`, CSV and TensorBoard keep the saved
+directory); checkpoints keep accumulating in the resumed rotation directory
+unless `checkpoint_rotation.directory` is overridden; and
+[`load_from_file()`](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file) restores the trainer state.
 
 Parameters:
 

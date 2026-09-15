@@ -170,25 +170,30 @@ with StopOnSignal() as stop:
  rotation.save(checkpoint, step=step)
 ```
 
-## Resuming Hydra trainer recipes
+## Resuming recipes
 
-The `sota-implementations/*_trainer` recipes save rotated checkpoints under
-`checkpoints/` in their Hydra run directory and stop cleanly on `SIGINT` or
-`SIGTERM`. A run continues from its checkpoint directory with a single
-override; the saved configuration is the base and further overrides apply on
-top of it:
+The `sota-implementations/*_trainer` recipes and the standalone `sac`,
+`td3` and `ddpg` recipes save rotated checkpoints under `checkpoints/` in
+their Hydra run directory and stop cleanly on `SIGINT` or `SIGTERM`. A run
+continues from its checkpoint directory with a single override; the saved
+configuration is the base and further overrides apply on top of it:
 
 ```
 python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints
-python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
+python sota-implementations/sac/sac.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
 ```
 
-[`instantiate_trainer()`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer) implements
-this flow. It reads the saved `config` and `logger` components with
-[`Checkpoint.read_component()`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.read_component) before constructing anything, so a W&B
-logger reopens the saved run with `resume="must"` and CSV or TensorBoard
-loggers keep appending to the saved directory. [`resolve_checkpoint_path()`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)
-maps a rotation directory to its newest checkpoint for standalone scripts.
+Three helpers implement this flow. [`resolve_checkpoint_path()`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path) maps a
+rotation directory to its newest checkpoint. [`resume_config()`](generated/torchrl.checkpoint.resume_config.html#torchrl.checkpoint.resume_config) reads the
+saved `config` component with [`Checkpoint.read_component()`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.read_component) and applies
+the current command-line overrides on top of it. The saved `logger` component,
+passed to `get_logger(..., state_dict=...)`, reopens a W&B run with
+`resume="must"` or keeps a CSV or TensorBoard logger appending to the saved
+directory. Trainer recipes get all of this from
+[`instantiate_trainer()`](generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html#torchrl.trainers.algorithms.configs.instantiate_trainer); [`RunCheckpointer`](generated/torchrl.checkpoint.RunCheckpointer.html#torchrl.checkpoint.RunCheckpointer) gives standalone scripts the same behavior: it
+restores every component but `config` and `rng`, then `rng` last, saves
+every `interval` steps through a [`CheckpointRotation`](generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation) under
+[`StopOnSignal`](generated/torchrl.checkpoint.StopOnSignal.html#torchrl.checkpoint.StopOnSignal), and keeps saving next to the resumed checkpoint.
 
 ## Compatibility
 
@@ -228,9 +233,11 @@ the default changes in v0.15.
 | [`DumpLoadCheckpointAdapter`](generated/torchrl.checkpoint.DumpLoadCheckpointAdapter.html#torchrl.checkpoint.DumpLoadCheckpointAdapter)() | Adapter for objects exposing `dump(path)` and `load(path)`. |
 | [`GlobalRNGState`](generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState)() | Checkpointable process-global random-number-generator state. |
 | [`JSONCheckpointAdapter`](generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter)() | Adapter for JSON-compatible configuration, metrics, and metadata. |
+| [`RunCheckpointer`](generated/torchrl.checkpoint.RunCheckpointer.html#torchrl.checkpoint.RunCheckpointer)(checkpoint, *, directory, ...) | Save a training script's [`Checkpoint`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint) at loop boundaries and restore it on resume. |
 | [`StateDictCheckpointAdapter`](generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter)([payload_format, ...]) | Adapter for `state_dict` / `load_state_dict` objects. |
 | [`StateDictFormat`](generated/torchrl.checkpoint.StateDictFormat.html#torchrl.checkpoint.StateDictFormat) | alias of `Literal`['directory', 'archive', 'consolidated', 'torch'] |
 | [`StopOnSignal`](generated/torchrl.checkpoint.StopOnSignal.html#torchrl.checkpoint.StopOnSignal)([signals, on_request]) | Turn termination signals into a stop request checked at loop boundaries. |
 
 | [`resolve_checkpoint_path`](generated/torchrl.checkpoint.resolve_checkpoint_path.html#torchrl.checkpoint.resolve_checkpoint_path)(path, *[, prefix]) | Return the checkpoint at `path` or the newest checkpoint of a rotation directory. |
 | --- | --- |
+| [`resume_config`](generated/torchrl.checkpoint.resume_config.html#torchrl.checkpoint.resume_config)(cfg, checkpoint_path, *[, ...]) | Return the configuration of a run resumed from `checkpoint_path`. |

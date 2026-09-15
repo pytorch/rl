@@ -1507,10 +1507,12 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.DumpLoadCheckpointAdapter.html">DumpLoadCheckpointAdapter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.GlobalRNGState.html">GlobalRNGState</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.JSONCheckpointAdapter.html">JSONCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.RunCheckpointer.html">RunCheckpointer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictCheckpointAdapter.html">StateDictCheckpointAdapter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictFormat.html">StateDictFormat</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StopOnSignal.html">StopOnSignal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.resolve_checkpoint_path.html">resolve_checkpoint_path</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.resume_config.html">resume_config</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../data.html">torchrl.data package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2591,15 +2593,14 @@ document.write(`
 <p>Without <code class="docutils literal notranslate"><span class="pre">resume</span></code> this is <code class="xref py py-func docutils literal notranslate"><span class="pre">hydra.utils.instantiate()</span></code> on <code class="docutils literal notranslate"><span class="pre">cfg.trainer</span></code>
 plus registration of the composed configuration on the trainer checkpoint.
 With <code class="docutils literal notranslate"><span class="pre">resume</span></code> set to a checkpoint or a
-<a class="reference internal" href="torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation" title="torchrl.checkpoint.CheckpointRotation"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointRotation</span></code></a> directory, the saved
-configuration becomes the base and the current command-line overrides apply
-on top (config-group overrides cannot apply to a saved configuration and are
-ignored with a warning); the saved logger run is reattached before the
-logger is constructed (W&amp;B resumes the saved id with <code class="docutils literal notranslate"><span class="pre">resume=&quot;must&quot;</span></code>, CSV
-and TensorBoard keep the saved directory); checkpoints keep accumulating in
-the resumed rotation directory unless <code class="docutils literal notranslate"><span class="pre">checkpoint_rotation.directory</span></code> is
-overridden; and <a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file" title="torchrl.trainers.Trainer.load_from_file"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_from_file()</span></code></a> restores
-the trainer state.</p>
+<a class="reference internal" href="torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation" title="torchrl.checkpoint.CheckpointRotation"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointRotation</span></code></a> directory,
+<a class="reference internal" href="torchrl.checkpoint.resume_config.html#torchrl.checkpoint.resume_config" title="torchrl.checkpoint.resume_config"><code class="xref py py-func docutils literal notranslate"><span class="pre">resume_config()</span></code></a> rebuilds the configuration from
+the saved one with the current command-line overrides on top; the saved
+logger run is reattached before the logger is constructed (W&amp;B resumes the
+saved id with <code class="docutils literal notranslate"><span class="pre">resume=&quot;must&quot;</span></code>, CSV and TensorBoard keep the saved
+directory); checkpoints keep accumulating in the resumed rotation directory
+unless <code class="docutils literal notranslate"><span class="pre">checkpoint_rotation.directory</span></code> is overridden; and
+<a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file" title="torchrl.trainers.Trainer.load_from_file"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_from_file()</span></code></a> restores the trainer state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2996,7 +2997,7 @@ current Hydra run, or none outside a Hydra application.</p></li>
        "headline": "instantiate_trainer",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.trainers.algorithms.configs.instantiate_trainer.html",
-       "articleBody": "instantiate_trainer# torchrl.trainers.algorithms.configs.instantiate_trainer(cfg: DictConfig, *, overrides: Sequence[str] | None = None) \u2192 Trainer[source]# Instantiate cfg.trainer, resuming from cfg.resume when it is set. Without resume this is hydra.utils.instantiate() on cfg.trainer plus registration of the composed configuration on the trainer checkpoint. With resume set to a checkpoint or a CheckpointRotation directory, the saved configuration becomes the base and the current command-line overrides apply on top (config-group overrides cannot apply to a saved configuration and are ignored with a warning); the saved logger run is reattached before the logger is constructed (W\u0026B resumes the saved id with resume=\"must\", CSV and TensorBoard keep the saved directory); checkpoints keep accumulating in the resumed rotation directory unless checkpoint_rotation.directory is overridden; and load_from_file() restores the trainer state. Parameters: cfg (DictConfig) \u2013 the composed Hydra configuration. It must hold a trainer node and may hold resume. overrides (Sequence[str], optional) \u2013 command-line overrides applied over the saved configuration. Defaults to the task overrides of the current Hydra run, or none outside a Hydra application. Returns: The instantiated trainer, restored from the checkpoint when resuming. Examples \u003e\u003e\u003e @hydra.main(config_path=\"config\", config_name=\"config\", version_base=\"1.3\") ... def main(cfg): ... trainer = instantiate_trainer(cfg) ... with trainer.stop_on_signal(): ... trainer.train()",
+       "articleBody": "instantiate_trainer# torchrl.trainers.algorithms.configs.instantiate_trainer(cfg: DictConfig, *, overrides: Sequence[str] | None = None) \u2192 Trainer[source]# Instantiate cfg.trainer, resuming from cfg.resume when it is set. Without resume this is hydra.utils.instantiate() on cfg.trainer plus registration of the composed configuration on the trainer checkpoint. With resume set to a checkpoint or a CheckpointRotation directory, resume_config() rebuilds the configuration from the saved one with the current command-line overrides on top; the saved logger run is reattached before the logger is constructed (W\u0026B resumes the saved id with resume=\"must\", CSV and TensorBoard keep the saved directory); checkpoints keep accumulating in the resumed rotation directory unless checkpoint_rotation.directory is overridden; and load_from_file() restores the trainer state. Parameters: cfg (DictConfig) \u2013 the composed Hydra configuration. It must hold a trainer node and may hold resume. overrides (Sequence[str], optional) \u2013 command-line overrides applied over the saved configuration. Defaults to the task overrides of the current Hydra run, or none outside a Hydra application. Returns: The instantiated trainer, restored from the checkpoint when resuming. Examples \u003e\u003e\u003e @hydra.main(config_path=\"config\", config_name=\"config\", version_base=\"1.3\") ... def main(cfg): ... trainer = instantiate_trainer(cfg) ... with trainer.stop_on_signal(): ... trainer.train()",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

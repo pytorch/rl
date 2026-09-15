@@ -180,26 +180,31 @@ Standalone scripts use the helper directly:
                 break
         rotation.save(checkpoint, step=step)
 
-Resuming Hydra trainer recipes
-------------------------------
+Resuming recipes
+----------------
 
-The ``sota-implementations/*_trainer`` recipes save rotated checkpoints under
-``checkpoints/`` in their Hydra run directory and stop cleanly on ``SIGINT`` or
-``SIGTERM``. A run continues from its checkpoint directory with a single
-override; the saved configuration is the base and further overrides apply on
-top of it:
+The ``sota-implementations/*_trainer`` recipes and the standalone ``sac``,
+``td3`` and ``ddpg`` recipes save rotated checkpoints under ``checkpoints/`` in
+their Hydra run directory and stop cleanly on ``SIGINT`` or ``SIGTERM``. A run
+continues from its checkpoint directory with a single override; the saved
+configuration is the base and further overrides apply on top of it:
 
 .. code-block:: bash
 
     python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints
-    python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
+    python sota-implementations/sac/sac.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
 
-:func:`~torchrl.trainers.algorithms.configs.instantiate_trainer` implements
-this flow. It reads the saved ``config`` and ``logger`` components with
-:meth:`Checkpoint.read_component` before constructing anything, so a W&B
-logger reopens the saved run with ``resume="must"`` and CSV or TensorBoard
-loggers keep appending to the saved directory. :func:`resolve_checkpoint_path`
-maps a rotation directory to its newest checkpoint for standalone scripts.
+Three helpers implement this flow. :func:`resolve_checkpoint_path` maps a
+rotation directory to its newest checkpoint. :func:`resume_config` reads the
+saved ``config`` component with :meth:`Checkpoint.read_component` and applies
+the current command-line overrides on top of it. The saved ``logger`` component,
+passed to ``get_logger(..., state_dict=...)``, reopens a W&B run with
+``resume="must"`` or keeps a CSV or TensorBoard logger appending to the saved
+directory. Trainer recipes get all of this from
+:func:`~torchrl.trainers.algorithms.configs.instantiate_trainer`; :class:`RunCheckpointer` gives standalone scripts the same behavior: it
+restores every component but ``config`` and ``rng``, then ``rng`` last, saves
+every ``interval`` steps through a :class:`CheckpointRotation` under
+:class:`StopOnSignal`, and keeps saving next to the resumed checkpoint.
 
 Compatibility
 -------------
@@ -244,6 +249,7 @@ API
     DumpLoadCheckpointAdapter
     GlobalRNGState
     JSONCheckpointAdapter
+    RunCheckpointer
     StateDictCheckpointAdapter
     StateDictFormat
     StopOnSignal
@@ -253,3 +259,4 @@ API
     :template: rl_template_fun.rst
 
     resolve_checkpoint_path
+    resume_config
