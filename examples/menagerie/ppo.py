@@ -128,6 +128,7 @@ WALK_REWARD_WEIGHTS = {
     "feet_clearance": -2.0,
     "feet_height": -0.2,
     "feet_air_time": 0.1,
+    "feet_stuck": -2.0,
 }
 
 
@@ -296,8 +297,10 @@ class QuadrupedJoystick(Transform):
     Playground's Go1 joystick task (velocity tracking, base motion and
     orientation costs, a pose term, servo torque and energy costs, joint soft
     limits, action rate, foot slip, clearance and swing height, air time at
-    touchdown, a termination cost), summed, clipped at zero and multiplied by
-    the control period. Termination: the base turns over. Foot contacts come
+    touchdown, a termination cost), plus a ``feet_stuck`` cost on any foot
+    kept in the air longer than ``max_air_time``, which closes the
+    three-legged gait the reference terms leave open; summed, clipped at zero
+    and multiplied by the control period. Termination: the base turns over. Foot contacts come
     from the env's ``geom_contacts``; the foot velocities are finite
     differences of the ``site_positions`` observation; the servo torques
     follow the actuators' affine gain and bias. The command, the air time, the
@@ -324,6 +327,9 @@ class QuadrupedJoystick(Transform):
             defaults to :data:`WALK_REWARD_WEIGHTS`.
         tracking_sigma (float, optional): scale of the tracking terms. Defaults to ``0.25``.
         max_foot_height (float, optional): target swing height in meters. Defaults to ``0.1``.
+        max_air_time (float, optional): air time in seconds beyond which a foot
+            is charged the ``feet_stuck`` cost, growing to its full weight one
+            second later. Defaults to ``0.5``.
     """
 
     def __init__(
@@ -340,6 +346,7 @@ class QuadrupedJoystick(Transform):
         weights: Mapping[str, float] | None = None,
         tracking_sigma: float = 0.25,
         max_foot_height: float = 0.1,
+        max_air_time: float = 0.5,
     ):
         super().__init__()
         self.register_buffer("command", torch.as_tensor(command, dtype=torch.float32))
@@ -361,6 +368,7 @@ class QuadrupedJoystick(Transform):
         self.weights = dict(WALK_REWARD_WEIGHTS if weights is None else weights)
         self.tracking_sigma = float(tracking_sigma)
         self.max_foot_height = float(max_foot_height)
+        self.max_air_time = float(max_air_time)
 
     @property
     def observation_dim(self) -> int:
@@ -471,6 +479,7 @@ class QuadrupedJoystick(Transform):
             * (cmd_norm > 0.01),
             "feet_air_time": ((air_time - 0.1) * first_contact).sum(-1)
             * (cmd_norm > 0.01),
+            "feet_stuck": (air_time - self.max_air_time).clamp(0.0, 1.0).sum(-1),
         }
         reward = sum(self.weights[name] * value for name, value in terms.items())
         next_tensordict.set("reward", (reward.clamp_min(0.0) * self.dt).unsqueeze(-1))
