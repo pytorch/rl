@@ -3083,6 +3083,10 @@ class TestMujoco:
         torch.testing.assert_close(
             folded.reset()["qpos"][0, 7:], torch.tensor([1.5, -1.5])
         )
+        torch.testing.assert_close(
+            folded.reset_state["qpos"][7:], torch.tensor([1.5, -1.5])
+        )
+        assert torch.equal(folded.reset_state["qvel"], torch.zeros(8))
         with pytest.raises(KeyError, match="folded"):
             MenagerieEnv("tiny_bot", task=MenagerieTask(keyframe="nope"), **kwargs)
         # Without a home keyframe the reset pose is the model's qpos0, and a

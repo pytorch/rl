@@ -373,8 +373,8 @@ floating bases and the weights of a hold-pose reward
 a transform can supply the reward of a task of your own. The default backend
 is ``"mujoco"``; the entry points Menagerie maintains for MJX (``scene_mjx``
 and the like) also run on ``"mujoco-torch"`` and ``"mjx"``.
-``examples/menagerie/ppo_hold_pose.py`` trains a PPO hold-pose policy on any
-robot and renders it with ``rlrender``.
+``examples/menagerie/ppo.py`` trains a PPO policy that holds the pose of any
+robot or walks a quadruped, and renders it with ``rlrender``.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live

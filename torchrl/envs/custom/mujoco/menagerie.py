@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
 from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
@@ -149,8 +149,10 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
     ``download=True`` lets fetch the robot. The package pins every robot to
     one Menagerie commit; a checkout is whatever revision it holds. The
     resolved XML is :attr:`model_path`, next to :attr:`robot`, :attr:`entry`
-    and :attr:`task`. ``examples/menagerie/ppo_hold_pose.py`` trains a PPO
-    hold-pose policy on any robot and plays it back with ``rlrender``.
+    and :attr:`task`; :attr:`reset_state` is the keyframe the reset draws
+    around, which position-controlled robots also use as their home targets.
+    ``examples/menagerie/ppo.py`` trains PPO to hold the pose of any robot or
+    to walk a quadruped, and plays the policy back with ``rlrender``.
 
     Menagerie's ``scene`` entry points put the robot on a floor with lights
     and are meant for the ``"mujoco"`` backend, the default here. The models
@@ -482,6 +484,19 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
         raise KeyError(
             f"The {self.robot!r} model has no keyframe {keyframe!r}; it defines "
             f"{keyframes}. Pass keyframe=None to reset to qpos0."
+        )
+
+    @property
+    def reset_state(self) -> TensorDict:
+        """The ``qpos`` and ``qvel`` the reset draws around, without a batch dimension.
+
+        The task keyframe when the model defines it, otherwise ``qpos0`` at
+        rest. Both entries are cast to the env's ``dtype``.
+        """
+        return TensorDict(
+            qpos=self._reset_qpos.to(self.dtype),
+            qvel=self._reset_qvel.to(self.dtype),
+            device=self.device,
         )
 
     def _sample_initial_state(

@@ -625,6 +625,11 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             device=self.device,
         )
 
+    @property
+    def dt(self) -> float:
+        """Seconds of simulated time per env step: ``frame_skip`` physics steps."""
+        return self.frame_skip * self._backend.timestep
+
     def get_state(self) -> TensorDict:
         """Return a detached snapshot of the MuJoCo simulator state.
 

@@ -127,8 +127,9 @@ RUNNABLE_EXAMPLES = (
     ExampleSpec("llm-tool-service", "examples/llm/tool_service_example.py"),
     ExampleSpec(
         "menagerie-ppo",
-        "examples/menagerie/ppo_hold_pose.py",
+        "examples/menagerie/ppo.py",
         (
+            "--task=hold_pose",
             "--robot=universal_robots_ur5e",
             "--smoke",
             "--ckpt={tmp_path}/menagerie_ppo.ckpt",
