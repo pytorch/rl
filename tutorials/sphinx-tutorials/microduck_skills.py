@@ -347,6 +347,13 @@ plt.show()
 #        --low-level-frames 10000000 --high-level-frames 1000000 \
 #        --output-dir ~/microduck-training
 #
+# Each low-level trajectory is ``--episode-steps`` physical steps long
+# (default 2000, 40 s at the default control period), so the walker sees
+# sustained locomotion sequences and not just 10-second snippets. A fall
+# terminates the episode immediately; resumption is from the saved trainer
+# checkpoint, not partway through an episode. Pass ``--episode-steps 500``
+# to reproduce the tutorial-time budget.
+#
 # Resume an interrupted low-level stage with ``--resume`` and the same worker
 # count. To reuse a walker (or resume its high-level stage), supply its checkpoint::
 #

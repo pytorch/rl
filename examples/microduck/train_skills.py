@@ -6,6 +6,11 @@
 
 Run from the repository root with ``python -m examples.microduck.train_skills``.
 The tutorial imports the same task and network definitions without launching workers.
+
+Low-level trajectories are ``--episode-steps`` physical steps (default 2000, so
+40 s at the default control period). A fall ends the episode immediately via
+:meth:`~torchrl.envs.MicroDuckEnv._compute_done` — episodes terminate on tip-over,
+not truncation.
 """
 
 from __future__ import annotations
@@ -222,6 +227,16 @@ def main() -> None:
     )
     parser.add_argument("--low-level-only", action="store_true")
     parser.add_argument("--evaluation-episodes", type=int, default=8)
+    parser.add_argument(
+        "--episode-steps",
+        type=int,
+        default=2000,
+        help=(
+            "Truncation horizon of one low-level trajectory in physical steps "
+            "(40 s at the default control period). Falls terminate the episode "
+            "immediately, regardless of this value."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
@@ -246,7 +261,7 @@ def main() -> None:
             "download": True,
             "num_envs": args.num_envs,
             "parallel": args.num_envs > 1,
-            "max_episode_steps": 32 if args.smoke else 500,
+            "max_episode_steps": 32 if args.smoke else args.episode_steps,
             "action_scale": 1.0,
             "tasks": SKILL_PRESETS,
             "seed": args.seed,
@@ -325,7 +340,7 @@ def main() -> None:
             label=str(task_id),
             jumping=bool(task.reward_weights[jump_index] > 0),
             num_episodes=1 if args.smoke else args.evaluation_episodes,
-            steps=32 if args.smoke else 500,
+            steps=32 if args.smoke else args.episode_steps,
         )
         try:
             skill_results.append(evaluator.evaluate())
