@@ -20,6 +20,7 @@ from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import Binary, Composite, Unbounded
 from torchrl.envs.custom.mujoco._ur_primitives import URScriptPrimitiveTransform
 from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.custom.mujoco.menagerie import MENAGERIE_ENV_VAR
 from torchrl.envs.transforms._base import Transform
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
@@ -70,7 +71,7 @@ class CubeBowlEnv(MujocoEnv):
     CUBE_QPOS_START = ROBOT_QPOS_DIM + MENAGERIE_GRIPPER_QPOS_DIM
     CUBE_QVEL_START = ROBOT_QPOS_DIM + MENAGERIE_GRIPPER_QPOS_DIM
     BOWL_TARGET_SITE_NAME = "bowl_target"
-    MENAGERIE_ENV_VAR = "TORCHRL_MUJOCO_MENAGERIE_PATH"
+    MENAGERIE_ENV_VAR = MENAGERIE_ENV_VAR
     MENAGERIE_CUBE_POSITION = (0.45, -0.18, 0.035)
     MENAGERIE_BOWL_POSITION = (0.45, 0.08, 0.01)
     MENAGERIE_BOWL_TARGET_OFFSET = (0.0, 0.0, 0.015)

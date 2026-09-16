@@ -237,6 +237,11 @@ class _PhysicsBackend(abc.ABC):
             f"{type(self).__name__} does not expose site positions."
         )
 
+    @property
+    def sensordata(self) -> torch.Tensor:
+        """Sensor readings, shaped ``(num_envs, nsensordata)``."""
+        raise NotImplementedError(f"{type(self).__name__} does not expose sensor data.")
+
     def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
         """World-frame site rotations, shaped ``(num_envs, sites, 3, 3)``."""
         raise NotImplementedError(
@@ -519,6 +524,10 @@ class _TorchBackend(_PhysicsBackend):
         ids = torch.as_tensor(list(site_ids), dtype=torch.long, device=self.device)
         return self._dx.site_xpos.to(self.device)[:, ids].to(torch.float32)
 
+    @property
+    def sensordata(self) -> torch.Tensor:
+        return self._dx.sensordata.to(self.device)
+
     def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
         ids = torch.as_tensor(list(site_ids), dtype=torch.long, device=self.device)
         return self._dx.site_xmat.to(self.device)[:, ids].to(torch.float32)
@@ -706,6 +715,12 @@ class _MujocoBackend(_PhysicsBackend):
             self._d.site_xpos[list(site_ids)].copy(),
             device=self.device,
             dtype=torch.float32,
+        ).unsqueeze(0)
+
+    @property
+    def sensordata(self) -> torch.Tensor:
+        return torch.as_tensor(
+            self._d.sensordata.copy(), device=self.device, dtype=torch.float32
         ).unsqueeze(0)
 
     def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
@@ -961,6 +976,10 @@ class _MJXBackend(_PhysicsBackend):
 
     def site_positions(self, site_ids: Sequence[int]) -> torch.Tensor:
         return self._jax_to_torch(self._dx.site_xpos[:, list(site_ids)])
+
+    @property
+    def sensordata(self) -> torch.Tensor:
+        return self._jax_to_torch(self._dx.sensordata)
 
     def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
         return self._jax_to_torch(self._dx.site_xmat[:, list(site_ids)])
