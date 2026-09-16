@@ -77,8 +77,8 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetMacroAction,
-    TicTacToeEnv,
     TensorDictPrimer,
+    TicTacToeEnv,
     ToyVLAEnv,
     TransformedEnv,
     URScriptPrimitive,
@@ -2031,9 +2031,7 @@ class TestClosedLoopMultiAction:
         try:
             batch = next(iter(collector))
             assert ("agents", "controller", "memory") in batch.keys(True, True)
-            assert ("next", "agents", "controller", "memory") in batch.keys(
-                True, True
-            )
+            assert ("next", "agents", "controller", "memory") in batch.keys(True, True)
             reward = batch["next", "agents", "reward"]
             for key in ("done", "terminated"):
                 batch["next", "agents", key] = (
