@@ -2621,7 +2621,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
         self._prefetch = False
-        self._prefetch_queue.clear()
+        self._prefetch_queue = collections.deque()
+        self._pending_update_futures = collections.deque()
+        self._sample_dependency = None
+        self._update_executor = None
 
     @_maybe_delay_init
     def __getstate__(self) -> dict[str, Any]:
@@ -2659,7 +2662,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 rng.set_state(
                     torch.frombuffer(
                         bytearray(rngstate["rng_state"]), dtype=torch.uint8
-                    ).clone()
+                    )
                 )
 
         if "_replay_lock_placeholder" in state:

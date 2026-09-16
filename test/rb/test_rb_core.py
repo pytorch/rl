@@ -224,6 +224,12 @@ class _SlowListStorage(ListStorage):
         return super().get(index)
 
 
+class _SlowGetStorage(LazyTensorStorage):
+    def get(self, index):
+        time.sleep(1.0)
+        return super().get(index)
+
+
 class TestRNG:
     def test_generator_state_survives_spawn(self):
         rb = ReplayBuffer(
@@ -3795,6 +3801,32 @@ class TestTorchDataInterop:
         rb = ReplayBuffer(storage=_SlowListStorage(100), batch_size=8, prefetch=2)
         rb.extend(torch.arange(100))
         rb.sample()
+        loader = DataLoader(
+            rb.as_dataset(num_batches=2),
+            batch_size=None,
+            num_workers=1,
+            collate_fn=tensordict_collate,
+            multiprocessing_context="fork",
+            timeout=60,
+        )
+        assert len(list(loader)) == 2
+
+    def test_as_dataset_forks_during_async_update(self):
+        if sys.platform == "win32":
+            pytest.skip("fork is not available on Windows")
+        rb = TensorDictReplayBuffer(
+            storage=_SlowGetStorage(100),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=8,
+            prefetch=2,
+        )
+        rb.extend(TensorDict({"obs": torch.zeros(100, 3)}, [100]))
+        sample = rb.sample()
+        rb.submit_update_if_present(
+            index=sample["index"],
+            generation=sample["index_generation"],
+            patch={"obs": torch.ones(8, 3)},
+        )
         loader = DataLoader(
             rb.as_dataset(num_batches=2),
             batch_size=None,

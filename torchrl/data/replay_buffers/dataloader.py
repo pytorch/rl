@@ -54,14 +54,14 @@ def tensordict_collate(batch: Any) -> Any:
         return batch
     first = batch[0]
     if is_tensor_collection(first):
-        return LazyStackedTensorDict.maybe_dense_stack(list(batch))
+        return LazyStackedTensorDict.maybe_dense_stack(batch)
     if isinstance(first, torch.Tensor):
-        return torch.stack(list(batch))
+        return torch.stack(batch)
     if isinstance(first, Mapping):
         return {key: tensordict_collate([item[key] for item in batch]) for key in first}
     if isinstance(first, tuple):
         return tuple(tensordict_collate(list(items)) for items in zip(*batch))
-    return default_collate(list(batch))
+    return default_collate(batch)
 
 
 class ReplayBufferDataset(IterableDataset):
