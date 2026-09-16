@@ -225,6 +225,15 @@ def main() -> None:
     parser.add_argument(
         "--init-from", type=Path, help="Initialize from a released six-skill walker"
     )
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        help=(
+            "Warm-start actor and critic from a checkpoint whose task library "
+            "matches SKILL_PRESETS (e.g. a saved nine-skill walker). Continues "
+            "training without remapping the task embeddings."
+        ),
+    )
     parser.add_argument("--low-level-only", action="store_true")
     parser.add_argument("--evaluation-episodes", type=int, default=8)
     parser.add_argument(
@@ -276,12 +285,23 @@ def main() -> None:
             if len(initial["config"]["env"]["tasks"]) != 6:
                 raise ValueError("--init-from requires the released six-skill library.")
             policy_kwargs = initial["policy_kwargs"]
+        if args.resume_from:
+            initial = load_checkpoint(args.resume_from)
+            if len(initial["config"]["env"]["tasks"]) != len(SKILL_PRESETS):
+                raise ValueError(
+                    f"--resume-from expects a checkpoint trained on {len(SKILL_PRESETS)} "
+                    f"tasks (the SKILL_PRESETS layout), got "
+                    f"{len(initial['config']['env']['tasks'])}."
+                )
+            policy_kwargs = initial["policy_kwargs"]
         env = make_env(env_config)
         actor, critic = make_models(env, **policy_kwargs)
         if args.init_from:
             load_parameters(
                 args.init_from, actor, critic, task_mapping=[0, 1, 2, 3, 4, 5, 0, 0, 5]
             )
+        if args.resume_from:
+            load_parameters(args.resume_from, actor, critic)
         low_trainer = PPOTrainer.from_env(
             env,
             actor=actor,
