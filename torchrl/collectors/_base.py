@@ -402,7 +402,11 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         self.post_collect_hook = hook
 
-    def stats(self) -> dict[str, int | float | bool]:
+    def stats(
+        self,
+        workers: Literal["aggregate", "per_worker", "both"] = "aggregate",
+        **kwargs,
+    ) -> dict[str, int | float | bool]:
         """Returns a cheap, serializable snapshot of the collector's progress.
 
         The snapshot only contains scalar counters and gauges: it never
@@ -423,8 +427,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         - ``"policy_version"``: current policy version, when the collector
           tracks it with an integer version.
 
-        Multi-worker collectors extend this signature with a ``workers``
-        argument controlling aggregate versus per-worker views.
+        Args:
+            workers (str, optional): controls the worker view. With
+                ``"aggregate"`` (default), only coordinator-side counters are
+                reported and no worker communication happens. With ``"per_worker"``
+                or ``"both"``, each worker is queried and its snapshot is
+                namespaced as ``"worker_<idx>/<metric>"``. For multi-worker
+                collectors, ``"workers"`` and ``"workers_alive"`` are always
+                reported.
 
         Examples:
             >>> from torchrl.collectors import Collector
@@ -442,27 +452,84 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             10
             20
         """
+        if workers not in ("aggregate", "per_worker", "both"):
+            raise ValueError(
+                f"workers must be one of 'aggregate', 'per_worker' or 'both', got {workers!r}."
+            )
+
         stats: dict[str, int | float | bool] = {}
-        frames = getattr(self, "_frames", None)
-        if frames is not None:
-            stats["frames"] = int(frames)
-        iters = getattr(self, "_iter", None)
-        if iters is not None:
-            stats["batches"] = int(iters) + 1
-        total_frames = getattr(self, "total_frames", None)
-        if isinstance(total_frames, int) and total_frames >= 0:
-            stats["total_frames"] = total_frames
+        if workers in ("aggregate", "both"):
+            frames = getattr(self, "_frames", getattr(self, "collected_frames", None))
             if frames is not None:
-                stats["completed"] = bool(frames >= total_frames)
-        requested = getattr(self, "requested_frames_per_batch", None)
-        if isinstance(requested, int):
-            stats["requested_frames_per_batch"] = requested
-        try:
-            version = self.policy_version
-        except (AttributeError, RuntimeError):
-            version = None
-        if isinstance(version, int):
-            stats["policy_version"] = version
+                stats["frames"] = int(frames)
+            iters = getattr(self, "_iter", None)
+            if iters is not None:
+                stats["batches"] = int(iters) + 1
+            total_frames = getattr(self, "total_frames", None)
+            if isinstance(total_frames, int) and total_frames >= 0:
+                stats["total_frames"] = total_frames
+                if frames is not None:
+                    stats["completed"] = bool(frames >= total_frames)
+            requested = getattr(
+                self,
+                "requested_frames_per_batch",
+                getattr(self, "frames_per_batch", None),
+            )
+            if isinstance(requested, int):
+                stats["requested_frames_per_batch"] = requested
+            try:
+                version = self.policy_version
+            except (AttributeError, RuntimeError):
+                version = None
+            if isinstance(version, int):
+                stats["policy_version"] = version
+
+        has_remote = hasattr(self, "remote_collectors") or hasattr(self, "procs")
+        if has_remote:
+            num_workers = getattr(
+                self, "num_workers", getattr(self, "num_collectors", 0)
+            )
+            if num_workers == 0:
+                remote_collectors = getattr(self, "remote_collectors", [])
+                num_workers = len(remote_collectors)
+            stats["workers"] = int(num_workers)
+
+            try:
+                # If we need worker_frames for aggregate RayCollector, we have to map_fn.
+                # To minimize overhead for MultiSyncCollector (which didn't do this),
+                # we only do it if workers in ("per_worker", "both") OR if we are a RayCollector.
+                worker_results = []
+                if workers in ("per_worker", "both") or hasattr(
+                    self, "remote_collectors"
+                ):
+                    worker_results = self.map_fn("stats")
+                    alive = 0
+                    worker_frames = []
+                    for idx, worker_stats in enumerate(worker_results):
+                        if worker_stats is None or isinstance(worker_stats, Exception):
+                            continue
+                        alive += 1
+                        if "frames" in worker_stats:
+                            worker_frames.append(worker_stats["frames"])
+                        if workers in ("per_worker", "both"):
+                            for key, value in worker_stats.items():
+                                stats[f"worker_{idx}/{key}"] = value
+
+                    stats["workers_alive"] = alive
+                    if workers in ("aggregate", "both") and worker_frames:
+                        stats["worker_frames"] = int(sum(worker_frames))
+                else:
+                    # MultiSyncCollector aggregate path
+                    if hasattr(self, "procs"):
+                        procs = getattr(self, "procs", [])
+                        if procs:
+                            stats["workers_alive"] = sum(
+                                int(proc.is_alive()) for proc in procs
+                            )
+
+            except Exception:
+                stats["workers_alive"] = 0
+
         return stats
 
     def enable_profile(
