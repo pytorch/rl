@@ -557,17 +557,37 @@ def save_checkpoint(
 
 
 def load_parameters(
-    path: str | Path, actor: ProbabilisticActor, critic: TensorDictSequential
+    path: str | Path,
+    actor: ProbabilisticActor,
+    critic: TensorDictSequential,
+    *,
+    task_mapping: Sequence[int] | None = None,
 ) -> int:
-    """Load actor and critic parameters from a checkpoint written by :func:`save_checkpoint`.
+    """Load actor parameters and, when saved, critic parameters from a checkpoint.
+
+    ``task_mapping`` optionally gives one source embedding index for each
+    destination task, allowing a skill library to grow without changing the
+    existing skills' inference weights. Optimizer state is not loaded.
 
     Returns:
         The number of transitions the checkpoint was trained on.
     """
     payload = load_checkpoint(path)
+    if task_mapping is not None:
+        for state in (
+            payload["model_state_dict"],
+            payload.get("critic_state_dict", {}),
+        ):
+            for key, value in state.items():
+                if key.endswith(".task.weight"):
+                    indices = torch.as_tensor(
+                        task_mapping, dtype=torch.long, device=value.device
+                    )
+                    state[key] = value.index_select(0, indices)
     try:
         actor.load_state_dict(payload["model_state_dict"])
-        critic.load_state_dict(payload["critic_state_dict"])
+        if "critic_state_dict" in payload:
+            critic.load_state_dict(payload["critic_state_dict"])
     except RuntimeError as err:
         raise RuntimeError(
             f"The checkpoint {path} was trained with policy kwargs "

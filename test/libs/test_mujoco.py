@@ -1241,6 +1241,85 @@ class TestMujoco:
         assert gait.gait_metrics(short)["walking"] == 0.0
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.parametrize(
+        "expand,with_critic", [(False, True), (True, True), (True, False)]
+    )
+    def test_microduck_training_launcher_restores_walker(
+        self, tmp_path, monkeypatch, expand, with_critic
+    ):
+        recipe = self._load_example("train_skills")
+        scene = self._write_microduck_fixture(tmp_path)
+        monkeypatch.setenv(MicroDuckEnv.ROOT_ENV_VAR, str(scene))
+        config = {
+            "backend": "mujoco",
+            "device": "cpu",
+            "parallel": False,
+            "num_envs": 2,
+            "action_scale": 0.5,
+            "tasks": [
+                {"preset": "sidestep_task", "speed": -0.15},
+                {"preset": "tracking_task", "speed": 0.03},
+            ],
+        }
+        env = recipe.make_env(config)
+        try:
+            actor, critic = recipe.make_models(env, hidden_size=16)
+            path = recipe.save_checkpoint(
+                tmp_path / "walker.ckpt",
+                actor,
+                critic,
+                transitions=0,
+                policy_kwargs={"hidden_size": 16},
+                metrics={},
+                config={"env": config},
+            )
+            if not with_critic:
+                save_render_checkpoint(
+                    path,
+                    actor,
+                    env_metadata={"policy_kwargs": {"hidden_size": 16}},
+                    config={"env": config},
+                    format="archive",
+                )
+            restored, tasks = recipe.load_walker(
+                load_checkpoint(path, weights_only=True)
+            )
+            assert (tasks == torch.stack(recipe.make_tasks(config["tasks"]))).all()
+            assert not any(
+                parameter.requires_grad for parameter in restored.parameters()
+            )
+            inputs = env.reset()
+            if expand:
+                expanded = recipe.make_env(
+                    {**config, "tasks": config["tasks"] + [config["tasks"][0]]}
+                )
+                try:
+                    restored, expanded_critic = recipe.make_models(
+                        expanded, hidden_size=16
+                    )
+                    recipe.load_parameters(
+                        path, restored, expanded_critic, task_mapping=[0, 1, 0]
+                    )
+                finally:
+                    expanded.close(raise_if_closed=False)
+            with torch.no_grad(), set_exploration_type(ExplorationType.DETERMINISTIC):
+                expected = actor(inputs.clone())
+                actual = restored(inputs.clone())
+            for key in ("action", ("next", "recurrent_state")):
+                torch.testing.assert_close(actual[key], expected[key])
+            if expand:
+                inputs["task_id"].fill_(0)
+                with torch.no_grad(), set_exploration_type(
+                    ExplorationType.DETERMINISTIC
+                ):
+                    expected = actor(inputs.clone())
+                    inputs["task_id"].fill_(2)
+                    actual = restored(inputs.clone())
+                torch.testing.assert_close(actual["action"], expected["action"])
+        finally:
+            env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_example_recurrent_ppo_trains_on_whole_episodes(self, tmp_path):
         ppo = self._load_example("ppo_mujoco")
         scene = self._write_microduck_fixture(tmp_path)
