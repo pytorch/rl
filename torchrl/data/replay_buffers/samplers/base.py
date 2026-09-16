@@ -63,10 +63,13 @@ class Sampler(ABC, metaclass=_SamplerMeta):
             without-replacement bookkeeping, priorities, consumption marks,
             staleness counters or streaming queues. Such a sampler cannot be
             copied into :class:`torch.utils.data.DataLoader` workers.
-            Defaults to ``False``.
+            Defaults to ``True``; samplers whose draws depend only on the
+            storage content and their configuration, such as
+            :class:`RandomSampler` and :class:`SliceSampler`, set it to
+            ``False``.
     """
 
-    requires_shared_state: bool = False
+    requires_shared_state: bool = True
 
     # Some samplers - mainly those without replacement -
     # need to keep track of the number of remaining batches

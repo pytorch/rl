@@ -386,8 +386,10 @@ buffers built with a ``generator`` are reseeded once per worker from the
 worker seed, so seeding the DataLoader (``torch.manual_seed`` or
 ``DataLoader(generator=...)``) makes worker sampling reproducible. Samplers
 whose :attr:`~torchrl.data.replay_buffers.Sampler.requires_shared_state` is
-``True`` (without replacement, prioritized, consuming, staleness-aware,
-streaming and prompt-group samplers) are rejected when ``num_workers > 0``.
+``True``, every sampler except those that declare their draws stateless such
+as :class:`~torchrl.data.replay_buffers.RandomSampler` and
+:class:`~torchrl.data.replay_buffers.SliceSampler`, are rejected when
+``num_workers > 0``.
 On a static dataset, give a :class:`~torchrl.data.replay_buffers.SliceSampler`
 ``cache_values=True`` and keep the workers persistent so trajectory boundaries
 are scanned once per worker rather than once per batch:

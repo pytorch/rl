@@ -377,6 +377,8 @@ class SliceSampler(Sampler):
     step_key: NestedKey | None = "step_count"
     _fragmented_index: _FragmentedTrajectoryIndex | None = None
 
+    requires_shared_state = False
+
     def __init__(
         self,
         *,

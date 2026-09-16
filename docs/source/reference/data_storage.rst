@@ -42,26 +42,12 @@ for improved node failure recovery.
 Storages as torch datasets
 --------------------------
 
-Every storage is a :class:`torch.utils.data.Dataset`, so a
-:class:`torch.utils.data.DataLoader` can read it with any torch sampler and
-worker processes. Index batches are fetched with a single
-:meth:`~torchrl.data.replay_buffers.Storage.get` call on the flattened storage;
-pass :func:`~torchrl.data.tensordict_collate` as ``collate_fn``, which keeps a
-fetched batch intact and stacks lists of samples, lazily when their shapes
-differ. Multi-dimensional storages are read through
-:meth:`~torchrl.data.replay_buffers.Storage.flatten`, and a
-:class:`~torchrl.data.replay_buffers.StorageEnsemble` is not a flat dataset
-and rejects this:
-
-    >>> import torch
-    >>> from tensordict import TensorDict
-    >>> from torch.utils.data import DataLoader
-    >>> from torchrl.data import LazyMemmapStorage, ReplayBuffer, tensordict_collate
-    >>> rb = ReplayBuffer(storage=LazyMemmapStorage(100))
-    >>> _ = rb.extend(TensorDict({"obs": torch.arange(100)}, [100]))
-    >>> loader = DataLoader(rb.storage, batch_size=4, shuffle=True, num_workers=2, collate_fn=tensordict_collate)
-    >>> next(iter(loader))["obs"].shape
-    torch.Size([4])
-
-See :meth:`~torchrl.data.ReplayBuffer.as_dataset` to keep the TorchRL sampler
-and transforms while sampling in DataLoader workers.
+Every storage is a :class:`torch.utils.data.Dataset`: a
+:class:`torch.utils.data.DataLoader` reads it with any torch sampler and
+worker processes, fetching each index batch with a single
+:meth:`~torchrl.data.replay_buffers.Storage.get` call. Pass
+:func:`~torchrl.data.tensordict_collate` as ``collate_fn``, read
+multi-dimensional storages through
+:meth:`~torchrl.data.replay_buffers.Storage.flatten`, and see
+:ref:`ref_buffers` for reading whole buffers through their sampler and
+transforms.

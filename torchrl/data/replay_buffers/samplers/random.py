@@ -43,6 +43,8 @@ class RandomSampler(Sampler):
 
     """
 
+    requires_shared_state = False
+
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         if len(storage) == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
@@ -104,8 +106,6 @@ class ConsumingSampler(Sampler):
         random sampling without replacement within each sampled batch.
         Prefetching and prioritized replay are not supported.
     """
-
-    requires_shared_state = True
 
     def __init__(self, max_sample_count: int = 1):
         if isinstance(max_sample_count, bool) or not isinstance(
@@ -447,8 +447,6 @@ class SamplerWithoutReplacement(Sampler):
     can lead to duplicated indices, unless the :obj:`drop_last` argument is set to ``True``.
 
     """
-
-    requires_shared_state = True
 
     def __init__(self, drop_last: bool = False, shuffle: bool = True):
         self._sample_list = None

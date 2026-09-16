@@ -727,8 +727,6 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
 
 
 class _StreamingSampler(Sampler):
-    requires_shared_state = True
-
     def __init__(self):
         ...
 

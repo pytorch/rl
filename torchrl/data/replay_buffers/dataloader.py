@@ -80,8 +80,10 @@ class ReplayBufferDataset(IterableDataset):
     reproducible when the DataLoader is seeded (``torch.manual_seed`` or
     ``DataLoader(generator=...)``). Samplers whose
     :attr:`~torchrl.data.replay_buffers.Sampler.requires_shared_state` is
-    ``True`` (without replacement, prioritized, consuming, staleness-aware,
-    streaming and prompt-group samplers) are rejected when workers are used.
+    ``True``, which is every sampler except those that declare their draws
+    stateless such as :class:`~torchrl.data.replay_buffers.RandomSampler` and
+    :class:`~torchrl.data.replay_buffers.SliceSampler`, are rejected when
+    workers are used.
 
     Args:
         replay_buffer (ReplayBuffer): the buffer to sample from. Its
