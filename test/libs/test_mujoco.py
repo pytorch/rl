@@ -62,7 +62,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import load_checkpoint
+from torchrl.render import load_checkpoint, save_render_checkpoint
 
 if _has_mujoco:
     import mujoco
@@ -691,6 +691,7 @@ class TestMujoco:
                 MicroDuckEnv.sidestep_task(-0.15),
                 MicroDuckEnv.jump_task(),
                 MicroDuckEnv.standing_task(),
+                MicroDuckEnv.jump_task(speed=0.3),
             ],
             seed=0,
         )
@@ -812,6 +813,15 @@ class TestMujoco:
         assert (
             env._reward_components(drifting, action)["diagnostic_reward_drift"] == 0
         ).all()
+        # Forward hopping retains airborne rewards, but tracks its command
+        # without paying the penalty intended for a stationary hop.
+        td = env.reset(TensorDict({"task_id": torch.tensor([[4]])}, batch_size=(1,)))
+        torch.testing.assert_close(td["command"], torch.tensor([[0.3, 0.0]]))
+        moving = env.get_state().clone()
+        moving["qvel"][..., 0] = 0.3
+        assert (term(moving, "tracking") > term(env.get_state(), "tracking")).all()
+        assert (term(moving, "drift") == 0).all()
+        assert (term(risen, "jump") > 0).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")

@@ -1140,8 +1140,15 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         )
 
     @classmethod
-    def jump_task(cls, *, weight: float = 1.0, **overrides: Any) -> MicroDuckTask:
-        """Hop in place under a zero command.
+    def jump_task(
+        cls, speed: float = 0.0, *, weight: float = 1.0, **overrides: Any
+    ) -> MicroDuckTask:
+        """Hop in place or track a forward hopping speed.
+
+        Args:
+            speed (float, optional): Forward speed in m/s. Defaults to zero
+                (hop in place). A nonzero speed disables the stationary drift
+                penalty and uses velocity tracking alongside the hop terms.
 
         Three terms shape the hop, in the order a policy discovers it.
         ``hop_rhythm`` (weight 1) pays, linearly up to the
@@ -1173,18 +1180,18 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 "jump": cls.JUMP_WEIGHT,
                 "launch": cls.LAUNCH_WEIGHT,
                 "hop_rhythm": cls.HOP_RHYTHM_WEIGHT,
-                "drift": cls.DRIFT_WEIGHT,
+                "drift": cls.DRIFT_WEIGHT if speed == 0.0 else 0.0,
                 "lin_vel_z": 0.0,
             }
         )
         reward_weights.update(overrides.pop("reward_weights", None) or {})
         return cls.make_task(
-            (0.0, 0.0),
-            (0.0, 0.0),
+            (float(speed), 0.0),
+            (float(speed), 0.0),
             weight=weight,
             reward_weights=reward_weights,
             **{
-                "name": "jump",
+                "name": "jump" if speed == 0.0 else f"jump{float(speed):+.2f}",
                 "pose_std": cls.POSE_STD_MOVING,
                 "gait_frequency_hz": cls.HOP_FREQUENCY_HZ,
                 **overrides,
