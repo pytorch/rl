@@ -159,6 +159,7 @@ uv pip install --no-progress \
   scipy \
   psutil \
   "hydra-core<1.4" \
+  huggingface_hub \
   ipython \
   "imageio==2.26.0" \
   "dm_control>=1.0.41" \
