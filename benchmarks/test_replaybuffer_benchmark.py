@@ -9,6 +9,7 @@ import os
 import pytest
 import torch
 from tensordict import TensorDict
+from torch.utils.data import DataLoader
 
 from torchrl.data import (
     LazyMemmapStorage,
@@ -17,6 +18,7 @@ from torchrl.data import (
     ListStorage,
     ReplayBuffer,
     ReplayBufferEnsemble,
+    tensordict_collate,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
@@ -393,6 +395,38 @@ def test_torchrl_buffer_dataset(benchmark):
     samples = benchmark(consume_buffer_dataset, dataset)
 
     assert len(samples) == 256
+
+
+def _resize_frames(data):
+    """Per-frame stand-in for decoders whose cost is serial per sample."""
+    frames = [
+        torch.nn.functional.interpolate(
+            frame[None].float(), size=(128, 128), mode="bilinear", align_corners=False
+        )[0]
+        for frame in data["pixels"]
+    ]
+    return data.set("pixels_resized", torch.stack(frames))
+
+
+@pytest.mark.parametrize("num_workers", [0, 2, 4])
+def test_replay_buffer_dataset_workers(benchmark, num_workers):
+    rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1024), batch_size=32)
+    rb.extend(
+        TensorDict(
+            {"pixels": torch.randint(0, 256, (1024, 3, 96, 96), dtype=torch.uint8)},
+            batch_size=[1024],
+        )
+    )
+    rb.append_transform(_resize_frames)
+    loader = DataLoader(
+        rb.as_dataset(),
+        batch_size=None,
+        num_workers=num_workers,
+        collate_fn=tensordict_collate,
+        persistent_workers=num_workers > 0,
+    )
+    iterator = iter(loader)
+    benchmark.pedantic(next, args=(iterator,), warmup_rounds=8, rounds=64)
 
 
 def _skip_or_fail_unavailable(message):

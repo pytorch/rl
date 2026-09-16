@@ -52,6 +52,7 @@ except ImportError:
 
 from torchrl._comm.replay_service import _DistributedReplayService, _extend_reply
 from torchrl._utils import _RayServiceMetaClass, rl_warnings
+from torchrl.data.replay_buffers.dataloader import ReplayBufferDataset
 from torchrl.data.replay_buffers.query import _query_source, Trajectory
 from torchrl.data.replay_buffers.sample_units import SampleUnit
 from torchrl.data.replay_buffers.samplers import (
@@ -2570,6 +2571,35 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             self._prefetch and len(self._prefetch_queue)
         ):
             yield self.sample()
+
+    def as_dataset(self, *, num_batches: int | None = None) -> ReplayBufferDataset:
+        """Returns a :class:`torch.utils.data.IterableDataset` streaming batches from this buffer.
+
+        See :class:`~torchrl.data.ReplayBufferDataset` for the DataLoader
+        worker semantics.
+
+        Keyword Args:
+            num_batches (int or None, optional): number of batches yielded by
+                one iterator, shared between DataLoader workers. ``None``
+                streams batches until the sampler runs out. Defaults to
+                ``None``.
+
+        Examples:
+            >>> import torch
+            >>> from torch.utils.data import DataLoader
+            >>> from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
+            >>> rb = ReplayBuffer(storage=LazyTensorStorage(100), batch_size=8)
+            >>> _ = rb.extend(torch.arange(100))
+            >>> loader = DataLoader(
+            ...     rb.as_dataset(num_batches=4),
+            ...     batch_size=None,
+            ...     num_workers=2,
+            ...     collate_fn=tensordict_collate,
+            ... )
+            >>> [batch.shape for batch in loader]
+            [torch.Size([8]), torch.Size([8]), torch.Size([8]), torch.Size([8])]
+        """
+        return ReplayBufferDataset(self, num_batches=num_batches)
 
     @_maybe_delay_init
     def __getstate__(self) -> dict[str, Any]:

@@ -41,6 +41,7 @@ discovery and buffer lifecycle.
 
     ReplayBuffer
     OfflineToOnlineReplayBuffer
+    ReplayBufferDataset
     ReplayBufferEnsemble
     PrioritizedReplayBuffer
     TensorDictReplayBuffer
@@ -349,6 +350,76 @@ capacity without scanning the full storage on every write. This mode supports
 ``TensorStorage``, ``LazyTensorStorage`` and ``LazyMemmapStorage`` with uniform
 random sampling. Prefetching, prioritized replay and multidimensional storages
 are rejected explicitly.
+
+Reading buffers with ``torch.utils.data``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Storages are :class:`torch.utils.data.Dataset` instances and
+:meth:`~torchrl.data.ReplayBuffer.as_dataset` wraps a buffer in a
+:class:`torch.utils.data.IterableDataset`, so a
+:class:`torch.utils.data.DataLoader` can own the parallelism of the sample
+path. Pass :func:`~torchrl.data.tensordict_collate` as ``collate_fn``: the
+default torch collation does not handle tensordicts.
+
+A storage reads like any map-style dataset. Torch samplers pick the indices
+and every index batch is fetched with a single storage read, collated as the
+buffer would collate it:
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from torch.utils.data import DataLoader
+    >>> from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
+    >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
+    >>> rb.extend(TensorDict({"obs": torch.arange(100)}, [100]))
+    >>> loader = DataLoader(rb.storage, batch_size=4, shuffle=True, collate_fn=tensordict_collate)
+    >>> next(iter(loader))["obs"].shape
+    torch.Size([4])
+
+A buffer dataset keeps the TorchRL sampler and transforms and runs them in the
+DataLoader workers. Each worker holds a copy of the buffer, so this fits
+memory-mapped or dataset-backed storages whose sample path is expensive, such
+as video decoding. ``num_batches`` is split between workers, buffer
+prefetching is disabled in workers because the DataLoader prefetches, and
+buffers built with a ``generator`` are reseeded once per worker from the
+worker seed, so seeding the DataLoader (``torch.manual_seed`` or
+``DataLoader(generator=...)``) makes worker sampling reproducible. Samplers
+whose :attr:`~torchrl.data.replay_buffers.Sampler.requires_shared_state` is
+``True`` (without replacement, prioritized, consuming, staleness-aware,
+streaming and prompt-group samplers) are rejected when ``num_workers > 0``.
+On a static dataset, give a :class:`~torchrl.data.replay_buffers.SliceSampler`
+``cache_values=True`` and keep the workers persistent so trajectory boundaries
+are scanned once per worker rather than once per batch:
+
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from torch.utils.data import DataLoader
+    >>> from torchrl.data import (
+    ...     LazyMemmapStorage,
+    ...     SliceSampler,
+    ...     TensorDictReplayBuffer,
+    ...     tensordict_collate,
+    ... )
+    >>> rb = TensorDictReplayBuffer(
+    ...     storage=LazyMemmapStorage(1000),
+    ...     sampler=SliceSampler(num_slices=4, traj_key="episode", cache_values=True),
+    ...     batch_size=32,
+    ... )
+    >>> rb.extend(TensorDict({"obs": torch.randn(1000, 3), "episode": torch.arange(1000) // 50}, [1000]))
+    >>> loader = DataLoader(
+    ...     rb.as_dataset(num_batches=8),
+    ...     batch_size=None,
+    ...     num_workers=4,
+    ...     persistent_workers=True,
+    ...     collate_fn=tensordict_collate,
+    ... )
+    >>> for batch in loader:
+    ...     assert batch["obs"].shape == (32, 3)
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    tensordict_collate
 
 Detecting overwritten slots: generation stamps
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

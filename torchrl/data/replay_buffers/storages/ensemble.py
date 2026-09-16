@@ -112,6 +112,12 @@ class StorageEnsemble(Storage):
 
     _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
 
+    def __getitems__(self, index):
+        raise NotImplementedError(
+            "StorageEnsemble cannot be read as a flat torch dataset. Read its "
+            "member storages instead."
+        )
+
     def __getitem__(self, index):
         if isinstance(index, tuple):
             if index[0] is Ellipsis:

@@ -11,6 +11,7 @@ from multiprocessing.context import get_spawning_popen
 from typing import Any
 
 import torch
+from torch.utils.data import Dataset
 
 from torchrl.data.replay_buffers.checkpointers import StorageCheckpointerBase
 
@@ -20,11 +21,16 @@ except ImportError:
     from torch._dynamo import disable as compile_disable, is_compiling
 
 
-class Storage:
+class Storage(Dataset):
     """A Storage is the container of a replay buffer.
 
     Every storage must have a set, get and __len__ methods implemented.
     Get and set should support integers as well as list of integers.
+
+    Storages are :class:`torch.utils.data.Dataset` instances: a
+    :class:`torch.utils.data.DataLoader` reads them with any torch sampler and
+    fetches every index batch through a single :meth:`get` call on the
+    flattened storage, collated as the replay buffer would.
 
     The storage does not need to have a definite size, but if it does one should
     make sure that it is compatible with the buffer size.
@@ -206,6 +212,12 @@ class Storage:
 
     def __getitem__(self, item):
         return self.get(item)
+
+    def __getitems__(self, index):
+        from torchrl.data.replay_buffers.storages.utils import _get_default_collate
+
+        storage = self.flatten()
+        return _get_default_collate(storage)(storage.get(index))
 
     def __setitem__(self, index, value):
         """Sets values in the storage without updating the cursor or length."""

@@ -109,6 +109,8 @@ class PromptGroupSampler(Sampler):
         8
     """
 
+    requires_shared_state = True
+
     def __init__(
         self,
         *,

@@ -175,6 +175,8 @@ class PrioritizedSampler(Sampler):
     # (pytorch/rl#3925); version-less payloads are treated as pre-#3925.
     _STATE_SCHEMA_VERSION: int = 1
 
+    requires_shared_state = True
+
     def __init__(
         self,
         max_capacity: int,

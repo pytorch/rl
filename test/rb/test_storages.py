@@ -917,6 +917,10 @@ def test_storage_save_hook(tmpdir):
     assert observed["is_full"] is False
 
 
+def _storage_content(storage, queue):
+    queue.put(storage[:].tolist())
+
+
 class TestSharedStorageInit:
     def worker(self, rb, worker_id, queue):
         length = len(rb)
@@ -937,6 +941,18 @@ class TestSharedStorageInit:
             [],
         )
         queue.put(rb.storage._mutation_revision)
+
+    def test_tensor_storage_spawn_roundtrip(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(10))
+        ctx = mp.get_context("spawn")
+        queue = ctx.Queue()
+        process = ctx.Process(target=_storage_content, args=(rb.storage, queue))
+        process.start()
+        try:
+            assert queue.get(timeout=120) == list(range(10))
+        finally:
+            process.join()
 
     def test_mutation_revision_shared_across_processes(self):
         storage = LazyTensorStorage(max_size=8)

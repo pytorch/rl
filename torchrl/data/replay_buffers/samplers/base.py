@@ -55,7 +55,18 @@ class _SamplerMeta(ABCMeta):
 
 
 class Sampler(ABC, metaclass=_SamplerMeta):
-    """A generic sampler base class for composable Replay Buffers."""
+    """A generic sampler base class for composable Replay Buffers.
+
+    Attributes:
+        requires_shared_state (bool): ``True`` when sampling mutates state that
+            every consumer of the buffer must observe, such as
+            without-replacement bookkeeping, priorities, consumption marks,
+            staleness counters or streaming queues. Such a sampler cannot be
+            copied into :class:`torch.utils.data.DataLoader` workers.
+            Defaults to ``False``.
+    """
+
+    requires_shared_state: bool = False
 
     # Some samplers - mainly those without replacement -
     # need to keep track of the number of remaining batches

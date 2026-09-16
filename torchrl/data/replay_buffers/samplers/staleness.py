@@ -95,6 +95,8 @@ class StalenessAwareSampler(Sampler):
         would add complexity without benefit.
     """
 
+    requires_shared_state = True
+
     def __init__(
         self,
         max_staleness: int = -1,

@@ -105,6 +105,8 @@ class ConsumingSampler(Sampler):
         Prefetching and prioritized replay are not supported.
     """
 
+    requires_shared_state = True
+
     def __init__(self, max_sample_count: int = 1):
         if isinstance(max_sample_count, bool) or not isinstance(
             max_sample_count, (int, np.integer)
@@ -445,6 +447,8 @@ class SamplerWithoutReplacement(Sampler):
     can lead to duplicated indices, unless the :obj:`drop_last` argument is set to ``True``.
 
     """
+
+    requires_shared_state = True
 
     def __init__(self, drop_last: bool = False, shuffle: bool = True):
         self._sample_list = None
