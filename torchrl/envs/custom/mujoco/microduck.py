@@ -38,6 +38,8 @@ Reward
 
 Termination
     A physical fall (low base height or tilted torso) or a non-finite state.
+    The same per-environment signal is exposed as the boolean ``fallen``
+    observation for controller-state resets.
 """
 
 from __future__ import annotations
@@ -426,8 +428,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     (14), joint velocity (14), the sine, cosine and ramp of the gait clock
     (3), and the previous action (14). The command and the index of the env's
     task in the library are also exposed under the ``command`` and ``task_id``
-    keys; task parameters are not in the observation, and an embedding of the
-    id stands for them.
+    keys; the boolean ``fallen`` observation reports physical failure for
+    per-agent controller resets. Task parameters are not in the observation,
+    and an embedding of the id stands for them.
 
     The env holds a library of :class:`MicroDuckTask` rows in :attr:`tasks`
     (``env.tasks.name`` lists their labels).
@@ -1360,6 +1363,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 dtype=torch.long,
                 device=self.device,
             ),
+            fallen=Binary(
+                n=1,
+                shape=(self.num_envs, 1),
+                dtype=torch.bool,
+                device=self.device,
+            ),
             shape=(self.num_envs,),
             device=self.device,
         )
@@ -1383,6 +1392,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         observation = super()._build_obs_dict(state)
         observation["command"] = self._command.clone()
         observation["task_id"] = self._task_id.unsqueeze(-1).clone()
+        observation["fallen"] = self._fallen(
+            state["qpos"].to(self.dtype), state["qvel"].to(self.dtype)
+        ).unsqueeze(-1)
         if self.diagnostics:
             observation.update(self._diagnostics(state, self._observation_action))
         return observation

@@ -424,6 +424,8 @@ Transform Configurations
     LineariseRewardsConfig
     ConditionalSkipConfig
     MultiActionConfig
+    ClosedLoopMultiActionConfig
+    LowLevelControllerConfig
     TimerConfig
     ConditionalPolicySwitchConfig
     FiniteTensorDictCheckConfig
