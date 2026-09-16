@@ -4,11 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Mapping
 from itertools import islice
 from typing import Any, TYPE_CHECKING
 
 import torch
+from tensordict import is_tensor_collection, LazyStackedTensorDict
 from torch.utils.data import get_worker_info, IterableDataset
+from torch.utils.data._utils.collate import default_collate
 
 from torchrl.data.replay_buffers.samplers import Sampler
 
@@ -23,10 +26,13 @@ __all__ = ["ReplayBufferDataset", "tensordict_collate"]
 def tensordict_collate(batch: Any) -> Any:
     """Collate function for a :class:`torch.utils.data.DataLoader` reading TorchRL storages or buffers.
 
-    Storages collate every index batch themselves and
-    :class:`ReplayBufferDataset` yields ready batches, so the batch is returned
-    unchanged. The default torch collation iterates a tensordict over its batch
-    dimension and cannot be used.
+    A batch that is already a tensor, a tensor collection or a tuple of them,
+    as fetched from a storage or yielded by :class:`ReplayBufferDataset`, is
+    returned unchanged. A list of samples, as produced by per-item storages or
+    by composing storages with :class:`torch.utils.data.ConcatDataset`, is
+    stacked: tensor collections lazily when their shapes differ, tensors
+    densely, and mappings or tuples element-wise. The default torch collation
+    iterates a tensordict over its batch dimension and cannot be used.
 
     Args:
         batch (Tensor, TensorDictBase or list): the fetched batch.
@@ -44,7 +50,18 @@ def tensordict_collate(batch: Any) -> Any:
         >>> next(iter(loader))["obs"].shape
         torch.Size([4])
     """
-    return batch
+    if not isinstance(batch, list) or not batch:
+        return batch
+    first = batch[0]
+    if is_tensor_collection(first):
+        return LazyStackedTensorDict.maybe_dense_stack(list(batch))
+    if isinstance(first, torch.Tensor):
+        return torch.stack(list(batch))
+    if isinstance(first, Mapping):
+        return {key: tensordict_collate([item[key] for item in batch]) for key in first}
+    if isinstance(first, tuple):
+        return tuple(tensordict_collate(list(items)) for items in zip(*batch))
+    return default_collate(list(batch))
 
 
 class ReplayBufferDataset(IterableDataset):
@@ -56,8 +73,9 @@ class ReplayBufferDataset(IterableDataset):
     ``batch_size=None`` and :func:`tensordict_collate` to sample in worker
     processes. Each worker holds its own copy of the buffer, so the sampler and
     the transforms run in the worker and ``num_batches`` is split between
-    workers. Buffer prefetching is disabled in workers, the DataLoader
-    prefetches instead. A buffer built with a :class:`torch.Generator` is
+    workers. Buffer prefetching is disabled in workers and prefetched batches
+    are never serialized to them, the DataLoader prefetches instead. A buffer
+    built with a :class:`torch.Generator` is
     reseeded once per worker from the worker seed, so sampling in workers is
     reproducible when the DataLoader is seeded (``torch.manual_seed`` or
     ``DataLoader(generator=...)``). Samplers whose
@@ -115,6 +133,23 @@ class ReplayBufferDataset(IterableDataset):
         self.num_batches = num_batches
         self._worker_seed = None
 
+    def __getstate__(self) -> dict[str, Any]:
+        replay_buffer = self.replay_buffer
+        self._check_sampler(replay_buffer.sampler)
+        return {
+            **self.__dict__,
+            "replay_buffer": (
+                type(replay_buffer),
+                replay_buffer._state_without_prefetch(),
+            ),
+        }
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        buffer_cls, buffer_state = state.pop("replay_buffer")
+        replay_buffer = buffer_cls.__new__(buffer_cls)
+        replay_buffer.__setstate__(buffer_state)
+        self.__dict__.update(state, replay_buffer=replay_buffer)
+
     def _check_sampler(self, sampler: Sampler) -> None:
         if sampler.requires_shared_state:
             raise RuntimeError(
@@ -129,8 +164,7 @@ class ReplayBufferDataset(IterableDataset):
             return None
         replay_buffer = self.replay_buffer
         self._check_sampler(replay_buffer.sampler)
-        replay_buffer._prefetch = False
-        replay_buffer._prefetch_queue.clear()
+        replay_buffer._reset_worker_state()
         rng = replay_buffer._rng
         if rng is not None and self._worker_seed != worker.seed:
             replay_buffer.set_rng(

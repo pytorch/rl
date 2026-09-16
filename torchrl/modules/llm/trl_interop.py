@@ -147,6 +147,14 @@ class TorchRLBufferDataset(ReplayBufferDataset):
                 f"num_batches must be a positive integer or None, got {num_batches!r}."
             )
         super().__init__(replay_buffer, num_batches=num_batches)
+        if replay_buffer.sampler.requires_shared_state:
+            warnings.warn(
+                f"{type(replay_buffer.sampler).__name__} keeps sampling state "
+                "that DataLoader workers cannot share. TorchRLBufferDataset "
+                "will raise when iterated in DataLoader workers from v0.17: "
+                "use num_workers=0 or a sampler without cross-process state.",
+                FutureWarning,
+            )
         self._batch_size = batch_size
         self._keys = keys
         self._device = torch.device(device) if device is not None else None
@@ -156,14 +164,7 @@ class TorchRLBufferDataset(ReplayBufferDataset):
     # ------------------------------------------------------------------
 
     def _check_sampler(self, sampler) -> None:
-        if sampler.requires_shared_state:
-            warnings.warn(
-                f"{type(sampler).__name__} keeps sampling state that DataLoader "
-                "workers cannot share, so every worker samples from its own copy. "
-                "TorchRLBufferDataset will raise in this case from v0.16: use "
-                "num_workers=0 or a sampler without cross-process state.",
-                FutureWarning,
-            )
+        """Shared-state samplers are still accepted in workers until v0.17, see the constructor warning."""
 
     def __iter__(self) -> Iterator[dict[str, Any]]:
         """Sample replay batches and yield individual, flattened samples."""

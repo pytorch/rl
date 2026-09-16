@@ -212,6 +212,8 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
 
     """
 
+    requires_shared_state = True
+
     def __init__(
         self,
         *,

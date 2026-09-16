@@ -362,15 +362,17 @@ path. Pass :func:`~torchrl.data.tensordict_collate` as ``collate_fn``: the
 default torch collation does not handle tensordicts.
 
 A storage reads like any map-style dataset. Torch samplers pick the indices
-and every index batch is fetched with a single storage read, collated as the
-buffer would collate it:
+and every index batch is fetched with a single storage read. The collate
+function also stacks lists of samples, lazily when their shapes differ, so
+storages compose with :class:`torch.utils.data.ConcatDataset` and per-item
+storages such as :class:`~torchrl.data.replay_buffers.ListStorage`:
 
     >>> import torch
     >>> from tensordict import TensorDict
     >>> from torch.utils.data import DataLoader
     >>> from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
     >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
-    >>> rb.extend(TensorDict({"obs": torch.arange(100)}, [100]))
+    >>> _ = rb.extend(TensorDict({"obs": torch.arange(100)}, [100]))
     >>> loader = DataLoader(rb.storage, batch_size=4, shuffle=True, collate_fn=tensordict_collate)
     >>> next(iter(loader))["obs"].shape
     torch.Size([4])
@@ -404,7 +406,7 @@ are scanned once per worker rather than once per batch:
     ...     sampler=SliceSampler(num_slices=4, traj_key="episode", cache_values=True),
     ...     batch_size=32,
     ... )
-    >>> rb.extend(TensorDict({"obs": torch.randn(1000, 3), "episode": torch.arange(1000) // 50}, [1000]))
+    >>> _ = rb.extend(TensorDict({"obs": torch.randn(1000, 3), "episode": torch.arange(1000) // 50}, [1000]))
     >>> loader = DataLoader(
     ...     rb.as_dataset(num_batches=8),
     ...     batch_size=None,

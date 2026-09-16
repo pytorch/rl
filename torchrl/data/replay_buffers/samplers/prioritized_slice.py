@@ -204,6 +204,8 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
 
     """
 
+    requires_shared_state = True
+
     def __init__(
         self,
         max_capacity: int,

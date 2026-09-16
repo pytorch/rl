@@ -29,8 +29,9 @@ class Storage(Dataset):
 
     Storages are :class:`torch.utils.data.Dataset` instances: a
     :class:`torch.utils.data.DataLoader` reads them with any torch sampler and
-    fetches every index batch through a single :meth:`get` call on the
-    flattened storage, collated as the replay buffer would.
+    fetches every index batch through a single :meth:`get` call. Pass
+    :func:`~torchrl.data.tensordict_collate` as the loader's ``collate_fn``
+    and read multi-dimensional storages through :meth:`flatten`.
 
     The storage does not need to have a definite size, but if it does one should
     make sure that it is compatible with the buffer size.
@@ -214,10 +215,12 @@ class Storage(Dataset):
         return self.get(item)
 
     def __getitems__(self, index):
-        from torchrl.data.replay_buffers.storages.utils import _get_default_collate
-
-        storage = self.flatten()
-        return _get_default_collate(storage)(storage.get(index))
+        if self.ndim > 1:
+            raise RuntimeError(
+                f"A {type(self).__name__} with ndim={self.ndim} is not a flat "
+                "dataset. Read storage.flatten() instead."
+            )
+        return self.get(index)
 
     def __setitem__(self, index, value):
         """Sets values in the storage without updating the cursor or length."""
