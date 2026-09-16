@@ -30,8 +30,6 @@ from examples.microduck.ppo_mujoco import (
     make_env,
     make_evaluator,
     make_models,
-    make_render_policy,
-    make_tasks,
     save_checkpoint,
 )
 from tensordict import TensorDictBase

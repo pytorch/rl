@@ -67,7 +67,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import load_checkpoint
+from torchrl.render import load_checkpoint, save_render_checkpoint
 
 if _has_mujoco:
     import mujoco
