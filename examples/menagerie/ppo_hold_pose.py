@@ -260,6 +260,7 @@ def train(args: argparse.Namespace) -> Path:
         frames_per_batch=args.frames_per_batch,
         total_frames=args.frames,
         device=device,
+        auto_register_policy_transforms=True,
     )
     buffer = ReplayBuffer(
         storage=LazyTensorStorage(args.frames_per_batch, device=device),

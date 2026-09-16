@@ -92,7 +92,7 @@ class MenagerieTask:
     control_cost_weight: float = 0.0
     alive_bonus: float = 0.0
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
         if isinstance(self.site_names, str):
             raise TypeError("site_names must be a sequence of site names, not a str.")
         object.__setattr__(self, "site_names", tuple(self.site_names))
@@ -291,7 +291,7 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
         backend: BackendName = "mujoco",
         max_episode_steps: int = 1000,
         **kwargs: Any,
-    ) -> None:
+    ):
         for forbidden in ("xml_path", "patch_xml"):
             if forbidden in kwargs:
                 raise ValueError(
