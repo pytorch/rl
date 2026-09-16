@@ -1,6 +1,6 @@
 # TorchRL v0.14.1
 
-TorchRL 0.14.1 is a maintenance release with 17 bug fixes covering environment resets, replay buffers, planning, training, and LLM workflows. It also corrects transform device handling and introduces the v0.17 device deprecations described below.
+TorchRL 0.14.1 is a maintenance release with 19 bug fixes covering environment resets, replay buffers, planning, training, logging, and LLM workflows. It also corrects transform device handling and introduces the v0.17 device deprecations described below.
 
 ## Compatibility and installation
 
@@ -31,6 +31,11 @@ pip install "torch==2.14.0" "torchrl==0.14.1" "tensordict>=0.14.2,<0.15.0"
 - `CrossQLoss.set_keys` works after a value estimator has been created. Renamed reward, done, and terminated keys propagate to the estimator without accessing a nonexistent value key. [#4372](https://github.com/pytorch/rl/pull/4372) by @yupengtang.
 - TD3 trainer construction works with multiprocessing collectors that do not expose an `env` attribute when the loss partial supplies `action_spec` or `bounds`. Explicit action domains are preserved; collectors with an environment still provide inferred bounds when needed. [#4368](https://github.com/pytorch/rl/pull/4368) by @aswanth-07.
 
+### Logging and resume
+
+- `CSVLogger` counts text and video steps independently. Loading legacy checkpoints also preserves existing text and hyperparameter files by continuing their numbering instead of overwriting them. [#4374](https://github.com/pytorch/rl/pull/4374) by @yupengtang.
+- Logger checkpoints preserve `log_dir=None` and store configured directories as absolute paths, so resuming after a working-directory change uses the original location. `WandbLogger` rejects loading state from a different live run instead of silently changing its recorded identity. Logger fixes from [#4382](https://github.com/pytorch/rl/pull/4382) by @vmoens.
+
 ### LLM workflows and transforms
 
 - `vLLMWrapper` no longer fills missing prompt log-probabilities with invented zero scores or exposes response-only scores as a full sequence. Full-sequence alignment and GRPO/KL masking remain correct when vLLM generation omits prompt scores. [#4255](https://github.com/pytorch/rl/pull/4255) by @YeonwooSung.
@@ -42,6 +47,7 @@ pip install "torch==2.14.0" "torchrl==0.14.1" "tensordict>=0.14.2,<0.15.0"
 
 ## Migration and deprecations
 
+- `WandbLogger.load_state_dict` raises `RuntimeError` when the saved run ID differs from the active run ID. Construct the logger with the saved ID and `resume="must"` before loading, or use `get_logger(..., state_dict=saved_state)` to resume the saved run. [#4382](https://github.com/pytorch/rl/pull/4382) by @vmoens.
 - When vLLM generation omits usable prompt scores, `LogProbs.prompt` remains unset (`None`) and `LogProbs.full` contains `NaN` at unavailable prompt positions while retaining prompt-plus-response length. Custom consumers should mask these alignment entries; `GRPOLoss` and `KLComputation` exclude unavailable prompt positions from their computations. Use `generate=False` when prompt scores are required. [#4255](https://github.com/pytorch/rl/pull/4255) by @YeonwooSung.
 - `TicTacToeEnv.win` now returns a boolean tensor with shape `[..., 1]` instead of a Python boolean. Direct callers should handle the batch-shaped result; use `.item()` only when a scalar result is required. [#4349](https://github.com/pytorch/rl/pull/4349) by @YeonwooSung.
 - `Tokenizer.device` is deprecated and will be removed in **v0.17**. Use `Tokenizer.out_device`, which follows the parent environment; `None` leaves outputs on the tokenizer's chosen device. [#4352](https://github.com/pytorch/rl/pull/4352) by @YeonwooSung.
