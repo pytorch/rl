@@ -59,6 +59,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
+import mujoco
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import NormalParamExtractor, TensorDictModule
@@ -94,7 +95,7 @@ TASK_ARGS = (
     "robot",
     "entry",
     "frame_skip",
-    "max_steps",
+    "max_episode_steps",
     "download",
     "fall_height",
     "alive_bonus",
@@ -134,7 +135,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--frame-skip", type=int, default=10, help="Physics steps per action."
     )
-    parser.add_argument("--max-steps", type=int, default=1000, help="Episode horizon.")
+    parser.add_argument(
+        "--max-episode-steps", type=int, default=1000, help="Episode horizon."
+    )
     parser.add_argument(
         "--download",
         action="store_true",
@@ -475,7 +478,7 @@ def make_single_env(
         frame_skip=settings["frame_skip"],
         seed=seed,
         device=device,
-        max_episode_steps=settings["max_steps"],
+        max_episode_steps=settings["max_episode_steps"],
         from_pixels=from_pixels,
         camera_id=camera_id,
         render_width=render_width,
@@ -491,6 +494,12 @@ def make_single_env(
         raise ValueError(
             "The walk task expects one position actuator per joint after the free "
             f"joint, got {env.action_spec.shape[-1]} actuators for {home.numel()} joints."
+        )
+    if (env.mj_model.actuator_biastype != mujoco.mjtBias.mjBIAS_AFFINE).any():
+        raise ValueError(
+            "The walk task drives position servos, but this entry has torque or "
+            "unbiased actuators; pick the position-controlled scene, e.g. "
+            "entry='scene_mjx' for the Unitree Go2."
         )
     return TransformedEnv(
         env,
@@ -509,7 +518,7 @@ def make_env(
     task: Literal["hold_pose", "walk"] | None = None,
     entry: str | None = None,
     frame_skip: int | None = None,
-    max_steps: int | None = None,
+    max_episode_steps: int | None = None,
     download: bool | None = None,
     fall_height: float | None = None,
     alive_bonus: float | None = None,
@@ -543,7 +552,7 @@ def make_env(
         "robot": robot,
         "entry": entry,
         "frame_skip": frame_skip,
-        "max_steps": max_steps,
+        "max_episode_steps": max_episode_steps,
         "download": download,
         "fall_height": fall_height,
         "alive_bonus": alive_bonus,
@@ -635,6 +644,11 @@ def train(args: argparse.Namespace) -> Path:
     actor = make_policy(env, device=device, hidden=args.hidden)
     critic = make_critic(env, device=device, hidden=args.hidden)
     frames_per_batch = args.num_envs * args.steps_per_batch
+    if frames_per_batch < args.minibatch:
+        raise ValueError(
+            f"minibatch={args.minibatch} exceeds the {frames_per_batch} frames "
+            "collected per batch, so no update would run."
+        )
     collector = Collector(
         env,
         actor,

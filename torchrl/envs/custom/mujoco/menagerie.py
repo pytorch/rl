@@ -57,8 +57,11 @@ class MenagerieTask:
             (default) omits the entry.
         terminate_below_height (float, optional): if set, the episode
             terminates once the height (world ``z``) of the floating base drops
-            below this value, in meters. Requires a free joint. ``None``
-            (default) never terminates on height.
+            below this value, in meters. The base is the first free joint in
+            model order, the robot's in Menagerie scenes that carry one; a
+            scene whose only free joint belongs to an object (a cube on a
+            table) would track that object instead. ``None`` (default) never
+            terminates on height.
         pose_weight (float, optional): weight of the pose term,
             ``exp(-mean((q - q_key)^2) / pose_std^2)`` over the hinge and
             slide joints, where ``q_key`` is the reset keyframe. ``0.0``
@@ -134,8 +137,11 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
     in the units and ranges of the MJCF). The observation is the raw state:
     ``qpos``, ``qvel``, the model's ``sensordata`` when it defines sensors,
     and the world positions of the sites named in the task under
-    ``site_positions``. A reset starts from the model's ``home`` keyframe plus
-    ``reset_noise_scale`` uniform noise. The episode ends at
+    ``site_positions``. As after MuJoCo's own ``mj_step``, ``sensordata``,
+    ``site_positions`` and contacts are computed before the last physics
+    substep of the env step, so they trail ``qpos`` and ``qvel`` by one
+    substep; a reset returns them consistent. A reset starts from the model's
+    ``home`` keyframe plus ``reset_noise_scale`` uniform noise. The episode ends at
     ``max_episode_steps``, when the state stops being finite or, if the task
     asks for it, when a floating base drops below a height. The reward is the
     weighted sum of the :class:`MenagerieTask` terms, all off by default; a
@@ -178,9 +184,11 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
             Defaults to the :data:`MENAGERIE_ENV_VAR` environment variable,
             then to the ``mujoco-menagerie`` package cache.
         download (bool, optional): whether the ``mujoco-menagerie`` package
-            may download the robot into its cache when no other source
-            resolves. Defaults to ``False``, in which case a missing robot
-            raises ``FileNotFoundError`` describing every option.
+            may download the robot into its cache. Only consulted when neither
+            ``menagerie_path`` nor the environment variable is set: a checkout
+            that lacks the robot raises instead of falling back to the
+            package. Defaults to ``False``, in which case a robot missing from
+            the cache raises ``FileNotFoundError`` describing every option.
         task (MenagerieTask, optional): the reset keyframe, the observed
             sites, the termination height and the reward weights. Defaults to
             ``MenagerieTask()``: the ``home`` keyframe, no sites, no
@@ -375,11 +383,25 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
                 "Pass download=True to fetch it, or point menagerie_path or "
                 f"{MENAGERIE_ENV_VAR} at a mujoco_menagerie checkout."
             )
-        return Path(spec.xml(entry, cache)).resolve()
+        entry_point = spec.entry(entry)
+        try:
+            robot_dir = spec.path(cache)
+        except mujoco_menagerie.MenagerieError as err:
+            raise FileNotFoundError(
+                f"{robot!r} could not be fetched from the mujoco-menagerie "
+                f"package: {err}. Point menagerie_path or {MENAGERIE_ENV_VAR} at "
+                "a mujoco_menagerie checkout instead."
+            ) from err
+        return (Path(robot_dir) / entry_point.file).resolve()
 
     @staticmethod
     def _resolve_in_checkout(robot: str, entry: str | None, path: Path) -> Path:
         if path.is_file():
+            if entry is not None and path.stem != entry:
+                raise ValueError(
+                    f"menagerie_path points at {path.name} but entry={entry!r} "
+                    "was requested; pass the robot directory or drop entry."
+                )
             return path.resolve()
         if (path / robot).is_dir():
             robot_dir = path / robot
@@ -407,13 +429,22 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
         control_cost_weight: float = 0.01,
         **overrides: Any,
     ) -> MenagerieTask:
-        """Hold the reset keyframe pose under a control cost.
+        r"""Hold the reset keyframe pose under a control cost.
 
         The usual first task for a new robot: the reward is the pose term
         times ``pose_weight`` plus the control cost times
-        ``control_cost_weight``. ``overrides`` set the other
-        :class:`MenagerieTask` fields, typically ``terminate_below_height``
-        and ``alive_bonus`` for a floating-base robot.
+        ``control_cost_weight``.
+
+        Keyword Args:
+            pose_weight (float, optional): weight of the pose term. Defaults
+                to ``1.0``.
+            pose_std (float, optional): scale of the pose term. Defaults to
+                ``0.5``.
+            control_cost_weight (float, optional): weight of the control cost.
+                Defaults to ``0.01``.
+            \*\*overrides: the other :class:`MenagerieTask` fields, typically
+                ``terminate_below_height`` and ``alive_bonus`` for a
+                floating-base robot.
         """
         return MenagerieTask(
             pose_weight=pose_weight,
