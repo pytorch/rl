@@ -255,11 +255,16 @@ class TestCSVLogger:
         assert (texts / "hparams0.txt").read_text() == "lr: 0.1"
         assert (texts / "hparams1.txt").read_text() == "lr: 0.2"
 
-    def test_factory_resume_appends_same_run(self, tmp_path):
-        logger = get_logger("csv", str(tmp_path), "saved")
+    @pytest.mark.parametrize("relative_dir", [False, True])
+    def test_factory_resume_appends_same_run(self, tmp_path, monkeypatch, relative_dir):
+        monkeypatch.chdir(tmp_path)
+        logger = get_logger("csv", "." if relative_dir else str(tmp_path), "saved")
         logger.log_scalar("reward", 1.0)
         state = logger.state_dict()
         logger.close()
+        resumed_cwd = tmp_path / "resumed_cwd"
+        resumed_cwd.mkdir()
+        monkeypatch.chdir(resumed_cwd)
         resumed = get_logger(
             "csv", str(tmp_path / "unused"), "unused", state_dict=state
         )
@@ -494,6 +499,51 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
         resumed.finish()
 
     assert calls == [("login", base_url), ("init", base_url)] * 2
+
+
+class TestWandbIdentity:
+    def test_rejects_other_run(self, monkeypatch):
+        run_ids = iter(["run-a", "run-b", "run-a", "run-a"])
+        calls = []
+
+        def init(**kwargs):
+            calls.append(kwargs)
+            return argparse.Namespace(
+                config={}, define_metric=mock.Mock(), id=next(run_ids), log=mock.Mock()
+            )
+
+        monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+        monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+
+        source = WandbLogger(exp_name="test", log_env_packages=False)
+        source.log_scalar("reward", 1.0)
+        state = source.state_dict()
+        assert state["local"]["id"] == "run-a"
+
+        # A logger attached to another run must not silently rebind its id while
+        # its metrics keep flowing to the new run.
+        other = WandbLogger(exp_name="test", log_env_packages=False)
+        with pytest.raises(RuntimeError, match="run 'run-b'.*run 'run-a'"):
+            other.load_state_dict(state)
+
+        same = WandbLogger(
+            exp_name="test", id="run-a", resume="must", log_env_packages=False
+        )
+        same.load_state_dict(state)
+        assert same._step_registry == source._step_registry
+
+        # The default W&B directory remains None when resuming via the factory.
+        resumed = get_logger(
+            "wandb",
+            "unused",
+            "unused",
+            state_dict=state,
+            wandb_kwargs={"log_env_packages": False},
+        )
+        resumed.log_scalar("reward", 2.0)
+        assert calls[-1]["dir"] is None
+        assert calls[-1]["id"] == "run-a"
+        assert calls[-1]["resume"] == "must"
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")

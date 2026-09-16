@@ -153,8 +153,17 @@ class WandbLogger(Logger):
         }
 
     def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
-        if "id" in state_dict:
-            self.id = state_dict["id"]
+        saved_id = state_dict.get("id")
+        live_id = getattr(self.experiment, "id", self.id)
+        if saved_id and live_id and saved_id != live_id:
+            raise RuntimeError(
+                f"This WandbLogger logs to run {live_id!r} but the checkpoint was "
+                f"written by run {saved_id!r}. Construct the logger for the saved "
+                "run before loading, e.g. WandbLogger(..., id=saved_id, "
+                "resume='must') or get_logger(..., state_dict=saved_state)."
+            )
+        if saved_id:
+            self.id = saved_id
         self._step_registry.clear()
         self._step_registry.update(state_dict.get("step_registry", {}))
         self._defined_step_metrics = set(state_dict.get("defined_step_metrics", ()))
