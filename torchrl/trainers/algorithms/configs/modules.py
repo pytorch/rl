@@ -83,7 +83,7 @@ class LowLevelControllerConfig(NetworkConfig):
     decision_spec: Any = MISSING
     adapter: Any = None
     group_key: Any = None
-    state_key: Any = "_controller"
+    state_key: Any = "controller"
     policy_action_key: Any = "action"
     action_key: Any = "action"
     reset_key: Any = None
@@ -99,7 +99,7 @@ def _make_low_level_controller(**kwargs: Any) -> LowLevelController:
         decision_spec=kwargs.pop("decision_spec"),
         adapter=kwargs.pop("adapter", None),
         group_key=_normalize_hydra_key(kwargs.pop("group_key", None)),
-        state_key=_normalize_hydra_key(kwargs.pop("state_key", "_controller")),
+        state_key=_normalize_hydra_key(kwargs.pop("state_key", "controller")),
         policy_action_key=_normalize_hydra_key(
             kwargs.pop("policy_action_key", "action")
         ),

@@ -189,7 +189,7 @@ for before, after in zip(low_level_weights, low_level_policy.parameters()):
 #    training_env = ClosedLoopMultiAction.from_env(task_env, controller, steps=5)
 #
 # State declared by policy or adapter primers lives under
-# ("agents", "_controller"). The pretrained policy still reads its original
+# ("agents", "controller"). The pretrained policy still reads its original
 # recurrent_state and is_init keys. Every physical step advances its state,
 # including the final step. An individual reset restores that row's declared
 # defaults and sets its is_init flag. Hidden mutable Python state cannot be

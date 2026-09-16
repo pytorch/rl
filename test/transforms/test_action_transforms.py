@@ -1815,13 +1815,13 @@ class TestClosedLoopMultiAction:
             steps=2,
         )
         td = env.reset()
-        assert (td["agents", "_controller", "memory"] == 7).all()
+        assert (td["agents", "controller", "memory"] == 7).all()
         td.update(env.full_action_spec.one())
         next_td = env.step(td)["next"]
-        assert (next_td["agents", "_controller", "memory"][:, 0] == 7).all()
-        assert next_td["agents", "_controller", "is_init"][:, 0].all()
-        assert (next_td["agents", "_controller", "memory"][:, 1:] == 2).all()
-        assert not next_td["agents", "_controller", "is_init"][:, 1:].any()
+        assert (next_td["agents", "controller", "memory"][:, 0] == 7).all()
+        assert next_td["agents", "controller", "is_init"][:, 0].all()
+        assert (next_td["agents", "controller", "memory"][:, 1:] == 2).all()
+        assert not next_td["agents", "controller", "is_init"][:, 1:].any()
         env.close()
 
     def test_plain_controller_preserves_unrelated_actions(self):
@@ -1873,7 +1873,7 @@ class TestClosedLoopMultiAction:
                 else transition["next", group_key]
             )
             assert group["observation"].shape[-2:] == (3, 1)
-            assert (group["_controller", "memory"] == 3 * (decision + 1)).all()
+            assert (group["controller", "memory"] == 3 * (decision + 1)).all()
             td = env.step_mdp(transition)
         env.close()
 
@@ -2030,6 +2030,10 @@ class TestClosedLoopMultiAction:
         collector = Collector(env, actor, frames_per_batch=16, total_frames=16)
         try:
             batch = next(iter(collector))
+            assert ("agents", "controller", "memory") in batch.keys(True, True)
+            assert ("next", "agents", "controller", "memory") in batch.keys(
+                True, True
+            )
             reward = batch["next", "agents", "reward"]
             for key in ("done", "terminated"):
                 batch["next", "agents", key] = (
@@ -2093,13 +2097,13 @@ class TestClosedLoopMultiAction:
             torch.testing.assert_close(
                 transition["next", "reward"], torch.full((1,), expected_reward)
             )
-            assert next_group["_controller", "memory"].item() == steps
+            assert next_group["controller", "memory"].item() == steps
         else:
             torch.testing.assert_close(
                 next_group["observation"][1:], torch.full((2, 1), expected)
             )
-            assert (next_group["_controller", "memory"][1:] == steps).all()
-            assert next_group["_controller", "memory"][0].item() == 1
+            assert (next_group["controller", "memory"][1:] == steps).all()
+            assert next_group["controller", "memory"][0].item() == 1
         root_group = transition if group_key is None else transition[group_key]
         original_group = before if group_key is None else before[group_key]
         torch.testing.assert_close(
@@ -2110,7 +2114,7 @@ class TestClosedLoopMultiAction:
             root_group["high_log_prob"], original_group["high_log_prob"]
         )
         assert next_td["count"].item() == steps
-        assert not next_group["_controller", "memory"].requires_grad
+        assert not next_group["controller", "memory"].requires_grad
         env.close()
 
     @pytest.mark.parametrize("mode", ["sum", "mean", "last", "stack"])
@@ -2132,7 +2136,7 @@ class TestClosedLoopMultiAction:
         result = env.step(td)["next"]
         torch.testing.assert_close(result["count"], torch.tensor([[1], [3], [3]]))
         torch.testing.assert_close(
-            result["_controller", "memory"], torch.tensor([[1.0], [3.0], [3.0]])
+            result["controller", "memory"], torch.tensor([[1.0], [3.0], [3.0]])
         )
         expected = {
             "sum": [0.5, 2.16, 2.16],
@@ -2160,7 +2164,7 @@ class TestClosedLoopMultiAction:
         )
         reset = env.reset(reset_input)
         torch.testing.assert_close(
-            reset["_controller", "memory"], torch.tensor([[0.0], [3.0], [3.0]])
+            reset["controller", "memory"], torch.tensor([[0.0], [3.0], [3.0]])
         )
         env.close()
 

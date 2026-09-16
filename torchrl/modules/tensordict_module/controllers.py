@@ -39,7 +39,8 @@ class LowLevelController(TensorDictModuleBase):
         group_key (NestedKey, optional): group whose batch dimensions enumerate
             controller instances. Defaults to None (the root TensorDict).
         state_key (NestedKey, optional): state namespace within the group.
-            Defaults to "_controller".
+            Defaults to "controller". The non-private namespace is retained by
+            collectors and replay buffers.
         policy_action_key (NestedKey, optional): action output of the wrapped
             policy. Defaults to "action".
         action_key (NestedKey, optional): destination action within the group.
@@ -79,7 +80,7 @@ class LowLevelController(TensorDictModuleBase):
         *,
         adapter: TensorDictModuleBase | Transform | None = None,
         group_key: NestedKey | None = None,
-        state_key: NestedKey = "_controller",
+        state_key: NestedKey = "controller",
         policy_action_key: NestedKey = "action",
         action_key: NestedKey = "action",
         reset_key: NestedKey | None = None,
