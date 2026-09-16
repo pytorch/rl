@@ -12,6 +12,7 @@ import importlib.util
 import math
 import os
 import shutil
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -3246,6 +3247,18 @@ class TestMujoco:
         with pytest.raises(ValueError, match="xml_path"):
             MujocoModelEnv(scene, xml_path=scene)
         env.close()
+
+    def test_model_sources_import_after_collectors(self):
+        # sources.py must not pull torchrl.data.datasets in while torchrl.data
+        # is still initializing, whichever package is imported first.
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import torchrl.collectors; from torchrl.envs import GitHubModelSource",
+            ],
+            check=True,
+        )
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_github_model_source(self, tmp_path, monkeypatch):

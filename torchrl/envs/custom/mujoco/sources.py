@@ -26,9 +26,10 @@ from tempfile import TemporaryDirectory
 from typing import Protocol
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data.datasets.utils import _get_root_dir
 
-GITHUB_MODELS_ROOT = _get_root_dir("github_models")
+GITHUB_MODELS_ROOT = os.path.join(
+    os.path.expanduser("~"), ".cache", "torchrl", "github_models"
+)
 _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 _REPO_SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 _TIMEOUT = 60.0
