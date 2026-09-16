@@ -41,6 +41,10 @@ coverage run -m pytest ${this_dir}/test_tutorials.py \
     -vvv \
     --capture no
 
+# Exercise the full-training entry point with the tutorial's native MuJoCo deps.
+python -m examples.microduck.train_skills --smoke \
+    --output-dir "${json_report_dir}/microduck-smoke"
+
 coverage combine -q || true
 coverage xml -i
 
