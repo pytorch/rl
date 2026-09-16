@@ -23,16 +23,23 @@ A UR5e from a local checkout, as a quick check::
     TORCHRL_MUJOCO_MENAGERIE_PATH=~/mujoco_menagerie \\
         python examples/menagerie/ppo_hold_pose.py --robot universal_robots_ur5e --smoke
 
-Render the checkpoint as a notebook: a saved rollout with pixel frames, plus a
-cell that collects a fresh one in the kernel. The checkpoint records the
-training arguments, so the factories rebuild the same robot and task;
-``--env-kwargs '{"robot": "..."}'`` overrides them::
+Render the checkpoint as a video from the scene's first camera (``--fps 100``
+is real time: the control step is 10 ms), or as a notebook with a saved
+rollout and a cell that collects a fresh one in the kernel. The checkpoint
+records the training arguments, so the factories rebuild the same robot and
+task; ``--env-kwargs`` overrides them and sets the render camera and size::
 
     rlrender --ckpt menagerie_ppo.ckpt \\
         --policy examples/menagerie/ppo_hold_pose.py:make_policy \\
         --env examples/menagerie/ppo_hold_pose.py:make_env \\
+        --env-kwargs '{"camera_id": 0, "render_width": 640, "render_height": 480}' \\
         --deterministic --from-pixels --render-backend pixels \\
-        --max-steps 300 --fps 50 --format ipynb --out menagerie_ppo.ipynb \\
+        --max-steps 300 --fps 100 --format mp4 --out menagerie_ppo.mp4 --overwrite
+    rlrender --ckpt menagerie_ppo.ckpt \\
+        --policy examples/menagerie/ppo_hold_pose.py:make_policy \\
+        --env examples/menagerie/ppo_hold_pose.py:make_env \\
+        --deterministic --from-pixels --render-backend pixels \\
+        --max-steps 300 --fps 100 --format ipynb --out menagerie_ppo.ipynb \\
         --notebook-rollout-mode both --overwrite
 """
 
@@ -126,6 +133,9 @@ def make_env(
     seed: int | None = None,
     device: torch.device | str | None = None,
     from_pixels: bool = False,
+    camera_id: int = -1,
+    render_width: int = 320,
+    render_height: int = 240,
     checkpoint: Mapping[str, Any] | None = None,
 ) -> TransformedEnv:
     """Build the batched hold-pose env; ``rlrender`` calls this with the checkpoint.
@@ -133,7 +143,9 @@ def make_env(
     Explicit arguments win over the training arguments recorded in
     ``checkpoint``, which win over the defaults of :func:`parse_args`. The
     transform concatenates ``qpos`` and ``qvel`` into the ``observation`` the
-    policy reads. ``from_pixels`` renders MuJoCo's free camera for ``rlrender``.
+    policy reads. ``from_pixels`` adds frames from ``camera_id`` (MuJoCo's free
+    camera by default, ``0`` for the first camera of the scene) for
+    ``rlrender``, e.g. ``--env-kwargs '{"camera_id": 0, "render_width": 640}'``.
     """
     recorded = dict((checkpoint or {}).get("config") or {})
     defaults = vars(parse_args([]))
@@ -167,9 +179,9 @@ def make_env(
         device=device,
         max_episode_steps=settings["max_steps"],
         from_pixels=from_pixels,
-        camera_id=-1,
-        render_width=320,
-        render_height=240,
+        camera_id=camera_id,
+        render_width=render_width,
+        render_height=render_height,
     )
     return TransformedEnv(
         env, CatTensors(in_keys=["qpos", "qvel"], out_key="observation", del_keys=False)
