@@ -920,6 +920,15 @@ class TestMujoco:
             set_state=True,
         )
         torch.testing.assert_close(env.head_pitch(), torch.zeros(1), atol=1e-4, rtol=0)
+        # Reward inspection must use the supplied snapshot, not the backend's
+        # current site transform.
+        torch.testing.assert_close(
+            env.reward_features(nose_down, action)["head_pitch"],
+            torch.full((1,), -math.pi / 4),
+            atol=1e-3,
+            rtol=0,
+        )
+        torch.testing.assert_close(env.head_pitch(), torch.zeros(1), atol=1e-4, rtol=0)
         paid_level = env._reward_components(level, action)[head_level]
         turned = level.clone()
         turned["qpos"][..., 3:7] = torch.tensor(

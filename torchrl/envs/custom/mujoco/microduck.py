@@ -1326,10 +1326,15 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         the IMU to the beak tip is tilted down by 41 degrees in the robot's
         head frame and must not be used as a forward direction.
         """
-        return self._head_angles(self._backend.qpos)[0]
+        return self._head_angles()[0]
 
-    def _head_angles(self, qpos: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        gaze = -self._backend.site_rotations([self._head_site_id])[:, 0, :, 2]
+    def _head_angles(
+        self, qpos: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        rotations = self._backend.site_rotations([self._head_site_id], qpos=qpos)
+        gaze = -rotations[:, 0, :, 2]
+        if qpos is None:
+            qpos = self._backend.qpos
         pitch = torch.atan2(gaze[..., 2], gaze[..., :2].norm(dim=-1))
         forward = _body_forward_vector(qpos[..., 3:7].to(gaze.dtype))
         yaw = torch.atan2(
@@ -1613,11 +1618,20 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         normalized action that led to it; the contact bookkeeping is the
         env's current one. See :meth:`register_reward` for the entries.
         """
+        return self._reward_features(state, action, state_is_current=False)
+
+    def _reward_features(
+        self,
+        state: TensorDictBase,
+        action: torch.Tensor,
+        *,
+        state_is_current: bool,
+    ) -> TensorDictBase:
         qpos = state["qpos"].to(self.dtype)
         qvel = state["qvel"].to(self.dtype)
         quaternion = qpos[..., 3:7]
         phase, _ = self._gait_clock()
-        head_pitch, head_yaw = self._head_angles(qpos)
+        head_pitch, head_yaw = self._head_angles(None if state_is_current else qpos)
         return TensorDict(
             {
                 "body_velocity": _body_frame_linear_velocity(quaternion, qvel[..., :3]),
@@ -1733,7 +1747,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     ) -> torch.Tensor:
         del state
         self._update_gait_state()
-        terms = self._reward_terms(self.reward_features(next_state, action))
+        terms = self._reward_terms(
+            self._reward_features(next_state, action, state_is_current=True)
+        )
         return (terms * self._task.reward_weights).sum(dim=-1, keepdim=True)
 
     def _compute_done(
