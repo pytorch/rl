@@ -596,6 +596,15 @@ def microduck_metrics(
     for walking and sidestepping, stillness for standing, and with
     ``jumping=True`` the fraction of time with both feet off the ground
     (which needs the env's ``diagnostics``).
+
+    With position diagnostics, ``drift_speed`` is net displacement divided
+    by elapsed time in m/s; ``displacement_max`` also reports the largest
+    excursion in metres, including trajectories that return to the start.
+    Heading rates in rad/s are unwrapped per episode, with extrema exposing
+    episodes that turn in the wrong direction despite a correct mean.
+    ``ground_forward_speed`` and ``ground_lateral_speed`` use horizontal
+    position differences and the interval's midpoint heading, so trunk pitch
+    does not mix vertical hopping into measured ground speed.
     """
     mask = trajectories["collector", "mask"]
     lengths = mask.sum(-1)
@@ -615,7 +624,7 @@ def microduck_metrics(
     last = trajectories["next", "terminated"][..., 0].gather(
         -1, (lengths - 1).unsqueeze(-1)
     )
-    return {
+    metrics = {
         "tracking_error": float(error[mask].mean()),
         "forward_speed": float(velocity[..., 0][mask].mean()),
         "lateral_speed": float(velocity[..., 1][mask].mean()),
@@ -625,6 +634,68 @@ def microduck_metrics(
         "task_score": float(score[mask].mean()),
         "task_score_min": float(episode_score.min()),
     }
+    if ("next", "diagnostic_head_pitch") in trajectories.keys(True):
+        for name in ("head_pitch", "head_yaw", "yaw_rate"):
+            values = trajectories["next", f"diagnostic_{name}"][..., 0]
+            metrics[name] = float(values[mask].mean())
+            metrics[f"{name}_abs"] = float(values[mask].abs().mean())
+            if name != "yaw_rate":
+                metrics[f"{name}_abs_p95"] = float(values[mask].abs().quantile(0.95))
+        height = trajectories["next", "diagnostic_height_gain"][..., 0]
+        metrics["hop_height_max"] = float(height.masked_fill(~mask, 0).amax(-1).mean())
+        metrics["planar_speed"] = float(velocity.norm(dim=-1)[mask].mean())
+        pairs = mask[..., 1:] & mask[..., :-1]
+        takeoffs = (airborne[..., 1:] > airborne[..., :-1]) & pairs
+        landings = (airborne[..., 1:] < airborne[..., :-1]) & pairs
+        metrics["takeoffs_per_episode"] = float(takeoffs.sum(-1).float().mean())
+        metrics["landings_per_episode"] = float(landings.sum(-1).float().mean())
+        metrics["hopping_episode_fraction"] = float(
+            ((takeoffs.sum(-1) >= 2) & (landings.sum(-1) >= 2)).float().mean()
+        )
+    if ("next", "diagnostic_position_x") in trajectories.keys(True):
+        # Net drift is distinct from the back-and-forth velocity of a hop.
+        displacement = []
+        offsets = []
+        for name in ("position_x", "position_y", "time"):
+            values = trajectories["next", f"diagnostic_{name}"][..., 0]
+            if name != "time":
+                offsets.append(values - values[..., :1])
+            else:
+                intervals = (values[..., 1:] - values[..., :-1]).clamp_min(1e-6)
+            displacement.append(
+                values.gather(-1, (lengths - 1).unsqueeze(-1)).squeeze(-1)
+                - values[..., 0]
+            )
+        elapsed = displacement[2].clamp_min(1e-6)
+        drift = torch.stack(displacement[:2], -1).norm(dim=-1) / elapsed
+        metrics["drift_speed"] = float(drift.mean())
+        metrics["drift_speed_max"] = float(drift.max())
+        # Returning to the starting point must not hide a large excursion.
+        distance = torch.stack(offsets, -1).norm(dim=-1).masked_fill(~mask, 0)
+        metrics["displacement_max"] = float(distance.max())
+        heading = trajectories["next", "diagnostic_heading"][..., 0]
+        delta = heading[..., 1:] - heading[..., :-1]
+        delta = torch.atan2(delta.sin(), delta.cos())
+        delta = delta * (mask[..., 1:] & mask[..., :-1])
+        heading_rate = delta.sum(-1) / elapsed
+        metrics["heading_rate"] = float(heading_rate.mean())
+        metrics["heading_rate_min"] = float(heading_rate.min())
+        metrics["heading_rate_max"] = float(heading_rate.max())
+        position = torch.stack(offsets, -1)
+        ground_velocity = (position[..., 1:, :] - position[..., :-1, :]) / intervals[
+            ..., None
+        ]
+        midpoint = heading[..., :-1] + 0.5 * delta
+        vx, vy = ground_velocity.unbind(-1)
+        pairs = mask[..., 1:] & mask[..., :-1]
+        count = pairs.sum().clamp_min(1)
+        metrics["ground_forward_speed"] = float(
+            (vx * midpoint.cos() + vy * midpoint.sin())[pairs].sum() / count
+        )
+        metrics["ground_lateral_speed"] = float(
+            (-vx * midpoint.sin() + vy * midpoint.cos())[pairs].sum() / count
+        )
+    return metrics
 
 
 def make_evaluator(

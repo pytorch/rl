@@ -67,7 +67,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import load_checkpoint
+from torchrl.render import load_checkpoint, save_render_checkpoint
 
 if _has_mujoco:
     import mujoco
@@ -699,6 +699,7 @@ class TestMujoco:
                 MicroDuckEnv.sidestep_task(-0.15),
                 MicroDuckEnv.jump_task(),
                 MicroDuckEnv.standing_task(),
+                MicroDuckEnv.jump_task(speed=0.3),
             ],
             seed=0,
         )
@@ -811,6 +812,23 @@ class TestMujoco:
             components["diagnostic_reward_drift"],
             torch.full((1, 1), MicroDuckEnv.DRIFT_WEIGHT * 0.5 * 0.02),
         )
+        # A tilted trunk must not turn horizontal travel into a launch, or
+        # make a purely vertical hop pay a horizontal drift penalty.
+        tilted = drifting.clone()
+        tilted["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 6), 0.0, math.sin(math.pi / 6), 0.0]
+        )
+        tilted["qvel"].zero_()
+        tilted["qvel"][..., 0] = 0.15
+        env._contacts.fill_(True)
+        torch.testing.assert_close(term(tilted, "drift"), term(drifting, "drift"))
+        assert (term(tilted, "launch") == 0).all()
+        assert (rhythm(tilted) == 0).all()
+        tilted["qvel"][..., 0] = 0.0
+        tilted["qvel"][..., 2] = on_beat["qvel"][..., 2]
+        assert (term(tilted, "drift") == 0).all()
+        torch.testing.assert_close(rhythm(tilted), rhythm(on_beat))
+        torch.testing.assert_close(term(tilted, "launch"), term(on_beat, "launch"))
         # Under the standing row the same motion earns no jump reward and pays
         # the vertical-velocity cost.
         env.reset(TensorDict({"task_id": torch.tensor([[3]])}, batch_size=(1,)))
@@ -820,6 +838,15 @@ class TestMujoco:
         assert (
             env._reward_components(drifting, action)["diagnostic_reward_drift"] == 0
         ).all()
+        # Forward hopping retains airborne rewards, but tracks its command
+        # without paying the penalty intended for a stationary hop.
+        td = env.reset(TensorDict({"task_id": torch.tensor([[4]])}, batch_size=(1,)))
+        torch.testing.assert_close(td["command"], torch.tensor([[0.3, 0.0]]))
+        moving = env.get_state().clone()
+        moving["qvel"][..., 0] = 0.3
+        assert (term(moving, "tracking") > term(env.get_state(), "tracking")).all()
+        assert (term(moving, "drift") == 0).all()
+        assert (term(risen, "jump") > 0).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
@@ -1127,6 +1154,50 @@ class TestMujoco:
         assert (metrics["left_swing_phases"] == 0.0).all()
         assert (metrics["left_single_support_steps"] == 0.0).all()
         env.close()
+
+    def test_microduck_skill_metrics_exclude_padding(self):
+        ppo = self._load_example("ppo_mujoco")
+        rollout = TensorDict(batch_size=(1, 6))
+        rollout["collector", "mask"] = torch.tensor([[True] * 5 + [False]])
+        rollout["command"] = torch.zeros(1, 6, 2)
+        rollout["next", "observation"] = torch.zeros(1, 6, 56)
+        rollout["next", "terminated"] = torch.zeros(1, 6, 1, dtype=torch.bool)
+        for foot in ("left", "right"):
+            rollout["next", f"diagnostic_{foot}_foot_contact"] = torch.tensor(
+                [[[1.0], [0.0], [1.0], [0.0], [1.0], [0.0]]]
+            )
+        for name in ("position_x", "position_y"):
+            rollout["next", f"diagnostic_{name}"] = torch.tensor(
+                [[[0.0], [0.01], [0.0], [0.01], [0.0], [99.0]]]
+            )
+        rollout["next", "diagnostic_time"] = torch.arange(6).view(1, 6, 1).float()
+        for name in ("head_pitch", "head_yaw", "yaw_rate", "height_gain"):
+            rollout["next", f"diagnostic_{name}"] = torch.tensor(
+                [[[0.0]] * 5 + [[99.0]]]
+            )
+        # Crossing +/-pi is a small positive turn, not a reversed full turn.
+        rollout["next", "diagnostic_heading"] = torch.tensor(
+            [[[3.0], [3.1], [-3.0831853], [-2.9831853], [-2.8831853], [0.0]]]
+        )
+        metrics = ppo.microduck_metrics(rollout, jumping=True)
+        assert metrics["airborne_fraction"] == pytest.approx(0.4)
+        assert metrics["drift_speed"] == 0.0
+        assert metrics["displacement_max"] == pytest.approx(math.sqrt(2) * 0.01)
+        assert metrics["heading_rate"] == pytest.approx(0.1)
+        assert metrics["takeoffs_per_episode"] == 2.0
+        assert metrics["landings_per_episode"] == 2.0
+        assert metrics["head_pitch_abs_p95"] == 0.0
+        # Ground speed comes from displacement and time, independently of
+        # the tilted body-frame velocity in the policy observation.
+        rollout["next", "diagnostic_heading"].zero_()
+        rollout["next", "diagnostic_position_y"].zero_()
+        rollout["next", "diagnostic_position_x"] = torch.tensor(
+            [[[0.0], [1.0], [2.0], [3.0], [4.0], [99.0]]]
+        )
+        metrics = ppo.microduck_metrics(rollout)
+        assert metrics["ground_forward_speed"] == 1.0
+        assert metrics["ground_lateral_speed"] == 0.0
+        assert ppo.microduck_metrics(rollout[..., :1])["ground_forward_speed"] == 0.0
 
     def test_microduck_example_gait_metrics_count_swing_phases(self):
         gait = self._load_example("heuristic_gait")
