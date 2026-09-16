@@ -375,7 +375,9 @@ state into the parent batch. Boolean masks are not supported.
     CubeBowlEnv
     HopperEnv
     HumanoidEnv
+    MicroDuckController
     MicroDuckEnv
+    microduck_skill_env
     MicroDuckTask
     MicroDuckTaskSampler
     SatelliteEnv
