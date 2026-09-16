@@ -24,8 +24,8 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
-from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
-from torchrl.envs.custom.mujoco.sources import ModelSource, resolve_model_source
+from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.custom.mujoco.sources import _resolve_model_source, ModelSource
 
 
 @dataclass(frozen=True)
@@ -94,21 +94,7 @@ class MujocoModelTask:
             raise ValueError(f"pose_std must be positive, got {self.pose_std}.")
 
 
-class _MujocoModelMeta(_MujocoMeta):
-    """Resolve, and if allowed download, the model once before batching.
-
-    :class:`~torchrl.envs.custom.mujoco.base._MujocoMeta` builds one env per
-    worker for the native backend; resolving the XML here through the class'
-    :meth:`_resolve_before_batching` hands the workers a local path, so they
-    never download concurrently.
-    """
-
-    def __call__(cls, *args: Any, **kwargs: Any):
-        args, kwargs = cls._resolve_before_batching(*args, **kwargs)
-        return super().__call__(*args, **kwargs)
-
-
-class MujocoModelEnv(MujocoEnv, metaclass=_MujocoModelMeta):
+class MujocoModelEnv(MujocoEnv):
     r"""Any MuJoCo model as an env: the bare simulator, with a small task config.
 
     The action is the model's actuator control vector (position targets for
@@ -136,8 +122,8 @@ class MujocoModelEnv(MujocoEnv, metaclass=_MujocoModelMeta):
     around, which position-controlled robots also use as their home targets.
 
     Args:
-        source (ModelSource, str or Path): the model: the XML itself, or a
-            source that resolves to it.
+        source (ModelSource, str or Path): the model: the path or ``http(s)``
+            URL of the XML itself, or a source that resolves to it.
 
     Keyword Args:
         download (bool, optional): whether the source may download files.
@@ -214,14 +200,8 @@ class MujocoModelEnv(MujocoEnv, metaclass=_MujocoModelMeta):
         max_episode_steps: int = 1000,
         **kwargs: Any,
     ):
-        for forbidden in ("xml_path", "patch_xml"):
-            if forbidden in kwargs:
-                raise ValueError(
-                    f"{type(self).__name__} loads the model itself; pass the "
-                    f"source instead of {forbidden}=..."
-                )
         self.task = MujocoModelTask() if task is None else task
-        self.model_path = resolve_model_source(source, download=download)
+        self.model_path = _resolve_model_source(source, download=download)
         super().__init__(
             xml_path=self.model_path,
             patch_xml=False,
@@ -234,13 +214,27 @@ class MujocoModelEnv(MujocoEnv, metaclass=_MujocoModelMeta):
     def _resolve_before_batching(
         cls,
         source: ModelSource | str | Path,
-        *args: Any,
+        *,
         download: bool = False,
         **kwargs: Any,
     ) -> tuple[tuple[Any, ...], dict[str, Any]]:
         """Resolve the source to a local XML so batched workers never download."""
-        path = resolve_model_source(source, download=download)
-        return (path, *args), {**kwargs, "download": False}
+        cls._reject_xml_kwargs(kwargs)
+        path = _resolve_model_source(source, download=download)
+        return (path,), {**kwargs, "download": False}
+
+    @classmethod
+    def _reject_xml_kwargs(cls, kwargs: dict[str, Any]) -> None:
+        for forbidden in ("xml_path", "patch_xml"):
+            if forbidden in kwargs:
+                raise ValueError(
+                    f"{cls.__name__} loads the model itself; {forbidden}=... is "
+                    "not accepted."
+                )
+
+    @property
+    def _model_name(self) -> str:
+        return Path(str(self.model_path)).name
 
     # ------------------------------------------------------------------
     # Task presets
@@ -314,7 +308,7 @@ class MujocoModelEnv(MujocoEnv, metaclass=_MujocoModelMeta):
         if task.terminate_below_height is not None and free_joint_qpos_adr is None:
             raise ValueError(
                 "terminate_below_height needs a floating base, but "
-                f"{self.model_path.name} has no free joint."
+                f"{self._model_name} has no free joint."
             )
         self._site_ids = self._mujoco_ids("site", task.site_names)
         self._nsensordata = int(model.nsensordata)
@@ -330,7 +324,7 @@ class MujocoModelEnv(MujocoEnv, metaclass=_MujocoModelMeta):
             return None
         keyframes = [model.key(index).name for index in range(model.nkey)]
         raise KeyError(
-            f"{self.model_path.name} has no keyframe {keyframe!r}; it defines "
+            f"{self._model_name} has no keyframe {keyframe!r}; it defines "
             f"{keyframes}. Pass keyframe=None to reset to qpos0."
         )
 

@@ -15,21 +15,25 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import tempfile
 import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data.datasets.utils import _get_root_dir
 
-GITHUB_MODELS_ROOT = "~/.cache/torchrl/github_models"
+GITHUB_MODELS_ROOT = _get_root_dir("github_models")
 _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+_REPO_SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
+_TIMEOUT = 60.0
 
 
-@runtime_checkable
 class ModelSource(Protocol):
     """Anything that resolves to the path of a MuJoCo XML.
 
@@ -42,56 +46,70 @@ class ModelSource(Protocol):
         ...
 
 
-def resolve_model_source(
+def _resolve_model_source(
     source: ModelSource | str | Path, *, download: bool = False
-) -> Path:
-    """Resolve a model source, or the path of a local XML, to an existing file.
+) -> Path | str:
+    """Resolve a source to an existing XML; local paths and URLs pass through.
 
-    Args:
-        source (ModelSource, str or Path): a source, or the XML itself.
-
-    Keyword Args:
-        download (bool, optional): whether the source may fetch files.
-            Defaults to ``False``.
-
-    Returns:
-        The absolute path to the XML.
+    A local path must exist; an ``http(s)`` URL is returned as is for
+    :class:`~torchrl.envs.MujocoEnv` to fetch, which needs a self-contained XML.
     """
+    if isinstance(source, str) and source.startswith(("http://", "https://")):
+        return source
     if isinstance(source, (str, Path)):
         path = Path(source).expanduser()
         if not path.is_file():
             raise FileNotFoundError(f"MuJoCo model XML not found: {path}.")
         return path.resolve()
+    if not callable(getattr(source, "resolve", None)):
+        raise TypeError(
+            "Expected the path of an XML or a model source with a "
+            f"resolve(download=...) method, got {type(source).__name__}."
+        )
     return source.resolve(download=download)
 
 
-def _github_commit(repo: str, revision: str) -> str:
-    """Resolve a branch, tag or short SHA to a full commit SHA through the GitHub API."""
+def _github_request(url: str, accept: str) -> urllib.request.Request:
     request = urllib.request.Request(
-        f"https://api.github.com/repos/{repo}/commits/{urllib.parse.quote(revision)}",
-        headers={"Accept": "application/vnd.github.sha", "User-Agent": "torchrl"},
+        url, headers={"Accept": accept, "User-Agent": "torchrl"}
     )
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         request.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(request) as response:
+    return request
+
+
+def _github_commit(repo: str, revision: str) -> str:
+    """Resolve a branch, tag or short SHA to a full commit SHA through the GitHub API."""
+    request = _github_request(
+        f"https://api.github.com/repos/{repo}/commits/{urllib.parse.quote(revision)}",
+        "application/vnd.github.sha",
+    )
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
         return response.read().decode("utf-8").strip()
 
 
 def _download_github_tree(repo: str, commit: str, target: Path) -> Path:
     """Fetch the repository tree at ``commit`` into ``target``.
 
-    The archive is extracted next to the target and moved into place
-    atomically, so a concurrent caller either finds the complete tree or
-    fetches it itself.
+    Public repositories come from the plain archive URL; with ``GITHUB_TOKEN``
+    set, the API archive endpoint serves private ones too. The archive is
+    extracted next to the target and moved into place atomically, so a
+    concurrent caller either finds the complete tree or fetches it itself.
     """
     root = target.parent
     root.mkdir(parents=True, exist_ok=True)
-    url = f"https://github.com/{repo}/archive/{commit}.zip"
+    if os.environ.get("GITHUB_TOKEN"):
+        url = f"https://api.github.com/repos/{repo}/zipball/{commit}"
+    else:
+        url = f"https://github.com/{repo}/archive/{commit}.zip"
     torchrl_logger.info("Downloading %s at %s to %s", repo, commit[:9], target)
     with TemporaryDirectory(prefix=".download-", dir=root) as tmp:
         archive = Path(tmp) / "archive.zip"
-        urllib.request.urlretrieve(url, archive)
+        request = _github_request(url, "application/vnd.github+json")
+        with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+            with open(archive, "wb") as handle:
+                shutil.copyfileobj(response, handle)
         with zipfile.ZipFile(archive) as zf:
             zf.extractall(tmp)
         trees = [path for path in Path(tmp).iterdir() if path.is_dir()]
@@ -108,6 +126,16 @@ def _download_github_tree(repo: str, commit: str, target: Path) -> Path:
     return target
 
 
+def _write_atomically(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        "w", dir=path.parent, prefix=f".{path.name}-", delete=False
+    )
+    with handle:
+        handle.write(text)
+    os.replace(handle.name, path)
+
+
 @dataclass(frozen=True)
 class GitHubModelSource:
     """A MuJoCo model in a GitHub repository, pinned to one revision.
@@ -122,7 +150,8 @@ class GitHubModelSource:
     to its commit through the GitHub API on the first ``download=True`` and
     that mapping is cached next to the tree, so the source resolves offline
     afterwards and keeps pointing at the same commit until the cache entry is
-    removed.
+    removed. Set ``GITHUB_TOKEN`` for private repositories or a higher API
+    rate limit.
 
     Args:
         repo (str): ``"owner/name"`` of the repository.
@@ -156,8 +185,11 @@ class GitHubModelSource:
     root: str | Path | None = None
 
     def __post_init__(self):
-        owner, _, name = self.repo.partition("/")
-        if not owner or not name or "/" in name:
+        segments = self.repo.split("/")
+        if len(segments) != 2 or any(
+            not _REPO_SEGMENT.match(segment) or segment in (".", "..")
+            for segment in segments
+        ):
             raise ValueError(f"repo must be 'owner/name', got {self.repo!r}.")
         entry = Path(self.entry)
         if entry.is_absolute() or ".." in entry.parts or not entry.parts:
@@ -182,7 +214,9 @@ class GitHubModelSource:
             return self.revision
         ref_file = self.cache_dir / "refs" / urllib.parse.quote(self.revision, safe="")
         if ref_file.is_file():
-            return ref_file.read_text().strip()
+            cached = ref_file.read_text().strip()
+            if _FULL_SHA.match(cached):
+                return cached
         if not download:
             raise FileNotFoundError(
                 f"{self.repo}@{self.revision} has not been resolved to a commit "
@@ -193,8 +227,7 @@ class GitHubModelSource:
             raise RuntimeError(
                 f"GitHub returned {sha!r} for {self.repo}@{self.revision}."
             )
-        ref_file.parent.mkdir(parents=True, exist_ok=True)
-        ref_file.write_text(sha)
+        _write_atomically(ref_file, sha)
         return sha
 
     def resolve(self, *, download: bool = False) -> Path:

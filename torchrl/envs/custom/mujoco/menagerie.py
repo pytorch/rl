@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from torchrl.envs.custom.mujoco._backends import BackendName
 from torchrl.envs.custom.mujoco.model_env import MujocoModelEnv, MujocoModelTask
 
 _has_mujoco_menagerie = importlib.util.find_spec("mujoco_menagerie") is not None
@@ -91,7 +92,7 @@ class MenagerieModelSource:
             return self._resolve_in_checkout(Path(candidate).expanduser())
         if not _has_mujoco_menagerie:
             raise FileNotFoundError(
-                f"MenagerieEnv could not locate {robot!r}. Pass "
+                f"MenagerieModelSource could not locate {robot!r}. Pass "
                 "menagerie_path=<mujoco_menagerie checkout>, set the "
                 f"{MENAGERIE_ENV_VAR} environment variable, or `pip install "
                 "mujoco-menagerie` and pass download=True."
@@ -118,13 +119,13 @@ class MenagerieModelSource:
             robot_dir = path
         else:
             raise FileNotFoundError(
-                f"MenagerieEnv: no {robot!r} model directory under {path}."
+                f"MenagerieModelSource: no {robot!r} model directory under {path}."
             )
         xml = robot_dir / f"{'scene' if self.entry is None else self.entry}.xml"
         if not xml.is_file():
             entries = sorted(candidate.stem for candidate in robot_dir.glob("*.xml"))
             raise FileNotFoundError(
-                f"MenagerieEnv: {robot!r} has no entry {xml.stem!r} under "
+                f"MenagerieModelSource: {robot!r} has no entry {xml.stem!r} under "
                 f"{robot_dir}; available entries: {entries}."
             )
         return xml.resolve()
@@ -283,6 +284,9 @@ class MenagerieEnv(MujocoModelEnv):
         entry: str | None = None,
         menagerie_path: str | Path | None = None,
         download: bool = False,
+        task: MujocoModelTask | None = None,
+        backend: BackendName = "mujoco",
+        max_episode_steps: int = 1000,
         **kwargs: Any,
     ):
         self.robot = str(robot)
@@ -290,6 +294,9 @@ class MenagerieEnv(MujocoModelEnv):
         super().__init__(
             MenagerieModelSource(robot, entry=entry, menagerie_path=menagerie_path),
             download=download,
+            task=task,
+            backend=backend,
+            max_episode_steps=max_episode_steps,
             **kwargs,
         )
 
@@ -297,21 +304,26 @@ class MenagerieEnv(MujocoModelEnv):
     def _resolve_before_batching(
         cls,
         robot: str,
-        *args: Any,
+        *,
         entry: str | None = None,
         menagerie_path: str | Path | None = None,
         download: bool = False,
         **kwargs: Any,
     ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        cls._reject_xml_kwargs(kwargs)
         xml = cls.resolve_model(
             robot, entry=entry, menagerie_path=menagerie_path, download=download
         )
-        return (robot, *args), {
+        return (robot,), {
             **kwargs,
             "entry": entry,
             "menagerie_path": xml,
             "download": False,
         }
+
+    @property
+    def _model_name(self) -> str:
+        return f"{self.robot} ({Path(str(self.model_path)).name})"
 
     @classmethod
     def resolve_model(

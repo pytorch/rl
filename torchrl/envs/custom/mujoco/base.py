@@ -115,7 +115,10 @@ class _MujocoMeta(_EnvPostInit):
     ``parallel=True``, the default) or :class:`~torchrl.envs.SerialEnv`
     (when ``parallel=False``) when ``num_workers > 1`` or ``num_envs >
     1``. ``num_workers`` and ``num_envs`` are mutually exclusive aliases
-    for that backend.
+    for that backend. Once those arguments are validated, and before any
+    env or worker is built, the class' :meth:`MujocoEnv._resolve_before_batching`
+    hook may rewrite the arguments, typically to resolve and download assets
+    once and hand every worker a local path.
     """
 
     def __call__(
@@ -141,6 +144,7 @@ class _MujocoMeta(_EnvPostInit):
                     f"backend={backend!r} only supports vmap-based batching; "
                     "the `parallel` kwarg is only valid for backend='mujoco'."
                 )
+            args, kwargs = cls._resolve_before_batching(*args, **kwargs)
             return super().__call__(*args, **kwargs)
 
         if backend == "mujoco":
@@ -149,6 +153,7 @@ class _MujocoMeta(_EnvPostInit):
                     "For backend='mujoco', set either num_envs or num_workers, "
                     "not both -- they are aliases for the same N copies."
                 )
+            args, kwargs = cls._resolve_before_batching(*args, **kwargs)
             n = max(num_workers, num_envs)
             if n > 1:
                 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
@@ -336,6 +341,19 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     # ------------------------------------------------------------------
     # XML resolution + patching
     # ------------------------------------------------------------------
+
+    @classmethod
+    def _resolve_before_batching(
+        cls, *args: Any, **kwargs: Any
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        """Rewrite the constructor arguments once before batching.
+
+        The metaclass calls this after validating the backend and batching
+        arguments and before building any env or worker, so a subclass can
+        resolve, and if allowed download, its assets once and hand every
+        worker a local path. The default returns the arguments unchanged.
+        """
+        return args, kwargs
 
     def _resolve_xml_candidate(
         self,

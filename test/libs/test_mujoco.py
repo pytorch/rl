@@ -3256,15 +3256,16 @@ class TestMujoco:
                     zf.write(path, Path(f"name-{sha}") / path.relative_to(tree))
         downloads, lookups = [], []
 
-        def fake_retrieve(url, filename):
-            downloads.append(url)
-            shutil.copy(archive, filename)
+        def fake_urlopen(request, timeout=None):
+            downloads.append(request.full_url)
+            return open(archive, "rb")
 
         def fake_commit(repo, revision):
             lookups.append((repo, revision))
             return sha
 
-        monkeypatch.setattr(sources_module.urllib.request, "urlretrieve", fake_retrieve)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.setattr(sources_module.urllib.request, "urlopen", fake_urlopen)
         monkeypatch.setattr(sources_module, "_github_commit", fake_commit)
         cache = tmp_path / "cache"
         source = GitHubModelSource(
@@ -3291,10 +3292,29 @@ class TestMujoco:
             GitHubModelSource(
                 "owner/name", revision=sha, entry="missing.xml", root=cache
             ).resolve()
-        with pytest.raises(ValueError, match="owner/name"):
-            GitHubModelSource("name", revision=sha, entry="x.xml")
+        # A torn ref file is ignored and the branch resolved again.
+        (cache / "owner" / "name" / "refs" / "main").write_text("")
+        with pytest.raises(FileNotFoundError, match="download=True"):
+            source.resolve()
+        assert source.resolve(download=True) == xml
+        assert lookups == [("owner/name", "main")] * 2 and len(downloads) == 1
+        for repo in ("name", "../evil", "owner/..", "owner/name/extra"):
+            with pytest.raises(ValueError, match="owner/name"):
+                GitHubModelSource(repo, revision=sha, entry="x.xml")
         with pytest.raises(ValueError, match="repository-relative"):
             GitHubModelSource("owner/name", revision=sha, entry="../x.xml")
+        # Argument errors come before any network access.
+        fresh = GitHubModelSource(
+            "owner/name",
+            revision="main",
+            entry="tiny_bot/scene.xml",
+            root=tmp_path / "fresh",
+        )
+        with pytest.raises(ValueError, match="num_envs"):
+            MujocoModelEnv(fresh, download=True, backend="mujoco-torch", num_workers=2)
+        with pytest.raises(ValueError, match="xml_path"):
+            MujocoModelEnv(fresh, download=True, xml_path="x")
+        assert not (tmp_path / "fresh").exists()
         # Batched native workers receive the cached XML: one download in total.
         env = MujocoModelEnv(
             source, download=True, backend="mujoco", num_envs=2, parallel=False, seed=0
