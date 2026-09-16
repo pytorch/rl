@@ -67,7 +67,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import load_checkpoint, save_render_checkpoint
+from torchrl.render import load_checkpoint
 
 if _has_mujoco:
     import mujoco
@@ -3218,9 +3218,7 @@ class _MicroDuckResetSignalEnv(EnvBase):
         result = self.observation_spec.zero()
         result["observation"] = td["observation"].clone()
         result["observation"][..., 0] += 1
-        result["respawned"] = torch.full_like(
-            result["respawned"], self._steps == 2
-        )
+        result["respawned"] = torch.full_like(result["respawned"], self._steps == 2)
         result["reward"] = td["action"].sum(-1, keepdim=True)
         return result.update(self.full_done_spec.zero())
 
@@ -3234,9 +3232,7 @@ class _MicroDuckMemoryPolicy(TensorDictModuleBase):
 
     def forward(self, td):
         observation = td["observation"]
-        action = observation.new_zeros(
-            (*td.batch_size, MicroDuckEnv.NUM_JOINTS)
-        )
+        action = observation.new_zeros((*td.batch_size, MicroDuckEnv.NUM_JOINTS))
         action[..., :2] = observation[
             ..., MicroDuckEnv.COMMAND_START : MicroDuckEnv.COMMAND_START + 2
         ]

@@ -21,14 +21,10 @@ from __future__ import annotations
 import importlib.util
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, TYPE_CHECKING
 
 import torch
-from tensordict.nn import (
-    NormalParamExtractor,
-    TensorDictModule,
-    TensorDictSequential,
-)
+from tensordict.nn import NormalParamExtractor, TensorDictModule, TensorDictSequential
 from torch import nn
 
 from torchrl.modules.distributions import TanhNormal
