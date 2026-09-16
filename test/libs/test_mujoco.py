@@ -13,6 +13,7 @@ import math
 import os
 import shutil
 import sys
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,7 @@ from torchrl.envs import (
     Compose,
     CubeBowlEnv,
     ExplorationType,
+    GitHubModelSource,
     HopperEnv,
     HumanoidEnv,
     InitTracker,
@@ -35,6 +37,8 @@ from torchrl.envs import (
     MicroDuckEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
+    MujocoModelEnv,
+    MujocoModelTask,
     ParallelEnv,
     RobotMacroAction,
     SatelliteEnv,
@@ -3153,7 +3157,7 @@ class TestMujoco:
         with pytest.raises(FileNotFoundError, match="download=True") as excinfo:
             MenagerieEnv.resolve_model("tiny_bot")
         assert MENAGERIE_ENV_VAR in str(excinfo.value)
-        with pytest.raises(ValueError, match="menagerie_path"):
+        with pytest.raises(ValueError, match="xml_path"):
             MenagerieEnv("tiny_bot", menagerie_path=root, xml_path=scene)
         # Native workers receive the resolved XML.
         env = MenagerieEnv(
@@ -3216,6 +3220,89 @@ class TestMujoco:
             "universal_robots_ur5e", entry="ur5e", menagerie_path=menagerie_path
         )
         assert robot_only.model_path.name == "ur5e.xml"
+
+    # ------------------------------------------------------------------
+    # MujocoModelEnv and model sources.
+    # ------------------------------------------------------------------
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_mujoco_model_env_from_path(self, tmp_path):
+        root = self._write_menagerie_fixture(tmp_path)
+        scene = root / "tiny_bot" / "scene.xml"
+        env = MujocoModelEnv(scene, reset_noise_scale=0.0, seed=0)
+        check_env_specs(env)
+        assert env.model_path == scene.resolve()
+        torch.testing.assert_close(
+            env.reset()["qpos"][0, 7:], torch.tensor([0.5, -1.0])
+        )
+        assert MenagerieTask is MujocoModelTask
+        with pytest.raises(FileNotFoundError, match="nope.xml"):
+            MujocoModelEnv(root / "tiny_bot" / "nope.xml")
+        with pytest.raises(ValueError, match="xml_path"):
+            MujocoModelEnv(scene, xml_path=scene)
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_github_model_source(self, tmp_path, monkeypatch):
+        from torchrl.envs.custom.mujoco import sources as sources_module
+
+        (tmp_path / "repo").mkdir()
+        tree = self._write_menagerie_fixture(tmp_path / "repo")
+        sha = "0123456789abcdef0123456789abcdef01234567"
+        archive = tmp_path / "archive.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            for path in sorted(tree.rglob("*")):
+                if path.is_file():
+                    zf.write(path, Path(f"name-{sha}") / path.relative_to(tree))
+        downloads, lookups = [], []
+
+        def fake_retrieve(url, filename):
+            downloads.append(url)
+            shutil.copy(archive, filename)
+
+        def fake_commit(repo, revision):
+            lookups.append((repo, revision))
+            return sha
+
+        monkeypatch.setattr(sources_module.urllib.request, "urlretrieve", fake_retrieve)
+        monkeypatch.setattr(sources_module, "_github_commit", fake_commit)
+        cache = tmp_path / "cache"
+        source = GitHubModelSource(
+            "owner/name", revision="main", entry="tiny_bot/scene.xml", root=cache
+        )
+        # Nothing touches the network without permission.
+        with pytest.raises(FileNotFoundError, match="download=True"):
+            source.resolve()
+        xml = source.resolve(download=True)
+        assert (
+            xml == (cache / "owner" / "name" / sha / "tiny_bot" / "scene.xml").resolve()
+        )
+        assert downloads == [f"https://github.com/owner/name/archive/{sha}.zip"]
+        assert lookups == [("owner/name", "main")]
+        # The branch stays pinned to the resolved commit and resolves offline;
+        # a full SHA never asks the API; the tree is shared between entries.
+        assert source.resolve() == xml
+        pinned = GitHubModelSource(
+            "owner/name", revision=sha, entry="tiny_bot/bare.xml", root=cache
+        )
+        assert pinned.resolve().name == "bare.xml"
+        assert len(downloads) == 1 and len(lookups) == 1
+        with pytest.raises(FileNotFoundError, match="tiny_bot/scene.xml"):
+            GitHubModelSource(
+                "owner/name", revision=sha, entry="missing.xml", root=cache
+            ).resolve()
+        with pytest.raises(ValueError, match="owner/name"):
+            GitHubModelSource("name", revision=sha, entry="x.xml")
+        with pytest.raises(ValueError, match="repository-relative"):
+            GitHubModelSource("owner/name", revision=sha, entry="../x.xml")
+        # Batched native workers receive the cached XML: one download in total.
+        env = MujocoModelEnv(
+            source, download=True, backend="mujoco", num_envs=2, parallel=False, seed=0
+        )
+        assert isinstance(env, SerialEnv)
+        assert env.rollout(3)["next", "qpos"].shape == (2, 1, 3, 9)
+        assert len(downloads) == 1
+        env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_xml_path_preserves_relative_assets(self, tmp_path, backend):

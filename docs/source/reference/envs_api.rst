@@ -375,6 +375,16 @@ is ``"mujoco"``; the entry points Menagerie maintains for MJX (``scene_mjx``
 and the like) also run on ``"mujoco-torch"`` and ``"mjx"``.
 ``examples/menagerie/ppo.py`` trains a PPO policy that holds the pose of any
 robot or walks a quadruped, and renders it with ``rlrender``.
+:class:`~torchrl.envs.MujocoModelEnv` is that same bare simulator for any
+model: a path to an XML, or a model source that resolves to one.
+:class:`~torchrl.envs.GitHubModelSource` names a repository, a pinned revision
+and an explicit repository-relative entry, and caches the whole tree by owner,
+repository and commit so includes and assets resolve;
+:class:`~torchrl.envs.MenagerieModelSource` is the curated Menagerie source
+that :class:`~torchrl.envs.MenagerieEnv` wraps. ``download=True`` is the
+explicit permission for a source to fetch files.
+:class:`~torchrl.envs.MujocoModelTask` (``MenagerieTask`` is its alias) is the
+task config of both envs.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -391,8 +401,13 @@ state into the parent batch. Boolean masks are not supported.
     CubeBowlEnv
     HopperEnv
     HumanoidEnv
+    GitHubModelSource
     MenagerieEnv
+    MenagerieModelSource
     MenagerieTask
+    ModelSource
+    MujocoModelEnv
+    MujocoModelTask
     MicroDuckEnv
     MicroDuckTask
     MicroDuckTaskSampler
