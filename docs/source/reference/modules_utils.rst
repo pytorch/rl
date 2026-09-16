@@ -12,6 +12,7 @@ Utility modules and helper functions for building RL networks.
     ActorValueOperator
     ActorCriticOperator
     ActorCriticWrapper
+    MicroDuckPolicy
     get_primers_from_module
     get_env_transforms_from_module
 

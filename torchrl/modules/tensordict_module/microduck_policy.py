@@ -15,10 +15,13 @@ writes joint-space actions plus the next recurrent state.
 Use :meth:`MicroDuckPolicy.from_pretrained` to download and instantiate the
 published walker in one call.
 """
+
 from __future__ import annotations
 
+import importlib.util
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any
 
 import torch
 from tensordict.nn import (
@@ -31,11 +34,17 @@ from torch import nn
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.modules.tensordict_module.rnn import GRUModule
+from torchrl.render.checkpoint import load_checkpoint
+
+if TYPE_CHECKING:
+    from torchrl.envs.custom.mujoco.microduck import MicroDuckTask
+
+_has_huggingface_hub = importlib.util.find_spec("huggingface_hub") is not None
 
 RECURRENT_STATE_KEY = "recurrent_state"
 
 
-class TaskConditionedEncoder(nn.Module):
+class _TaskConditionedEncoder(nn.Module):
     """Observation encoder conditioned on the task index.
 
     The observation carries the command but no other task parameter, so a
@@ -55,15 +64,13 @@ class TaskConditionedEncoder(nn.Module):
         self.observation = nn.Linear(observation_dim, hidden_size, device=device)
         self.task = nn.Embedding(num_tasks, hidden_size, device=device)
 
-    def forward(
-        self, observation: torch.Tensor, task_id: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, observation: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
         return torch.tanh(
             self.observation(observation) + self.task(task_id.squeeze(-1))
         )
 
 
-class GaussianHead(nn.Module):
+class _GaussianHead(nn.Module):
     """Plain Gaussian policy head for training from scratch.
 
     The mean starts near zero, which is the ``STAND`` pose, and the
@@ -120,6 +127,15 @@ class MicroDuckPolicy:
             ``action_scale`` in the wrapped environment to denormalize.
 
     Examples:
+        >>> from torchrl.modules import MicroDuckPolicy
+        >>> policy = MicroDuckPolicy(
+        ...     hidden_size=32, num_tasks=2, observation_dim=56, num_actions=14
+        ... )
+        >>> type(policy.actor).__name__
+        'ProbabilisticActor'
+
+        Download the published checkpoint and its task library:
+
         >>> from torchrl.modules import MicroDuckPolicy  # doctest: +SKIP
         >>> walker, skill_tasks, action_scale = MicroDuckPolicy.from_pretrained()  # doctest: +SKIP
         >>> walker  # doctest: +SKIP
@@ -151,7 +167,7 @@ class MicroDuckPolicy:
         self.device = torch.device(device)
 
         embed = TensorDictModule(
-            TaskConditionedEncoder(
+            _TaskConditionedEncoder(
                 observation_dim,
                 num_tasks,
                 hidden_size,
@@ -169,7 +185,7 @@ class MicroDuckPolicy:
             device=self.device,
         )
         actor_head = TensorDictModule(
-            GaussianHead(
+            _GaussianHead(
                 hidden_size,
                 num_actions,
                 initial_policy_scale=initial_policy_scale,
@@ -214,9 +230,9 @@ class MicroDuckPolicy:
         )
 
     @staticmethod
-    def _checkpoint_payload(source: str | Path | Mapping[str, Any]) -> Mapping[str, Any]:
-        from torchrl.render import load_checkpoint
-
+    def _checkpoint_payload(
+        source: str | Path | Mapping[str, Any],
+    ) -> Mapping[str, Any]:
         if isinstance(source, Mapping):
             return source
         path = Path(source).expanduser().resolve()
@@ -229,12 +245,13 @@ class MicroDuckPolicy:
         *,
         device: torch.device | str = "cpu",
         freeze: bool = True,
-    ):
+    ) -> tuple[ProbabilisticActor, MicroDuckTask, float]:
         """Rebuild from a training checkpoint produced by ``examples.microduck.train_skills``.
 
         The checkpoint carries the ordered task library, the architecture
         arguments (``policy_kwargs``), and the env-side action scale.
         """
+        # Import lazily to avoid a cycle between torchrl.envs and torchrl.modules.
         from torchrl.envs.custom.mujoco.microduck import MicroDuckEnv
 
         payload = cls._checkpoint_payload(checkpoint)
@@ -242,7 +259,7 @@ class MicroDuckPolicy:
         config = payload.get("config", {})
         task_specs = config.get("env", {}).get("tasks", [])
         if not isinstance(task_specs, list):
-            raise ValueError(
+            raise TypeError(
                 "MicroDuckPolicy could not read the ordered task list from "
                 "config.env.tasks."
             )
@@ -278,7 +295,7 @@ class MicroDuckPolicy:
         freeze: bool = True,
         download: bool = True,
         **hub_kwargs: Any,
-    ):
+    ) -> tuple[ProbabilisticActor, MicroDuckTask, float]:
         """Download the published walker and rebuild it.
 
         Args:
@@ -295,21 +312,18 @@ class MicroDuckPolicy:
         Returns:
             ``(actor, skill_tasks, action_scale)``.
         """
-        from torchrl.render import load_checkpoint  # noqa: F401  (used via _checkpoint_payload)
-
         if not download:
             raise ValueError(
                 "MicroDuckPolicy.from_pretrained fetches the checkpoint from "
                 "Hugging Face. Pass download=True, or use "
                 "MicroDuckPolicy.from_checkpoint(path) for a local file."
             )
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError as e:
+        if not _has_huggingface_hub:
             raise ImportError(
                 "huggingface_hub is required to load MicroDuckPolicy from the "
                 "hub. Install it with `pip install huggingface-hub`."
-            ) from e
+            )
+        from huggingface_hub import hf_hub_download
 
         path = hf_hub_download(
             repo_id=repo_id or cls.DEFAULT_REPO_ID,
