@@ -49,6 +49,7 @@ from torchrl.modules import (
     LSTMCell,
     LSTMModule,
     MLP,
+    MicroDuckPolicy,
     ProbabilisticActor,
     set_recurrent_matmul_precision,
     set_recurrent_mode,
@@ -79,6 +80,48 @@ from torchrl.testing.mocking_classes import (
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _vmap = None
+
+
+def test_microduck_policy_checkpoint_reconstructs_frozen_actor():
+    policy = MicroDuckPolicy(
+        hidden_size=8,
+        num_tasks=2,
+        observation_dim=56,
+        num_actions=14,
+    )
+    payload = {
+        "policy_kwargs": {"hidden_size": 8},
+        "config": {
+            "env": {
+                "tasks": [
+                    {"preset": "standing_task"},
+                    {"preset": "tracking_task", "speed": 0.2},
+                ],
+                "action_scale": 0.35,
+            }
+        },
+        "model_state_dict": policy.actor.state_dict(),
+    }
+
+    actor, tasks, action_scale = MicroDuckPolicy.from_checkpoint(payload)
+
+    assert list(tasks.name) == ["standing", "tracking+0.20"]
+    assert action_scale == 0.35
+    assert not actor.training
+    assert not any(parameter.requires_grad for parameter in actor.parameters())
+    td = TensorDict(
+        {
+            "observation": torch.randn(3, 56),
+            "task_id": torch.tensor([[0], [1], [0]]),
+            "recurrent_state": torch.zeros(3, 1, 8),
+            "is_init": torch.ones(3, 1, dtype=torch.bool),
+        },
+        batch_size=[3],
+    )
+    actor(td)
+    assert td["action"].shape == (3, 14)
+    assert torch.isfinite(td["action"]).all()
+    assert td["next", "recurrent_state"].shape == (3, 1, 8)
 
 
 def _get_vmap():
