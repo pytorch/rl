@@ -71,6 +71,17 @@ class MenagerieTask:
             off.
         alive_bonus (float, optional): constant paid at every step that does
             not terminate on height. Defaults to ``0.0``.
+
+    Examples:
+        >>> from dataclasses import replace
+        >>> from torchrl.envs import MenagerieEnv, MenagerieTask
+        >>> task = MenagerieTask(site_names=("imu",), terminate_below_height=0.15)
+        >>> task.pose_weight, task.site_names
+        (0.0, ('imu',))
+        >>> standing = replace(MenagerieEnv.hold_pose_task(), alive_bonus=0.5)
+        >>> standing.pose_weight, standing.alive_bonus
+        (1.0, 0.5)
+        >>> env = MenagerieEnv("unitree_go2", download=True, task=standing)  # doctest: +SKIP
     """
 
     keyframe: str | None = None
@@ -136,7 +147,10 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
     the :data:`MENAGERIE_ENV_VAR` environment variable, then from the cache of
     the ``mujoco-menagerie`` package (``pip install mujoco-menagerie``), which
     ``download=True`` lets fetch the robot. The package pins every robot to
-    one Menagerie commit; a checkout is whatever revision it holds.
+    one Menagerie commit; a checkout is whatever revision it holds. The
+    resolved XML is :attr:`model_path`, next to :attr:`robot`, :attr:`entry`
+    and :attr:`task`. ``examples/menagerie/ppo_hold_pose.py`` trains a PPO
+    hold-pose policy on any robot and plays it back with ``rlrender``.
 
     Menagerie's ``scene`` entry points put the robot on a floor with lights
     and are meant for the ``"mujoco"`` backend, the default here. The models
@@ -333,7 +347,9 @@ class MenagerieEnv(MujocoEnv, metaclass=_MenagerieMeta):
 
         Raises:
             FileNotFoundError: if the robot cannot be located without
-                downloading, or the checkout lacks the robot or the entry.
+                downloading, or the checkout lacks the robot or the entry. The
+                package raises its own errors for a name or an entry that is
+                not in its registry.
         """
         candidate = menagerie_path
         if candidate is None:
