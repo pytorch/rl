@@ -34,7 +34,6 @@ from torch import nn
 from torchrl.modules.distributions import TanhNormal
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.modules.tensordict_module.rnn import GRUModule
-from torchrl.render.checkpoint import load_checkpoint
 
 if TYPE_CHECKING:
     from torchrl.envs.custom.mujoco.microduck import MicroDuckTask
@@ -235,6 +234,10 @@ class MicroDuckPolicy:
     ) -> Mapping[str, Any]:
         if isinstance(source, Mapping):
             return source
+        # Import lazily to avoid torchrl.render re-entering torchrl.envs while
+        # torchrl.modules is still being initialized.
+        from torchrl.render import load_checkpoint
+
         path = Path(source).expanduser().resolve()
         return load_checkpoint(path, weights_only=True)
 
