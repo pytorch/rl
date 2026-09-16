@@ -32,6 +32,7 @@ from torchrl.modules.tensordict_module.actors import (
 )
 from torchrl.modules.tensordict_module.common import SafeModule, VmapModule
 from torchrl.modules.tensordict_module.controllers import LowLevelController
+from torchrl.modules.tensordict_module.microduck_policy import MicroDuckPolicy
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianModule,
     AdditiveGaussianWrapper,
@@ -67,6 +68,7 @@ from torchrl.modules.tensordict_module.world_models import WorldModel, WorldMode
 
 __all__ = [
     "LowLevelController",
+    "MicroDuckPolicy",
     "Actor",
     "ActorCriticOperator",
     "ActorCriticWrapper",
