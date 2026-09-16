@@ -266,18 +266,19 @@ class TestSamplers:
         s = new_replay_buffer.sample(batch_size=1)
         assert (s.exclude("index") == 0).all()
 
-    def test_sampler_without_rep_dumps_loads(self, tmpdir):
+    @pytest.mark.parametrize("drop_last", [False, True])
+    def test_sampler_without_rep_dumps_loads(self, tmpdir, drop_last):
         d0 = tmpdir + "/save0"
         d1 = tmpdir + "/save1"
         d2 = tmpdir + "/dump"
         replay_buffer = TensorDictReplayBuffer(
             storage=LazyMemmapStorage(max_size=100, scratch_dir=d0, device="cpu"),
-            sampler=SamplerWithoutReplacement(drop_last=True),
+            sampler=SamplerWithoutReplacement(drop_last=drop_last),
             batch_size=8,
         )
         replay_buffer2 = TensorDictReplayBuffer(
             storage=LazyMemmapStorage(max_size=100, scratch_dir=d1, device="cpu"),
-            sampler=SamplerWithoutReplacement(drop_last=True),
+            sampler=SamplerWithoutReplacement(drop_last=drop_last),
             batch_size=8,
         )
         td = TensorDict(
@@ -293,6 +294,13 @@ class TestSamplers:
         ).all()
         s = replay_buffer2.sample(3)
         assert (s["a"] == s["b", "c"] - 1).all()
+        # A resumed PPO run must be able to checkpoint again at a new path.
+        d3 = tmpdir + "/resaved"
+        replay_buffer2.dumps(d3)
+        replay_buffer.loads(d3)
+        torch.testing.assert_close(
+            replay_buffer.sample(3)["a"], replay_buffer2.sample(3)["a"]
+        )
 
     @pytest.mark.parametrize("drop_last", [False, True])
     def test_sampler_without_replacement_cap_prefetch(self, drop_last):
