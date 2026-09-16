@@ -648,6 +648,11 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         """Seconds of simulated time per env step: ``frame_skip`` physics steps."""
         return self.frame_skip * self._backend.timestep
 
+    @property
+    def mj_model(self) -> Any:
+        """The compiled ``mujoco.MjModel`` the backend simulates, for read-only lookups."""
+        return self._backend.mj_model
+
     def get_state(self) -> TensorDict:
         """Return a detached snapshot of the MuJoCo simulator state.
 

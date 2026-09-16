@@ -73,7 +73,9 @@ class MenagerieModelSource:
 
         Keyword Args:
             download (bool, optional): whether the ``mujoco-menagerie`` package
-                may download the robot into its cache. Defaults to ``False``.
+                may download the robot into its cache. Only consulted when
+                neither ``menagerie_path`` nor the environment variable is
+                set. Defaults to ``False``.
 
         Returns:
             The absolute path to the XML.
@@ -107,11 +109,26 @@ class MenagerieModelSource:
                 "Pass download=True to fetch it, or point menagerie_path or "
                 f"{MENAGERIE_ENV_VAR} at a mujoco_menagerie checkout."
             )
-        return Path(spec.xml(self.entry, cache)).resolve()
+        entry_point = spec.entry(self.entry)
+        try:
+            robot_dir = spec.path(cache)
+        except mujoco_menagerie.MenagerieError as err:
+            raise FileNotFoundError(
+                f"{robot!r} could not be fetched from the mujoco-menagerie "
+                f"package: {err}. Point menagerie_path or {MENAGERIE_ENV_VAR} at "
+                "a mujoco_menagerie checkout instead."
+            ) from err
+        return (Path(robot_dir) / entry_point.file).resolve()
 
     def _resolve_in_checkout(self, path: Path) -> Path:
         robot = self.robot
         if path.is_file():
+            if self.entry is not None and path.stem != self.entry:
+                raise ValueError(
+                    f"menagerie_path points at {path.name} but entry="
+                    f"{self.entry!r} was requested; pass the robot directory or "
+                    "drop entry."
+                )
             return path.resolve()
         if (path / robot).is_dir():
             robot_dir = path / robot
@@ -175,9 +192,11 @@ class MenagerieEnv(MujocoModelEnv):
             Defaults to the :data:`MENAGERIE_ENV_VAR` environment variable,
             then to the ``mujoco-menagerie`` package cache.
         download (bool, optional): whether the ``mujoco-menagerie`` package
-            may download the robot into its cache when no other source
-            resolves. Defaults to ``False``, in which case a missing robot
-            raises ``FileNotFoundError`` describing every option.
+            may download the robot into its cache. Only consulted when neither
+            ``menagerie_path`` nor the environment variable is set: a checkout
+            that lacks the robot raises instead of falling back to the
+            package. Defaults to ``False``, in which case a robot missing from
+            the cache raises ``FileNotFoundError`` describing every option.
         task (MujocoModelTask, optional): the reset keyframe, the observed
             sites, the termination height and the reward weights. Defaults to
             ``MujocoModelTask()``: the ``home`` keyframe, no sites, no

@@ -3142,6 +3142,8 @@ class TestMujoco:
             == scene
         )
         assert MenagerieEnv.resolve_model("tiny_bot", menagerie_path=scene) == scene
+        with pytest.raises(ValueError, match="entry='bare'"):
+            MenagerieEnv.resolve_model("tiny_bot", entry="bare", menagerie_path=scene)
         assert MenagerieEnv.resolve_model(
             "tiny_bot", entry="bare", menagerie_path=root
         ) == scene.with_name("bare.xml")
@@ -3187,6 +3189,9 @@ class TestMujoco:
         )
         with pytest.raises(mujoco_menagerie.UnknownRobotError):
             MenagerieEnv.resolve_model("universal_robots_ur5")
+        # A registered robot missing from MENAGERIE_ROOT is a FileNotFoundError.
+        with pytest.raises(FileNotFoundError, match="checkout"):
+            MenagerieEnv.resolve_model("unitree_go2")
         # Nothing downloads unless asked.
         monkeypatch.delenv("MENAGERIE_ROOT")
         monkeypatch.setenv("MENAGERIE_CACHE_DIR", str(tmp_path / "cache"))

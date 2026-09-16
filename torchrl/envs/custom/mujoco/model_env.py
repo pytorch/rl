@@ -51,8 +51,11 @@ class MujocoModelTask:
             (default) omits the entry.
         terminate_below_height (float, optional): if set, the episode
             terminates once the height (world ``z``) of the floating base drops
-            below this value, in meters. Requires a free joint. ``None``
-            (default) never terminates on height.
+            below this value, in meters. The base is the first free joint in
+            model order, the robot's in scenes that carry one; a scene whose
+            only free joint belongs to an object (a cube on a table) would
+            track that object instead. ``None`` (default) never terminates on
+            height.
         pose_weight (float, optional): weight of the pose term,
             ``exp(-mean((q - q_key)^2) / pose_std^2)`` over the hinge and
             slide joints, where ``q_key`` is the reset keyframe. ``0.0``
@@ -101,9 +104,12 @@ class MujocoModelEnv(MujocoEnv):
     most arms and hands, torques for most legged robots, in the units and
     ranges of the MJCF). The observation is the raw state: ``qpos``, ``qvel``,
     the model's ``sensordata`` when it defines sensors, and the world
-    positions of the sites named in the task under ``site_positions``. A
-    reset starts from the model's ``home`` keyframe plus ``reset_noise_scale``
-    uniform noise. The episode ends at ``max_episode_steps``, when the state
+    positions of the sites named in the task under ``site_positions``. As
+    after MuJoCo's own ``mj_step``, ``sensordata``, ``site_positions`` and
+    contacts are computed before the last physics substep of the env step, so
+    they trail ``qpos`` and ``qvel`` by one substep; a reset returns them
+    consistent. A reset starts from the model's ``home`` keyframe plus
+    ``reset_noise_scale`` uniform noise. The episode ends at ``max_episode_steps``, when the state
     stops being finite or, if the task asks for it, when a floating base
     drops below a height. The reward is the weighted sum of the
     :class:`MujocoModelTask` terms, all off by default; a task of your own is
@@ -249,13 +255,22 @@ class MujocoModelEnv(MujocoEnv):
         control_cost_weight: float = 0.01,
         **overrides: Any,
     ) -> MujocoModelTask:
-        """Hold the reset keyframe pose under a control cost.
+        r"""Hold the reset keyframe pose under a control cost.
 
         The usual first task for a new robot: the reward is the pose term
         times ``pose_weight`` plus the control cost times
-        ``control_cost_weight``. ``overrides`` set the other
-        :class:`MujocoModelTask` fields, typically ``terminate_below_height``
-        and ``alive_bonus`` for a floating-base robot.
+        ``control_cost_weight``.
+
+        Keyword Args:
+            pose_weight (float, optional): weight of the pose term. Defaults
+                to ``1.0``.
+            pose_std (float, optional): scale of the pose term. Defaults to
+                ``0.5``.
+            control_cost_weight (float, optional): weight of the control cost.
+                Defaults to ``0.01``.
+            \*\*overrides: the other :class:`MujocoModelTask` fields, typically
+                ``terminate_below_height`` and ``alive_bonus`` for a
+                floating-base robot.
         """
         return MujocoModelTask(
             pose_weight=pose_weight,
