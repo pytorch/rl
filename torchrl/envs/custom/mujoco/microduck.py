@@ -670,6 +670,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         "head_yaw",
         "yaw_rate",
         "height_gain",
+        "position_x",
+        "position_y",
+        "time",
+        "heading",
         "body_velocity_x",
         "body_velocity_y",
         "body_velocity_z",
@@ -1702,6 +1706,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 "diagnostic_head_yaw": head_yaw.unsqueeze(-1),
                 "diagnostic_yaw_rate": qvel[..., 5:6],
                 "diagnostic_height_gain": qpos[..., 2:3] - self._target_height,
+                "diagnostic_position_x": qpos[..., 0:1],
+                "diagnostic_position_y": qpos[..., 1:2],
+                "diagnostic_time": self._backend.time.unsqueeze(-1),
+                "diagnostic_heading": torch.atan2(
+                    2 * (w * z + x * y), 1 - 2 * (y.square() + z.square())
+                ).unsqueeze(-1),
                 "diagnostic_body_velocity_x": body_velocity[..., 0:1],
                 "diagnostic_body_velocity_y": body_velocity[..., 1:2],
                 "diagnostic_body_velocity_z": body_velocity[..., 2:3],
