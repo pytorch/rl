@@ -329,16 +329,11 @@ class MenagerieEnv(MujocoModelEnv):
         download: bool = False,
         **kwargs: Any,
     ) -> tuple[tuple[Any, ...], dict[str, Any]]:
-        cls._reject_xml_kwargs(kwargs)
-        xml = cls.resolve_model(
-            robot, entry=entry, menagerie_path=menagerie_path, download=download
+        source = MenagerieModelSource(robot, entry=entry, menagerie_path=menagerie_path)
+        (xml,), kwargs = super()._resolve_before_batching(
+            source, download=download, **kwargs
         )
-        return (robot,), {
-            **kwargs,
-            "entry": entry,
-            "menagerie_path": xml,
-            "download": False,
-        }
+        return (robot,), {**kwargs, "entry": entry, "menagerie_path": xml}
 
     @property
     def _model_name(self) -> str:
@@ -353,25 +348,10 @@ class MenagerieEnv(MujocoModelEnv):
         menagerie_path: str | Path | None = None,
         download: bool = False,
     ) -> Path:
-        """Locate the XML of one Menagerie robot; see :class:`MenagerieModelSource`.
+        """Locate the XML of one Menagerie robot.
 
-        Args:
-            robot (str): the Menagerie model directory, for example
-                ``"unitree_go2"``.
-
-        Keyword Args:
-            entry (str, optional): the top-level XML to load, by file stem.
-                ``None`` (default) means ``scene`` from a checkout and the
-                registry's default scene from the package.
-            menagerie_path (str or Path, optional): a ``mujoco_menagerie``
-                checkout, the robot's directory inside one, or the XML itself.
-                Defaults to the :data:`MENAGERIE_ENV_VAR` environment variable,
-                then to the ``mujoco-menagerie`` package cache.
-            download (bool, optional): whether the ``mujoco-menagerie`` package
-                may download the robot into its cache. Defaults to ``False``.
-
-        Returns:
-            The absolute path to the XML.
+        The arguments are those of :class:`MenagerieModelSource`, whose
+        :meth:`~MenagerieModelSource.resolve` this calls.
         """
         source = MenagerieModelSource(robot, entry=entry, menagerie_path=menagerie_path)
         return source.resolve(download=download)

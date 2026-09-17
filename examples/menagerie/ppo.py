@@ -69,7 +69,7 @@ import argparse
 from collections.abc import Mapping, Sequence
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import mujoco
 import numpy as np
@@ -122,6 +122,18 @@ TASK_ARGS = (
     "action_scale",
     "feet_sites",
     "feet_geoms",
+)
+
+RENDER_RUNTIME_KWARGS = frozenset(
+    {
+        "spec",
+        "config",
+        "env_kwargs",
+        "max_steps",
+        "pixels_only",
+        "camera",
+        "render_mode",
+    }
 )
 
 WALK_REWARD_WEIGHTS = {
@@ -654,21 +666,6 @@ def make_single_env(
 def make_env(
     robot: str | None = None,
     *,
-    task: Literal["hold_pose", "walk"] | None = None,
-    repo: str | None = None,
-    revision: str | None = None,
-    entry: str | None = None,
-    frame_skip: int | None = None,
-    max_episode_steps: int | None = None,
-    download: bool | None = None,
-    fall_height: float | None = None,
-    alive_bonus: float | None = None,
-    control_cost: float | None = None,
-    command: Sequence[float] | None = None,
-    command_range: Sequence[float] | None = None,
-    action_scale: float | None = None,
-    feet_sites: Sequence[str] | None = None,
-    feet_geoms: Sequence[str] | None = None,
     num_envs: int = 1,
     fixed_command: bool = False,
     seed: int | None = None,
@@ -678,38 +675,36 @@ def make_env(
     render_width: int = 320,
     render_height: int = 240,
     checkpoint: Mapping[str, Any] | None = None,
+    **task_overrides: Any,
 ) -> EnvBase:
     """Build the env, batched over worker processes when ``num_envs > 1``.
 
-    ``rlrender`` calls this with the checkpoint. Explicit arguments win over
-    the training arguments recorded in ``checkpoint``, which win over the
-    defaults of :func:`parse_args`. ``from_pixels`` adds frames from
-    ``camera_id`` (MuJoCo's free camera by default, ``0`` for the first camera
-    of the scene), e.g. ``--env-kwargs '{"camera_id": 0, "render_width": 640}'``.
+    ``rlrender`` calls this with the checkpoint. The task arguments
+    (:data:`TASK_ARGS`, the ``--`` options of :func:`parse_args`) come from the
+    checkpoint's recorded config, and explicit keyword arguments override
+    them, e.g. ``--env-kwargs '{"command": [0.8, 0, 0]}'``; the keys
+    ``rlrender`` forwards for its own use (:data:`RENDER_RUNTIME_KWARGS`) are
+    ignored. ``from_pixels``
+    adds frames from ``camera_id`` (MuJoCo's free camera by default, ``0``
+    for the first camera of the scene); ``fixed_command`` pins the walk
+    command for evaluation.
     """
+    unknown = set(task_overrides) - set(TASK_ARGS) - RENDER_RUNTIME_KWARGS
+    if unknown:
+        raise TypeError(
+            f"Unknown task arguments {sorted(unknown)}; expected {TASK_ARGS}."
+        )
     recorded = dict((checkpoint or {}).get("config") or {})
     defaults = vars(parse_args([]))
     settings = {key: recorded.get(key, defaults[key]) for key in TASK_ARGS}
-    explicit = {
-        "task": task,
-        "robot": robot,
-        "repo": repo,
-        "revision": revision,
-        "entry": entry,
-        "frame_skip": frame_skip,
-        "max_episode_steps": max_episode_steps,
-        "download": download,
-        "fall_height": fall_height,
-        "alive_bonus": alive_bonus,
-        "control_cost": control_cost,
-        "command": command,
-        "command_range": command_range,
-        "action_scale": action_scale,
-        "feet_sites": feet_sites,
-        "feet_geoms": feet_geoms,
-    }
+    if robot is not None:
+        settings["robot"] = robot
     settings.update(
-        {key: value for key, value in explicit.items() if value is not None}
+        {
+            key: value
+            for key, value in task_overrides.items()
+            if key in TASK_ARGS and value is not None
+        }
     )
     render = {
         "fixed_command": fixed_command,

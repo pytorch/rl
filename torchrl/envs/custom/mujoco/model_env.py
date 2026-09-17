@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
+import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import Composite, Unbounded
@@ -225,18 +226,14 @@ class MujocoModelEnv(MujocoEnv):
         **kwargs: Any,
     ) -> tuple[tuple[Any, ...], dict[str, Any]]:
         """Resolve the source to a local XML so batched workers never download."""
-        cls._reject_xml_kwargs(kwargs)
-        path = _resolve_model_source(source, download=download)
-        return (path,), {**kwargs, "download": False}
-
-    @classmethod
-    def _reject_xml_kwargs(cls, kwargs: dict[str, Any]) -> None:
         for forbidden in ("xml_path", "patch_xml"):
             if forbidden in kwargs:
                 raise ValueError(
                     f"{cls.__name__} loads the model itself; {forbidden}=... is "
                     "not accepted."
                 )
+        path = _resolve_model_source(source, download=download)
+        return (path,), {**kwargs, "download": False}
 
     @property
     def _model_name(self) -> str:
@@ -305,22 +302,18 @@ class MujocoModelEnv(MujocoEnv):
             self._reset_qvel = torch.as_tensor(
                 model.key_qvel[key_id], dtype=qvel0.dtype, device=qvel0.device
             )
-        joint_qpos_index = []
-        free_joint_qpos_adr = None
-        for joint_id in range(model.njnt):
-            joint_type = model.jnt_type[joint_id]
-            qpos_adr = int(model.jnt_qposadr[joint_id])
-            if joint_type in (mujoco.mjtJoint.mjJNT_HINGE, mujoco.mjtJoint.mjJNT_SLIDE):
-                joint_qpos_index.append(qpos_adr)
-            elif (
-                joint_type == mujoco.mjtJoint.mjJNT_FREE and free_joint_qpos_adr is None
-            ):
-                free_joint_qpos_adr = qpos_adr
-        self._joint_qpos_index = torch.tensor(
-            joint_qpos_index, dtype=torch.long, device=self.device
+        joint_types = model.jnt_type
+        scalar = np.isin(
+            joint_types, (mujoco.mjtJoint.mjJNT_HINGE, mujoco.mjtJoint.mjJNT_SLIDE)
         )
-        self._free_joint_qpos_adr = free_joint_qpos_adr
-        if task.terminate_below_height is not None and free_joint_qpos_adr is None:
+        self._joint_qpos_index = torch.as_tensor(
+            model.jnt_qposadr[scalar], dtype=torch.long, device=self.device
+        )
+        free = np.flatnonzero(joint_types == mujoco.mjtJoint.mjJNT_FREE)
+        self._free_joint_qpos_adr = (
+            int(model.jnt_qposadr[free[0]]) if free.size else None
+        )
+        if task.terminate_below_height is not None and not free.size:
             raise ValueError(
                 "terminate_below_height needs a floating base, but "
                 f"{self._model_name} has no free joint."
