@@ -480,7 +480,11 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         progress = getattr(self, "_collector_progress", None)
         if progress is not None:
             stats.update(
-                progress.snapshot(getattr(self, "_collector_progress_worker_idx", None))
+                progress.snapshot(
+                    None
+                    if getattr(self, "_collector_progress_aggregate", False)
+                    else getattr(self, "_collector_progress_worker_idx", 0)
+                )
             )
         frames = getattr(self, "_frames", None)
         if frames is not None:
@@ -508,12 +512,20 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         self._collector_progress.increment_stepped(
             self._collector_progress_worker_idx,
             frames,
-            trajectory_pending=self.trajs_per_batch is not None,
+            trajectory_pending=(
+                self.trajs_per_batch is not None
+                or getattr(self, "replay_write_mode", None) == "trajectory"
+            ),
         )
 
     def _record_trajectory_completion(self, frames: int, trajectories: int) -> None:
         self._collector_progress.record_trajectory_completion(
             self._collector_progress_worker_idx, frames, trajectories
+        )
+
+    def _record_pending_trajectory_frames(self, frames: int) -> None:
+        self._collector_progress.record_trajectory_pending(
+            self._collector_progress_worker_idx, frames
         )
 
     def _record_replay_write(self, frames: int) -> None:
@@ -1547,6 +1559,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             for batch in self.iterator():
                 if batch is None:
                     continue
+                if getattr(self, "_collector_progress_pending_on_ingest", False):
+                    self._record_pending_trajectory_frames(batch.numel())
                 completed_frames, completed_trajectories = _traj_ingest(
                     batch, partial_trajs, complete_trajs
                 )

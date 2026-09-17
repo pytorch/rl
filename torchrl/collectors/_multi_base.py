@@ -1403,8 +1403,13 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.queue_out = queue_out
         self.procs = []
         self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
-        self._collector_progress = _CollectorProgress(self.num_workers, ctx=ctx)
-        self._collector_progress_worker_idx = None
+        # Workers and coordinator each get a single-writer row. The extra
+        # coordinator row accounts for trajectory assembly performed by this
+        # process when no replay buffer is attached.
+        self._collector_progress = _CollectorProgress(self.num_workers + 1, ctx=ctx)
+        self._collector_progress_worker_idx = self.num_workers
+        self._collector_progress_aggregate = True
+        self._collector_progress_pending_on_ingest = True
 
         # Create all pipes upfront (needed for weight sync scheme initialization)
         # Store as list of (parent, child) tuples for use in worker creation
@@ -2231,7 +2236,13 @@ also that the state dict is synchronised across processes if needed."""
             if traj_pool_state is None and worker_traj_pool_state is not None:
                 traj_pool_state = worker_traj_pool_state
             state_dict[f"worker{idx}"] = _state_dict
-        state_dict.update({"frames": self._frames, "iter": self._iter})
+        state_dict.update(
+            {
+                "frames": self._frames,
+                "iter": self._iter,
+                "collector_progress_coordinator": self._progress_state_dict(),
+            }
+        )
         if traj_pool_state is not None:
             state_dict["traj_pool"] = traj_pool_state
         if self.policy_version_tracker is not None:
@@ -2258,6 +2269,7 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        self._load_progress_state_dict(state_dict.get("collector_progress_coordinator"))
         if "policy_version" in state_dict and self.policy_version_tracker is not None:
             policy_version = state_dict["policy_version"]
             self._acknowledged_policy_version = policy_version

@@ -602,6 +602,10 @@ class _CollectorProgress:
         self._values[offset + 2] -= frames
         self._values[offset + 4] += trajectories
 
+    def record_trajectory_pending(self, worker_idx: int, frames: int) -> None:
+        offset = worker_idx * len(self._KEYS)
+        self._values[offset + 2] += frames
+
     def record_replay_write(self, worker_idx: int, frames: int) -> None:
         offset = worker_idx * len(self._KEYS)
         self._values[offset + 3] += frames
