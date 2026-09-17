@@ -5079,12 +5079,12 @@ class TestPolicyVersion:
                 track_policy_version=True,
             )
 
-    def test_multi_collector_accepts_preinitialized_uuid_version_schema(self):
+    def test_multi_collector_accepts_preinitialized_shared_uuid_version_schema(self):
         tracker = PolicyVersion(version_type="uuid")
         env = self._Env()
         fake_td = env.fake_tensordict()
         fake_td.set("next", tracker._step(fake_td, fake_td.get("next")))
-        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(16))
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(16), shared=True)
         replay_buffer.extend(fake_td.unsqueeze(0))
         env.close()
 
