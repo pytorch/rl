@@ -32,7 +32,7 @@ from torch.amp import GradScaler
 from torch.autograd.profiler import record_function
 from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
-from torchrl.envs.llm.transforms import PolicyVersion
+from torchrl.envs.transforms import PolicyVersion
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,

@@ -303,6 +303,7 @@ Available Transforms
     NextObservationDelta
     NextStateReconstructor
     PolicyAgeFilter
+    PolicyVersion
     NoopResetEnv
     ObservationNorm
     ObservationTransform

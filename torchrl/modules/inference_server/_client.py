@@ -212,7 +212,7 @@ class PolicyClientModule(TensorDictModuleBase):
 
     .. note::
         The default ``"policy_version"`` key is shared on purpose with the
-        :class:`~torchrl.envs.llm.transforms.PolicyVersion` transform and the
+        :class:`~torchrl.envs.transforms.PolicyVersion` transform and the
         collectors' ``track_policy_version`` mechanism: they stamp the same
         concept (the behavior-policy version that produced the data), so
         consumers such as

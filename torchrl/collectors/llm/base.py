@@ -20,7 +20,7 @@ from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool
 from torchrl.envs.common import EnvBase
-from torchrl.envs.llm.transforms.policy_version import PolicyVersion
+from torchrl.envs.transforms import PolicyVersion
 
 
 class LLMCollector(Collector):
@@ -80,8 +80,8 @@ class LLMCollector(Collector):
             This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
+            This will be mediated by the :class:`~torchrl.envs.transforms.PolicyVersion` transform, which will be added to the environment.
+            Alternatively, a :class:`~torchrl.envs.transforms.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
         verbose (bool, optional): if ``True``, the collector will print progress information.

@@ -158,13 +158,13 @@ class AsyncCollector(MultiAsyncCollector):
             for when these markers are needed to sample trajectories from a
             replay buffer.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            A :class:`~torchrl.envs.transforms.PolicyVersion` transform is
             installed on the environment, tagging every collected frame with the current version
             under the ``"policy_version"`` key. The transform's version is bumped exactly once
             per :meth:`update_policy_weights_` call.
 
             The recommended path is ``track_policy_version=True``: let the collector own the
-            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            transform. Passing a :class:`~torchrl.envs.transforms.PolicyVersion`
             instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
             **without** going through a collector (e.g. a hand-rolled rollout loop).
 
