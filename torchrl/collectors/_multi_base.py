@@ -1101,7 +1101,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 "type at that key before enabling track_policy_version."
             )
         value = storage.get(key)
-        version_type = self.policy_version_tracker.version_type
+        version_type = getattr(self.policy_version_tracker, "version_type", int)
         if version_type in (int, "int"):
             if not isinstance(value, torch.Tensor) or value.dtype != torch.int64:
                 dtype = getattr(value, "dtype", type(value).__name__)
