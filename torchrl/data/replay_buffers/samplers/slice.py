@@ -4,9 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from multiprocessing.context import get_spawning_popen
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from tensordict import is_tensor_collection
@@ -151,6 +152,21 @@ class SliceSampler(Sampler):
             requires a fixed time dimension before a manual reshape).
             Combining ``pad_output=True`` with ``strict_length=True`` raises
             :class:`ValueError`. Defaults to ``False``.
+        output_layout ("flat" or "batch_time", optional): controls the batch
+            layout returned by the replay buffer. ``"flat"`` preserves the
+            historical concatenated layout. ``"batch_time"`` returns
+            ``[num_slices, time]``; short non-strict slices are padded by
+            repeating their last real transition and accompanied by
+            ``("collector", "mask")``. The time name is assigned before replay
+            transforms run; a transform that changes the batch layout is
+            responsible for updating batch names. Defaults to ``"flat"``.
+        slice_end_key (NestedKey, optional): key populated at the final real
+            transition of every row when ``output_layout="batch_time"``.
+            Unlike environment terminal fields, this marker only represents
+            the sampled slice boundary. Defaults to
+            ``("collector", "slice_end")``.
+        time_dim_name (str or None, optional): name assigned to the time batch
+            dimension of structured TensorDict samples. Defaults to ``"time"``.
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
@@ -357,6 +373,8 @@ class SliceSampler(Sampler):
                 [22],
                 [ 8]])
 
+    See also :class:`~torchrl.trainers.algorithms.configs.SliceSamplerConfig`.
+
     .. seealso::
 
         Trajectory boundaries are recovered at sampling time with
@@ -376,6 +394,10 @@ class SliceSampler(Sampler):
     fragmented: bool = False
     step_key: NestedKey | None = "step_count"
     _fragmented_index: _FragmentedTrajectoryIndex | None = None
+    output_layout: Literal["flat", "batch_time"] = "flat"
+    slice_end_key: NestedKey = ("collector", "slice_end")
+    time_dim_name: str | None = "time"
+    _warned_short_batch: bool = False
 
     def __init__(
         self,
@@ -394,6 +416,9 @@ class SliceSampler(Sampler):
         init_key: NestedKey | None = "is_init",
         strict_length: bool = True,
         pad_output: bool = False,
+        output_layout: Literal["flat", "batch_time"] = "flat",
+        slice_end_key: NestedKey = ("collector", "slice_end"),
+        time_dim_name: str | None = "time",
         compile: bool | dict = False,
         span: bool | int | tuple[bool | int, bool | int] = False,
         use_gpu: torch.device | bool = False,
@@ -448,6 +473,19 @@ class SliceSampler(Sampler):
         self.cache_values = cache_values
         self._fetch_traj = True
         self.strict_length = strict_length
+        if output_layout not in ("flat", "batch_time"):
+            raise ValueError(
+                "output_layout must be either 'flat' or 'batch_time', got "
+                f"{output_layout!r}."
+            )
+        if time_dim_name is not None and not isinstance(time_dim_name, str):
+            raise TypeError("time_dim_name must be a string or None.")
+        self.output_layout = output_layout
+        if not isinstance(slice_end_key, (str, tuple)):
+            slice_end_key = tuple(slice_end_key)
+        self.slice_end_key = unravel_key(slice_end_key)
+        self.time_dim_name = time_dim_name
+        self._warned_short_batch = False
         if pad_output and strict_length:
             raise ValueError(
                 "pad_output=True is incompatible with strict_length=True: "
@@ -584,8 +622,33 @@ class SliceSampler(Sampler):
             f"fragmented={self.fragmented}, "
             f"truncated_key={self.truncated_key}, "
             f"strict_length={self.strict_length}, "
-            f"pad_output={getattr(self, 'pad_output', False)})"
+            f"pad_output={getattr(self, 'pad_output', False)}, "
+            f"output_layout={self.output_layout!r})"
         )
+
+    def _set_sample_names(self, data):
+        if self.output_layout != "batch_time" or not is_tensor_collection(data):
+            return data
+        names = list(data.names)
+        if len(names) >= 2:
+            names[-1] = self.time_dim_name
+            data.names = names
+        return data
+
+    def _warn_if_short_batch(self, index, requested_size: int) -> None:
+        if self.output_layout != "flat" or self._warned_short_batch:
+            return
+        returned_size = index[0].numel() if isinstance(index, tuple) else index.numel()
+        if returned_size < requested_size:
+            self._warned_short_batch = True
+            warnings.warn(
+                "SliceSampler returned a short flat batch: requested "
+                f"{requested_size} transitions but returned {returned_size}. "
+                "Use output_layout='batch_time' for padded, fixed-shape output "
+                "or strict_length=True to sample only eligible trajectories.",
+                UserWarning,
+                stacklevel=3,
+            )
 
     def _find_start_stop_traj(
         self,
@@ -888,7 +951,9 @@ class SliceSampler(Sampler):
         if self._batch_size_multiplier is not None:
             batch_size = batch_size * self._batch_size_multiplier
         if self.fragmented:
-            return self._sample_fragmented(storage, batch_size)
+            result = self._sample_fragmented(storage, batch_size)
+            self._warn_if_short_batch(result[0], batch_size)
+            return result
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
@@ -902,7 +967,7 @@ class SliceSampler(Sampler):
             )
         seq_length, num_slices = self._adjusted_batch_size(batch_size)
         storage_length = storage.shape[0]
-        return self._sample_slices(
+        result = self._sample_slices(
             lengths,
             start_idx,
             stop_idx,
@@ -911,6 +976,8 @@ class SliceSampler(Sampler):
             storage_length=storage_length,
             storage=storage,
         )
+        self._warn_if_short_batch(result[0], batch_size)
+        return result
 
     def _sample_fragmented(
         self, storage: Storage, batch_size: int
@@ -965,7 +1032,11 @@ class SliceSampler(Sampler):
                 generator=self._rng,
             )
             sampled_lengths = lengths[run_idx].clamp_max(seq_length)
-            target_seq_length = seq_length if self.pad_output else None
+            target_seq_length = (
+                seq_length
+                if self.pad_output or self.output_layout == "batch_time"
+                else None
+            )
 
         selected_run_lengths = lengths[run_idx]
         available_starts = selected_run_lengths - sampled_lengths + 1
@@ -1031,7 +1102,11 @@ class SliceSampler(Sampler):
                 maxval, (num_slices,), device=lengths.device, generator=self._rng
             )
 
-        _target_seq_length = None
+        _target_seq_length = (
+            seq_length
+            if self.output_layout == "batch_time" and not self.strict_length
+            else None
+        )
         if (lengths < seq_length).any():
             if self.strict_length:
                 idx = lengths >= seq_length
@@ -1077,7 +1152,11 @@ class SliceSampler(Sampler):
                     num_slices = traj_idx.shape[0]
 
                 # make seq_length a tensor with values clamped by lengths
-                _target_seq_length = seq_length if self.pad_output else None
+                _target_seq_length = (
+                    seq_length
+                    if self.pad_output or self.output_layout == "batch_time"
+                    else None
+                )
                 seq_length = lengths[traj_idx].clamp_max(seq_length)
         else:
             if traj_idx is None:
@@ -1110,6 +1189,14 @@ class SliceSampler(Sampler):
         target_seq_length: int | None = None,
         storage,
     ) -> tuple[torch.Tensor, dict]:
+        # Preserve the requested scalar length: span handling below may turn
+        # seq_length into a per-slice tensor, but structured output still needs
+        # the original fixed time size.
+        requested_seq_length = (
+            seq_length
+            if self.output_layout == "batch_time" and isinstance(seq_length, int)
+            else None
+        )
         # end_point is the last possible index for start
         last_indexable_start = lengths[traj_idx] - seq_length + 1
         if not self.span[1]:
@@ -1172,6 +1259,13 @@ class SliceSampler(Sampler):
                 seq_length = torch.minimum(
                     seq_length, lengths[traj_idx] - relative_starts
                 )
+
+        if (
+            self.output_layout == "batch_time"
+            and target_seq_length is None
+            and isinstance(seq_length, torch.Tensor)
+        ):
+            target_seq_length = requested_seq_length
 
         starts = torch.cat(
             [
@@ -1239,6 +1333,57 @@ class SliceSampler(Sampler):
         mask_flat: torch.Tensor | None,
         storage: Storage,
     ) -> tuple[tuple[torch.Tensor, ...], dict[str, Any]]:
+        if self.output_layout == "batch_time":
+            time_size = (
+                target_seq_length
+                if target_seq_length is not None
+                else seq_length
+                if isinstance(seq_length, int)
+                else None
+            )
+            if time_size is None or index.shape[0] != num_slices * time_size:
+                raise RuntimeError(
+                    "Could not form a stable batch-time SliceSampler output. "
+                    f"output_layout={self.output_layout!r}, "
+                    f"strict_length={self.strict_length}, "
+                    f"pad_output={self.pad_output}, num_slices={num_slices}, "
+                    f"seq_length_shape={getattr(seq_length, 'shape', None)}, "
+                    f"target_seq_length={target_seq_length}, "
+                    f"index_shape={tuple(index.shape)}. Please report this "
+                    "issue with the sampler configuration."
+                )
+            if not self.strict_length and mask_flat is None:
+                mask_flat = torch.ones(
+                    index.shape[0], dtype=torch.bool, device=index.device
+                )
+
+            slice_end = torch.zeros(
+                (index.shape[0], 1), dtype=torch.bool, device=index.device
+            )
+            if isinstance(seq_length, int):
+                slice_end.view(num_slices, time_size)[:, seq_length - 1] = True
+            else:
+                positions = torch.arange(
+                    num_slices, device=seq_length.device
+                ) * time_size + (seq_length - 1).clamp_min(0)
+                slice_end[positions] = True
+
+            flat_index = index.to(torch.long).unbind(-1)
+            st_index = storage[flat_index]
+            info = {self.slice_end_key: slice_end}
+            if mask_flat is not None:
+                info[("collector", "mask")] = mask_flat
+            self._maybe_emit_init_marker(
+                info, st_index, num_slices, seq_length, target_seq_length
+            )
+
+            index = index.reshape(num_slices, time_size, index.shape[-1])
+            info = {
+                key: value.reshape(num_slices, time_size, *value.shape[1:])
+                for key, value in info.items()
+            }
+            return index.unbind(-1), info
+
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
             done_key = _replace_last(truncated_key, "done")

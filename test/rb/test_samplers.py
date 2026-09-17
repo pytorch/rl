@@ -56,6 +56,7 @@ from torchrl.data.replay_buffers.utils import (
     _ReplayBoundaryIndex,
 )
 from torchrl.modules import GRUModule, set_recurrent_mode
+from torchrl.objectives.value import GAE
 from torchrl.testing import get_default_devices
 
 
@@ -1488,6 +1489,182 @@ class TestSamplers:
                     i, length:
                 ].any(), f"slice {i}: spurious truncated in padding"
 
+    @pytest.mark.parametrize("strict_length", [False, True])
+    def test_slice_sampler_batch_time_layout(self, strict_length):
+        torch.manual_seed(0)
+        length = 6 if strict_length else 2
+        done = torch.zeros(length, 1, dtype=torch.bool)
+        done[-1] = True
+        is_init = torch.zeros(length, 1, dtype=torch.bool)
+        is_init[0] = True
+        data = TensorDict(
+            {
+                "traj": torch.zeros(length, dtype=torch.long),
+                "step": torch.arange(length),
+                "is_init": is_init,
+                ("next", "done"): done,
+                ("next", "terminated"): done.clone(),
+                ("next", "truncated"): torch.zeros_like(done),
+            },
+            [length],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(length),
+            sampler=SliceSampler(
+                slice_len=4,
+                traj_key="traj",
+                strict_length=strict_length,
+                output_layout="batch_time",
+                slice_end_key=("metadata", "slice_end"),
+            ),
+            batch_size=8,
+        )
+        rb.extend(data)
+
+        sample = rb.sample()
+
+        assert sample.batch_size == torch.Size([2, 4])
+        assert sample.names == [None, "time"]
+        index = sample["index"].squeeze(-1)
+        for key in (
+            ("next", "done"),
+            ("next", "terminated"),
+            ("next", "truncated"),
+        ):
+            torch.testing.assert_close(sample[key], data[key][index])
+        assert sample["is_init"][:, 0].all()
+
+        slice_end = sample["metadata", "slice_end"].squeeze(-1)
+        if strict_length:
+            assert (slice_end.nonzero(as_tuple=True)[1] == 3).all()
+            assert ("collector", "mask") not in sample.keys(True)
+        else:
+            mask = sample["collector", "mask"]
+            torch.testing.assert_close(
+                mask, torch.tensor([[True, True, False, False]]).expand(2, -1)
+            )
+            torch.testing.assert_close(
+                slice_end, torch.tensor([[False, True, False, False]]).expand(2, -1)
+            )
+
+    def test_slice_sampler_batch_time_circular_wraparound(self):
+        torch.manual_seed(0)
+        lengths = (4, 6)
+        data = TensorDict.cat(
+            [
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), traj, dtype=torch.long),
+                        "step": torch.arange(length),
+                    },
+                    [length],
+                )
+                for traj, length in enumerate(lengths)
+            ]
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(
+                slice_len=4,
+                traj_key="traj",
+                output_layout="batch_time",
+            ),
+            batch_size=16,
+        )
+        rb.extend(data[:4])
+        rb.extend(data[4:])
+
+        sample = rb.sample()
+
+        assert (sample["traj"] == 1).all()
+        assert (sample["step"].diff(dim=1) == 1).all()
+        physical_index = sample["index"].squeeze(-1)
+        assert (physical_index.diff(dim=1) != 1).any()
+
+    def test_slice_sampler_flat_short_batch_warns_once(self):
+        data = TensorDict(
+            {"traj": torch.zeros(2, dtype=torch.long), "step": torch.arange(2)}, [2]
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(2),
+            sampler=SliceSampler(slice_len=4, traj_key="traj", strict_length=False),
+            batch_size=8,
+        )
+        rb.extend(data)
+
+        with pytest.warns(UserWarning, match="requested 8 transitions but returned 4"):
+            rb.sample()
+        with warnings.catch_warnings(record=True) as caught:
+            rb.sample()
+        assert not caught
+
+    def test_slice_sampler_batch_time_recurrent_and_gae_boundaries(self):
+        torch.manual_seed(0)
+        batch, time = 2, 4
+        input_size, hidden_size = 3, 5
+        length = 2
+        is_init = torch.zeros(length, 1, dtype=torch.bool)
+        is_init[0] = True
+        data = TensorDict(
+            {
+                "traj": torch.zeros(length, dtype=torch.long),
+                "embed": torch.randn(length, input_size),
+                "recurrent_state": torch.randn(length, 1, hidden_size),
+                "is_init": is_init,
+                "state_value": torch.zeros(length, 1),
+                "next": {
+                    "state_value": torch.ones(length, 1),
+                    "reward": torch.ones(length, 1),
+                    "done": torch.zeros(length, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(length, 1, dtype=torch.bool),
+                },
+            },
+            [length],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(length),
+            sampler=SliceSampler(
+                slice_len=time,
+                traj_key="traj",
+                strict_length=False,
+                output_layout="batch_time",
+            ),
+            batch_size=batch * time,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+
+        gru = GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=1,
+            in_keys=["embed", "recurrent_state", "is_init"],
+            out_keys=["features", ("next", "recurrent_state")],
+        )
+        with set_recurrent_mode("recurrent"):
+            batched = gru(sample.clone())
+            rowwise = [gru(row.unsqueeze(0)) for row in sample.clone().unbind(0)]
+        torch.testing.assert_close(
+            batched["features"],
+            torch.cat([row["features"] for row in rowwise], dim=0),
+        )
+
+        gae = GAE(gamma=0.9, lmbda=1.0, value_network=None)
+        gae.set_keys(valid=("collector", "mask"))
+        gae_input = sample.clone()
+        gae_input["next", "done"] = (
+            gae_input["next", "done"] | gae_input["collector", "slice_end"]
+        )
+        output = gae(gae_input)
+        mask = sample["collector", "mask"]
+        assert not output["advantage"][~mask].any()
+        assert not output["value_target"][~mask].any()
+        last_real = mask.sum(-1) - 1
+        torch.testing.assert_close(
+            output["advantage"][torch.arange(batch), last_real, 0],
+            torch.full((batch,), 1.9),
+        )
+
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])
     @pytest.mark.parametrize("circ", [False, True])
@@ -2164,13 +2341,14 @@ class TestSamplers:
                 slice_len=5,
                 traj_key="episode",
                 strict_length=True,
+                output_layout="batch_time",
             ),
             batch_size=10,
         )
         rb.extend(data)
         sample = rb.sample()
-        # batch_size=10, slice_len=5 -> 2 slices of 5 contiguous obs each
-        obs = sample["obs"].view(2, 5)
+        assert sample.batch_size == torch.Size([2, 5])
+        obs = sample["obs"]
         diffs = obs[:, 1:] - obs[:, :-1]
         assert (diffs == 1).all(), obs
 
