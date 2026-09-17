@@ -140,7 +140,11 @@ class TestEnsemble:
         assert members[1][:]["value"].tolist() == [110, 111]
         assert rb.stats() == {
             "size": 4,
+            "storage_size": 4,
+            "sampleable_size": 4,
             "write_count": 6,
+            "sample_calls": 0,
+            "samples_returned": 0,
             "prefetch_queue_size": 0,
             "initialized": True,
             "capacity": 4,

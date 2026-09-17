@@ -8,6 +8,7 @@ import argparse
 import os
 
 import sys
+import threading
 import time
 from functools import partial
 
@@ -18,9 +19,11 @@ import torch.multiprocessing as mp
 from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl import service_backend, transport_backend
+from torchrl._comm.replay_service import _DistributedReplayService
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import RayReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
+from torchrl.data.replay_buffers.ray_buffer import _RayReplayBufferClient
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     SamplerWithoutReplacement,
@@ -34,6 +37,33 @@ from torchrl.objectives.llm import MCAdvantage
 
 RETRY_COUNT = 3
 RETRY_BACKOFF = 3
+
+
+def test_distributed_replay_control_reports_flow_counters():
+    replay_buffer = ReplayBuffer(storage=LazyTensorStorage(8), batch_size=2)
+    replay_buffer.extend(torch.arange(4))
+    replay_buffer.sample()
+    service = object.__new__(_DistributedReplayService)
+    service.replay_buffer = replay_buffer
+    service._lock = threading.Lock()
+
+    (stats,) = service._control([object()])
+
+    assert stats.to_dict() == {
+        "size": 4,
+        "storage_size": 4,
+        "sampleable_size": 4,
+        "write_count": 4,
+        "sample_calls": 1,
+        "samples_returned": 2,
+    }
+
+
+def test_ray_client_rejects_blocking_sample_without_dispatch():
+    client = _RayReplayBufferClient(actor=object(), has_gpu=False)
+
+    with pytest.raises(NotImplementedError, match="Blocking replay sampling"):
+        client.sample(wait=True, timeout=1.0)
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):

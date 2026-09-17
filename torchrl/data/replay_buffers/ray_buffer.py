@@ -107,6 +107,10 @@ class _RayReplayBufferClient:
         ray.get(self._actor._setattr.remote("dim_extend", value))
 
     def sample(self, *args, **kwargs):
+        if kwargs.get("wait", False):
+            raise NotImplementedError(
+                "Blocking replay sampling is not supported by Ray actors."
+            )
         return ray.get(self._actor.sample.remote(*args, **kwargs))
 
     def extend(self, *args, **kwargs):
@@ -482,6 +486,18 @@ class RayReplayBuffer(ReplayBuffer):
 
     def sample(self, *args, **kwargs):
         return self._client.sample(*args, **kwargs)
+
+    def wait_until_sampleable(
+        self,
+        min_items: int | None = None,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> bool:
+        """Raises because synchronous Ray actors cannot safely block for writes."""
+        del min_items, timeout, cancel_event
+        raise NotImplementedError(
+            "wait_until_sampleable is not supported by Ray replay buffers."
+        )
 
     def extend(self, *args, **kwargs):
         return self._client.extend(*args, **kwargs)

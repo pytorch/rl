@@ -440,6 +440,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
         batch_size: int | None = None,
         return_info: bool = False,
         include_info: bool | None = None,
+        *,
+        wait: bool = False,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
     ) -> TensorDictBase:
         """Samples a batch of data from the replay buffer.
 
@@ -452,6 +456,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
             return_info (bool): whether to return info. If True, the result
                 is a tuple (data, info). If False, the result is the data.
             include_info (bool, optional): deprecated alias for ``return_info``.
+            wait (bool, optional): if ``True``, wait for enough replay items
+                instead of failing immediately. Defaults to ``False``.
+            timeout (float, optional): maximum number of seconds to wait when
+                ``wait=True``. ``None`` waits indefinitely.
+            cancel_event (optional): event-like object exposing ``is_set()``.
+                Setting it cancels a blocking sample.
 
         Returns:
             A tensordict containing a batch of data selected in the replay buffer.
@@ -465,7 +475,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 "output tensordict."
             )
 
-        data, info = super().sample(batch_size, return_info=True)
+        data, info = super().sample(
+            batch_size,
+            return_info=True,
+            wait=wait,
+            timeout=timeout,
+            cancel_event=cancel_event,
+        )
         is_tc = is_tensor_collection(data)
         if is_tc and not is_tensorclass(data) and include_info in (True, None):
             is_locked = data.is_locked

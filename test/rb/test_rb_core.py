@@ -1754,7 +1754,11 @@ class TestBufferStats:
         rb = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
         stats = rb.stats()
         assert stats["size"] == 0
+        assert stats["storage_size"] == 0
+        assert stats["sampleable_size"] == 0
         assert stats["write_count"] == 0
+        assert stats["sample_calls"] == 0
+        assert stats["samples_returned"] == 0
         assert stats["capacity"] == 10
         assert stats["utilization"] == 0.0
         assert stats["prefetch_queue_size"] == 0
@@ -1762,22 +1766,70 @@ class TestBufferStats:
         rb.extend(torch.arange(15))
         stats = rb.stats()
         assert stats["size"] == 10
+        assert stats["storage_size"] == 10
+        assert stats["sampleable_size"] == 10
         assert stats["write_count"] == 15
         assert stats["utilization"] == 1.0
+
+    def test_stats_supports_64_bit_write_counts(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.writer._write_count = 2**31 + 1
+
+        assert rb.stats()["write_count"] == 2**31 + 1
 
     def test_stats_is_side_effect_free(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
         rb.extend(torch.arange(4))
         before = rb.stats()
-        rb.stats()
-        rb.sample()
         assert rb.stats() == before
+        rb.sample()
+        after = rb.stats()
+        assert after["sample_calls"] == 1
+        assert after["samples_returned"] == 2
+        for key in before.keys() - {"sample_calls", "samples_returned"}:
+            assert after[key] == before[key]
+
+    def test_stats_separates_storage_and_sampleable_sizes(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            batch_size=2,
+            consume_after_n_samples=1,
+        )
+        rb.extend(torch.arange(4))
+        rb.sample()
+
+        stats = rb.stats()
+        assert stats["size"] == stats["sampleable_size"] == 2
+        assert stats["storage_size"] == 4
+        assert stats["utilization"] == 0.4
+
+    @pytest.mark.parametrize("checkpoint", ["state_dict", "dumps", "pickle"])
+    def test_stats_counters_checkpoint_roundtrip(self, checkpoint, tmp_path):
+        source = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
+        source.extend(torch.arange(4))
+        source.sample()
+
+        if checkpoint == "pickle":
+            restored = pickle.loads(pickle.dumps(source))
+        else:
+            restored = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
+            if checkpoint == "state_dict":
+                restored.load_state_dict(source.state_dict())
+            else:
+                source.dumps(tmp_path)
+                restored.extend(torch.zeros(1))
+                restored.loads(tmp_path)
+
+        assert restored.stats()["sample_calls"] == 1
+        assert restored.stats()["samples_returned"] == 2
 
     def test_stats_does_not_initialize_buffer(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(10), delayed_init=True)
         stats = rb.stats()
         assert stats["initialized"] is False
         assert stats["size"] == 0
+        assert stats["storage_size"] == 0
+        assert stats["sampleable_size"] == 0
         assert stats["capacity"] == 10
         assert stats["utilization"] == 0.0
         assert not rb.initialized
@@ -1812,6 +1864,68 @@ class TestBufferStats:
         assert stats["size"] == 10
         assert stats["write_count"] == 0
         assert stats["capacity"] == 10
+
+
+class TestReplayBufferReadiness:
+    def test_wait_until_sampleable_unblocks_on_write(self):
+        rb = ReplayBuffer(storage=ListStorage(10), batch_size=2)
+        started = threading.Event()
+        completed = threading.Event()
+        results = []
+
+        def wait_for_replay():
+            started.set()
+            results.append(rb.wait_until_sampleable(timeout=5))
+            completed.set()
+
+        thread = threading.Thread(target=wait_for_replay)
+        thread.start()
+        assert started.wait(timeout=1)
+        assert not completed.wait(timeout=0.05)
+        rb.extend(torch.arange(2))
+        assert completed.wait(timeout=1)
+        thread.join(timeout=1)
+        assert results == [True]
+
+    def test_sample_wait_timeout_and_cancellation(self):
+        rb = ReplayBuffer(storage=ListStorage(10), batch_size=2)
+        with pytest.raises(TimeoutError, match="did not become sampleable"):
+            rb.sample(wait=True, timeout=0)
+
+        cancel_event = threading.Event()
+        cancel_event.set()
+        with pytest.raises(RuntimeError, match="cancelled"):
+            rb.sample(wait=True, cancel_event=cancel_event)
+
+    def test_tensordict_sample_wait_forwards_readiness_options(self):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
+        rb.extend(TensorDict({"value": torch.arange(2)}, batch_size=[2]))
+
+        sample = rb.sample(wait=True, timeout=1.0)
+
+        assert sample.batch_size == torch.Size([2])
+
+    def test_shutdown_wakes_waiters(self):
+        rb = ReplayBuffer(storage=ListStorage(10), batch_size=2)
+        started = threading.Event()
+        completed = threading.Event()
+        errors = []
+
+        def wait_for_replay():
+            started.set()
+            try:
+                rb.wait_until_sampleable()
+            except RuntimeError as error:
+                errors.append(str(error))
+            completed.set()
+
+        thread = threading.Thread(target=wait_for_replay)
+        thread.start()
+        assert started.wait(timeout=1)
+        rb.shutdown()
+        assert completed.wait(timeout=1)
+        thread.join(timeout=1)
+        assert errors and "shut down" in errors[0]
 
 
 class _RepeatTwiceUnit(SampleUnit):
