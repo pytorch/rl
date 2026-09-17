@@ -30,7 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=a746c00c" />
     <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=a6c16915" />
-    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=c83e6b79" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
@@ -1565,179 +1565,178 @@ to download the full example code.</p>
 <p>This tutorial shows how to save a standalone training state, restore selected
 components, choose a directory or archive container, integrate the same object
 with a Trainer, and extend checkpointing for a custom component.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
-
-<span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">import</span> <span class="nn">tempfile</span>
-<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
-
-<span class="kn">import</span> <span class="nn">torch</span>
-
-<span class="kn">from</span> <span class="nn">torchrl.checkpoint</span> <span class="kn">import</span> <span class="p">(</span>
-    <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">,</span>
-    <a href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">CheckpointAdapter</span></a><span class="p">,</span>
-    <a href="../reference/generated/torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions" title="torchrl.checkpoint.CheckpointOptions" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">CheckpointOptions</span></a><span class="p">,</span>
-    <a href="../reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState" title="torchrl.checkpoint.GlobalRNGState" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">GlobalRNGState</span></a><span class="p">,</span>
-    <a href="../reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter" title="torchrl.checkpoint.StateDictCheckpointAdapter" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">StateDictCheckpointAdapter</span></a><span class="p">,</span>
-<span class="p">)</span>
-
-
-<span class="c1"># Standalone training state</span>
-<span class="c1"># -------------------------</span>
-<span class="c1"># Components are independent. Omitting the replay buffer, optimizer, or RNG is</span>
-<span class="c1"># valid, and restoration can select a smaller subset than was saved.</span>
-
-<span class="n">temporary_directory</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span>
-<span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">temporary_directory</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-<a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">policy</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">3e-4</span><span class="p">)</span>
-<span class="n">progress</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;frames&quot;</span><span class="p">:</span> <span class="mi">128</span><span class="p">}</span>
-
-<a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">checkpoint</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">(</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a><span class="p">,</span>
-    <span class="n">trainer_state</span><span class="o">=</span><span class="n">progress</span><span class="p">,</span>
-    <span class="n">rng</span><span class="o">=</span><a href="../reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState" title="torchrl.checkpoint.GlobalRNGState" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">GlobalRNGState</span></a><span class="p">(),</span>
-    <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;learning_rate&quot;</span><span class="p">:</span> <span class="mf">3e-4</span><span class="p">},</span>
-<span class="p">)</span>
-<span class="n">directory_path</span> <span class="o">=</span> <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save" title="torchrl.checkpoint.Checkpoint.save" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-method"><span class="n">checkpoint</span><span class="o">.</span><span class="n">save</span></a><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;step-128&quot;</span><span class="p">)</span>
-
-
-<span class="c1"># Partial restoration and device remapping</span>
-<span class="c1"># ----------------------------------------</span>
-<span class="c1"># Only the policy file is read. Large unrequested components, such as replay</span>
-<span class="c1"># buffers, are neither opened nor materialized.</span>
-
-<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">restored_policy</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-<a href="../reference/generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult" title="torchrl.checkpoint.CheckpointLoadResult" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">load_result</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">restored_policy</span></a><span class="p">)</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
-    <span class="n">directory_path</span><span class="p">,</span>
-    <span class="n">components</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">},</span>
-    <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="k">assert</span> <a href="../reference/generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult" title="torchrl.checkpoint.CheckpointLoadResult" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">load_result</span></a><span class="o">.</span><span class="n">loaded</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">}</span>
-<span class="k">assert</span> <a href="../reference/generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult" title="torchrl.checkpoint.CheckpointLoadResult" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">load_result</span></a><span class="o">.</span><span class="n">unrequested</span> <span class="o">==</span> <span class="p">{</span>
-    <span class="s2">&quot;config&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;optimizer&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;rng&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;trainer_state&quot;</span><span class="p">,</span>
-<span class="p">}</span>
-
-
-<span class="c1"># Single-file archives</span>
-<span class="c1"># --------------------</span>
-<span class="c1"># Archives contain the same manifest and component tree. Stored ZIP entries are</span>
-<span class="c1"># the default so a replay buffer&#39;s own compression is not repeated.</span>
-
-<span class="n">archive_path</span> <span class="o">=</span> <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save" title="torchrl.checkpoint.Checkpoint.save" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-method"><span class="n">checkpoint</span><span class="o">.</span><span class="n">save</span></a><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;step-128.torchrl&quot;</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;archive&quot;</span><span class="p">)</span>
-<span class="n">archive_manifest</span> <span class="o">=</span> <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.manifest" title="torchrl.checkpoint.Checkpoint.manifest" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-method"><span class="n">Checkpoint</span><span class="o">.</span><span class="n">manifest</span></a><span class="p">(</span><span class="n">archive_path</span><span class="p">)</span>
-<span class="k">assert</span> <span class="n">archive_manifest</span><span class="p">[</span><span class="s2">&quot;container&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;archive&quot;</span>
-
-
-<span class="c1"># State-dict payload formats</span>
-<span class="c1"># --------------------------</span>
-<span class="c1"># Modules, optimizers, and other state-dict components use TensorDict files by</span>
-<span class="c1"># default. The component payload can instead be a TensorDict ZIP archive or a</span>
-<span class="c1"># consolidated TensorDict, independently of the outer checkpoint container.</span>
-<span class="c1"># Pickle-based torch serialization is available only when selected explicitly.</span>
-
-<span class="n">consolidated_policy_path</span> <span class="o">=</span> <span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;consolidated-policy&quot;</span>
-<a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">()</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">&quot;policy&quot;</span><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span>
-    <span class="n">adapter</span><span class="o">=</span><a href="../reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter" title="torchrl.checkpoint.StateDictCheckpointAdapter" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">StateDictCheckpointAdapter</span></a><span class="p">(</span><span class="n">payload_format</span><span class="o">=</span><span class="s2">&quot;consolidated&quot;</span><span class="p">),</span>
-<span class="p">)</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">consolidated_policy_path</span><span class="p">)</span>
-
-<a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch_policy_checkpoint</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">()</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">&quot;policy&quot;</span><span class="p">,</span>
-    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span>
-    <span class="n">adapter</span><span class="o">=</span><a href="../reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter" title="torchrl.checkpoint.StateDictCheckpointAdapter" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">StateDictCheckpointAdapter</span></a><span class="p">(</span><span class="n">payload_format</span><span class="o">=</span><span class="s2">&quot;torch&quot;</span><span class="p">),</span>
-<span class="p">)</span>
-
-
-<span class="c1"># Trainer integration</span>
-<span class="c1"># -------------------</span>
-<span class="c1"># Every TorchRL algorithm trainer accepts ``checkpoint=``. The trainer adds its</span>
-<span class="c1"># known policy, loss, optimizer, collector, replay buffer, progress, and hooks to</span>
-<span class="c1"># registrations that the caller has not already supplied. Scheduled saves use</span>
-<span class="c1"># this same manifest and adapter implementation.</span>
-
-<a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">trainer_checkpoint</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;directory&quot;</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><a href="../reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState" title="torchrl.checkpoint.GlobalRNGState" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">GlobalRNGState</span></a><span class="p">())</span>
-<span class="c1"># trainer = PPOTrainer(..., checkpoint=trainer_checkpoint,</span>
-<span class="c1">#                      save_trainer_file=&quot;run/checkpoint&quot;)</span>
-
-
-<span class="c1"># Custom serialization</span>
-<span class="c1"># --------------------</span>
-<span class="c1"># ``dump`` and ``load`` objects work automatically. An adapter is useful when a</span>
-<span class="c1"># third-party class cannot be changed or needs a different on-disk layout.</span>
-
-
-<span class="k">class</span> <span class="nc">Cursor</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">offset</span> <span class="o">=</span> <span class="n">offset</span>
-
-
-<span class="k">class</span> <span class="nc">CursorAdapter</span><span class="p">(</span><a href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">CheckpointAdapter</span></a><span class="p">):</span>
-    <span class="n">adapter_id</span> <span class="o">=</span> <span class="s2">&quot;tutorial.cursor&quot;</span>
-
-    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">del</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span>
-        <span class="n">path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;cursor.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">component</span><span class="o">.</span><span class="n">offset</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">component</span><span class="p">,</span>
-        <span class="n">path</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">map_location</span><span class="p">,</span>
-        <span class="n">tensor_load_kwargs</span><span class="p">,</span>
-        <span class="n">args</span><span class="p">,</span>
-        <span class="n">kwargs</span><span class="p">,</span>
-    <span class="p">):</span>
-        <span class="k">del</span> <span class="n">map_location</span><span class="p">,</span> <span class="n">tensor_load_kwargs</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span>
-        <span class="n">component</span><span class="o">.</span><span class="n">offset</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">((</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;cursor.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
-
-
-<span class="n">cursor_path</span> <span class="o">=</span> <span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;cursor-checkpoint&quot;</span>
-<a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">()</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">&quot;cursor&quot;</span><span class="p">,</span>
-    <span class="n">Cursor</span><span class="p">(</span><span class="mi">7</span><span class="p">),</span>
-    <span class="n">adapter</span><span class="o">=</span><a href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">CursorAdapter</span></a><span class="p">(),</span>
-    <span class="n">options</span><span class="o">=</span><a href="../reference/generated/torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions" title="torchrl.checkpoint.CheckpointOptions" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">CheckpointOptions</span></a><span class="p">(),</span>
-<span class="p">)</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">cursor_path</span><span class="p">)</span>
-<span class="n">restored_cursor</span> <span class="o">=</span> <span class="n">Cursor</span><span class="p">()</span>
-<a href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">Checkpoint</span></a><span class="p">()</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;cursor&quot;</span><span class="p">,</span> <span class="n">restored_cursor</span><span class="p">,</span> <span class="n">adapter</span><span class="o">=</span><a href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter" class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class"><span class="n">CursorAdapter</span></a><span class="p">())</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
-    <span class="n">cursor_path</span>
-<span class="p">)</span>
-<span class="k">assert</span> <span class="n">restored_cursor</span><span class="o">.</span><span class="n">offset</span> <span class="o">==</span> <span class="mi">7</span>
-
-
-<span class="c1"># Compatibility</span>
-<span class="c1"># -------------</span>
-<span class="c1"># Unified loads validate the manifest version and each component adapter</span>
-<span class="c1"># version before touching payload files. Trainer checkpoints written through</span>
-<span class="c1"># the legacy torch, torchsnapshot, and memmap backends remain readable during</span>
-<span class="c1"># the compatibility window; pass ``checkpoint=Checkpoint(...)`` to opt into</span>
-<span class="c1"># unified scheduled saves.</span>
-
-
-<span class="c1"># Conclusion</span>
-<span class="c1"># ----------</span>
-<span class="c1"># A single Checkpoint object now covers standalone scripts and trainers while</span>
-<span class="c1"># keeping every component optional. The manifest makes partial loading,</span>
-<span class="c1"># compatibility reporting, and user-defined adapters explicit.</span>
-
-
-<span class="c1"># Further reading</span>
-<span class="c1"># ---------------</span>
-<span class="c1"># See :class:`torchrl.checkpoint.Checkpoint`,</span>
-<span class="c1"># :class:`torchrl.checkpoint.CheckpointAdapter`, and the replay-buffer tutorial</span>
-<span class="c1"># for storage-specific checkpoint configuration.</span>
-
-<span class="n">temporary_directory</span><span class="o">.</span><span class="n">cleanup</span><span class="p">()</span>
-</pre></div>
-</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span><span class="w">
+</span><span class="w">
+</span><span class="kn">import</span> <span class="nn">json</span><span class="w">
+</span><span class="kn">import</span> <span class="nn">tempfile</span><span class="w">
+</span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span><span class="w">
+</span><span class="w">
+</span><span class="kn">import</span> <span class="nn">torch</span><span class="w">
+</span><span class="w">
+</span><span class="kn">from</span> <span class="nn">torchrl</span><span class="nn">.</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="nn">checkpoint</span></a> <span class="kn">import</span> <span class="p">(</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter"><span class="n">CheckpointAdapter</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions" title="torchrl.checkpoint.CheckpointOptions"><span class="n">CheckpointOptions</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState" title="torchrl.checkpoint.GlobalRNGState"><span class="n">GlobalRNGState</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter" title="torchrl.checkpoint.StateDictCheckpointAdapter"><span class="n">StateDictCheckpointAdapter</span></a><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Standalone training state</span><span class="w">
+</span><span class="c1"># -------------------------</span><span class="w">
+</span><span class="c1"># Components are independent. Omitting the replay buffer, optimizer, or RNG is</span><span class="w">
+</span><span class="c1"># valid, and restoration can select a smaller subset than was saved.</span><span class="w">
+</span><span class="w">
+</span><span class="n">temporary_directory</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">(</span><span class="p">)</span><span class="w">
+</span><span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">temporary_directory</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">policy</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam"><span class="n">optimizer</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span><a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters"><span class="n">policy</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(</span><span class="p">)</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">3e-4</span><span class="p">)</span><span class="w">
+</span><span class="n">progress</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;</span><span class="s2">frames</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mi">128</span><span class="p">}</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">checkpoint</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">(</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">policy</span></a><span class="o">=</span><a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">policy</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam"><span class="n">optimizer</span></a><span class="o">=</span><a class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam"><span class="n">optimizer</span></a><span class="p">,</span><span class="w">
+</span>    <span class="n">trainer_state</span><span class="o">=</span><span class="n">progress</span><span class="p">,</span><span class="w">
+</span>    <span class="n">rng</span><span class="o">=</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState" title="torchrl.checkpoint.GlobalRNGState"><span class="n">GlobalRNGState</span></a><span class="p">(</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span>    <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;</span><span class="s2">learning_rate</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mf">3e-4</span><span class="p">}</span><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><span class="n">directory_path</span> <span class="o">=</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-method reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save" title="torchrl.checkpoint.Checkpoint.save"><span class="n">checkpoint</span><span class="o">.</span><span class="n">save</span></a><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">step-128</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Partial restoration and device remapping</span><span class="w">
+</span><span class="c1"># ----------------------------------------</span><span class="w">
+</span><span class="c1"># Only the policy file is read. Large unrequested components, such as replay</span><span class="w">
+</span><span class="c1"># buffers, are neither opened nor materialized.</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">restored_policy</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult" title="torchrl.checkpoint.CheckpointLoadResult"><span class="n">load_result</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">(</span><a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">policy</span></a><span class="o">=</span><a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">restored_policy</span></a><span class="p">)</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="w">
+</span>    <span class="n">directory_path</span><span class="p">,</span><span class="w">
+</span>    <span class="n">components</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;</span><span class="s2">policy</span><span class="s2">&quot;</span><span class="p">}</span><span class="p">,</span><span class="w">
+</span>    <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">cpu</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><span class="k">assert</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult" title="torchrl.checkpoint.CheckpointLoadResult"><span class="n">load_result</span></a><span class="o">.</span><span class="n">loaded</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;</span><span class="s2">policy</span><span class="s2">&quot;</span><span class="p">}</span><span class="w">
+</span><span class="k">assert</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult" title="torchrl.checkpoint.CheckpointLoadResult"><span class="n">load_result</span></a><span class="o">.</span><span class="n">unrequested</span> <span class="o">==</span> <span class="p">{</span><span class="w">
+</span>    <span class="s2">&quot;</span><span class="s2">config</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span>    <span class="s2">&quot;</span><span class="s2">optimizer</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span>    <span class="s2">&quot;</span><span class="s2">rng</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span>    <span class="s2">&quot;</span><span class="s2">trainer_state</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Single-file archives</span><span class="w">
+</span><span class="c1"># --------------------</span><span class="w">
+</span><span class="c1"># Archives contain the same manifest and component tree. Stored ZIP entries are</span><span class="w">
+</span><span class="c1"># the default so a replay buffer's own compression is not repeated.</span><span class="w">
+</span><span class="w">
+</span><span class="n">archive_path</span> <span class="o">=</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-method reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save" title="torchrl.checkpoint.Checkpoint.save"><span class="n">checkpoint</span><span class="o">.</span><span class="n">save</span></a><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">step-128.torchrl</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">archive</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span><span class="n">archive_manifest</span> <span class="o">=</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-method reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.manifest" title="torchrl.checkpoint.Checkpoint.manifest"><span class="n">Checkpoint</span><span class="o">.</span><span class="n">manifest</span></a><span class="p">(</span><span class="n">archive_path</span><span class="p">)</span><span class="w">
+</span><span class="k">assert</span> <span class="n">archive_manifest</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">container</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;</span><span class="s2">archive</span><span class="s2">&quot;</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># State-dict payload formats</span><span class="w">
+</span><span class="c1"># --------------------------</span><span class="w">
+</span><span class="c1"># Modules, optimizers, and other state-dict components use TensorDict files by</span><span class="w">
+</span><span class="c1"># default. The component payload can instead be a TensorDict ZIP archive or a</span><span class="w">
+</span><span class="c1"># consolidated TensorDict, independently of the outer checkpoint container.</span><span class="w">
+</span><span class="c1"># Pickle-based torch serialization is available only when selected explicitly.</span><span class="w">
+</span><span class="w">
+</span><span class="n">consolidated_policy_path</span> <span class="o">=</span> <span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">consolidated-policy</span><span class="s2">&quot;</span><span class="w">
+</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">(</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="w">
+</span>    <span class="s2">&quot;</span><span class="s2">policy</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">policy</span></a><span class="p">,</span><span class="w">
+</span>    <span class="n">adapter</span><span class="o">=</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter" title="torchrl.checkpoint.StateDictCheckpointAdapter"><span class="n">StateDictCheckpointAdapter</span></a><span class="p">(</span><span class="n">payload_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">consolidated</span><span class="s2">&quot;</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">consolidated_policy_path</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">torch_policy_checkpoint</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">(</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="w">
+</span>    <span class="s2">&quot;</span><span class="s2">policy</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear"><span class="n">policy</span></a><span class="p">,</span><span class="w">
+</span>    <span class="n">adapter</span><span class="o">=</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter" title="torchrl.checkpoint.StateDictCheckpointAdapter"><span class="n">StateDictCheckpointAdapter</span></a><span class="p">(</span><span class="n">payload_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">torch</span><span class="s2">&quot;</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Trainer integration</span><span class="w">
+</span><span class="c1"># -------------------</span><span class="w">
+</span><span class="c1"># Every TorchRL algorithm trainer accepts ``checkpoint=``. The trainer adds its</span><span class="w">
+</span><span class="c1"># known policy, loss, optimizer, collector, replay buffer, progress, and hooks to</span><span class="w">
+</span><span class="c1"># registrations that the caller has not already supplied. Scheduled saves use</span><span class="w">
+</span><span class="c1"># this same manifest and adapter implementation.</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">trainer_checkpoint</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">directory</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState" title="torchrl.checkpoint.GlobalRNGState"><span class="n">GlobalRNGState</span></a><span class="p">(</span><span class="p">)</span><span class="p">)</span><span class="w">
+</span><span class="c1"># trainer = PPOTrainer(..., checkpoint=trainer_checkpoint,</span><span class="w">
+</span><span class="c1">#                      save_trainer_file=&quot;run/checkpoint&quot;)</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Custom serialization</span><span class="w">
+</span><span class="c1"># --------------------</span><span class="w">
+</span><span class="c1"># ``dump`` and ``load`` objects work automatically. An adapter is useful when a</span><span class="w">
+</span><span class="c1"># third-party class cannot be changed or needs a different on-disk layout.</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="k">class</span> <span class="nc">Cursor</span><span class="p">:</span><span class="w">
+</span>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-</span><span class="o">&gt;</span> <span class="kc">None</span><span class="p">:</span><span class="w">
+</span>        <span class="bp">self</span><span class="o">.</span><span class="n">offset</span> <span class="o">=</span> <span class="n">offset</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="k">class</span> <a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter"><span class="nc">CursorAdapter</span></a><span class="p">(</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter"><span class="n">CheckpointAdapter</span></a><span class="p">)</span><span class="p">:</span><span class="w">
+</span>    <span class="n">adapter_id</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="s2">tutorial.cursor</span><span class="s2">&quot;</span><span class="w">
+</span><span class="w">
+</span>    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span><span class="p">:</span><span class="w">
+</span>        <span class="k">del</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="w">
+</span>        <span class="n">path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="w">
+</span>        <span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">cursor.json</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">component</span><span class="o">.</span><span class="n">offset</span><span class="p">)</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="w">
+</span>        <span class="bp">self</span><span class="p">,</span><span class="w">
+</span>        <span class="n">component</span><span class="p">,</span><span class="w">
+</span>        <span class="n">path</span><span class="p">,</span><span class="w">
+</span>        <span class="o">*</span><span class="p">,</span><span class="w">
+</span>        <span class="n">map_location</span><span class="p">,</span><span class="w">
+</span>        <span class="n">tensor_load_kwargs</span><span class="p">,</span><span class="w">
+</span>        <span class="n">args</span><span class="p">,</span><span class="w">
+</span>        <span class="n">kwargs</span><span class="p">,</span><span class="w">
+</span>    <span class="p">)</span><span class="p">:</span><span class="w">
+</span>        <span class="k">del</span> <span class="n">map_location</span><span class="p">,</span> <span class="n">tensor_load_kwargs</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="w">
+</span>        <span class="n">component</span><span class="o">.</span><span class="n">offset</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">cursor.json</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="p">)</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="n">cursor_path</span> <span class="o">=</span> <span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">cursor-checkpoint</span><span class="s2">&quot;</span><span class="w">
+</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">(</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="w">
+</span>    <span class="s2">&quot;</span><span class="s2">cursor</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span>    <span class="n">Cursor</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span>    <span class="n">adapter</span><span class="o">=</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter"><span class="n">CursorAdapter</span></a><span class="p">(</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span>    <span class="n">options</span><span class="o">=</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions" title="torchrl.checkpoint.CheckpointOptions"><span class="n">CheckpointOptions</span></a><span class="p">(</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">cursor_path</span><span class="p">)</span><span class="w">
+</span><span class="n">restored_cursor</span> <span class="o">=</span> <span class="n">Cursor</span><span class="p">(</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><span class="n">Checkpoint</span></a><span class="p">(</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;</span><span class="s2">cursor</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">restored_cursor</span><span class="p">,</span> <span class="n">adapter</span><span class="o">=</span><a class="sphx-glr-backref-module-torchrl-checkpoint sphx-glr-backref-type-py-class reference internal" href="../reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter" title="torchrl.checkpoint.CheckpointAdapter"><span class="n">CursorAdapter</span></a><span class="p">(</span><span class="p">)</span><span class="p">)</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="w">
+</span>    <span class="n">cursor_path</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><span class="k">assert</span> <span class="n">restored_cursor</span><span class="o">.</span><span class="n">offset</span> <span class="o">==</span> <span class="mi">7</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Compatibility</span><span class="w">
+</span><span class="c1"># -------------</span><span class="w">
+</span><span class="c1"># Unified loads validate the manifest version and each component adapter</span><span class="w">
+</span><span class="c1"># version before touching payload files. Trainer checkpoints written through</span><span class="w">
+</span><span class="c1"># the legacy torch, torchsnapshot, and memmap backends remain readable during</span><span class="w">
+</span><span class="c1"># the compatibility window; pass ``checkpoint=Checkpoint(...)`` to opt into</span><span class="w">
+</span><span class="c1"># unified scheduled saves.</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Conclusion</span><span class="w">
+</span><span class="c1"># ----------</span><span class="w">
+</span><span class="c1"># A single Checkpoint object now covers standalone scripts and trainers while</span><span class="w">
+</span><span class="c1"># keeping every component optional. The manifest makes partial loading,</span><span class="w">
+</span><span class="c1"># compatibility reporting, and user-defined adapters explicit.</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="c1"># Further reading</span><span class="w">
+</span><span class="c1"># ---------------</span><span class="w">
+</span><span class="c1"># See :class:`torchrl.checkpoint.Checkpoint`,</span><span class="w">
+</span><span class="c1"># :class:`torchrl.checkpoint.CheckpointAdapter`, and the replay-buffer tutorial</span><span class="w">
+</span><span class="c1"># for storage-specific checkpoint configuration.</span><span class="w">
+</span><span class="w">
+</span><span class="n">temporary_directory</span><span class="o">.</span><span class="n">cleanup</span><span class="p">(</span><span class="p">)</span><span class="w">
+</span></pre></div></div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.024 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-checkpointing-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">

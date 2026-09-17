@@ -325,7 +325,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and :pytorchrl to solve a Multi-Agent Reinforcement Learning (MARL) problem.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and torchrl to solve a Multi-Agent Reinforcement Learning (MARL) problem.">
 
 .. only:: html
 
@@ -376,7 +376,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and :pytorchrl to train a parametric policy network to solve the Inverted Pendulum task from the OpenAI-Gym/Farama-Gymnasium control library.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use PyTorch and torchrl to train a parametric policy network to solve the Inverted Pendulum task from the OpenAI-Gym/Farama-Gymnasium control library.">
 
 .. only:: html
 

@@ -1151,7 +1151,7 @@ The steps include:
 
  .. code-block:: none
 
-    episode_reward_mean = 0:   0%|          | 0/5 [00:00<?, ?it/s]    episode_reward_mean = -0.8114265203475952:  20%|██        | 1/5 [00:05<00:20,  5.17s/it]    episode_reward_mean = -0.043357834219932556:  40%|████      | 2/5 [00:10<00:15,  5.17s/it]    episode_reward_mean = 0.9149011373519897:  60%|██████    | 3/5 [00:15<00:10,  5.14s/it]       episode_reward_mean = 1.4833080768585205:  80%|████████  | 4/5 [00:20<00:05,  5.14s/it]    episode_reward_mean = 1.9071177244186401: 100%|██████████| 5/5 [00:25<00:00,  5.14s/it]
+    episode_reward_mean = 0:   0%|          | 0/5 [00:00<?, ?it/s]    episode_reward_mean = -0.4132178723812103:  20%|██        | 1/5 [00:05<00:20,  5.21s/it]    episode_reward_mean = 0.38943931460380554:  40%|████      | 2/5 [00:10<00:15,  5.19s/it]    episode_reward_mean = 0.9139546751976013:  60%|██████    | 3/5 [00:15<00:10,  5.19s/it]     episode_reward_mean = 1.4105859994888306:  80%|████████  | 4/5 [00:20<00:05,  5.19s/it]    episode_reward_mean = 1.8970561027526855: 100%|██████████| 5/5 [00:25<00:00,  5.19s/it]
 
 
 
@@ -1282,7 +1282,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 25.926 seconds)
+   **Total running time of the script:** (0 minutes 26.156 seconds)
 
 
 .. _sphx_glr_download_tutorials_multiagent_ppo.py:

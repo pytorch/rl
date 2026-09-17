@@ -216,7 +216,6 @@ selection.
 > 
 > 
 > 
-> 
 > The parent class that stores the data in TorchRL
 > is referred to as [`ReplayBuffer`](../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer). TorchRL's replay
 > buffers are composable: you can edit the storage type, their sampling
@@ -324,7 +323,7 @@ with multi-process collectors. The underlying contract -- how episode
 boundaries are recovered from the stored data -- is documented in
 [Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries).
 
-**Total running time of the script:** (0 minutes 0.083 seconds)
+**Total running time of the script:** (0 minutes 0.084 seconds)
 
 [`Download Jupyter notebook: getting-started-3.ipynb`](../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb)
 
