@@ -40,6 +40,7 @@ discovery and buffer lifecycle.
     :template: rl_template.rst
 
     ReplayBuffer
+    ReplayFlowControl
     OfflineToOnlineReplayBuffer
     ReplayBufferEnsemble
     PrioritizedReplayBuffer
@@ -85,6 +86,62 @@ converted into rates without scanning storage; the round-robin write counter
 uses 64-bit storage for long-running jobs. Circular-buffer capacity is not a
 producer-backpressure signal: after warm-up, writes continue to overwrite old
 slots even though physical utilization remains 100 percent.
+
+
+Replay-ratio and policy-lag control
+-----------------------------------
+
+:class:`~torchrl.data.ReplayFlowControl` provides learner-side pacing for a
+continuously overwritten replay buffer. Its sample budget is based on cumulative
+``write_count`` and ``samples_returned`` values, so it remains meaningful after
+the physical buffer reaches capacity. A value such as
+``samples_per_insert=2.0`` permits at most two sampled transitions per inserted
+transition. Concurrent callers reserve budget atomically through the replay
+buffer's shared readiness condition.
+
+The optional ``max_policy_lag`` gate is deliberately separate from replay
+sampling eligibility. The coordinator records the policy versions in each
+sampled TensorDict and reports whether the next weight publication is allowed;
+it does not reject or reweight individual replay entries. Use a sampler such as
+:class:`~torchrl.data.StalenessAwareSampler` when hard per-entry filtering is
+required.
+
+.. code-block:: python
+
+    import torch
+    from tensordict import TensorDict
+    from torchrl.data import (
+        LazyTensorStorage,
+        ReplayFlowControl,
+        TensorDictReplayBuffer,
+    )
+
+    replay = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(1024), batch_size=64
+    )
+    replay.extend(TensorDict(
+        {
+            "observation": torch.randn(64, 4),
+            ("next", "policy_version"): torch.zeros(64, dtype=torch.long),
+        },
+        batch_size=[64],
+    ))
+    control = ReplayFlowControl(
+        replay,
+        samples_per_insert=1.0,
+        max_policy_lag=2,
+    )
+    batch = control.sample(timeout=5.0)
+    if control.can_publish(1):
+        control.record_policy_publication(1)
+
+``control.stats()`` returns the current sample and publication decisions, the
+cumulative counts and measured sample-to-insert ratio, available sample budget,
+policy-lag summaries, and cumulative wait count and time. The controller state
+is checkpointable with ``state_dict()`` / ``load_state_dict()``. Checkpoint it
+together with the replay buffer so both sides of the cumulative ratio remain
+aligned. ``shutdown()`` releases blocked controller calls without taking
+ownership of replay-buffer shutdown.
 
 
 Sample units

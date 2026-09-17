@@ -22,6 +22,7 @@ from torchrl._utils import rl_warnings
 from torchrl.data import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
+    ReplayFlowControl,
     Sequence,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -1927,6 +1928,131 @@ class TestReplayBufferReadiness:
         assert completed.wait(timeout=1)
         thread.join(timeout=1)
         assert errors and "shut down" in errors[0]
+
+
+class TestReplayFlowControl:
+    def test_ratio_uses_cumulative_counts_after_circular_wrap(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
+        rb.extend(torch.arange(8))
+        control = ReplayFlowControl(rb, samples_per_insert=0.5)
+
+        control.sample(timeout=1)
+        control.sample(timeout=1)
+        with pytest.raises(TimeoutError, match="did not permit sampling"):
+            control.sample(timeout=0)
+
+        stats = control.stats()
+        assert stats["write_count"] == 8
+        assert stats["samples_returned"] == 4
+        assert stats["samples_per_insert"] == 0.5
+        assert stats["sample_budget"] == 0
+        assert rb.stats()["storage_size"] == 4
+
+    def test_concurrent_samples_reserve_ratio_budget_atomically(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
+        rb.extend(torch.arange(2))
+        control = ReplayFlowControl(rb, samples_per_insert=1.0)
+        barrier = threading.Barrier(3)
+        cancel_event = threading.Event()
+        sampled = threading.Event()
+        results = []
+
+        def sample():
+            barrier.wait()
+            try:
+                results.append(control.sample(cancel_event=cancel_event))
+                sampled.set()
+            except RuntimeError as error:
+                results.append(str(error))
+
+        threads = [threading.Thread(target=sample) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        assert sampled.wait(timeout=1)
+        cancel_event.set()
+        for thread in threads:
+            thread.join(timeout=1)
+
+        assert sum(isinstance(result, torch.Tensor) for result in results) == 1
+        assert (
+            sum("cancelled" in result for result in results if isinstance(result, str))
+            == 1
+        )
+        assert control.stats()["samples_returned"] == 2
+
+    def test_timeout_cancellation_and_shutdown_release_waiters(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
+        rb.extend(torch.arange(2))
+        control = ReplayFlowControl(rb, samples_per_insert=0.5)
+        with pytest.raises(TimeoutError, match="did not permit sampling"):
+            control.sample(timeout=0)
+
+        cancel_event = threading.Event()
+        cancel_event.set()
+        with pytest.raises(RuntimeError, match="cancelled"):
+            control.sample(cancel_event=cancel_event)
+
+        started = threading.Event()
+        completed = threading.Event()
+        errors = []
+
+        def sample():
+            started.set()
+            try:
+                control.sample()
+            except RuntimeError as error:
+                errors.append(str(error))
+            completed.set()
+
+        thread = threading.Thread(target=sample)
+        thread.start()
+        assert started.wait(timeout=1)
+        control.shutdown()
+        assert completed.wait(timeout=1)
+        thread.join(timeout=1)
+        assert errors and "shut down" in errors[0]
+        assert control.stats()["sample_wait_count"] == 2
+
+    def test_nested_policy_lag_and_checkpoint_roundtrip(self):
+        version_key = ("collector", "policy_version")
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(8), batch_size=2)
+        rb.extend(
+            TensorDict(
+                {
+                    "value": torch.arange(4),
+                    version_key: torch.full((4,), 4, dtype=torch.long),
+                },
+                batch_size=[4],
+            )
+        )
+        control = ReplayFlowControl(
+            rb,
+            samples_per_insert=1.0,
+            max_policy_lag=2,
+            policy_version_key=version_key,
+            initial_policy_version=5,
+        )
+
+        control.sample(timeout=1)
+        assert control.can_publish(6)
+        control.record_policy_publication(6)
+        assert not control.can_publish(7)
+        with pytest.raises(RuntimeError, match="exceeds max_policy_lag"):
+            control.record_policy_publication(7)
+
+        state = control.state_dict()
+        state["sample_wait_count"] = 2**31 + 1
+        restored = ReplayFlowControl(rb, samples_per_insert=2.0)
+        restored.load_state_dict(state)
+        stats = restored.stats()
+        assert stats["target_samples_per_insert"] == 1.0
+        assert stats["published_policy_version"] == 6
+        assert stats["policy_publication_count"] == 1
+        assert stats["policy_lag_count"] == 2
+        assert stats["policy_lag_mean"] == 1.0
+        assert stats["policy_lag_min"] == stats["policy_lag_max"] == 1
+        assert stats["sample_wait_count"] == 2**31 + 1
 
 
 class _RepeatTwiceUnit(SampleUnit):

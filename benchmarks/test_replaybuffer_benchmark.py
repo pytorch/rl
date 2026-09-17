@@ -17,6 +17,7 @@ from torchrl.data import (
     ListStorage,
     ReplayBuffer,
     ReplayBufferEnsemble,
+    ReplayFlowControl,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
@@ -348,6 +349,14 @@ def test_replay_buffer_ready_check(benchmark):
     replay_buffer.extend(torch.arange(64))
 
     assert benchmark(replay_buffer.wait_until_sampleable)
+
+
+def test_replay_flow_control_ready_check(benchmark):
+    replay_buffer = ReplayBuffer(storage=ListStorage(64), batch_size=32)
+    replay_buffer.extend(torch.arange(64))
+    control = ReplayFlowControl(replay_buffer, samples_per_insert=1.0)
+
+    assert benchmark(control.can_sample)
 
 
 def sample_prioritized_sampler(sampler, storage, batch_size):

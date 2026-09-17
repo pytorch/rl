@@ -13,6 +13,7 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .flow_control import ReplayFlowControl
 from .her import HERReplayBuffer, HindsightStrategy
 from .offline_to_online import OfflineToOnlineReplayBuffer, prefill_replay_buffer
 from .query import (
@@ -95,6 +96,7 @@ __all__ = [
     "StorageEnsembleCheckpointer",
     "TensorStorageCheckpointer",
     "RayReplayBuffer",
+    "ReplayFlowControl",
     "PrioritizedReplayBuffer",
     "RemoteTensorDictReplayBuffer",
     "ConditionalUpdateResult",
