@@ -777,6 +777,53 @@ def _validate_traj_format(
     return traj_format
 
 
+def _validate_replay_write_mode(
+    replay_write_mode: Literal["rollout", "trajectory"] | None,
+    *,
+    has_replay_buffer: bool,
+    trajs_per_batch: int | None,
+    trajs_per_write: int | None,
+) -> Literal["rollout", "trajectory"] | None:
+    """Validate and resolve replay-buffer write semantics.
+
+    ``None`` retains the historical coupling where ``trajs_per_batch`` selects
+    complete-trajectory writes when a replay buffer is present.
+    """
+    if replay_write_mode not in (None, "rollout", "trajectory"):
+        raise ValueError(
+            "replay_write_mode must be 'rollout', 'trajectory', or None, got "
+            f"{replay_write_mode!r}."
+        )
+    if replay_write_mode is not None and not has_replay_buffer:
+        raise ValueError("replay_write_mode requires a replay_buffer.")
+    if replay_write_mode is not None and trajs_per_batch is not None:
+        raise ValueError(
+            "replay_write_mode cannot be combined with trajs_per_batch: "
+            "trajs_per_batch controls yielded trajectory batches, while "
+            "replay_write_mode controls replay-buffer writes. Omit "
+            "replay_write_mode to preserve the legacy replay_buffer + "
+            "trajs_per_batch behavior."
+        )
+    if replay_write_mode == "rollout" and trajs_per_write is not None:
+        raise ValueError(
+            "trajs_per_write is only supported with replay_write_mode='trajectory'."
+        )
+    if replay_write_mode == "trajectory" and trajs_per_write is not None:
+        if (
+            isinstance(trajs_per_write, bool)
+            or not isinstance(trajs_per_write, int)
+            or trajs_per_write < 1
+        ):
+            raise ValueError("trajs_per_write must be a positive integer.")
+    if not has_replay_buffer:
+        return None
+    if replay_write_mode is not None:
+        return replay_write_mode
+    if trajs_per_batch is not None:
+        return "trajectory"
+    return "rollout"
+
+
 def _make_policy_factory(
     *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx, pipe=None
 ):

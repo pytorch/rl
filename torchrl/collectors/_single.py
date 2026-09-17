@@ -41,6 +41,7 @@ from torchrl.collectors._constants import (
 from torchrl.collectors.utils import (
     _maybe_normalize_replay_buffer_tensordict_device,
     _TrajectoryPool,
+    _validate_replay_write_mode,
     _validate_traj_format,
     split_trajectories,
 )
@@ -439,19 +440,20 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             Episodes spanning internal collection steps are reassembled and
             in-flight episodes are held back, so every row is a whole,
             done-terminated trajectory (``frames_per_batch`` then only sets
-            the internal polling granularity). When combined with
-            ``replay_buffer``, complete trajectories are instead written to
-            the buffer as flat, unpadded 1-D sequences (and the collector
-            yields ``None``) -- the layout
-            :class:`~torchrl.data.replay_buffers.SliceSampler` expects.
+            the internal polling granularity).
             See :ref:`collectors_replay_trajs`. The equivalent on
             :class:`~torchrl.collectors.AsyncBatchedCollector` is the
             ``yield_completed_trajectories`` flag.
             Defaults to ``None`` (fixed-frame batches).
-        trajs_per_write (int, optional): together with ``trajs_per_batch``
-            and ``replay_buffer``, the number of complete trajectories
+        replay_write_mode (``"rollout"``, ``"trajectory"``, optional): Selects
+            fixed-frame rollout writes or flat complete-trajectory writes to
+            ``replay_buffer``. Defaults to ``None``; for compatibility,
+            combining ``replay_buffer`` with ``trajs_per_batch`` still selects
+            trajectory writes.
+        trajs_per_write (int, optional): with
+            ``replay_write_mode="trajectory"``, the number of complete trajectories
             written to the buffer per extend call. Defaults to ``None``
-            (write every trajectory as soon as it completes).
+            (write all currently queued completed trajectories together).
         traj_format (str, optional): layout of the batches yielded under
             ``trajs_per_batch``. ``"padded"`` stacks trajectories
             into ``(trajs_per_batch, max_traj_len)`` with zero padding and a
@@ -723,6 +725,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        replay_write_mode: Literal["rollout", "trajectory"] | None = None,
         traj_format: Literal["padded", "cat"] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
@@ -739,6 +742,12 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.replay_write_mode = _validate_replay_write_mode(
+            replay_write_mode,
+            has_replay_buffer=replay_buffer is not None,
+            trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
+        )
         self.traj_format = _validate_traj_format(
             traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
         )

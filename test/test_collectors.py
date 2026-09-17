@@ -6183,6 +6183,7 @@ class TestCollectorRB:
             env,
             RandomPolicy(env.action_spec),
             replay_buffer=rb,
+            replay_write_mode="rollout",
             total_frames=256,
             frames_per_batch=16,
         )
@@ -7687,6 +7688,57 @@ class TestTrajsPerBatch:
         finally:
             env.close(raise_if_closed=False)
 
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"replay_write_mode": "trajectory"}, "requires a replay_buffer"),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "invalid",
+                },
+                "must be 'rollout', 'trajectory', or None",
+            ),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "trajectory",
+                    "trajs_per_batch": 2,
+                },
+                "cannot be combined with trajs_per_batch",
+            ),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "rollout",
+                    "trajs_per_write": 2,
+                },
+                "trajs_per_write is only supported",
+            ),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "trajectory",
+                    "trajs_per_write": 0,
+                },
+                "trajs_per_write must be a positive integer",
+            ),
+        ],
+    )
+    def test_replay_write_mode_validation(self, kwargs, match):
+        env = CountingEnv(max_steps=4)
+        try:
+            with pytest.raises(ValueError, match=match):
+                Collector(
+                    env,
+                    RandomPolicy(env.action_spec),
+                    frames_per_batch=8,
+                    total_frames=16,
+                    **kwargs,
+                )
+        finally:
+            env.close(raise_if_closed=False)
+
     def test_ingest_single_batch_complete(self):
         """_traj_ingest routes completed trajectories into complete_trajs."""
         batch = self._make_batch(
@@ -8108,7 +8160,14 @@ class TestTrajsPerBatchReplayBuffer:
     # Single-process collector tests
     # ------------------------------------------------------------------
 
-    def test_trajs_per_batch_replay_buffer_sync(self):
+    @pytest.mark.parametrize(
+        "write_kwargs",
+        [
+            pytest.param({"trajs_per_batch": 2}, id="legacy"),
+            pytest.param({"replay_write_mode": "trajectory"}, id="explicit-trajectory"),
+        ],
+    )
+    def test_trajs_per_batch_replay_buffer_sync(self, write_kwargs):
         """Replay buffer receives complete trajectories as flat timesteps."""
         max_steps = 4
         num_trajs = 2
@@ -8121,7 +8180,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 3,
             total_frames=max_steps * 12,
-            trajs_per_batch=num_trajs,
+            **write_kwargs,
         )
         try:
             list(collector)  # exhaust the collector
@@ -8226,7 +8285,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 3,
             total_frames=max_steps * 12,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             trajs_per_write=2,
         )
         try:
@@ -8235,7 +8294,7 @@ class TestTrajsPerBatchReplayBuffer:
             collector.shutdown()
             env.close(raise_if_closed=False)
 
-        assert any(size >= 2 * max_steps for size in extend_sizes)
+        assert any(size >= num_trajs * max_steps for size in extend_sizes)
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_write_defaults_to_all_queued_replay_buffer_extends(self):
@@ -8383,7 +8442,6 @@ class TestTrajsPerBatchReplayBuffer:
         is complete.
         """
         max_steps = 4
-        num_trajs = 2
         env_fn, policy = self._make_env_and_policy(max_steps)
         rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
         collector = MultiSyncCollector(
@@ -8392,7 +8450,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 4,
             total_frames=max_steps * 24,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:
@@ -8578,7 +8636,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 4,
             total_frames=max_steps * 16,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:
@@ -8673,7 +8731,7 @@ class TestTrajsPerBatchReplayBuffer:
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_batch_multi_async_collector_rb(self):
-        """MultiAsyncCollector + trajs_per_batch + replay buffer.
+        """MultiAsyncCollector + trajectory writes + replay buffer.
 
         Same guarantees as sync: buffer populated, trajectories complete.
         """
@@ -8687,7 +8745,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 4,
             total_frames=max_steps * 24,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:
@@ -8711,7 +8769,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=1,
             total_frames=1,
-            trajs_per_batch=1,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:

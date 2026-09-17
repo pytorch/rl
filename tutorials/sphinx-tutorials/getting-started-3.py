@@ -242,10 +242,11 @@ print(sample)
 #   equivalent to calling ``rb.sample()`` within a loop!
 # - For trajectory-based training (recurrent policies, decision transformers),
 #   see :ref:`collectors_replay_trajs` — it shows how to use
-#   ``trajs_per_batch`` with a :class:`~torchrl.data.replay_buffers.SliceSampler` to store
-#   and sample clean trajectory slices from the replay buffer, especially
-#   with multi-process collectors. The underlying contract — how episode
-#   boundaries are recovered from the stored data — is documented in
+#   ``replay_write_mode="trajectory"`` with a
+#   :class:`~torchrl.data.replay_buffers.SliceSampler` to store and sample clean
+#   trajectory slices from the replay buffer, especially with multi-process
+#   collectors. The underlying contract — how episode boundaries are recovered
+#   from the stored data — is documented in
 #   :ref:`Trajectory boundaries <ref_traj_boundaries>`.
 #
 

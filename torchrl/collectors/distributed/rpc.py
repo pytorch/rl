@@ -308,6 +308,9 @@ class RPCCollector(BaseCollector):
 
             See :class:`~torchrl.collectors.BaseCollector` for the full
             description of the completeness guarantee and storage contract.
+            New code can instead pass ``replay_write_mode="trajectory"``
+            through ``collector_kwargs`` to select the same replay-ingestion
+            contract without coupling it to yielded trajectory batches.
             Defaults to ``None``.
 
     """

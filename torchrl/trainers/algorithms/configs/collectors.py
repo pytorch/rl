@@ -75,6 +75,7 @@ class CollectorConfig(BaseCollectorConfig):
     worker_idx: int | None = None
     trajs_per_batch: int | None = None
     trajs_per_write: int | None = None
+    replay_write_mode: str | None = None
     traj_format: str | None = None
     auto_register_policy_transforms: bool | None = None
     pre_collect_hook: Any = None
@@ -128,6 +129,8 @@ class AsyncCollectorConfig(BaseCollectorConfig):
     use_buffers: bool = False
     replay_buffer: ConfigBase | None = None
     extend_buffer: bool = False
+    replay_write_mode: str | None = None
+    trajs_per_write: int | None = None
     trust_policy: bool = True
     compile_policy: Any = None
     cudagraph_policy: Any = None
@@ -193,6 +196,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     worker_idx: int | None = None
     trajs_per_batch: int | None = None
     trajs_per_write: int | None = None
+    replay_write_mode: str | None = None
     traj_format: str | None = None
     init_fn: Any = None
     auto_register_policy_transforms: bool | None = None
@@ -260,6 +264,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     worker_idx: int | None = None
     trajs_per_batch: int | None = None
     trajs_per_write: int | None = None
+    replay_write_mode: str | None = None
     traj_format: str | None = None
     init_fn: Any = None
     auto_register_policy_transforms: bool | None = None
