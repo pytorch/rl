@@ -96,6 +96,7 @@ from torchrl.envs import (
     Transform,
 )
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
+from torchrl.envs.llm.transforms import PolicyVersion
 from torchrl.envs.transforms import Compose, TransformedEnv, VecNorm
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
@@ -5077,6 +5078,33 @@ class TestPolicyVersion:
                 total_frames=4,
                 track_policy_version=True,
             )
+
+    def test_multi_collector_accepts_preinitialized_uuid_version_schema(self):
+        tracker = PolicyVersion(version_type="uuid")
+        env = self._Env()
+        fake_td = env.fake_tensordict()
+        fake_td.set("next", tracker._step(fake_td, fake_td.get("next")))
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(16))
+        replay_buffer.extend(fake_td.unsqueeze(0))
+        env.close()
+
+        collector = MultiAsyncCollector(
+            [self._Env],
+            self._make_policy(),
+            replay_buffer=replay_buffer,
+            frames_per_batch=4,
+            total_frames=4,
+            track_policy_version=tracker,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+
+        assert len(replay_buffer) > 1
+        assert all(
+            replay_buffer.storage[: len(replay_buffer)]["next", "policy_version"]
+        )
 
 
 class TestAggregateReset:

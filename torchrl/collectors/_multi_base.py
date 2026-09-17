@@ -1097,13 +1097,22 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             raise RuntimeError(
                 "The replay-buffer storage was initialized without the required "
                 "('next', 'policy_version') field. Use an uninitialized lazy "
-                "storage or include an int64 field at that key before enabling "
-                "track_policy_version."
+                "storage or include a field matching the configured policy-version "
+                "type at that key before enabling track_policy_version."
             )
-        if storage.get(key).dtype != torch.int64:
+        value = storage.get(key)
+        version_type = self.policy_version_tracker.version_type
+        if version_type in (int, "int"):
+            if not isinstance(value, torch.Tensor) or value.dtype != torch.int64:
+                dtype = getattr(value, "dtype", type(value).__name__)
+                raise RuntimeError(
+                    "The replay-buffer field ('next', 'policy_version') must have "
+                    f"dtype torch.int64 for integer policy versions, got {dtype}."
+                )
+        elif version_type in (str, "uuid") and isinstance(value, torch.Tensor):
             raise RuntimeError(
-                "The replay-buffer field ('next', 'policy_version') must have "
-                f"dtype torch.int64, got {storage.get(key).dtype}."
+                "The replay-buffer field ('next', 'policy_version') must contain "
+                "non-tensor values for UUID policy versions."
             )
 
     def _add_collector_outputs_to_fake_td(self, fake_td):
