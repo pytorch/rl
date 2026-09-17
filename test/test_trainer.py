@@ -2467,6 +2467,7 @@ class _HookEvaluator:
         self.triggers = []
         self.results = []
         self.shutdown_calls = 0
+        self.wait_timeout = None
 
     def trigger_eval(self, weights, step):
         self.triggers.append((step, weights.clone()))
@@ -2485,7 +2486,8 @@ class _HookEvaluator:
             return self.results.pop(0)
         return None
 
-    def wait(self):
+    def wait(self, timeout=None):
+        self.wait_timeout = timeout
         if self.wait_error is not None:
             raise self.wait_error
         if self.pending:
@@ -2615,6 +2617,7 @@ class TestEvaluatorHook:
 
         with pytest.raises(RuntimeError, match="evaluation failed"):
             trainer._shutdown_hook()
+        assert evaluator.wait_timeout == 60.0
         assert evaluator.shutdown_calls == 1
 
 

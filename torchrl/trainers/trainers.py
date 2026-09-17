@@ -3081,6 +3081,9 @@ class EvaluatorHook(TrainerHookBase):
             evaluations so their metrics are logged. When ``False``, outstanding
             work is handed to :meth:`Evaluator.shutdown` and may be cancelled by
             the evaluator backend. Defaults to ``True``.
+        wait_at_end_timeout (float or None, optional): Maximum seconds to wait for
+            a pending evaluation during shutdown. ``None`` waits without a time
+            limit. Defaults to ``60.0``.
 
     Examples:
         >>> from torchrl.collectors import Evaluator
@@ -3106,6 +3109,7 @@ class EvaluatorHook(TrainerHookBase):
         run_at_start: bool = False,
         run_at_end: bool = True,
         wait_at_end: bool = True,
+        wait_at_end_timeout: float | None = 60.0,
     ):
         if isinstance(every_frames, bool) or not isinstance(every_frames, int):
             raise TypeError("every_frames must be an integer.")
@@ -3119,6 +3123,7 @@ class EvaluatorHook(TrainerHookBase):
         self.run_at_start = run_at_start
         self.run_at_end = run_at_end
         self.wait_at_end = wait_at_end
+        self.wait_at_end_timeout = wait_at_end_timeout
         self._next_due_frame = 0 if run_at_start else every_frames
         self._last_completed_frame: int | None = None
         self._last_triggered_frame: int | None = None
@@ -3203,7 +3208,7 @@ class EvaluatorHook(TrainerHookBase):
     def _drain(self) -> None:
         self._poll()
         while self.evaluator.pending:
-            result = self.evaluator.wait()
+            result = self.evaluator.wait(timeout=self.wait_at_end_timeout)
             if result is not None:
                 self._log_result(result)
             elif self.evaluator.pending:
