@@ -18,7 +18,7 @@ import traceback
 import warnings
 from contextlib import nullcontext
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
@@ -162,6 +162,11 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+
+
+class _BlockingShutdownCollector(Collector):
+    def shutdown(self, timeout=None, close_env=True, raise_on_error=True):
+        time.sleep(60)
 
 
 @pytest.mark.parametrize(
@@ -1073,6 +1078,71 @@ class TestCollectorGeneric:
                 assert batch.numel() == 20
             finally:
                 collector.shutdown()
+
+    def test_multiprocess_shutdown_is_bounded_and_idempotent(self):
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            collector_class=_BlockingShutdownCollector,
+            frames_per_batch=20,
+            total_frames=-1,
+            cat_results="stack",
+        )
+        procs = list(collector.procs)
+        try:
+            start = time.monotonic()
+            collector.shutdown(timeout=0.5)
+            elapsed = time.monotonic() - start
+            collector.shutdown(timeout=0.5)
+
+            assert elapsed < 1.0
+            assert all(not proc.is_alive() for proc in procs)
+        finally:
+            for proc in procs:
+                if not proc._closed and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+
+    def test_multiprocess_shutdown_tolerates_dead_worker(self):
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            frames_per_batch=20,
+            total_frames=-1,
+            cat_results="stack",
+        )
+        procs = list(collector.procs)
+        procs[0].terminate()
+        procs[0].join(timeout=5)
+        try:
+            collector.shutdown(timeout=2)
+            collector.shutdown(timeout=2)
+            assert all(not proc.is_alive() for proc in procs)
+        finally:
+            for proc in procs:
+                if not proc._closed and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+
+    def test_worker_disconnect_runs_collector_cleanup(self):
+        inner_collector = Mock()
+
+        def disconnect(*args, _inner_collector_ref, **kwargs):
+            _inner_collector_ref.append(inner_collector)
+            raise EOFError
+
+        with patch(
+            "torchrl.collectors._runner._main_async_collector_impl",
+            side_effect=disconnect,
+        ):
+            torchrl.collectors._runner._main_async_collector()
+
+        inner_collector.shutdown.assert_called_once_with()
+
+        with patch(
+            "torchrl.collectors._runner._main_async_collector_impl",
+            side_effect=ConnectionError("unexpected worker failure"),
+        ):
+            with pytest.raises(ConnectionError, match="unexpected worker failure"):
+                torchrl.collectors._runner._main_async_collector()
 
     def test_collector_without_traj_ids(self):
         env = CountingEnv(max_steps=3)
