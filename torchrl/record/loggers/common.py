@@ -419,7 +419,9 @@ class PrefixLogger(Generic[LoggerT]):
     Metric, video, histogram, and string names are prefixed consistently while
     hyperparameter keys are forwarded unchanged. Chained views compose their
     prefixes, and lifecycle, state, and experiment access remain owned by the
-    wrapped logger.
+    wrapped logger. A view over an owning :class:`Logger` is accepted wherever
+    a ``Logger`` instance is required; a view over a service client retains the
+    client's restricted capabilities.
 
     Args:
         logger: Logger or logger service client to wrap.
@@ -446,6 +448,8 @@ class PrefixLogger(Generic[LoggerT]):
             normalized = f"{logger.prefix}/{normalized}"
             logger = logger._logger
         self._logger = logger
+        if isinstance(logger, Logger):
+            self._logger_cls = getattr(logger, "_service_cls", type(logger))
         self.prefix = normalized
 
     def _prefix_name(self, name: str) -> str:
@@ -520,6 +524,8 @@ class PrefixLogger(Generic[LoggerT]):
 
         def preserve_view(*args, **kwargs):
             logger = attribute(*args, **kwargs)
+            if logger is None:
+                return None
             if logger is object.__getattribute__(self, "_logger"):
                 return self
             return PrefixLogger(logger, self.prefix)

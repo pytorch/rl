@@ -142,13 +142,21 @@ def test_prefix_logger_composes_namespaces_and_delegates_state(tmp_path):
     policy = training.with_prefix("/policy/")
 
     assert isinstance(policy, PrefixLogger)
+    assert isinstance(policy, Logger)
     assert policy.prefix == "training/policy"
+    assert repr(policy) == (
+        "PrefixLogger(prefix='training/policy', logger=PrefixTestLogger())"
+    )
     assert logger.with_prefix("") is logger
     assert policy.with_prefix("") is policy
     assert policy.client() is policy
     assert policy.experiment is logger.experiment
+    with pytest.raises(TypeError, match="prefix must be a string"):
+        logger.with_prefix(1)
     with pytest.raises(ValueError, match="at least one character"):
         logger.with_prefix("///")
+    with mock.patch.object(logger, "client", return_value=None):
+        assert policy.client() is None
 
     policy.log_scalar("/loss", 1.0, step=3, source="learner")
     policy.log_video("rollout", torch.zeros(1), step=4, fps=8)
@@ -1280,6 +1288,7 @@ class TestProcessLogger:
             parent_client = logger.client()
             worker_client = logger.client().with_prefix("workers")
             prefixed_client = logger.with_prefix("training").client()
+            assert not isinstance(prefixed_client, Logger)
             assert not hasattr(prefixed_client, "start")
             assert not hasattr(prefixed_client, "shutdown")
             assert not hasattr(prefixed_client, "client")
