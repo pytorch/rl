@@ -31,9 +31,11 @@ from torchrl.trainers.algorithms.td3 import TD3Trainer
 
 if TYPE_CHECKING:
     _LearnerBackend = Literal["local", "ray"]
+    _Telemetry = Literal["minimal", "standard"]
 else:
     # OmegaConf structured configs do not support Literal on all supported versions.
     _LearnerBackend = str
+    _Telemetry = str
 
 
 @dataclass
@@ -453,6 +455,9 @@ class OnPolicyTrainerConfig(TrainerConfig):
         episode_reward_key: Episode reward key used for cumulative reward logging. Default: "reward".
         action_key: Action key used by losses and logging. Default: "action".
         observation_key: Observation key used for logging. Default: "observation".
+        telemetry: Diagnostic telemetry level. ``"minimal"`` preserves the
+            legacy metric set and overhead; ``"standard"`` adds namespaced
+            training diagnostics. Default: ``"standard"``.
         hooks: List of :class:`~torchrl.trainers.TrainerHookBase` instances to
             register on the trainer after construction.
     """
@@ -499,6 +504,7 @@ class OnPolicyTrainerConfig(TrainerConfig):
     episode_reward_key: Any = "reward"
     action_key: Any = "action"
     observation_key: Any = "observation"
+    telemetry: _Telemetry = "standard"
     hooks: list[Any] | None = None
     checkpoint: Any = None
     checkpoint_rotation: Any = None
@@ -590,6 +596,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
     log_rewards = kwargs.pop("log_rewards", True)
     log_actions = kwargs.pop("log_actions", True)
     log_observations = kwargs.pop("log_observations", False)
+    telemetry = kwargs.pop("telemetry", "standard")
     done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
     terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
     reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
@@ -706,6 +713,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
         episode_reward_key=episode_reward_key,
         action_key=action_key,
         observation_key=observation_key,
+        telemetry=telemetry,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer

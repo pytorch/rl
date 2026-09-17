@@ -11,12 +11,14 @@ import warnings
 from collections.abc import Callable, Mapping
 
 from functools import partial
-from typing import Any
+from typing import Any, Literal
 
+import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
+from torchrl._utils import timeit
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 
@@ -35,6 +37,230 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     ValueEstimatorHook,
 )
+
+
+def _next_key(key: NestedKey) -> NestedKey:
+    if isinstance(key, tuple):
+        return ("next", *key)
+    return ("next", key)
+
+
+def _sibling_key(key: NestedKey, sibling: str) -> NestedKey:
+    if isinstance(key, tuple):
+        return (*key[:-1], sibling)
+    return sibling
+
+
+class _OnPolicyTelemetry:
+    """Compute optional on-policy diagnostics outside the minimal logging path."""
+
+    def __init__(self, trainer: OnPolicyTrainer):
+        self.trainer = trainer
+        self._last_collected_frames = trainer.collected_frames
+        self._optim_start_count = trainer._optim_count
+        self._collection_timer = timeit("on_policy/collection").start()
+        self._optimization_timer = timeit("on_policy/optimization").start()
+
+    def setup(self) -> None:
+        self._last_collected_frames = self.trainer.collected_frames
+        self._optim_start_count = self.trainer._optim_count
+        self._collection_timer.start()
+
+    def start_collection(self) -> None:
+        self._collection_timer.start()
+
+    @staticmethod
+    def _masked(batch: TensorDictBase, key: NestedKey) -> torch.Tensor | None:
+        if key not in batch.keys(True):
+            return None
+        value = batch.get(key)
+        mask = batch.get(("collector", "mask"), None)
+        if mask is not None:
+            value = value[mask]
+        return value
+
+    @staticmethod
+    def _scalar_per_transition(
+        batch: TensorDictBase, value: torch.Tensor
+    ) -> torch.Tensor | None:
+        while value.ndim > batch.ndim and value.shape[-1] == 1:
+            value = value.squeeze(-1)
+        if value.ndim != batch.ndim:
+            return None
+        return value
+
+    @staticmethod
+    def _summary(prefix: str, value: torch.Tensor) -> dict[str, torch.Tensor]:
+        value = value.float()
+        return {
+            f"{prefix}/min": value.min(),
+            f"{prefix}/mean": value.mean(),
+            f"{prefix}/std": value.std(unbiased=False),
+            f"{prefix}/max": value.max(),
+        }
+
+    def _complete_episode_metrics(
+        self,
+        batch: TensorDictBase,
+        reward: torch.Tensor,
+        done: torch.Tensor,
+    ) -> dict[str, torch.Tensor]:
+        traj_ids = batch.get(("collector", "traj_ids"), None)
+        is_init = batch.get("is_init", None)
+        if traj_ids is None or is_init is None:
+            return {}
+        reward = self._scalar_per_transition(batch, reward)
+        done = self._scalar_per_transition(batch, done)
+        traj_ids = self._scalar_per_transition(batch, traj_ids)
+        is_init = self._scalar_per_transition(batch, is_init)
+        if reward is None or done is None or traj_ids is None or is_init is None:
+            return {}
+        mask = batch.get(("collector", "mask"), None)
+        if mask is not None:
+            reward = reward[mask]
+            done = done[mask]
+            traj_ids = traj_ids[mask]
+            is_init = is_init[mask]
+        reward = reward.reshape(-1)
+        done = done.reshape(-1).bool()
+        traj_ids = traj_ids.reshape(-1)
+        is_init = is_init.reshape(-1).bool()
+        trajectories, inverse = traj_ids.unique(return_inverse=True)
+        num_trajectories = trajectories.numel()
+        returns = reward.new_zeros(num_trajectories).scatter_add_(0, inverse, reward)
+        lengths = torch.zeros(
+            num_trajectories, dtype=torch.long, device=inverse.device
+        ).scatter_add_(0, inverse, torch.ones_like(inverse))
+        starts = torch.zeros_like(lengths).scatter_add_(0, inverse, is_init.long())
+        ends = torch.zeros_like(lengths).scatter_add_(0, inverse, done.long())
+        complete = starts.bool() & ends.bool()
+        if not complete.any():
+            return {}
+        returns = returns[complete]
+        lengths = lengths[complete]
+        return {
+            **self._summary("episodes/return", returns),
+            **self._summary("episodes/length", lengths),
+        }
+
+    @staticmethod
+    def _flatten_stats(
+        prefix: str, stats: Mapping[str, Any], metrics: dict[str, Any]
+    ) -> None:
+        for key, value in stats.items():
+            name = f"{prefix}/{key}"
+            if isinstance(value, Mapping):
+                _OnPolicyTelemetry._flatten_stats(name, value, metrics)
+            elif isinstance(value, torch.Tensor):
+                if value.numel() == 1:
+                    metrics.setdefault(name, value.detach())
+            elif isinstance(value, (bool, int, float)):
+                metrics.setdefault(name, value)
+
+    def _target_stats(self, target: Any, prefix: str) -> dict[str, Any]:
+        stats = getattr(target, "stats", None)
+        if not callable(stats):
+            return {}
+        try:
+            snapshot = stats()
+        except (AttributeError, RuntimeError, TypeError):
+            return {}
+        if not isinstance(snapshot, Mapping):
+            return {}
+        metrics: dict[str, Any] = {}
+        self._flatten_stats(prefix, snapshot, metrics)
+        return metrics
+
+    def batch_metrics(self, batch: TensorDictBase | None) -> None:
+        trainer = self.trainer
+        batch_frames = max(0, trainer.collected_frames - self._last_collected_frames)
+        self._last_collected_frames = trainer.collected_frames
+        metrics: dict[str, Any] = {
+            "frames/collected": trainer.collected_frames,
+            "frames/batch": batch_frames,
+        }
+        elapsed = self._collection_timer.elapsed()
+        if elapsed > 0:
+            metrics["throughput/collection_frames_per_second"] = batch_frames / elapsed
+
+        if batch is not None:
+            done_key = _next_key(trainer.done_key)
+            done = self._masked(batch, done_key)
+            if done is not None and done.numel():
+                metrics["terminals/done_rate"] = done.float().mean()
+                done_per_transition = batch.get(done_key)
+                while done_per_transition.ndim > batch.ndim:
+                    done_per_transition = done_per_transition.any(-1)
+                mask = batch.get(("collector", "mask"), None)
+                if mask is not None:
+                    done_per_transition = done_per_transition[mask]
+                metrics["episodes/completed"] = done_per_transition.sum()
+            terminated = self._masked(batch, _next_key(trainer.terminated_key))
+            if terminated is not None and terminated.numel():
+                metrics["terminals/terminated_rate"] = terminated.float().mean()
+            truncated = self._masked(
+                batch,
+                _next_key(_sibling_key(trainer.terminated_key, "truncated")),
+            )
+            if truncated is not None and truncated.numel():
+                metrics["terminals/truncated_rate"] = truncated.float().mean()
+
+            reward = self._masked(batch, _next_key(trainer.reward_key))
+            if trainer.log_rewards and reward is not None and reward.numel():
+                metrics.update(self._summary("rewards", reward))
+                if done is not None:
+                    unmasked_reward = batch.get(_next_key(trainer.reward_key))
+                    unmasked_done = batch.get(done_key)
+                    metrics.update(
+                        self._complete_episode_metrics(
+                            batch, unmasked_reward, unmasked_done
+                        )
+                    )
+
+        metrics.update(self._target_stats(trainer.collector, "collector"))
+        if trainer.replay_buffer is not None:
+            replay_metrics = self._target_stats(trainer.replay_buffer, "replay")
+            if "replay/size" not in replay_metrics:
+                try:
+                    replay_metrics["replay/size"] = len(trainer.replay_buffer)
+                except (AttributeError, RuntimeError, TypeError):
+                    pass
+            storage = getattr(trainer.replay_buffer, "storage", None)
+            capacity = getattr(storage, "max_size", None)
+            if capacity is not None:
+                replay_metrics.setdefault("replay/capacity", capacity)
+            metrics.update(replay_metrics)
+
+        self._optim_start_count = trainer._optim_count
+        self._optimization_timer.start()
+        trainer._log_standard(metrics)
+
+    def optimization_metrics(
+        self, optim_steps: int, average_losses: TensorDictBase | None
+    ) -> None:
+        metrics: dict[str, Any] = {}
+        optimizer = self.trainer.optimizer
+        if optimizer is not None and optimizer.param_groups:
+            metrics["optimizer/learning_rate"] = optimizer.param_groups[0]["lr"]
+        if average_losses is not None:
+            grad_norms = [
+                value.float().mean()
+                for key, value in average_losses.flatten_keys(".").items()
+                if str(key).split(".")[-1].startswith("grad_norm")
+            ]
+            if grad_norms:
+                metrics["optimizer/gradient_norm"] = torch.stack(grad_norms).mean()
+        elapsed = self._optimization_timer.elapsed()
+        updates = optim_steps - self._optim_start_count
+        if elapsed > 0 and updates > 0:
+            metrics["throughput/optimizer_updates_per_second"] = updates / elapsed
+        self.trainer._log_standard(metrics)
+
+    def register(self) -> None:
+        self.trainer.register_op("setup", self.setup)
+        self.trainer.register_op("pre_steps_log", self.batch_metrics)
+        self.trainer.register_op("post_optim_complete_log", self.optimization_metrics)
+        self.trainer.register_op("post_steps", self.start_collection)
 
 
 class OnPolicyTrainer(Trainer):
@@ -109,6 +335,12 @@ class OnPolicyTrainer(Trainer):
             Default: "reward".
         action_key (NestedKey, optional): Action key used by losses and logging. Default: "action".
         observation_key (NestedKey, optional): Observation key used for logging. Default: "observation".
+        telemetry ("minimal" or "standard", optional): Diagnostic telemetry level.
+            ``"minimal"`` preserves the legacy logging set and performs no
+            additional metric collection. ``"standard"`` also records frame,
+            episode, terminal, reward, optimizer, throughput, collector and replay
+            diagnostics under the ``training/`` logger namespace. Missing optional
+            fields are omitted. Default: ``"standard"``.
     """
 
     # Overridden by subclasses: name used in warnings and number of epochs used
@@ -159,7 +391,8 @@ class OnPolicyTrainer(Trainer):
         episode_reward_key: NestedKey = "reward",
         action_key: NestedKey = "action",
         observation_key: NestedKey = "observation",
-    ) -> None:
+        telemetry: Literal["minimal", "standard"] = "standard",
+    ):
         warnings.warn(
             f"{type(self).__name__} is an experimental/prototype feature. The API may "
             "change in future versions. Please report any issues or feedback to help "
@@ -169,6 +402,10 @@ class OnPolicyTrainer(Trainer):
         )
         if num_epochs is None:
             num_epochs = self._default_num_epochs
+        if telemetry not in ("minimal", "standard"):
+            raise ValueError(
+                f"telemetry must be 'minimal' or 'standard', got {telemetry!r}."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -330,10 +567,31 @@ class OnPolicyTrainer(Trainer):
         self.episode_reward_key = episode_reward_key
         self.action_key = action_key
         self.observation_key = observation_key
+        self.telemetry = telemetry
+        self._training_logger = (
+            self.logger.with_prefix("training")
+            if self.logger is not None and telemetry == "standard"
+            else None
+        )
 
         # Set up comprehensive logging for on-policy training
         if self.enable_logging:
             self._setup_logging()
+
+    def _log_standard(self, metrics: Mapping[str, Any]) -> None:
+        """Record standard metrics and forward due values to the training view."""
+        due = {}
+        for key, value in metrics.items():
+            history_key = f"training/{key}"
+            self._log_dict[history_key].append(value)
+            if (
+                self.collected_frames - self._last_log.get(history_key, 0)
+                > self._log_interval
+            ):
+                self._last_log[history_key] = self.collected_frames
+                due[key] = value
+        if due and self._training_logger is not None:
+            self._training_logger.log_metrics(due, step=self.collected_frames)
 
     def _setup_logging(self):
         """Set up logging hooks for on-policy training metrics.
@@ -351,7 +609,7 @@ class OnPolicyTrainer(Trainer):
 
         # Always log done states as percentage (episode completion rate)
         log_done_percentage = LogScalar(
-            key=("next", self.done_key),
+            key=_next_key(self.done_key),
             logname="done_percentage",
             log_pbar=True,
             include_std=False,  # No std for binary values
@@ -363,7 +621,7 @@ class OnPolicyTrainer(Trainer):
         if self.log_rewards:
             # 1. Log training rewards (most important on-policy metric)
             log_rewards = LogScalar(
-                key=("next", self.reward_key),
+                key=_next_key(self.reward_key),
                 logname="r_training",
                 log_pbar=True,  # Show in progress bar
                 include_std=True,
@@ -373,7 +631,7 @@ class OnPolicyTrainer(Trainer):
 
             # 2. Log maximum reward in batch (for monitoring best performance)
             log_max_reward = LogScalar(
-                key=("next", self.reward_key),
+                key=_next_key(self.reward_key),
                 logname="r_max",
                 log_pbar=False,
                 include_std=False,
@@ -383,7 +641,7 @@ class OnPolicyTrainer(Trainer):
 
             # 3. Log total reward in batch (for monitoring cumulative performance)
             log_total_reward = LogScalar(
-                key=("next", self.episode_reward_key),
+                key=_next_key(self.episode_reward_key),
                 logname="r_total",
                 log_pbar=False,
                 include_std=False,
@@ -414,3 +672,7 @@ class OnPolicyTrainer(Trainer):
                 reduction="mean",
             )
             self.register_op(log_dest, log_obs_norm)
+
+        if self.telemetry == "standard":
+            self._standard_telemetry = _OnPolicyTelemetry(self)
+            self._standard_telemetry.register()
