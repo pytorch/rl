@@ -431,7 +431,8 @@ def test_wandb_creates_save_directory_before_init(monkeypatch, tmp_path, directo
         expected_dir = requested_dir
         expected_dir.mkdir(parents=True)
     else:
-        monkeypatch.setenv("HOME", str(tmp_path))
+        home_env = "USERPROFILE" if os.name == "nt" else "HOME"
+        monkeypatch.setenv(home_env, str(tmp_path))
         requested_dir = pathlib.Path("~/log/nested")
         expected_dir = tmp_path / "log" / "nested"
 
