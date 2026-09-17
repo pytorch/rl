@@ -1817,6 +1817,7 @@ class TestBufferStats:
                 restored.load_state_dict(source.state_dict())
             else:
                 source.dumps(tmp_path)
+                # Materialize the lazy destination storage before loading it.
                 restored.extend(torch.zeros(1))
                 restored.loads(tmp_path)
 

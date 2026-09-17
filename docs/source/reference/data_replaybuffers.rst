@@ -61,7 +61,8 @@ raises ``TimeoutError`` when its timeout expires. Shutdown wakes blocked
 callers. Direct and shared-memory buffers support these waits. Ray actor clients,
 including the fixed-layout distributed transport, do not yet support a blocking
 readiness call because a synchronous actor wait could prevent producer calls
-from reaching the owner.
+from reaching the owner; both client types raise :class:`NotImplementedError`
+instead of dispatching the wait.
 
 .. code-block:: python
 

@@ -19,7 +19,10 @@ import torch.multiprocessing as mp
 from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl import service_backend, transport_backend
-from torchrl._comm.replay_service import _DistributedReplayService
+from torchrl._comm.replay_service import (
+    _DistributedReplayClient,
+    _DistributedReplayService,
+)
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import RayReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
@@ -64,6 +67,22 @@ def test_ray_client_rejects_blocking_sample_without_dispatch():
 
     with pytest.raises(NotImplementedError, match="Blocking replay sampling"):
         client.sample(wait=True, timeout=1.0)
+
+
+def test_distributed_client_rejects_blocking_sample_without_dispatch():
+    client = _DistributedReplayClient(
+        None,
+        None,
+        None,
+        None,
+        batch_size=2,
+        sample_batch_size=2,
+    )
+
+    with pytest.raises(NotImplementedError, match="Blocking replay sampling"):
+        client.sample(wait=True)
+    with pytest.raises(NotImplementedError, match="wait_until_sampleable"):
+        client.wait_until_sampleable()
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):

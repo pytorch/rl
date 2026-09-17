@@ -61,7 +61,20 @@ class _DistributedReplayClient:
         response = self._extend_client(data, timeout=timeout)
         return response.get("result", None)
 
-    def sample(self, batch_size: int | None = None, *, timeout: float | None = None):
+    def sample(
+        self,
+        batch_size: int | None = None,
+        *,
+        wait: bool = False,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ):
+        del cancel_event
+        if wait:
+            raise NotImplementedError(
+                "Blocking replay sampling is not supported by the distributed "
+                "replay transport."
+            )
         if batch_size is None:
             batch_size = self.batch_size
         if batch_size is None:
@@ -76,6 +89,19 @@ class _DistributedReplayClient:
             batch_size=[],
         )
         return self._sample_client(request, timeout=timeout)
+
+    def wait_until_sampleable(
+        self,
+        min_items: int | None = None,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> bool:
+        """Raises because distributed transport clients cannot block for writes."""
+        del min_items, timeout, cancel_event
+        raise NotImplementedError(
+            "wait_until_sampleable is not supported by the distributed replay "
+            "transport."
+        )
 
     def update_tensordict_priority(
         self, data: TensorDictBase, *, timeout: float | None = None

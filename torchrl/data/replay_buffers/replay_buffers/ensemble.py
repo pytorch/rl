@@ -749,7 +749,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
             )
             prefetch_queue_size = len(self._prefetch_queue)
         return {
-            "size": int(storage_size),
+            "size": int(sampleable_size),
             "storage_size": int(storage_size),
             "sampleable_size": int(sampleable_size),
             "write_count": int(write_count),

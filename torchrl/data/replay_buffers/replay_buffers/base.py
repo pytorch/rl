@@ -2477,7 +2477,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             return_info (bool): whether to return info. If True, the result
                 is a tuple (data, info). If False, the result is the data.
             wait (bool, optional): if ``True``, wait for enough replay items
-                instead of failing immediately. Defaults to ``False``.
+                instead of failing immediately. Defaults to ``False``. This is
+                an advisory readiness check, not a reservation: another
+                consuming sampler can claim the records before this call
+                samples them.
             timeout (float, optional): maximum number of seconds to wait when
                 ``wait=True``. ``None`` waits indefinitely.
             cancel_event (optional): event-like object exposing ``is_set()``.

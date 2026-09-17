@@ -160,6 +160,24 @@ class TestEnsemble:
         assert restored_members[1][:]["value"].tolist() == [110, 111]
         assert restored.stats()["write_count"] == 6
 
+    def test_stats_size_tracks_sampleable_records(self):
+        members = [
+            ReplayBuffer(
+                storage=LazyTensorStorage(4),
+                batch_size=2,
+                consume_after_n_samples=1,
+            )
+            for _ in range(2)
+        ]
+        for member in members:
+            member.extend(torch.arange(4))
+        members[0].sample()
+        rb = ReplayBufferEnsemble(*members)
+
+        stats = rb.stats()
+        assert stats["size"] == stats["sampleable_size"] == 6
+        assert stats["storage_size"] == 8
+
     @pytest.mark.parametrize(
         "device",
         [
