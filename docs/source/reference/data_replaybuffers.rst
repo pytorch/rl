@@ -135,11 +135,16 @@ from reaching the owner. The fixed-layout distributed transport rejects all
 non-default producer policies because it cannot represent a variable dropped
 write response. Unsupported modes fail during construction.
 
-The statistics snapshot includes cumulative ``overwrites``,
+The statistics snapshot includes cumulative estimated ``overwrites``,
 ``dropped_new_items``, ``blocked_producer_calls`` and
 ``blocked_producer_time`` counters, plus the current ``producer_waiters`` and
 ``producer_under_pressure`` gauges. They are shared across worker processes and
-checkpointed with the replay buffer.
+checkpointed with the replay buffer. Advisory
+:meth:`~torchrl.data.ReplayBuffer.wait_until_writable` calls do not contribute
+to producer blocking counters or the waiter gauge, and do not change the
+hysteresis state. For consuming buffers,
+``overwrites`` is an upper-bound estimate because a write can reuse slots that
+the sampler already consumed.
 
 
 Replay-ratio limiting

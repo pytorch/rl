@@ -313,7 +313,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
             timeout (float, optional): maximum producer-admission wait for a
                 blocking policy. ``None`` waits indefinitely.
             cancel_event (optional): event-like object that cancels a blocked
-                write when set.
+                write when set. Under ``"drop_newest"`` and ``"raise"``, a
+                cancelled admission returns ``None`` without applying the
+                write.
 
         Returns:
             The indices of the data that were added to the replay buffer.
@@ -330,13 +332,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
 
         index = super()._extend(tensordicts, timeout=timeout, cancel_event=cancel_event)
+        if index is None:
+            return None
 
         # TODO: to be usable directly, the indices should be flipped but the issue
         #  is that just doing this results in indices that are not sorted like the original data
         #  so the actually indices will have to be used on the _storage directly (not on the buffer)
         self._set_index_in_td(tensordicts, index)
-        if index is None:
-            return None
         if update_priority is None:
             update_priority = True
         if update_priority:

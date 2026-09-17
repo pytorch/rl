@@ -270,7 +270,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             preserves the traditional circular replay behavior, ``"block"``
             waits for space, ``"drop_newest"`` drops the complete incoming
             write, and ``"raise"`` raises :class:`BufferError`. Defaults to
-            ``"overwrite_oldest"``.
+            ``"overwrite_oldest"``. For a non-consuming buffer, sampling does
+            not free space, so a blocked producer resumes only after
+            :meth:`empty` or another operation removes storage.
         producer_high_watermark (int, optional): maximum number of occupied
             records admitted by a non-default producer policy. Defaults to the
             storage capacity. The watermark counts sampleable records for a
@@ -1252,7 +1254,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
               :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter`);
             - ``"sample_calls"``: number of completed calls to :meth:`sample`;
             - ``"samples_returned"``: total number of records returned by :meth:`sample`;
-            - ``"overwrites"``: number of live records evicted by circular writes;
+            - ``"overwrites"``: estimated number of live records evicted by
+              circular writes (consumed-slot reuse can make this an upper bound
+              for consuming buffers);
             - ``"dropped_new_items"``: incoming records dropped by producer admission;
             - ``"blocked_producer_calls"`` and ``"blocked_producer_time"``:
               cumulative blocking count and elapsed seconds;
@@ -1506,7 +1510,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         The result is advisory: another producer may write before the caller.
         :meth:`add` and :meth:`extend` perform their own atomic admission.
         Circular replay buffers using the default ``"overwrite_oldest"``
-        policy are always writable.
+        policy are always writable. Advisory waits do not change producer
+        blocking counters, the current producer-waiter gauge or hysteresis.
 
         Args:
             num_items (int, optional): number of items in the prospective
@@ -1541,39 +1546,35 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         else:
             deadline = None
         condition = self._readiness_condition
-        blocked_at = None
         with condition:
-            try:
-                while True:
-                    if self._shutdown_requested():
-                        raise RuntimeError(
-                            "A shut down replay buffer cannot become writable."
-                        )
-                    if cancel_event is not None and cancel_event.is_set():
-                        return False
-                    with self._replay_lock:
-                        if self._producer_has_room_locked(num_items):
-                            return True
-                    if blocked_at is None:
-                        blocked_at = time.monotonic()
-                        self._increment_counter("_blocked_producer_count_value", 1)
-                        self._increment_counter("_producer_waiter_count_value", 1)
-                        condition.notify_all()
-                    wait_time = None
-                    if deadline is not None:
-                        wait_time = deadline - time.monotonic()
-                        if wait_time <= 0:
-                            return False
-                    if cancel_event is not None:
-                        wait_time = 0.1 if wait_time is None else min(wait_time, 0.1)
-                    condition.wait(wait_time)
-            finally:
-                if blocked_at is not None:
-                    self._increment_counter("_producer_waiter_count_value", -1)
-                    self._increment_counter(
-                        "_blocked_producer_time_value",
-                        time.monotonic() - blocked_at,
+            while True:
+                if self._shutdown_requested():
+                    raise RuntimeError(
+                        "A shut down replay buffer cannot become writable."
                     )
+                if cancel_event is not None and cancel_event.is_set():
+                    return False
+                with self._replay_lock:
+                    occupancy = self._producer_occupancy_locked()
+                    under_pressure = bool(
+                        self._counter_value(self._producer_pressure_value)
+                    )
+                    if under_pressure and occupancy > self._producer_resume_watermark:
+                        has_room = False
+                    else:
+                        has_room = (
+                            occupancy + num_items <= self._producer_high_watermark
+                        )
+                    if has_room:
+                        return True
+                wait_time = None
+                if deadline is not None:
+                    wait_time = deadline - time.monotonic()
+                    if wait_time <= 0:
+                        return False
+                if cancel_event is not None:
+                    wait_time = 0.1 if wait_time is None else min(wait_time, 0.1)
+                condition.wait(wait_time)
 
     @_maybe_delay_init
     def wait_until_sampleable(
@@ -2726,7 +2727,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             timeout (float, optional): maximum producer-admission wait for a
                 blocking policy. ``None`` waits indefinitely.
             cancel_event (optional): event-like object that cancels a blocked
-                write when set.
+                write when set. Under ``"drop_newest"`` and ``"raise"``, a
+                cancelled admission returns ``None`` without applying the
+                write.
 
         Returns:
             index where the data lives in the replay buffer.
@@ -2928,7 +2931,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             timeout (float, optional): maximum producer-admission wait for a
                 blocking policy. ``None`` waits indefinitely.
             cancel_event (optional): event-like object that cancels a blocked
-                write when set.
+                write when set. Under ``"drop_newest"`` and ``"raise"``, a
+                cancelled admission returns ``None`` without applying the
+                write.
 
         Returns:
             Indices of the data added to the replay buffer.

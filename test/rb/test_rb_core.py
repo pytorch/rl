@@ -2170,8 +2170,15 @@ class TestReplayProducerAdmission:
         )
         with pytest.raises(ValueError, match="can never fit"):
             block.extend(torch.arange(3))
+        block.add(torch.tensor(0))
+        assert not block.wait_until_writable(num_items=2, timeout=0)
+        assert block.stats()["blocked_producer_calls"] == 0
+        assert block.stats()["producer_waiters"] == 0
+        assert not block.stats()["producer_under_pressure"]
+
+        block.add(torch.tensor(1))
+
         cancel = threading.Event()
-        block.extend(torch.arange(2))
         cancel.set()
         assert not block.wait_until_writable(cancel_event=cancel)
         with pytest.raises(RuntimeError, match="cancelled"):
