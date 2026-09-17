@@ -2824,7 +2824,7 @@ class TestOnPolicyTelemetry:
                 "advantage": torch.randn(8, 1),
                 "value_target": torch.randn(8, 1),
                 "is_init": is_init,
-                ("collector", "traj_ids"): torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+                ("collector", "traj_ids"): torch.zeros(8, dtype=torch.long),
                 ("next", "agents", "reward"): torch.arange(1.0, 9.0).view(8, 1),
                 ("next", "agents", "done"): done,
                 ("next", "agents", "terminated"): terminated,
@@ -2835,6 +2835,9 @@ class TestOnPolicyTelemetry:
 
     def test_standard_telemetry_for_finite_ppo_update_with_nested_keys(self):
         trainer, loss_module, logger = self._make_trainer()
+        trainer.optimizer.add_param_group(
+            {"params": [nn.Parameter(torch.zeros(()))], "lr": 0.2}
+        )
         batch = self._batch(loss_module)
 
         trainer._setup_hook()
@@ -2856,6 +2859,8 @@ class TestOnPolicyTelemetry:
             "training/episodes/return/mean",
             "training/episodes/length/mean",
             "training/optimizer/learning_rate",
+            "training/optimizer/learning_rate/group_0",
+            "training/optimizer/learning_rate/group_1",
             "training/optimizer/gradient_norm",
             "training/throughput/collection_frames_per_second",
             "training/throughput/optimizer_updates_per_second",
@@ -2866,7 +2871,10 @@ class TestOnPolicyTelemetry:
         for name in expected:
             assert torch.isfinite(torch.as_tensor(logger.records[name][-1][1]))
         assert logger.records["training/episodes/completed"][-1][1] == 2
+        assert logger.records["training/episodes/return/mean"][-1][1] == 18.0
+        assert logger.records["training/episodes/length/mean"][-1][1] == 4.0
         assert logger.records["training/optimizer/learning_rate"][-1][1] == 0.1
+        assert logger.records["training/optimizer/learning_rate/group_1"][-1][1] == 0.2
 
     def test_minimal_avoids_standard_collection_work(self):
         class FailingStatsCollector(MockingCollector):
@@ -2888,6 +2896,7 @@ class TestOnPolicyTelemetry:
         trainer._pre_steps_log_hook(batch)
 
         assert logger.records.keys() == {"done_percentage"}
+        assert not hasattr(trainer, "_standard_telemetry")
         assert not any(key.startswith("training/") for key in trainer._log_dict)
 
     def test_standard_logs_runtime_stats_and_omits_unavailable_batch_metrics(self):

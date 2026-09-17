@@ -125,8 +125,11 @@ class _OnPolicyTelemetry:
         done = done.reshape(-1).bool()
         traj_ids = traj_ids.reshape(-1)
         is_init = is_init.reshape(-1).bool()
-        trajectories, inverse = traj_ids.unique(return_inverse=True)
-        num_trajectories = trajectories.numel()
+        episode_start = torch.ones_like(is_init)
+        episode_start[1:] = is_init[1:] | (traj_ids[1:] != traj_ids[:-1])
+        episode_ids = episode_start.cumsum(0) - 1
+        episodes, inverse = episode_ids.unique_consecutive(return_inverse=True)
+        num_trajectories = episodes.numel()
         returns = reward.new_zeros(num_trajectories).scatter_add_(0, inverse, reward)
         lengths = torch.zeros(
             num_trajectories, dtype=torch.long, device=inverse.device
@@ -242,6 +245,10 @@ class _OnPolicyTelemetry:
         optimizer = self.trainer.optimizer
         if optimizer is not None and optimizer.param_groups:
             metrics["optimizer/learning_rate"] = optimizer.param_groups[0]["lr"]
+            if len(optimizer.param_groups) > 1:
+                for index, group in enumerate(optimizer.param_groups):
+                    name = group.get("name", f"group_{index}")
+                    metrics[f"optimizer/learning_rate/{name}"] = group["lr"]
         if average_losses is not None:
             grad_norms = [
                 value.float().mean()
