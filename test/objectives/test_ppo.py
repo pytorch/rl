@@ -1501,7 +1501,14 @@ class TestPPO(LossModuleTestBase):
         torch.testing.assert_close(out["mean_ratio"], (lp_cur - lp_behav).exp().mean())
 
         # stepping the updater moves the proximal policy and the loss follows
+        source_before = loss_fn.actor_network_params.clone()
+        target_before = loss_fn.target_actor_network_params.clone()
         updater.step()
+        for key, target_after in loss_fn.target_actor_network_params.items(True, True):
+            torch.testing.assert_close(
+                target_after,
+                target_before.get(key).lerp(source_before.get(key), 0.5),
+            )
         lp_prox_new = log_prob_with(loss_fn.target_actor_network_params)
         assert not torch.allclose(lp_prox_new, lp_prox)
         torch.testing.assert_close(
