@@ -564,6 +564,10 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.policy = policy
         self.policy_factory = policy_factory
 
+        # Policy-version tracking must be configured before replay-buffer
+        # initialization so the shared storage reserves worker-produced fields.
+        self._setup_multi_policy_version_tracking(track_policy_version)
+
         self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up weight receivers if provided
@@ -573,9 +577,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self._setup_multi_policy_and_weights(
             self.policy, self.policy_factory, weight_updater, weight_sync_schemes
         )
-
-        # Set up policy version tracking
-        self._setup_multi_policy_version_tracking(track_policy_version)
 
         # # Set up fallback policy for weight extraction
         # self._setup_fallback_policy(policy, policy_factory, weight_sync_schemes)
@@ -1009,6 +1010,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         is_init = hasattr(self.replay_buffer, "_storage") and getattr(
             self.replay_buffer._storage, "initialized", True
         )
+        if is_init:
+            self._validate_policy_version_replay_schema()
         if not is_init:
             storage = self.replay_buffer._storage
             if self._should_init_replay_buffer_from_worker(storage):
@@ -1030,7 +1033,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 fake_td = self.create_env_fn[0](
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
-            fake_td = self._add_policy_outputs_to_fake_td(fake_td)
+            fake_td = self._add_collector_outputs_to_fake_td(fake_td)
             if getattr(self, "_worker_trajs_per_batch", None) is not None:
                 # With trajs_per_batch, workers write flat 1-D timesteps to
                 # the buffer.  Initialise the storage as 1-D so that the
@@ -1083,18 +1086,40 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         storage._init_event = mp.Event()
         storage._make_init_directory()
 
-    def _add_policy_outputs_to_fake_td(self, fake_td):
+    def _validate_policy_version_replay_schema(self):
+        if self.policy_version_tracker is None:
+            return
+        storage = getattr(self.replay_buffer._storage, "_storage", None)
+        if not isinstance(storage, TensorDictBase):
+            return
+        key = ("next", "policy_version")
+        if key not in storage.keys(True, True):
+            raise RuntimeError(
+                "The replay-buffer storage was initialized without the required "
+                "('next', 'policy_version') field. Use an uninitialized lazy "
+                "storage or include an int64 field at that key before enabling "
+                "track_policy_version."
+            )
+        if storage.get(key).dtype != torch.int64:
+            raise RuntimeError(
+                "The replay-buffer field ('next', 'policy_version') must have "
+                f"dtype torch.int64, got {storage.get(key).dtype}."
+            )
+
+    def _add_collector_outputs_to_fake_td(self, fake_td):
         policy = getattr(self, "policy", None)
         out_keys = getattr(policy, "out_keys", None)
-        if not out_keys:
-            return fake_td
-        with torch.no_grad():
-            policy_output = policy(fake_td.copy())
-        policy_output_keys = policy_output.keys(True, True)
-        for key in out_keys:
-            if key in fake_td.keys(True, True) or key not in policy_output_keys:
-                continue
-            fake_td.set(key, policy_output.get(key))
+        if out_keys:
+            with torch.no_grad():
+                policy_output = policy(fake_td.copy())
+            policy_output_keys = policy_output.keys(True, True)
+            for key in out_keys:
+                if key in fake_td.keys(True, True) or key not in policy_output_keys:
+                    continue
+                fake_td.set(key, policy_output.get(key))
+        if self.policy_version_tracker is not None:
+            next_td = self.policy_version_tracker._step(fake_td, fake_td.get("next"))
+            fake_td.set("next", next_td)
         return fake_td
 
     def fake_tensordict(self) -> TensorDictBase:

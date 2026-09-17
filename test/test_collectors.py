@@ -5029,6 +5029,55 @@ class TestPolicyVersion:
         finally:
             collector.shutdown()
 
+    @pytest.mark.parametrize("track_policy_version", [False, True])
+    def test_multi_async_replay_buffer_preserves_policy_version(
+        self, track_policy_version
+    ):
+        """Worker annotations are part of the shared replay-buffer schema."""
+        env_fn = functools.partial(CountingEnv, max_steps=4)
+        env = env_fn()
+        policy = RandomPolicy(env.action_spec)
+        env.close()
+        replay_buffer = ReplayBuffer(
+            storage=LazyTensorStorage(64), batch_size=4, shared=True
+        )
+        collector = MultiAsyncCollector(
+            [env_fn],
+            policy,
+            replay_buffer=replay_buffer,
+            frames_per_batch=8,
+            total_frames=16,
+            trajs_per_batch=1,
+            track_policy_version=track_policy_version,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+
+        stored = replay_buffer.storage[: len(replay_buffer)]
+        if track_policy_version:
+            assert ("next", "policy_version") in stored.keys(True, True)
+            assert stored["next", "policy_version"].dtype == torch.int64
+        else:
+            assert ("next", "policy_version") not in stored.keys(True, True)
+
+    def test_multi_collector_rejects_incompatible_policy_version_schema(self):
+        env = self._Env()
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(16))
+        replay_buffer.extend(env.fake_tensordict().unsqueeze(0))
+        env.close()
+
+        with pytest.raises(RuntimeError, match="initialized without the required"):
+            MultiAsyncCollector(
+                [self._Env],
+                self._make_policy(),
+                replay_buffer=replay_buffer,
+                frames_per_batch=4,
+                total_frames=4,
+                track_policy_version=True,
+            )
+
 
 class TestAggregateReset:
     def test_aggregate_reset_to_root(self):
