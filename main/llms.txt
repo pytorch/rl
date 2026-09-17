@@ -224,6 +224,8 @@
 - [MarlGroupMapType](reference/generated/torchrl.envs.MarlGroupMapType.md)
 - [MeltingpotEnv](reference/generated/torchrl.envs.MeltingpotEnv.md)
 - [MeltingpotWrapper](reference/generated/torchrl.envs.MeltingpotWrapper.md)
+- [MenagerieEnv](reference/generated/torchrl.envs.MenagerieEnv.md)
+- [MenagerieTask](reference/generated/torchrl.envs.MenagerieTask.md)
 - [MicroDuckEnv](reference/generated/torchrl.envs.MicroDuckEnv.md)
 - [MicroDuckTask](reference/generated/torchrl.envs.MicroDuckTask.md)
 - [MicroDuckTaskSampler](reference/generated/torchrl.envs.MicroDuckTaskSampler.md)

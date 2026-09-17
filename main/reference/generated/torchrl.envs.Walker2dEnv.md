@@ -638,6 +638,14 @@ Return type:
 
 Module
 
+*property*dt*: float*
+
+`frame_skip` physics steps.
+
+Type:
+
+Seconds of simulated time per env step
+
 eager()
 
 Restore eager `step_and_maybe_reset()` execution and return `self`.
@@ -1204,6 +1212,10 @@ Returns:
 
 A tensordict that is identical to the input where the environment was
 not reset and contains the new reset data where the environment was reset.
+
+*property*mj_model*: Any*
+
+The compiled `mujoco.MjModel` the backend simulates, for read-only lookups.
 
 modules(*remove_duplicate: bool = True*) → Iterator[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]
 

@@ -234,11 +234,11 @@ RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 Background color for the `mujoco-torch` ray-cast renderer.
 Subclasses (e.g. satellite) override to a deep-space tone.
 
-REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'heading_std': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
+REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
 
 Default value of every term parameter a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) carries.
 
-REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'heading': _RegisteredTerm(fn=<function heading>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
+REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
 
 Registered reward terms by name, in weight-vector order.
 
@@ -860,6 +860,14 @@ self
 Return type:
 
 Module
+
+*property*dt*: float*
+
+`frame_skip` physics steps.
+
+Type:
+
+Seconds of simulated time per env step
 
 eager()
 
@@ -1483,6 +1491,10 @@ Returns:
 
 A tensordict that is identical to the input where the environment was
 not reset and contains the new reset data where the environment was reset.
+
+*property*mj_model*: Any*
+
+The compiled `mujoco.MjModel` the backend simulates, for read-only lookups.
 
 modules(*remove_duplicate: bool = True*) → Iterator[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]
 

@@ -335,6 +335,22 @@ the tasks' weights or from a `task_id` in the reset TensorDict;
 [`MicroDuckTaskSampler`](generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler) writes that id from a mixture of
 its own. The reward is a registry of terms over shared step features that
 [`register_reward()`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv.register_reward) extends.
+[`MenagerieEnv`](generated/torchrl.envs.MenagerieEnv.html#torchrl.envs.MenagerieEnv) loads any robot of
+[MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) by
+name (`"unitree_go2"`, `"franka_emika_panda"`, `"shadow_hand"`, ...)
+from a local checkout (`TORCHRL_MUJOCO_MENAGERIE_PATH`) or from the cache of
+the `mujoco-menagerie` package, which `download=True` fills on demand.
+Menagerie ships models, not tasks: the env resets around the model's `home`
+keyframe and exposes `qpos`, `qvel`, the model's `sensordata` and the
+requested `site_positions`. Its [`MenagerieTask`](generated/torchrl.envs.MenagerieTask.html#torchrl.envs.MenagerieTask) config
+holds the reset keyframe, the observed sites, a termination height for
+floating bases and the weights of a hold-pose reward
+([`hold_pose_task()`](generated/torchrl.envs.MenagerieEnv.html#torchrl.envs.MenagerieEnv.hold_pose_task)) that is off by default, so
+a transform can supply the reward of a task of your own. The default backend
+is `"mujoco"`; the entry points Menagerie maintains for MJX (`scene_mjx`
+and the like) also run on `"mujoco-torch"` and `"mjx"`.
+`examples/menagerie/ppo.py` trains a PPO policy that holds the pose of any
+robot or walks a quadruped, and renders it with `rlrender`.
 
 MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
 and integer torch tensors. Indexing returns a detached snapshot, not a live
@@ -348,6 +364,8 @@ state into the parent batch. Boolean masks are not supported.
 | [`CubeBowlEnv`](generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv)(*args[, num_workers, parallel]) | UR-style cube-to-bowl manipulation scene. |
 | [`HopperEnv`](generated/torchrl.envs.HopperEnv.html#torchrl.envs.HopperEnv)(*args[, num_workers, parallel]) | Single-legged hopping task (6-DoF, 3 actuators). |
 | [`HumanoidEnv`](generated/torchrl.envs.HumanoidEnv.html#torchrl.envs.HumanoidEnv)(*args[, num_workers, parallel]) | Bipedal humanoid locomotion task (28 DoF, 21 actuators). |
+| [`MenagerieEnv`](generated/torchrl.envs.MenagerieEnv.html#torchrl.envs.MenagerieEnv)(robot, *args[, entry, ...]) | A MuJoCo Menagerie robot, loaded by name. |
+| [`MenagerieTask`](generated/torchrl.envs.MenagerieTask.html#torchrl.envs.MenagerieTask)([keyframe, site_names, ...]) | Task parameters of [`MenagerieEnv`](generated/torchrl.envs.MenagerieEnv.html#torchrl.envs.MenagerieEnv). |
 | [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv)([microduck_root, root, download]) | Locomotion tasks for the MicroDuck biped: stand, walk, sidestep, jump. |
 | [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)(command_low, command_high, ...) | |
 | [`MicroDuckTaskSampler`](generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler)([weights, task_ids, ...]) | Write a [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) `task_id` per env at reset from a weighted mixture. |
