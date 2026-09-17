@@ -36,6 +36,7 @@ from torchrl.collectors._constants import (
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import (
+    _CollectorProgress,
     _make_meta_policy_cm,
     _TrajectoryPool,
     _validate_replay_write_mode,
@@ -1402,6 +1403,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.queue_out = queue_out
         self.procs = []
         self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
+        self._collector_progress = _CollectorProgress(self.num_workers, ctx=ctx)
+        self._collector_progress_worker_idx = None
 
         # Create all pipes upfront (needed for weight sync scheme initialization)
         # Store as list of (parent, child) tuples for use in worker creation
@@ -1540,6 +1543,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                     "compact_obs": self.compact_obs,
+                    "collector_progress": self._collector_progress,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
@@ -1981,8 +1985,10 @@ also that the state dict is synchronised across processes if needed."""
         Args:
             workers (str, optional): controls the worker view. With
                 ``"aggregate"`` (default), only coordinator-side counters are
-                reported and no worker communication happens, so the call is
-                safe from any thread. With ``"per_worker"`` or ``"both"``,
+                reported and no worker communication happens. Collector
+                progress is summed from parent-owned shared counter rows, so
+                the call remains non-blocking while workers collect. With
+                ``"per_worker"`` or ``"both"``,
                 each worker is queried through the control pipes and its
                 snapshot is namespaced as ``"worker_<idx>/<metric>"``; since
                 this shares the control channel with other coordinator
@@ -2139,6 +2145,9 @@ also that the state dict is synchronised across processes if needed."""
                 + self._total_workers_from_env(self.create_env_fn),
             )
             torch.set_num_threads(num_threads)
+            progress = getattr(self, "_collector_progress", None)
+            if progress is not None:
+                progress.clear_pending()
             self._shutdown_complete = True
 
     def async_shutdown(self, timeout: float | None = None):

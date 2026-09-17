@@ -570,6 +570,72 @@ class _TrajectoryPool:
             self._traj_id.copy_(state_dict["traj_id"])
 
 
+class _CollectorProgress:
+    """Lock-free collector progress shared by one writer per worker row."""
+
+    _KEYS = (
+        "stepped_frames",
+        "trajectory_completed_frames",
+        "trajectory_pending_frames",
+        "replay_written_frames",
+        "completed_trajectories",
+    )
+
+    def __init__(self, num_workers: int = 1, ctx=None):
+        self.num_workers = num_workers
+        size = num_workers * len(self._KEYS)
+        self._values = [0] * size if ctx is None else ctx.RawArray("q", size)
+
+    def increment_stepped(
+        self, worker_idx: int, frames: int, *, trajectory_pending: bool
+    ) -> None:
+        offset = worker_idx * len(self._KEYS)
+        self._values[offset] += frames
+        if trajectory_pending:
+            self._values[offset + 2] += frames
+
+    def record_trajectory_completion(
+        self, worker_idx: int, frames: int, trajectories: int
+    ) -> None:
+        offset = worker_idx * len(self._KEYS)
+        self._values[offset + 1] += frames
+        self._values[offset + 2] -= frames
+        self._values[offset + 4] += trajectories
+
+    def record_replay_write(self, worker_idx: int, frames: int) -> None:
+        offset = worker_idx * len(self._KEYS)
+        self._values[offset + 3] += frames
+
+    def clear_pending(self, worker_idx: int | None = None) -> None:
+        if worker_idx is None:
+            for row in range(self.num_workers):
+                self._values[row * len(self._KEYS) + 2] = 0
+        else:
+            self._values[worker_idx * len(self._KEYS) + 2] = 0
+
+    def snapshot(self, worker_idx: int | None = None) -> dict[str, int]:
+        if worker_idx is None:
+            return {
+                key: sum(
+                    int(self._values[row * len(self._KEYS) + column])
+                    for row in range(self.num_workers)
+                )
+                for column, key in enumerate(self._KEYS)
+            }
+        offset = worker_idx * len(self._KEYS)
+        return {
+            key: int(self._values[offset + column])
+            for column, key in enumerate(self._KEYS)
+        }
+
+    def load_snapshot(self, worker_idx: int, state: dict[str, int]) -> None:
+        offset = worker_idx * len(self._KEYS)
+        for column, key in enumerate(self._KEYS):
+            # In-flight trajectory data is intentionally not checkpointed.
+            value = 0 if key == "trajectory_pending_frames" else state.get(key, 0)
+            self._values[offset + column] = int(value)
+
+
 def _map_weight(
     weight,
     policy_device,
@@ -649,10 +715,11 @@ def _traj_ingest(
     batch: TensorDictBase,
     partial_trajs: dict,
     complete_trajs: list,
-) -> None:
+) -> tuple[int, int]:
     """Route steps from *batch* into per-trajectory buffers.
 
     Completed trajectories are moved from *partial_trajs* into *complete_trajs*.
+    Returns their total frame and trajectory counts.
     """
     flat = batch.reshape(-1)
     traj_ids = flat.get(("collector", "traj_ids"), None)
@@ -668,6 +735,8 @@ def _traj_ingest(
     traj_ids = traj_ids.reshape(-1)[order]
     unique_ids, counts = traj_ids.unique_consecutive(return_counts=True)
     start = 0
+    completed_frames = 0
+    completed_trajectories = 0
     for tid_tensor, count in zip(unique_ids, counts):
         tid = tid_tensor.item()
         stop = start + count.item()
@@ -683,6 +752,9 @@ def _traj_ingest(
             chunks = partial_trajs.pop(tid)
             complete = torch.cat(chunks, dim=0) if len(chunks) > 1 else chunks[0]
             complete_trajs.append(complete)
+            completed_frames += complete.numel()
+            completed_trajectories += 1
+    return completed_frames, completed_trajectories
 
 
 def _traj_emit(

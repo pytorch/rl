@@ -24,6 +24,7 @@ from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
 from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import (
+    _CollectorProgress,
     _NON_NN_POLICY_WEIGHTS,
     _validate_replay_write_mode,
     split_trajectories,
@@ -1113,8 +1114,8 @@ class RayCollector(BaseCollector):
         Args:
             workers (str, optional): controls the worker view. With
                 ``"aggregate"`` (default), the snapshot contains the
-                coordinator counters plus ``"worker_frames"``, the sum of the
-                frame counters reported by the remote collectors. With
+                coordinator counters plus ``"worker_frames"`` and sums of the
+                progress counters reported by the remote collectors. With
                 ``"per_worker"``, each remote snapshot is namespaced as
                 ``"worker_<idx>/<metric>"`` instead. ``"both"`` returns the
                 union. ``"workers"`` and ``"workers_alive"`` are always
@@ -1170,6 +1171,14 @@ class RayCollector(BaseCollector):
             ]
             if worker_frames:
                 stats["worker_frames"] = int(sum(worker_frames))
+            for key in _CollectorProgress._KEYS:
+                values = [
+                    snapshot[key]
+                    for snapshot in per_worker
+                    if snapshot is not None and key in snapshot
+                ]
+                if values:
+                    stats[key] = int(sum(values))
         if workers in ("per_worker", "both"):
             for idx, snapshot in enumerate(per_worker):
                 if snapshot is None:

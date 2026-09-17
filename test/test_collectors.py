@@ -6119,6 +6119,140 @@ class TestCollectorStats:
         finally:
             collector.shutdown()
 
+    def test_complete_trajectory_progress_and_checkpoint(self):
+        env = TransformedEnv(CountingEnv(max_steps=2), StepCounter(2))
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(32))
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=1,
+            total_frames=8,
+            replay_buffer=replay_buffer,
+            trajs_per_batch=1,
+        )
+        try:
+            collector_iter = iter(collector)
+            assert next(collector_iter) is None
+            stats = collector.stats()
+            assert stats["stepped_frames"] == 1
+            assert stats["trajectory_pending_frames"] == 1
+            assert stats["trajectory_completed_frames"] == 0
+            assert stats["replay_written_frames"] == 0
+            assert stats["completed_trajectories"] == 0
+
+            assert next(collector_iter) is None
+            stats = collector.stats()
+            assert stats["stepped_frames"] == 2
+            assert stats["trajectory_pending_frames"] == 0
+            assert stats["trajectory_completed_frames"] == 2
+            assert stats["replay_written_frames"] == 2
+            assert stats["completed_trajectories"] == 1
+
+            assert next(collector_iter) is None
+            checkpoint = collector.state_dict()
+            assert collector.stats()["trajectory_pending_frames"] == 1
+            collector.reset()
+            stats = collector.stats()
+            assert stats["trajectory_pending_frames"] == 0
+            assert stats["stepped_frames"] == 3
+            assert stats["trajectory_completed_frames"] == 2
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        resumed_env = TransformedEnv(CountingEnv(max_steps=2), StepCounter(2))
+        resumed = Collector(
+            resumed_env,
+            RandomPolicy(resumed_env.action_spec),
+            frames_per_batch=1,
+            total_frames=8,
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(32)),
+            trajs_per_batch=1,
+        )
+        try:
+            resumed.load_state_dict(checkpoint, strict=False)
+            stats = resumed.stats()
+            assert stats["stepped_frames"] == 3
+            assert stats["trajectory_completed_frames"] == 2
+            assert stats["replay_written_frames"] == 2
+            assert stats["completed_trajectories"] == 1
+            # Collector checkpoints do not serialize environment or partial
+            # trajectory payloads, so resume starts with no in-flight frames.
+            assert stats["trajectory_pending_frames"] == 0
+        finally:
+            resumed.shutdown()
+            resumed_env.close(raise_if_closed=False)
+
+    def test_multiprocess_trajectory_progress_is_parent_shared(self):
+        max_steps = 1_000_000
+
+        def make_env():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+            )
+
+        probe = make_env()
+        try:
+            policy = CountingEnvCountPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        collector = MultiAsyncCollector(
+            [make_env, make_env],
+            policy,
+            frames_per_batch=1,
+            total_frames=-1,
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(64), shared=True),
+            trajs_per_batch=1,
+        )
+        try:
+            collector.start()
+            deadline = time.time() + 30
+            while collector.stats()["stepped_frames"] < 2 and time.time() < deadline:
+                time.sleep(0.01)
+
+            with collector.pause():
+                both = collector.stats(workers="both")
+                worker_stepped = sum(
+                    both[f"worker_{idx}/stepped_frames"] for idx in range(2)
+                )
+                assert both["stepped_frames"] == worker_stepped
+                assert both["trajectory_pending_frames"] == both["stepped_frames"]
+                assert both["trajectory_completed_frames"] == 0
+                assert both["replay_written_frames"] == 0
+
+                with patch.object(
+                    collector,
+                    "map_fn",
+                    side_effect=AssertionError("aggregate stats used worker RPC"),
+                ):
+                    aggregate = collector.stats()
+                assert aggregate["stepped_frames"] == worker_stepped
+            checkpoint = collector.state_dict()
+        finally:
+            collector.shutdown()
+
+        assert collector.stats()["trajectory_pending_frames"] == 0
+
+        resumed = MultiAsyncCollector(
+            [make_env, make_env],
+            policy,
+            frames_per_batch=1,
+            total_frames=-1,
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(64), shared=True),
+            trajs_per_batch=1,
+        )
+        try:
+            resumed.load_state_dict(checkpoint)
+            stats = resumed.stats()
+            expected_stepped = sum(
+                int(checkpoint[f"worker{idx}"]["collector_progress"]["stepped_frames"])
+                for idx in range(2)
+            )
+            assert stats["stepped_frames"] == expected_stepped
+            assert stats["trajectory_pending_frames"] == 0
+        finally:
+            resumed.shutdown()
+
     @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
     def test_multiprocess_collector_stats(self, collector_cls):
         collector = collector_cls(
