@@ -37,10 +37,10 @@ _has_mjx = _has_mujoco and importlib.util.find_spec("mujoco.mjx") is not None
 
 
 BackendName = Literal["mujoco-torch", "mjx", "mujoco"]
-ModelSource = str | Path
+XmlSource = str | Path
 
 
-def _load_mujoco_model(source: ModelSource):
+def _load_mujoco_model(source: XmlSource):
     import mujoco
 
     if isinstance(source, Path):
@@ -142,7 +142,7 @@ class _PhysicsBackend(abc.ABC):
     actuator_ctrllimited: torch.Tensor
 
     def __init__(
-        self, source: ModelSource, *, num_envs: int, device: torch.device | None
+        self, source: XmlSource, *, num_envs: int, device: torch.device | None
     ) -> None:
         self.num_envs = num_envs
         self.device = (
@@ -151,7 +151,7 @@ class _PhysicsBackend(abc.ABC):
         self._init_model(source)
 
     @abc.abstractmethod
-    def _init_model(self, source: ModelSource) -> None:
+    def _init_model(self, source: XmlSource) -> None:
         """Load the model source and prepare the batched data state.
 
         Populates ``nq, nv, nu, timestep, qpos0, qvel0, actuator_lo,
@@ -296,7 +296,7 @@ class _TorchBackend(_PhysicsBackend):
 
     def __init__(
         self,
-        source: ModelSource,
+        source: XmlSource,
         *,
         num_envs: int,
         device: torch.device | None,
@@ -312,7 +312,7 @@ class _TorchBackend(_PhysicsBackend):
         self._compile_kwargs = compile_kwargs or {}
         super().__init__(source, num_envs=num_envs, device=device)
 
-    def _init_model(self, source: ModelSource) -> None:
+    def _init_model(self, source: XmlSource) -> None:
         import mujoco
 
         try:
@@ -579,7 +579,7 @@ class _MujocoBackend(_PhysicsBackend):
 
     def __init__(
         self,
-        source: ModelSource,
+        source: XmlSource,
         *,
         num_envs: int,
         device: torch.device | None,
@@ -598,7 +598,7 @@ class _MujocoBackend(_PhysicsBackend):
             )
         super().__init__(source, num_envs=num_envs, device=device)
 
-    def _init_model(self, source: ModelSource) -> None:
+    def _init_model(self, source: XmlSource) -> None:
         import mujoco
 
         m_mj = _load_mujoco_model(source)
@@ -793,7 +793,7 @@ class _MJXBackend(_PhysicsBackend):
 
     def __init__(
         self,
-        source: ModelSource,
+        source: XmlSource,
         *,
         num_envs: int,
         device: torch.device | None,
@@ -805,7 +805,7 @@ class _MJXBackend(_PhysicsBackend):
             )
         super().__init__(source, num_envs=num_envs, device=device)
 
-    def _init_model(self, source: ModelSource) -> None:
+    def _init_model(self, source: XmlSource) -> None:
         import jax
         from mujoco import mjx
 
@@ -1029,7 +1029,7 @@ class _MJXBackend(_PhysicsBackend):
 
 def make_backend(
     name: BackendName,
-    source: ModelSource,
+    source: XmlSource,
     *,
     num_envs: int,
     device: torch.device | None,

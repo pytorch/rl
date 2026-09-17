@@ -46,9 +46,7 @@ import importlib.util
 import math
 import os
 import shutil
-import urllib.request
 import xml.etree.ElementTree as ET
-import zipfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
@@ -58,16 +56,15 @@ from typing import Any, ClassVar
 
 import torch
 from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
-from torchrl._utils import implement_for, logger as torchrl_logger
+from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import Binary, Bounded, Categorical, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import BackendName
-from torchrl.envs.custom.mujoco.base import _MujocoMeta, MujocoEnv
+from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.custom.mujoco.sources import _download_github_tree
 from torchrl.envs.transforms.transforms import Transform
 
 MICRODUCK_RL_COMMIT = "d424a0c899f6b33cbd3daeb279913134349c0b63"
-MICRODUCK_RL_ARCHIVE_URL = (
-    "https://github.com/pollen-robotics/microduck_rl/archive/{commit}.zip"
-)
+MICRODUCK_RL_REPO = "pollen-robotics/microduck_rl"
 
 # A reward term maps (features, params) to a (num_envs,) tensor; see
 # MicroDuckEnv.register_reward.
@@ -86,41 +83,7 @@ def _download_microduck_rl(root: Path, commit: str, *, force: bool) -> Path:
         shutil.rmtree(target)
     if target.exists():
         return target
-    root.mkdir(parents=True, exist_ok=True)
-    url = MICRODUCK_RL_ARCHIVE_URL.format(commit=commit)
-    torchrl_logger.info("Downloading the MicroDuck assets from %s to %s", url, target)
-    with TemporaryDirectory(prefix="microduck_rl-", dir=root) as tmp:
-        archive = Path(tmp) / "microduck_rl.zip"
-        urllib.request.urlretrieve(url, archive)
-        with zipfile.ZipFile(archive) as zf:
-            zf.extractall(tmp)
-        extracted = Path(tmp) / f"microduck_rl-{commit}"
-        try:
-            extracted.replace(target)
-        except OSError:
-            if not target.exists():
-                raise
-    return target
-
-
-class _MicroDuckMeta(_MujocoMeta):
-    """Resolve (and if requested download) the assets once, before batching.
-
-    :class:`~torchrl.envs.custom.mujoco.base._MujocoMeta` builds one env per
-    worker for the native backend; resolving the scene here means the workers
-    receive a local path and never download concurrently.
-    """
-
-    def __call__(
-        cls,
-        microduck_root: str | Path | None = None,
-        *args: Any,
-        root: str | Path | None = None,
-        download: bool | str = False,
-        **kwargs: Any,
-    ):
-        scene = cls.resolve_scene(microduck_root, root=root, download=download)
-        return super().__call__(scene, *args, **kwargs)
+    return _download_github_tree(MICRODUCK_RL_REPO, commit, target)
 
 
 def _projected_gravity(quaternion: torch.Tensor) -> torch.Tensor:
@@ -416,7 +379,7 @@ class _RegisteredTerm:
     per_second: bool
 
 
-class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
+class MicroDuckEnv(MujocoEnv):
     r"""Locomotion tasks for the MicroDuck biped: stand, walk, sidestep, jump.
 
     The action is a normalized offset around the actuator targets of the MJCF
@@ -1275,6 +1238,19 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             f"{MICRODUCK_RL_COMMIT[:9]} of pollen-robotics/microduck_rl into "
             f"{cache_root}. Tried:\n{detail}"
         )
+
+    @classmethod
+    def _resolve_before_batching(
+        cls,
+        microduck_root: str | Path | None = None,
+        *args: Any,
+        root: str | Path | None = None,
+        download: bool | str = False,
+        **kwargs: Any,
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        """Resolve, and if requested download, the scene once so workers never download."""
+        scene = cls.resolve_scene(microduck_root, root=root, download=download)
+        return (scene, *args), kwargs
 
     def _configure_from_model(self) -> None:
         import mujoco

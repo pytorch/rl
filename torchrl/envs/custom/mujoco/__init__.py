@@ -18,7 +18,9 @@ observation map. The locomotion subclasses (:class:`HumanoidEnv`,
 Gymnasium ``-v4`` reward / termination spec. :class:`SatelliteEnv`
 implements an attitude-control task with 4- or 6-CMG clusters and a
 manipulability-based singularity penalty. :class:`CubeBowlEnv` is a
-compact Menagerie-backed manipulation task for macro-control examples, and
+compact Menagerie-backed manipulation task for macro-control examples.
+:class:`MujocoModelEnv` is the bare simulator of any model from a path or a
+model source (:class:`GitHubModelSource`, :class:`MenagerieModelSource`), and
 :class:`MenagerieEnv` loads any MuJoCo Menagerie robot by name.
 """
 
@@ -32,13 +34,19 @@ from torchrl.envs.custom.mujoco.base import MujocoEnv
 from torchrl.envs.custom.mujoco.cube_bowl import CubeBowlEnv
 from torchrl.envs.custom.mujoco.hopper import HopperEnv
 from torchrl.envs.custom.mujoco.humanoid import HumanoidEnv
-from torchrl.envs.custom.mujoco.menagerie import MenagerieEnv, MenagerieTask
+from torchrl.envs.custom.mujoco.menagerie import (
+    MenagerieEnv,
+    MenagerieModelSource,
+    MenagerieTask,
+)
 from torchrl.envs.custom.mujoco.microduck import (
     MicroDuckEnv,
     MicroDuckTask,
     MicroDuckTaskSampler,
 )
+from torchrl.envs.custom.mujoco.model_env import MujocoModelEnv, MujocoModelTask
 from torchrl.envs.custom.mujoco.satellite import SatelliteEnv
+from torchrl.envs.custom.mujoco.sources import GitHubModelSource, ModelSource
 from torchrl.envs.custom.mujoco.walker import Walker2dEnv
 
 __all__ = [
@@ -47,8 +55,13 @@ __all__ = [
     "HopperEnv",
     "HumanoidMacroAction",
     "HumanoidEnv",
+    "GitHubModelSource",
     "MenagerieEnv",
+    "MenagerieModelSource",
     "MenagerieTask",
+    "ModelSource",
+    "MujocoModelEnv",
+    "MujocoModelTask",
     "MicroDuckEnv",
     "MicroDuckTask",
     "MicroDuckTaskSampler",

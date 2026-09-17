@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""PPO on a MuJoCo Menagerie robot: hold the home pose, or walk.
+"""PPO on a MuJoCo Menagerie robot, or any MuJoCo model on GitHub: hold the home pose, or walk.
 
 A short recipe around :class:`~torchrl.envs.MenagerieEnv`: a Gaussian MLP
 actor and an MLP critic, a :class:`~torchrl.collectors.Collector` feeding
@@ -34,6 +34,14 @@ A UR5e holding its pose from a local checkout, as a quick check::
 
     TORCHRL_MUJOCO_MENAGERIE_PATH=~/mujoco_menagerie \\
         python examples/menagerie/ppo.py --task hold_pose --robot universal_robots_ur5e --smoke
+
+Any model in a GitHub repository instead of a Menagerie robot: ``--repo`` and
+``--revision`` pin it through :class:`~torchrl.envs.GitHubModelSource`, and
+``--entry`` is then the repository-relative XML::
+
+    python examples/menagerie/ppo.py --task hold_pose --download \\
+        --repo SouthColumn76/universal_robots_ur3e \\
+        --revision 5f042ffca6b5885fd18f5448e17b71ab46274fa3 --entry ur3e.xml
 
 Render the checkpoint as a video from the scene's first camera (``--fps 50``
 is real time for the 20 ms control step), or as a notebook with a saved
@@ -84,8 +92,10 @@ from torchrl.envs import (
     CatTensors,
     Compose,
     EnvBase,
+    GitHubModelSource,
     MenagerieEnv,
     MenagerieTask,
+    MujocoModelEnv,
     ParallelEnv,
     Transform,
     TransformedEnv,
@@ -98,6 +108,8 @@ from torchrl.render import save_render_checkpoint
 TASK_ARGS = (
     "task",
     "robot",
+    "repo",
+    "revision",
     "entry",
     "frame_skip",
     "max_episode_steps",
@@ -152,7 +164,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--robot", default="unitree_go2", help="Menagerie model directory."
     )
     parser.add_argument(
-        "--entry", default=None, help="XML entry point, e.g. scene_mjx."
+        "--entry",
+        default=None,
+        help="Menagerie entry point by stem (e.g. scene_mjx), or the repository-relative XML of --repo.",
+    )
+    parser.add_argument(
+        "--repo",
+        default=None,
+        help="GitHub owner/name to load instead of a Menagerie robot.",
+    )
+    parser.add_argument(
+        "--revision", default=None, help="Commit, tag or branch of --repo."
     )
     parser.add_argument(
         "--frame-skip", type=int, default=10, help="Physics steps per action."
@@ -225,6 +247,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--smoke", action="store_true", help="One tiny update on one env."
     )
     args = parser.parse_args(argv)
+    if (args.repo is None) != (args.revision is None) or (
+        args.repo is not None and args.entry is None
+    ):
+        parser.error(
+            "--repo needs --revision and --entry (the repository-relative XML)."
+        )
     args.command = tuple(float(v) for v in args.command)
     if args.command_range is not None:
         args.command_range = tuple(float(v) for v in args.command_range)
@@ -564,21 +592,26 @@ def make_single_env(
             alive_bonus=settings["alive_bonus"],
             terminate_below_height=settings["fall_height"],
         )
-    env = MenagerieEnv(
-        settings["robot"],
-        entry=settings["entry"],
-        download=settings["download"],
-        task=task,
-        backend="mujoco",
-        frame_skip=settings["frame_skip"],
-        seed=seed,
-        device=device,
-        max_episode_steps=settings["max_episode_steps"],
-        from_pixels=from_pixels,
-        camera_id=camera_id,
-        render_width=render_width,
-        render_height=render_height,
-    )
+    env_kwargs = {
+        "download": settings["download"],
+        "task": task,
+        "backend": "mujoco",
+        "frame_skip": settings["frame_skip"],
+        "seed": seed,
+        "device": device,
+        "max_episode_steps": settings["max_episode_steps"],
+        "from_pixels": from_pixels,
+        "camera_id": camera_id,
+        "render_width": render_width,
+        "render_height": render_height,
+    }
+    if settings["repo"] is not None:
+        source = GitHubModelSource(
+            settings["repo"], settings["revision"], settings["entry"]
+        )
+        env = MujocoModelEnv(source, **env_kwargs)
+    else:
+        env = MenagerieEnv(settings["robot"], entry=settings["entry"], **env_kwargs)
     if not walk:
         return TransformedEnv(
             env,
@@ -651,9 +684,11 @@ def make_env(
     checkpoint's recorded config, and explicit keyword arguments override
     them, e.g. ``--env-kwargs '{"command": [0.8, 0, 0]}'``; the keys
     ``rlrender`` forwards for its own use (:data:`RENDER_RUNTIME_KWARGS`) are
-    ignored. ``from_pixels`` adds frames from ``camera_id`` (MuJoCo's free
-    camera by default, ``0`` for the first camera of the scene);
-    ``fixed_command`` pins the walk command for evaluation.
+    ignored. An explicit ``robot`` clears a recorded ``repo``, so a checkpoint
+    trained on a GitHub model can be re-targeted to a Menagerie robot. ``from_pixels``
+    adds frames from ``camera_id`` (MuJoCo's free camera by default, ``0``
+    for the first camera of the scene); ``fixed_command`` pins the walk
+    command for evaluation.
     """
     unknown = set(task_overrides) - set(TASK_ARGS) - RENDER_RUNTIME_KWARGS
     if unknown:
@@ -665,6 +700,7 @@ def make_env(
     settings = {key: recorded.get(key, defaults[key]) for key in TASK_ARGS}
     if robot is not None:
         settings["robot"] = robot
+        settings["repo"] = settings["revision"] = None
     settings.update(
         {
             key: value
@@ -672,6 +708,10 @@ def make_env(
             if key in TASK_ARGS and value is not None
         }
     )
+    if (settings["repo"] is None) != (settings["revision"] is None) or (
+        settings["repo"] is not None and settings["entry"] is None
+    ):
+        raise ValueError("repo needs revision and entry (the repository-relative XML).")
     render = {
         "fixed_command": fixed_command,
         "from_pixels": from_pixels,

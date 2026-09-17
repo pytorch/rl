@@ -50,6 +50,27 @@ rewrites the checkpoint.
 `--smoke` runs one tiny update on one env, which is what the examples CI does
 on the UR5e.
 
+Any MuJoCo model in a GitHub repository, instead of a Menagerie robot: `--repo`
+and `--revision` pin it through `GitHubModelSource` (the whole tree is cached
+under `~/.cache/torchrl/github_models/owner/name/<commit>`), and `--entry` is
+then the repository-relative XML. The same factories serve `rlrender`:
+
+```bash
+python examples/menagerie/ppo.py --task hold_pose --download \
+    --repo SouthColumn76/universal_robots_ur3e \
+    --revision 5f042ffca6b5885fd18f5448e17b71ab46274fa3 --entry ur3e.xml \
+    --num-envs 4 --frames 200000 --max-episode-steps 300 --ckpt ur3e.ckpt
+rlrender --ckpt ur3e.ckpt \
+    --policy examples/menagerie/ppo.py:make_policy \
+    --env examples/menagerie/ppo.py:make_env \
+    --env-kwargs '{"render_width": 640, "render_height": 480}' \
+    --deterministic --from-pixels --render-backend pixels \
+    --max-steps 300 --fps 50 --format mp4 --out ur3e.mp4 --overwrite
+```
+
+A model-only XML like this one has no floor or camera; frames come from
+MuJoCo's free camera.
+
 ## Render
 
 `rlrender` rebuilds the env and the policy from the checkpoint through the
@@ -97,6 +118,7 @@ committed; the commands above regenerate them.
 | run | command | frames | wall time | outcome |
 |---|---|---|---|---|
 | Go2 `hold_pose` | `--fall-height 0.15 --num-envs 4 --frames 200000` | 200k | 2 min | reward per step 1.10 to 1.23 (max 1.5); deterministic return 699 over 500 steps versus 606 untrained |
+| UR3e `hold_pose` (GitHub source) | `--repo SouthColumn76/universal_robots_ur3e ... --num-envs 4 --frames 200000 --max-episode-steps 300` | 200k | 2 min | reward per step 0.52 to 1.30; deterministic return 431 over 300 steps versus 155 untrained |
 | Go2 `walk` | `--command-range 1.0 0.5 0.8 --num-envs 6 --frames 6000000` | 6M | 30 min | at the 0.5 m/s command: 0.45 m/s, 19 to 20 touchdowns per foot in 10 s, 0.24 s flight, 0.08 m swing height, 85% diagonal-pair timing, no falls |
 | Go2 `walk`, Mac Studio (20 workers) | `--command-range 1.0 0.5 0.8 --num-envs 20 --frames 12000000 --steps-per-batch 1024 --minibatch 4096` | 12M | 40 min | at the 0.5 m/s command: 0.48 m/s, 17 to 18 touchdowns per foot with all four feet loaded evenly (53 to 63% contact each), 0.25 s flight, 0.09 m swing height, no falls |
 
