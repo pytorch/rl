@@ -169,6 +169,47 @@ class TestMultiAgentGAE:
                     values.std(), torch.ones(()), atol=1e-5, rtol=0
                 )
 
+    def test_valid_mask_keeps_agents_independent(self):
+        batch, time, n_agents = 2, 4, 3
+        valid = torch.tensor([[True, True, False, False], [True, True, True, False]])
+        value = torch.randn(batch, time, n_agents, 1)
+        next_value = torch.randn_like(value)
+        invalid = ~valid[..., None, None].expand_as(value)
+        value[invalid] = torch.nan
+        next_value[invalid] = torch.nan
+        td = TensorDict(
+            {
+                "state_value": value,
+                "collector": {"mask": valid},
+                "next": {
+                    "state_value": next_value,
+                    "reward": torch.randn(batch, time, 1),
+                    "done": torch.zeros(batch, time, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(batch, time, 1, dtype=torch.bool),
+                },
+            },
+            [batch, time],
+        )
+        td["next", "reward"][~valid] = torch.nan
+        gae = MultiAgentGAE(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=None,
+            average_gae=True,
+        )
+        gae.set_keys(valid=("collector", "mask"))
+        gae(td)
+
+        advantage = td[gae.tensor_keys.advantage]
+        assert not advantage[invalid].any()
+        assert not td[gae.tensor_keys.value_target][invalid].any()
+        for agent in range(n_agents):
+            values = advantage[..., agent, :][valid]
+            torch.testing.assert_close(
+                values.mean(), torch.zeros(()), atol=1e-5, rtol=0
+            )
+            torch.testing.assert_close(values.std(), torch.ones(()), atol=1e-5, rtol=0)
+
     def test_broadcast_error_on_bad_shape(self):
         gae = MultiAgentGAE(gamma=0.99, lmbda=0.95, value_network=None, agent_dim=-2)
         # value has ndim=4 (B, T, n_agents, 1); a 2-D reward is neither

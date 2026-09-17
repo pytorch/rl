@@ -1984,11 +1984,13 @@ class TestLossConfigs:
             lmbda=0.95,
             value_chunk_dim=1,
             group_key=["metadata", "task_id"],
+            valid_key=["collector", "mask"],
         )
         module = instantiate(cfg)
         assert isinstance(module, GAE)
         assert module.value_chunk_dim == 1
         assert module.group_key == ("metadata", "task_id")
+        assert module.tensor_keys.valid == ("collector", "mask")
 
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")

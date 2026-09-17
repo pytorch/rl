@@ -89,22 +89,28 @@ def _standardize_by_group(
         )
     groups = groups.expand(x.shape).reshape(-1)
     flat = x.reshape(-1)
-    weight = (
-        torch.ones_like(flat)
-        if mask is None
-        else mask.expand(x.shape).reshape(-1).to(flat.dtype)
-    )
+    if mask is None:
+        weight = torch.ones_like(flat)
+        flat_for_stats = flat
+    else:
+        flat_mask = mask.expand(x.shape).reshape(-1).bool()
+        weight = flat_mask.to(flat.dtype)
+        flat_for_stats = flat.masked_fill(~flat_mask, 0)
     _, index = torch.unique(groups, return_inverse=True)
     count = torch.zeros(
         int(index.max()) + 1, dtype=flat.dtype, device=flat.device
     ).index_add_(0, index, weight)
     mean = torch.zeros_like(count).index_add_(
-        0, index, flat * weight
+        0, index, flat_for_stats
     ) / count.clamp_min(1)
     centered = flat - mean[index]
+    if mask is not None:
+        centered_for_stats = centered.masked_fill(~flat_mask, 0)
+    else:
+        centered_for_stats = centered
     # Unbiased variance, like ``Tensor.std`` in the global standardization.
     variance = torch.zeros_like(count).index_add_(
-        0, index, centered.square() * weight
+        0, index, centered_for_stats.square()
     ) / (count - 1).clamp_min(1)
     return (centered / variance.sqrt().clamp_min(eps)[index]).reshape(x.shape)
 
@@ -493,7 +499,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             else:
                 value = unravel_key(value)
 
-            if key not in self._AcceptedKeys.__dict__:
+            if key not in self._AcceptedKeys.__dataclass_fields__:
                 raise KeyError(
                     f"{key} is not an accepted tensordict key for advantages"
                 )
@@ -2075,6 +2081,13 @@ class GAE(ValueEstimatorBase):
       in the input tensordict, the GAE module will ignore the calls to the value
       network (if any) and use the provided value instead.
 
+    .. note::
+      Right-padding masks can be configured with ``set_keys(valid=...)``.
+      Invalid entries are isolated from the valid prefix, excluded from
+      advantage normalization, and written as zero in both output tensors.
+      Other trajectory boundaries continue to use the configured ``done`` and
+      ``terminated`` keys.
+
     .. note:: GAE can be used with value networks that rely on recurrent neural networks, provided that the
         init markers (`"is_init"`) and terminated / truncated markers are properly set.
         With ``shifted=True``, reset next-observations are inserted into a
@@ -2088,6 +2101,35 @@ class GAE(ValueEstimatorBase):
     """
 
     value_network: TensorDictModule | None
+
+    @dataclass
+    class _AcceptedKeys(ValueEstimatorBase._AcceptedKeys):
+        """TensorDict keys accepted by :class:`GAE`.
+
+        Attributes:
+            valid (NestedKey, optional): key of a boolean mask that marks a
+                valid trajectory prefix rather than right-padding. Invalid
+                outputs are zero and are excluded from advantage
+                normalization. The ``("next", value)`` entry on the last valid
+                transition must contain the bootstrap value for the state that
+                follows that transition. Defaults to ``None``.
+        """
+
+        valid: NestedKey | None = None
+
+    default_keys = _AcceptedKeys
+
+    @property
+    def valid_key(self):
+        return self.tensor_keys.valid
+
+    @property
+    def in_keys(self):
+        in_keys = super().in_keys
+        key = self.tensor_keys.valid
+        if key is not None and key not in in_keys:
+            in_keys.append(key)
+        return in_keys
 
     def __init__(
         self,
@@ -2266,7 +2308,7 @@ class GAE(ValueEstimatorBase):
                 # with torch.no_grad():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value, valid = self._call_value_nets(
+                value, next_value, shifted_valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -2275,8 +2317,8 @@ class GAE(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
-                if valid is not None:
-                    tensordict.set("shifted_valid", valid)
+                if shifted_valid is not None:
+                    tensordict.set("shifted_valid", shifted_valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
@@ -2289,10 +2331,12 @@ class GAE(ValueEstimatorBase):
                 raise ValueError(
                     f"The tensor with key {('next', self.tensor_keys.value)} is missing, and no value network was provided."
                 )
+            shifted_valid = tensordict.get("shifted_valid", default=None)
 
         time_dim = self._get_time_dim(time_dim, tensordict)
-        valid = tensordict.get("shifted_valid", default=None)
-        data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
+        data_for_value = self._prepare_shifted_tensordict(
+            tensordict, shifted_valid, time_dim
+        )
         reward = data_for_value.get(("next", self.tensor_keys.reward))
         done = data_for_value.get(("next", self.tensor_keys.done))
         terminated = data_for_value.get(
@@ -2305,12 +2349,23 @@ class GAE(ValueEstimatorBase):
         reward, done, terminated = self._prepare_signals(
             reward, done, terminated, value
         )
+        valid = self._valid_mask(tensordict, shifted_valid, value)
+        value, next_value, reward = self._zero_invalid_values(
+            value, next_value, reward, valid
+        )
 
         if self.auto_reset_env:
             truncated = tensordict.get(("next", "truncated"))
             truncated = self._broadcast_optional(truncated, value)
             if truncated.any():
                 reward = reward + gamma * value * truncated
+            recursion_terminated = done
+        else:
+            recursion_terminated = terminated
+        # Keep real termination semantics separate from the synthetic boundary
+        # inserted at the last valid transition: padding stops recursion but
+        # must not suppress that transition's bootstrap value.
+        done = self._apply_valid_boundaries(done, valid, time_dim)
 
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
@@ -2320,7 +2375,7 @@ class GAE(ValueEstimatorBase):
                 next_value,
                 reward,
                 done=done,
-                terminated=terminated if not self.auto_reset_env else done,
+                terminated=recursion_terminated,
                 time_dim=time_dim,
             )
         else:
@@ -2331,7 +2386,7 @@ class GAE(ValueEstimatorBase):
                 next_value,
                 reward,
                 done=done,
-                terminated=terminated if not self.auto_reset_env else done,
+                terminated=recursion_terminated,
                 time_dim=time_dim,
             )
 
@@ -2342,7 +2397,8 @@ class GAE(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
-        self._mask_shifted_output(tensordict, valid)
+        self._mask_shifted_output(tensordict, shifted_valid)
+        self._mask_invalid_output(tensordict, valid)
 
         return tensordict
 
@@ -2371,6 +2427,96 @@ class GAE(ValueEstimatorBase):
         """
         return tensor
 
+    def _read_optional_mask(
+        self,
+        tensordict: TensorDictBase,
+        key: NestedKey | None,
+        target: Tensor,
+        name: str,
+    ) -> Tensor | None:
+        if key is None:
+            return None
+        mask = tensordict.get(key)
+        if mask.dtype is not torch.bool:
+            raise TypeError(
+                f"The {name} mask under key {key!r} must have dtype torch.bool, "
+                f"got {mask.dtype}."
+            )
+        try:
+            return self._expand_to_match(mask, target)
+        except RuntimeError as err:
+            raise RuntimeError(
+                f"The {name} mask under key {key!r} with shape "
+                f"{tuple(mask.shape)} cannot be broadcast to the value shape "
+                f"{tuple(target.shape)}."
+            ) from err
+
+    def _valid_mask(
+        self,
+        tensordict: TensorDictBase,
+        shifted_valid: Tensor | None,
+        value: Tensor,
+    ) -> Tensor | None:
+        valid = self._read_optional_mask(
+            tensordict, self.tensor_keys.valid, value, "valid"
+        )
+        if shifted_valid is None:
+            return valid
+        shifted_valid = self._expand_to_match(shifted_valid, value)
+        if valid is None:
+            return shifted_valid
+        return valid & shifted_valid
+
+    def _apply_valid_boundaries(
+        self,
+        done: Tensor,
+        valid: Tensor | None,
+        time_dim: int,
+    ) -> Tensor:
+        if valid is None:
+            return done
+        valid = self._expand_to_match(valid, done)
+        next_valid = torch.cat(
+            [
+                valid.narrow(time_dim, 1, valid.shape[time_dim] - 1),
+                valid.new_ones(
+                    [
+                        *valid.shape[:time_dim],
+                        1,
+                        *valid.shape[time_dim + 1 :],
+                    ]
+                ),
+            ],
+            dim=time_dim,
+        )
+        return done | ~valid | (valid & ~next_valid)
+
+    def _zero_invalid_values(
+        self,
+        value: Tensor,
+        next_value: Tensor,
+        reward: Tensor,
+        valid: Tensor | None,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        if valid is None:
+            return value, next_value, reward
+        mask = self._expand_to_match(valid, value)
+        return (
+            value.masked_fill(~mask, 0),
+            next_value.masked_fill(~mask, 0),
+            reward.masked_fill(~mask, 0),
+        )
+
+    def _mask_invalid_output(
+        self, tensordict: TensorDictBase, valid: Tensor | None
+    ) -> None:
+        if valid is None:
+            return
+        for key in (self.tensor_keys.advantage, self.tensor_keys.value_target):
+            value = tensordict.get(key)
+            mask = self._expand_to_match(valid, value)
+            tensordict.set(key, value.masked_fill(~mask, 0))
+
     def _normalize_advantage(
         self,
         adv: Tensor,
@@ -2391,10 +2537,18 @@ class GAE(ValueEstimatorBase):
             loc = adv.mean()
             scale = adv.std().clamp_min(1e-4)
             return (adv - loc) / scale
-        mask = self._expand_to_match(valid, adv).to(adv.dtype)
+        mask = self._expand_to_match(valid, adv)
         count = mask.sum().clamp_min(1)
-        loc = (adv * mask).sum() / count
-        scale = (((adv - loc).pow(2) * mask).sum() / count).sqrt().clamp_min(1e-4)
+        loc = adv.masked_fill(~mask, 0).sum() / count
+        scale = (
+            (adv - loc)
+            .masked_fill(~mask, 0)
+            .pow(2)
+            .sum()
+            .div((count - 1).clamp_min(1))
+            .sqrt()
+            .clamp_min(1e-4)
+        )
         return (adv - loc) / scale
 
     def value_estimate(
@@ -2438,7 +2592,7 @@ class GAE(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value, valid = self._call_value_nets(
+                value, next_value, shifted_valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -2447,13 +2601,15 @@ class GAE(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
-                if valid is not None:
-                    tensordict.set("shifted_valid", valid)
+                if shifted_valid is not None:
+                    tensordict.set("shifted_valid", shifted_valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
-        valid = tensordict.get("shifted_valid", default=None)
-        data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
+            shifted_valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(
+            tensordict, shifted_valid, time_dim
+        )
         reward = data_for_value.get(("next", self.tensor_keys.reward))
         done = data_for_value.get(("next", self.tensor_keys.done))
         terminated = data_for_value.get(
@@ -2462,6 +2618,11 @@ class GAE(ValueEstimatorBase):
         reward, done, terminated = self._prepare_signals(
             reward, done, terminated, value
         )
+        valid = self._valid_mask(tensordict, shifted_valid, value)
+        value, next_value, reward = self._zero_invalid_values(
+            value, next_value, reward, valid
+        )
+        done = self._apply_valid_boundaries(done, valid, time_dim)
         _, value_target = vec_generalized_advantage_estimate(
             gamma,
             lmbda,
@@ -2472,6 +2633,10 @@ class GAE(ValueEstimatorBase):
             terminated=terminated,
             time_dim=time_dim,
         )
+        if valid is not None:
+            value_target = value_target.masked_fill(
+                ~self._expand_to_match(valid, value_target), 0
+            )
         return value_target
 
 
@@ -2583,11 +2748,17 @@ class MultiAgentGAE(GAE):
             loc = adv.mean(dim=reduce_dims, keepdim=True)
             scale = adv.std(dim=reduce_dims, keepdim=True).clamp_min(1e-4)
             return (adv - loc) / scale
-        mask = self._expand_to_match(valid, adv).to(adv.dtype)
+        mask = self._expand_to_match(valid, adv)
         count = mask.sum(dim=reduce_dims, keepdim=True).clamp_min(1)
-        loc = (adv * mask).sum(dim=reduce_dims, keepdim=True) / count
+        loc = adv.masked_fill(~mask, 0).sum(dim=reduce_dims, keepdim=True) / count
         scale = (
-            (((adv - loc).pow(2) * mask).sum(dim=reduce_dims, keepdim=True) / count)
+            (
+                (adv - loc)
+                .masked_fill(~mask, 0)
+                .pow(2)
+                .sum(dim=reduce_dims, keepdim=True)
+                / (count - 1).clamp_min(1)
+            )
             .sqrt()
             .clamp_min(1e-4)
         )
