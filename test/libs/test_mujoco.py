@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.error
 import zipfile
 from pathlib import Path
 
@@ -3321,6 +3322,30 @@ class TestMujoco:
                 GitHubModelSource(repo, revision=sha, entry="x.xml")
         with pytest.raises(ValueError, match="repository-relative"):
             GitHubModelSource("owner/name", revision=sha, entry="../x.xml")
+        # A stale token must not break public downloads: the plain archive is
+        # fetched without it, and only the API lookup mentions it on failure.
+        monkeypatch.setenv("GITHUB_TOKEN", "stale")
+        assert GitHubModelSource(
+            "owner/name", revision=sha, entry="tiny_bot/bare.xml", root=tmp_path / "t"
+        ).resolve(download=True) == (
+            tmp_path / "t" / "owner" / "name" / sha / "tiny_bot" / "bare.xml"
+        )
+        assert all("api.github.com" not in url for url in downloads)
+        monkeypatch.delenv("GITHUB_TOKEN")
+
+        def http_error(request, timeout=None):
+            raise urllib.error.HTTPError(
+                request.full_url, 422, "Unprocessable", {}, None
+            )
+
+        monkeypatch.undo()
+        monkeypatch.setattr(sources_module.urllib.request, "urlopen", http_error)
+        with pytest.raises(FileNotFoundError, match="owner/name@nope.*HTTP 422"):
+            GitHubModelSource(
+                "owner/name", revision="nope", entry="x.xml", root=cache
+            ).commit(download=True)
+        monkeypatch.setattr(sources_module.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(sources_module, "_github_commit", fake_commit)
         # Argument errors come before any network access.
         fresh = GitHubModelSource(
             "owner/name",
@@ -3333,13 +3358,14 @@ class TestMujoco:
         with pytest.raises(ValueError, match="xml_path"):
             MujocoModelEnv(fresh, download=True, xml_path="x")
         assert not (tmp_path / "fresh").exists()
-        # Batched native workers receive the cached XML: one download in total.
+        # Batched native workers receive the cached XML: no new download.
+        downloads_before_batching = len(downloads)
         env = MujocoModelEnv(
             source, download=True, backend="mujoco", num_envs=2, parallel=False, seed=0
         )
         assert isinstance(env, SerialEnv)
         assert env.rollout(3)["next", "qpos"].shape == (2, 1, 3, 9)
-        assert len(downloads) == 1
+        assert len(downloads) == downloads_before_batching
         env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)

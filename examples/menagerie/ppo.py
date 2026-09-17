@@ -684,7 +684,8 @@ def make_env(
     checkpoint's recorded config, and explicit keyword arguments override
     them, e.g. ``--env-kwargs '{"command": [0.8, 0, 0]}'``; the keys
     ``rlrender`` forwards for its own use (:data:`RENDER_RUNTIME_KWARGS`) are
-    ignored. ``from_pixels``
+    ignored. An explicit ``robot`` clears a recorded ``repo``, so a checkpoint
+    trained on a GitHub model can be re-targeted to a Menagerie robot. ``from_pixels``
     adds frames from ``camera_id`` (MuJoCo's free camera by default, ``0``
     for the first camera of the scene); ``fixed_command`` pins the walk
     command for evaluation.
@@ -699,6 +700,7 @@ def make_env(
     settings = {key: recorded.get(key, defaults[key]) for key in TASK_ARGS}
     if robot is not None:
         settings["robot"] = robot
+        settings["repo"] = settings["revision"] = None
     settings.update(
         {
             key: value
@@ -706,6 +708,10 @@ def make_env(
             if key in TASK_ARGS and value is not None
         }
     )
+    if (settings["repo"] is None) != (settings["revision"] is None) or (
+        settings["repo"] is not None and settings["entry"] is None
+    ):
+        raise ValueError("repo needs revision and entry (the repository-relative XML).")
     render = {
         "fixed_command": fixed_command,
         "from_pixels": from_pixels,

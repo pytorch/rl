@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -70,53 +71,83 @@ def _resolve_model_source(
     return source.resolve(download=download)
 
 
-def _github_request(url: str, accept: str) -> urllib.request.Request:
+def _github_request(
+    url: str, accept: str, *, token: str | None = None
+) -> urllib.request.Request:
     request = urllib.request.Request(
         url, headers={"Accept": accept, "User-Agent": "torchrl"}
     )
-    token = os.environ.get("GITHUB_TOKEN")
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     return request
 
 
+def _github_open(url: str, accept: str, what: str, *, token: str | None = None):
+    """Open a GitHub URL, turning HTTP errors into messages that name the request."""
+    try:
+        return urllib.request.urlopen(
+            _github_request(url, accept, token=token), timeout=_TIMEOUT
+        )
+    except urllib.error.HTTPError as err:
+        hint = ""
+        if err.code in (401, 403):
+            hint = (
+                " GITHUB_TOKEN is set but rejected; unset or renew it."
+                if token
+                else " Set GITHUB_TOKEN for a private repository or a higher rate limit."
+            )
+        raise FileNotFoundError(f"{what}: HTTP {err.code} from {url}.{hint}") from err
+
+
 def _github_commit(repo: str, revision: str) -> str:
     """Resolve a branch, tag or short SHA to a full commit SHA through the GitHub API."""
-    request = _github_request(
-        f"https://api.github.com/repos/{repo}/commits/{urllib.parse.quote(revision)}",
+    url = f"https://api.github.com/repos/{repo}/commits/{urllib.parse.quote(revision)}"
+    with _github_open(
+        url,
         "application/vnd.github.sha",
-    )
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+        f"Could not resolve {repo}@{revision}",
+        token=os.environ.get("GITHUB_TOKEN"),
+    ) as response:
         return response.read().decode("utf-8").strip()
 
 
 def _download_github_tree(repo: str, commit: str, target: Path) -> Path:
     """Fetch the repository tree at ``commit`` into ``target``.
 
-    Public repositories come from the plain archive URL; with ``GITHUB_TOKEN``
-    set, the API archive endpoint serves private ones too. The archive is
-    extracted next to the target and moved into place atomically, so a
-    concurrent caller either finds the complete tree or fetches it itself.
+    The plain archive URL serves public repositories without credentials;
+    when it answers 404 and ``GITHUB_TOKEN`` is set, the API archive endpoint
+    is tried with the token for a private one. The archive is extracted next
+    to the target and moved into place atomically, so a concurrent caller
+    either finds the complete tree or fetches it itself.
     """
     root = target.parent
     root.mkdir(parents=True, exist_ok=True)
-    if os.environ.get("GITHUB_TOKEN"):
-        url = f"https://api.github.com/repos/{repo}/zipball/{commit}"
-    else:
-        url = f"https://github.com/{repo}/archive/{commit}.zip"
+    what = f"Could not download {repo}@{commit[:9]}"
     torchrl_logger.info("Downloading %s at %s to %s", repo, commit[:9], target)
     with TemporaryDirectory(prefix=".download-", dir=root) as tmp:
         archive = Path(tmp) / "archive.zip"
-        request = _github_request(url, "application/vnd.github+json")
-        with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
-            with open(archive, "wb") as handle:
-                shutil.copyfileobj(response, handle)
+        try:
+            response = _github_open(
+                f"https://github.com/{repo}/archive/{commit}.zip", "*/*", what
+            )
+        except FileNotFoundError:
+            token = os.environ.get("GITHUB_TOKEN")
+            if not token:
+                raise
+            response = _github_open(
+                f"https://api.github.com/repos/{repo}/zipball/{commit}",
+                "application/vnd.github+json",
+                what,
+                token=token,
+            )
+        with response, open(archive, "wb") as handle:
+            shutil.copyfileobj(response, handle)
         with zipfile.ZipFile(archive) as zf:
             zf.extractall(tmp)
         trees = [path for path in Path(tmp).iterdir() if path.is_dir()]
         if len(trees) != 1:
             raise RuntimeError(
-                f"Expected one top-level directory in {url}, got "
+                f"{what}: expected one top-level directory in the archive, got "
                 f"{[path.name for path in trees]}."
             )
         try:
@@ -151,8 +182,9 @@ class GitHubModelSource:
     to its commit through the GitHub API on the first ``download=True`` and
     that mapping is cached next to the tree, so the source resolves offline
     afterwards and keeps pointing at the same commit until the cache entry is
-    removed. Set ``GITHUB_TOKEN`` for private repositories or a higher API
-    rate limit.
+    removed. Public repositories need no credentials; ``GITHUB_TOKEN`` is
+    sent to the API for the revision lookup and, when the public archive
+    answers 404, for the archive of a private repository.
 
     Args:
         repo (str): ``"owner/name"`` of the repository.
