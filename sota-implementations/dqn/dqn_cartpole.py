@@ -150,6 +150,9 @@ def main(cfg: DictConfig):
                 "group": cfg.logger.group_name,
             },
         )
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Create the test environment
     test_env = make_env(cfg.env.env_name, "cpu", from_pixels=cfg.logger.video)
@@ -196,9 +199,11 @@ def main(cfg: DictConfig):
         storing_device="cpu",
         max_frames_per_traj=-1,
         init_random_frames=cfg.collector.init_random_frames,
-        compile_policy={"mode": compile_mode, "fullgraph": True}
-        if compile_mode is not None
-        else False,
+        compile_policy=(
+            {"mode": compile_mode, "fullgraph": True}
+            if compile_mode is not None
+            else False
+        ),
         cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
@@ -247,6 +252,9 @@ def main(cfg: DictConfig):
 
     c_iter = iter(collector)
     total_iter = len(collector)
+    training_metrics = {}
+    evaluation_metrics = {}
+    timing_metrics = {}
     metrics_to_log = dict(checkpoint_metrics)
     for i in range(total_iter):
         timeit.printevery(1000, total_iter, erase=True)
@@ -256,7 +264,8 @@ def main(cfg: DictConfig):
             except StopIteration:
                 break
 
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         pbar.update(data.numel())
         data = data.reshape(-1)
         current_frames = data.numel()
@@ -272,18 +281,17 @@ def main(cfg: DictConfig):
             episode_reward_mean = episode_rewards.mean().item()
             episode_length = data["next", "step_count"][data["next", "done"]]
             episode_length_mean = episode_length.sum().item() / len(episode_length)
-            metrics_to_log.update(
+            training_metrics.update(
                 {
-                    "train/episode_reward": episode_reward_mean,
-                    "train/episode_length": episode_length_mean,
+                    "episode_reward": episode_reward_mean,
+                    "episode_length": episode_length_mean,
                 }
             )
 
         if collected_frames < init_random_frames:
-            if collected_frames < init_random_frames:
-                if logger:
-                    logger.log_metrics(metrics_to_log, step=collected_frames)
-                continue
+            if logger and training_metrics:
+                training_logger.log_metrics(training_metrics, step=collected_frames)
+            continue
 
         # optimization steps
         for j in range(num_updates):
@@ -295,19 +303,21 @@ def main(cfg: DictConfig):
             q_losses[j].copy_(q_loss)
 
         # Get and log q-values, loss, epsilon, sampling time and training time
-        metrics_to_log.update(
+        training_metrics.update(
             {
-                "train/q_values": (data["action_value"] * data["action"]).sum().item()
+                "q_values": (data["action_value"] * data["action"]).sum().item()
                 / frames_per_batch,
-                "train/q_loss": q_losses.mean().item(),
-                "train/epsilon": greedy_module.eps,
+                "q_loss": q_losses.mean().item(),
+                "epsilon": greedy_module.eps,
             }
         )
 
         # Get and log evaluation rewards and eval time
-        with torch.no_grad(), set_exploration_type(
-            ExplorationType.DETERMINISTIC
-        ), timeit("eval"):
+        with (
+            torch.no_grad(),
+            set_exploration_type(ExplorationType.DETERMINISTIC),
+            timeit("eval"),
+        ):
             prev_test_frame = ((i - 1) * frames_per_batch) // test_interval
             cur_test_frame = (i * frames_per_batch) // test_interval
             final = current_frames >= collector.total_frames
@@ -315,17 +325,31 @@ def main(cfg: DictConfig):
                 model.eval()
                 test_rewards = eval_model(model, test_env, num_test_episodes)
                 model.train()
-                metrics_to_log.update(
+                evaluation_metrics.update(
                     {
-                        "eval/reward": test_rewards,
+                        "reward": test_rewards,
                     }
                 )
 
         # Log all the information
         if logger:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            logger.log_metrics(metrics_to_log, step=collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                training_logger.log_metrics(training_metrics, step=collected_frames)
+            if evaluation_metrics:
+                evaluation_logger.log_metrics(evaluation_metrics, step=collected_frames)
+            if timing_metrics:
+                timing_logger.log_metrics(timing_metrics, step=collected_frames)
+        metrics_to_log = {
+            f"{namespace}/{key}": value
+            for namespace, metrics in (
+                ("train", training_metrics),
+                ("eval", evaluation_metrics),
+                ("time", timing_metrics),
+            )
+            for key, value in metrics.items()
+        }
         if (
             checkpoint_path
             and checkpoint_interval > 0

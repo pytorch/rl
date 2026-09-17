@@ -26,7 +26,6 @@ import tqdm
 from omegaconf import DictConfig
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-
 from torchrl._utils import compile_with_warmup, get_available_device, timeit
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -195,6 +194,9 @@ def main(cfg: DictConfig):
         logger_video = cfg.logger.video
     else:
         logger_video = False
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     test_env = make_env(cfg.env.env_name, device, from_pixels=logger_video)
     if logger_video:
@@ -273,7 +275,8 @@ def main(cfg: DictConfig):
         with timeit("collecting"):
             data = next(collector_iter)
 
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(frames_in_batch)
@@ -282,13 +285,13 @@ def main(cfg: DictConfig):
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+            training_metrics["reward"] = episode_rewards.mean().item()
+            training_metrics["episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
 
         # Log mean intrinsic reward for this batch.
-        metrics_to_log["train/intrinsic_reward"] = (
+        training_metrics["intrinsic_reward"] = (
             data["next", "intrinsic_reward"].mean().item()
         )
 
@@ -328,9 +331,9 @@ def main(cfg: DictConfig):
 
         losses_mean = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses_mean.items():
-            metrics_to_log[f"train/{key}"] = value.item()
-        metrics_to_log["train/lr"] = loss["alpha"] * cfg_optim_lr
-        metrics_to_log["train/clip_epsilon"] = (
+            training_metrics[key] = value.item()
+        training_metrics["lr"] = loss["alpha"] * cfg_optim_lr
+        training_metrics["clip_epsilon"] = (
             loss["alpha"] * cfg_loss_clip_epsilon
             if cfg_loss_anneal_clip_eps
             else cfg_loss_clip_epsilon
@@ -348,13 +351,18 @@ def main(cfg: DictConfig):
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
-                metrics_to_log["eval/reward"] = test_rewards.mean()
+                evaluation_metrics["reward"] = test_rewards.mean()
                 actor.train()
 
         if logger:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            logger.log_metrics(metrics_to_log, collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                training_logger.log_metrics(training_metrics, collected_frames)
+            if evaluation_metrics:
+                evaluation_logger.log_metrics(evaluation_metrics, collected_frames)
+            if timing_metrics:
+                timing_logger.log_metrics(timing_metrics, collected_frames)
 
         collector.update_policy_weights_()
 

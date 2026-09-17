@@ -115,12 +115,17 @@ commands = {
 """,
     "ppo_mujoco": """python sota-implementations/ppo/ppo_mujoco.py \
   env.env_name=HalfCheetah-v4 \
+  env.max_episode_steps=20 \
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=2 \
-  logger.backend= \
-  logger.test_interval=10
+  optim.device=cpu \
+  logger.backend=csv \
+  logger.video=False \
+  logger.test_interval=10 \
+  logger.num_test_episodes=1 \
+  hydra.run.dir=$SOTA_LOG_DIR/ppo_mujoco
 """,
     "rnd_mujoco": """python sota-implementations/rnd/rnd_mujoco.py \
   env.env_name=HalfCheetah-v4 \
@@ -515,4 +520,20 @@ def test_commands(algo, monkeypatch, tmp_path):
     if dataset_id is not None:
         monkeypatch.setenv("HOME", str(tmp_path))
         _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
+    if algo == "ppo_mujoco":
+        monkeypatch.setenv("SOTA_LOG_DIR", str(tmp_path))
     run_command(commands[algo])
+    if algo == "ppo_mujoco":
+        scalar_roots = list(tmp_path.rglob("scalars"))
+        assert len(scalar_roots) == 1
+        scalar_names = {
+            path.relative_to(scalar_roots[0]).as_posix()
+            for path in scalar_roots[0].rglob("*.csv")
+        }
+        assert "training/loss_objective.csv" in scalar_names
+        assert "evaluation/reward.csv" in scalar_names
+        assert scalar_names
+        assert all(
+            name.startswith(("training/", "evaluation/", "timing/"))
+            for name in scalar_names
+        )
