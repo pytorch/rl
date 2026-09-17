@@ -109,6 +109,8 @@ class WandbLogger(Logger):
 
         log_dir: str | os.PathLike[str] | None = kwargs.pop("log_dir", None)
         self.offline = offline
+        save_dir = save_dir or None
+        log_dir = log_dir or None
         if save_dir is not None and log_dir is not None:
             raise ValueError(
                 "log_dir and save_dir point to the same value in "

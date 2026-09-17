@@ -426,6 +426,7 @@ def wandb_tmp_logger(tmp_path):
 
 @pytest.mark.parametrize("directory_arg", ["save_dir", "log_dir"])
 def test_wandb_creates_save_directory_before_init(monkeypatch, tmp_path, directory_arg):
+    empty_directory_arg = "log_dir" if directory_arg == "save_dir" else "save_dir"
     if directory_arg == "save_dir":
         requested_dir = tmp_path / "save" / "nested"
         expected_dir = requested_dir
@@ -449,7 +450,7 @@ def test_wandb_creates_save_directory_before_init(monkeypatch, tmp_path, directo
     logger = WandbLogger(
         exp_name="test",
         log_env_packages=False,
-        **{directory_arg: requested_dir},
+        **{directory_arg: requested_dir, empty_directory_arg: ""},
     )
 
     assert init_kwargs["dir"] == str(expected_dir)
