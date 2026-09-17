@@ -30,6 +30,8 @@ from torchrl.envs import (
     InitTracker,
     MacroPrimitive,
     MacroPrimitiveTransform,
+    MenagerieEnv,
+    MenagerieTask,
     MicroDuckEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
@@ -56,6 +58,10 @@ from torchrl.envs.custom.mujoco._math import (
     quat_log,
     quat_mul,
     random_unit_quat,
+)
+from torchrl.envs.custom.mujoco.menagerie import (
+    _has_mujoco_menagerie,
+    MENAGERIE_ENV_VAR,
 )
 from torchrl.envs.custom.mujoco.microduck import (
     _body_frame_linear_velocity,
@@ -2969,6 +2975,252 @@ class TestMujoco:
             expanded[..., :6].double(), seq[..., :6].double(), atol=1e-6, rtol=0
         )
         env.close()
+
+    # ------------------------------------------------------------------
+    # MenagerieEnv: any Menagerie robot by name.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _write_menagerie_fixture(tmp_path: Path, name: str = "tiny_bot") -> Path:
+        """A one-robot Menagerie checkout under ``tmp_path``.
+
+        ``scene.xml`` includes a floating base carrying a two-joint arm with a
+        ``tip`` site, two sensors and ``home`` and ``folded`` keyframes;
+        ``bare.xml`` is the arm alone, fixed to the world, with no keyframe.
+        """
+
+        def robot(*, floating: bool, keyframes: bool) -> str:
+            base = "<freejoint name='root'/>" if floating else ""
+            keys = (
+                "<keyframe>"
+                "<key name='home' qpos='0 0 0.3 1 0 0 0 0.5 -1' ctrl='0.5 -1'/>"
+                "<key name='folded' qpos='0 0 0.3 1 0 0 0 1.5 -1.5' ctrl='1.5 -1.5'/>"
+                "</keyframe>"
+                if keyframes
+                else ""
+            )
+            return (
+                f"<mujoco model='{name}'><option timestep='0.002'/>"
+                "<default><joint damping='0.1'/><geom contype='0' conaffinity='0'/></default>"
+                f"<worldbody><body name='base' pos='0 0 0.3'>{base}"
+                "<geom type='sphere' size='0.05' mass='1'/>"
+                "<body name='link1' pos='0 0 -0.05'>"
+                "<joint name='joint1' axis='0 1 0' range='-1.5 1.5'/>"
+                "<geom type='capsule' size='0.01' fromto='0 0 0 0 0 -0.1' mass='0.1'/>"
+                "<body name='link2' pos='0 0 -0.1'>"
+                "<joint name='joint2' axis='0 1 0' range='-1.5 1.5'/>"
+                "<geom type='capsule' size='0.01' fromto='0 0 0 0 0 -0.1' mass='0.1'/>"
+                "<site name='tip' pos='0 0 -0.1'/>"
+                "</body></body></body></worldbody>"
+                "<actuator>"
+                "<position name='a1' joint='joint1' kp='10' ctrlrange='-1.5 1.5'/>"
+                "<position name='a2' joint='joint2' kp='10' ctrlrange='-1.5 1.5'/>"
+                "</actuator>"
+                "<sensor><jointpos name='joint1_pos' joint='joint1'/>"
+                "<framepos name='tip_pos' objtype='site' objname='tip'/></sensor>"
+                f"{keys}</mujoco>"
+            )
+
+        robot_dir = tmp_path / name
+        robot_dir.mkdir()
+        (robot_dir / f"{name}.xml").write_text(robot(floating=True, keyframes=True))
+        (robot_dir / "scene.xml").write_text(
+            f"<mujoco model='{name} scene'><include file='{name}.xml'/>"
+            "<worldbody><geom name='floor' type='plane' size='2 2 0.1' "
+            "contype='1' conaffinity='1'/></worldbody></mujoco>"
+        )
+        (robot_dir / "bare.xml").write_text(robot(floating=False, keyframes=False))
+        return tmp_path
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_menagerie_specs_keyframe_and_observation(self, tmp_path, backend):
+        root = self._write_menagerie_fixture(tmp_path)
+        env = MenagerieEnv(
+            "tiny_bot",
+            menagerie_path=root,
+            task=MenagerieTask(site_names=("tip",)),
+            backend=backend,
+            num_envs=1 if backend == "mujoco" else 2,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        check_env_specs(env)
+        assert env.model_path == (root / "tiny_bot" / "scene.xml").resolve()
+        assert env.action_spec.shape[-1] == 2
+        observation = env.reset()
+        home = torch.tensor([0.0, 0.0, 0.3, 1.0, 0.0, 0.0, 0.0, 0.5, -1.0])
+        torch.testing.assert_close(
+            observation["qpos"], home.expand(env.num_envs, -1), atol=1e-6, rtol=0
+        )
+        assert torch.equal(observation["qvel"], torch.zeros(env.num_envs, 8))
+        # The joint sensor reads the joint, the frame sensor reads the site.
+        torch.testing.assert_close(
+            observation["sensordata"][..., 0], observation["qpos"][..., 7]
+        )
+        torch.testing.assert_close(
+            observation["sensordata"][..., 1:4],
+            observation["site_positions"][..., 0, :],
+        )
+        torch.testing.assert_close(
+            observation["site_positions"], env.site_positions(["tip"])
+        )
+        rollout = env.rollout(3)
+        assert torch.isfinite(rollout["next", "qpos"]).all()
+        assert torch.equal(rollout["next", "reward"], torch.zeros(env.num_envs, 3, 1))
+        assert not rollout["next", "done"].any()
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_menagerie_task_keyframes_reward_and_termination(self, tmp_path):
+        root = self._write_menagerie_fixture(tmp_path)
+        kwargs = {"menagerie_path": root, "backend": "mujoco", "seed": 0}
+        folded = MenagerieEnv(
+            "tiny_bot",
+            task=MenagerieTask(keyframe="folded"),
+            reset_noise_scale=0.0,
+            **kwargs,
+        )
+        torch.testing.assert_close(
+            folded.reset()["qpos"][0, 7:], torch.tensor([1.5, -1.5])
+        )
+        torch.testing.assert_close(
+            folded.reset_state["qpos"][7:], torch.tensor([1.5, -1.5])
+        )
+        assert torch.equal(folded.reset_state["qvel"], torch.zeros(8))
+        with pytest.raises(KeyError, match="folded"):
+            MenagerieEnv("tiny_bot", task=MenagerieTask(keyframe="nope"), **kwargs)
+        # Without a home keyframe the reset pose is the model's qpos0, and a
+        # fixed base cannot terminate on height.
+        bare = MenagerieEnv("tiny_bot", entry="bare", reset_noise_scale=0.0, **kwargs)
+        assert torch.equal(bare.reset()["qpos"], torch.zeros(1, 2))
+        assert "sensordata" in bare.observation_spec.keys()
+        with pytest.raises(ValueError, match="free joint"):
+            MenagerieEnv(
+                "tiny_bot",
+                entry="bare",
+                task=MenagerieTask(terminate_below_height=0.2),
+                **kwargs,
+            )
+
+        task = MenagerieEnv.hold_pose_task(
+            control_cost_weight=0.01, terminate_below_height=0.2, alive_bonus=0.5
+        )
+        env = MenagerieEnv("tiny_bot", task=task, max_episode_steps=40, **kwargs)
+        rollout = env.rollout(40)
+        # The base is in free fall: the episode ends when it drops below the
+        # height, and only then.
+        height = rollout["next", "qpos"][0, :, 2]
+        assert rollout.shape[-1] < 40
+        assert rollout["next", "terminated"][0, -1, 0]
+        assert not rollout["next", "terminated"][0, :-1].any()
+        assert height[-1] < 0.2 <= height[:-1].min()
+        # The reward follows the task's formula, alive bonus withheld on the
+        # terminating step.
+        joints = rollout["next", "qpos"][0, :, 7:]
+        pose = torch.exp(-(joints - torch.tensor([0.5, -1.0])).square().mean(-1) / 0.25)
+        control = (rollout["action"][0] / 1.5).square().mean(-1)
+        alive = 0.5 * (height >= 0.2).float()
+        torch.testing.assert_close(
+            rollout["next", "reward"][0, :, 0], pose - 0.01 * control + alive
+        )
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_menagerie_model_resolution(self, tmp_path, monkeypatch):
+        from torchrl.envs.custom.mujoco import menagerie as menagerie_module
+
+        root = self._write_menagerie_fixture(tmp_path)
+        scene = (root / "tiny_bot" / "scene.xml").resolve()
+        # A checkout, the robot directory or the XML itself; entries by stem.
+        assert MenagerieEnv.resolve_model("tiny_bot", menagerie_path=root) == scene
+        assert (
+            MenagerieEnv.resolve_model("tiny_bot", menagerie_path=root / "tiny_bot")
+            == scene
+        )
+        assert MenagerieEnv.resolve_model("tiny_bot", menagerie_path=scene) == scene
+        with pytest.raises(ValueError, match="entry='bare'"):
+            MenagerieEnv.resolve_model("tiny_bot", entry="bare", menagerie_path=scene)
+        assert MenagerieEnv.resolve_model(
+            "tiny_bot", entry="bare", menagerie_path=root
+        ) == scene.with_name("bare.xml")
+        with pytest.raises(FileNotFoundError, match="'bare', 'scene', 'tiny_bot'"):
+            MenagerieEnv.resolve_model("tiny_bot", entry="nope", menagerie_path=root)
+        with pytest.raises(FileNotFoundError, match="'other'"):
+            MenagerieEnv.resolve_model("other", menagerie_path=root)
+        monkeypatch.setenv(MENAGERIE_ENV_VAR, str(root))
+        assert MenagerieEnv.resolve_model("tiny_bot") == scene
+        # Without a checkout or the package the error lists every option.
+        monkeypatch.delenv(MENAGERIE_ENV_VAR)
+        monkeypatch.setattr(menagerie_module, "_has_mujoco_menagerie", False)
+        with pytest.raises(FileNotFoundError, match="download=True") as excinfo:
+            MenagerieEnv.resolve_model("tiny_bot")
+        assert MENAGERIE_ENV_VAR in str(excinfo.value)
+        with pytest.raises(ValueError, match="menagerie_path"):
+            MenagerieEnv("tiny_bot", menagerie_path=root, xml_path=scene)
+        # Native workers receive the resolved XML.
+        env = MenagerieEnv(
+            "tiny_bot",
+            menagerie_path=root,
+            backend="mujoco",
+            num_envs=2,
+            parallel=False,
+            seed=0,
+        )
+        assert isinstance(env, SerialEnv)
+        assert env.rollout(3)["next", "qpos"].shape == (2, 1, 3, 9)
+        env.close()
+
+    @pytest.mark.skipif(
+        not _has_mujoco_menagerie, reason="mujoco-menagerie is not installed"
+    )
+    def test_menagerie_package_resolution(self, tmp_path, monkeypatch):
+        import mujoco_menagerie
+
+        root = self._write_menagerie_fixture(tmp_path, name="universal_robots_ur5e")
+        monkeypatch.delenv(MENAGERIE_ENV_VAR, raising=False)
+        monkeypatch.setenv("MENAGERIE_ROOT", str(root))
+        assert (
+            MenagerieEnv.resolve_model("universal_robots_ur5e")
+            == (root / "universal_robots_ur5e" / "scene.xml").resolve()
+        )
+        with pytest.raises(mujoco_menagerie.UnknownRobotError):
+            MenagerieEnv.resolve_model("universal_robots_ur5")
+        # A registered robot missing from MENAGERIE_ROOT is a FileNotFoundError.
+        with pytest.raises(FileNotFoundError, match="checkout"):
+            MenagerieEnv.resolve_model("unitree_go2")
+        # Nothing downloads unless asked.
+        monkeypatch.delenv("MENAGERIE_ROOT")
+        monkeypatch.setenv("MENAGERIE_CACHE_DIR", str(tmp_path / "cache"))
+        with pytest.raises(FileNotFoundError, match="download=True"):
+            MenagerieEnv.resolve_model("universal_robots_ur5e")
+        assert not (tmp_path / "cache").exists()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_menagerie_ur5e_when_available(self):
+        menagerie_path = os.environ.get(MENAGERIE_ENV_VAR)
+        if menagerie_path is None or not Path(menagerie_path).exists():
+            pytest.xfail(
+                f"MenagerieEnv requires {MENAGERIE_ENV_VAR} for Menagerie assets."
+            )
+        env = MenagerieEnv(
+            "universal_robots_ur5e",
+            menagerie_path=menagerie_path,
+            task=MenagerieEnv.hold_pose_task(site_names=("attachment_site",)),
+            reset_noise_scale=0.0,
+            seed=0,
+            max_episode_steps=3,
+        )
+        check_env_specs(env)
+        home = torch.tensor([-1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0])
+        torch.testing.assert_close(env.reset()["qpos"][0], home)
+        assert env.action_spec.shape == torch.Size([1, 6])
+        rollout = env.rollout(3)
+        assert rollout["next", "site_positions"].shape == (1, 3, 1, 3)
+        assert torch.isfinite(rollout["next", "reward"]).all()
+        robot_only = MenagerieEnv(
+            "universal_robots_ur5e", entry="ur5e", menagerie_path=menagerie_path
+        )
+        assert robot_only.model_path.name == "ur5e.xml"
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_xml_path_preserves_relative_assets(self, tmp_path, backend):

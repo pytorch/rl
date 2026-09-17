@@ -126,6 +126,16 @@ RUNNABLE_EXAMPLES = (
     ExampleSpec("env-gym-conversion", "examples/envs/gym_conversion_examples.py"),
     ExampleSpec("llm-tool-service", "examples/llm/tool_service_example.py"),
     ExampleSpec(
+        "menagerie-ppo",
+        "examples/menagerie/ppo.py",
+        (
+            "--task=hold_pose",
+            "--robot=universal_robots_ur5e",
+            "--smoke",
+            "--ckpt={tmp_path}/menagerie_ppo.ckpt",
+        ),
+    ),
+    ExampleSpec(
         "mujoco-cube-bowl",
         "examples/mujoco_macros/cube_bowl_macros.py",
         ("--smoke", "--max-rollouts=1"),

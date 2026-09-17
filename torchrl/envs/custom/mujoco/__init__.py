@@ -18,7 +18,8 @@ observation map. The locomotion subclasses (:class:`HumanoidEnv`,
 Gymnasium ``-v4`` reward / termination spec. :class:`SatelliteEnv`
 implements an attitude-control task with 4- or 6-CMG clusters and a
 manipulability-based singularity penalty. :class:`CubeBowlEnv` is a
-compact Menagerie-backed manipulation task for macro-control examples.
+compact Menagerie-backed manipulation task for macro-control examples, and
+:class:`MenagerieEnv` loads any MuJoCo Menagerie robot by name.
 """
 
 from torchrl.envs.custom.mujoco._humanoid_primitives import HumanoidMacroAction
@@ -31,6 +32,7 @@ from torchrl.envs.custom.mujoco.base import MujocoEnv
 from torchrl.envs.custom.mujoco.cube_bowl import CubeBowlEnv
 from torchrl.envs.custom.mujoco.hopper import HopperEnv
 from torchrl.envs.custom.mujoco.humanoid import HumanoidEnv
+from torchrl.envs.custom.mujoco.menagerie import MenagerieEnv, MenagerieTask
 from torchrl.envs.custom.mujoco.microduck import (
     MicroDuckEnv,
     MicroDuckTask,
@@ -45,6 +47,8 @@ __all__ = [
     "HopperEnv",
     "HumanoidMacroAction",
     "HumanoidEnv",
+    "MenagerieEnv",
+    "MenagerieTask",
     "MicroDuckEnv",
     "MicroDuckTask",
     "MicroDuckTaskSampler",
