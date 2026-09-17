@@ -92,12 +92,13 @@ committed; the commands above regenerate them.
 
 ## Results
 
-Laptop CPU (Apple M1 Pro), `backend="mujoco"` with worker processes, one seed.
+`backend="mujoco"` with worker processes, one seed; laptop rows on an Apple M1 Pro. On a headless machine without a display, render with `--render-backend null` and finish the video on a machine with FFmpeg.
 
 | run | command | frames | wall time | outcome |
 |---|---|---|---|---|
 | Go2 `hold_pose` | `--fall-height 0.15 --num-envs 4 --frames 200000` | 200k | 2 min | reward per step 1.10 to 1.23 (max 1.5); deterministic return 699 over 500 steps versus 606 untrained |
 | Go2 `walk` | `--command-range 1.0 0.5 0.8 --num-envs 6 --frames 6000000` | 6M | 30 min | at the 0.5 m/s command: 0.45 m/s, 19 to 20 touchdowns per foot in 10 s, 0.24 s flight, 0.08 m swing height, 85% diagonal-pair timing, no falls |
+| Go2 `walk`, Mac Studio (20 workers) | `--command-range 1.0 0.5 0.8 --num-envs 20 --frames 12000000 --steps-per-batch 1024 --minibatch 4096` | 12M | 40 min | at the 0.5 m/s command: 0.48 m/s, 17 to 18 touchdowns per foot with all four feet loaded evenly (53 to 63% contact each), 0.25 s flight, 0.09 m swing height, no falls |
 
 Two things the walk numbers depend on. Without the `feet_stuck` cost the
 reference terms let PPO settle, after about 5M frames, on a three-legged gait
