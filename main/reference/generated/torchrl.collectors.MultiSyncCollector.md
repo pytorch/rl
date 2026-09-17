@@ -374,10 +374,10 @@ and values are WeightSyncScheme instances configured to receive weights.
 This enables cascading in hierarchies like: RPCCollector -> MultiSyncCollector -> Collector.
 Received weights are automatically propagated to sub-collectors if matching model_ids exist.
 Defaults to `None`.
-- **track_policy_version** (*bool**or*[*PolicyVersion*](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)*,**optional*) -
+- **track_policy_version** (*bool**or*[*PolicyVersion*](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)*,**optional*) -
 
 if `True`, the collector will track the version of the policy.
-A [`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion) transform is
+A [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion) transform is
 installed on each worker's environment, tagging every collected frame with the
 current version under the `"policy_version"` key. Each worker's transform is
 bumped after the new weights have actually been applied in that worker, so
@@ -396,7 +396,7 @@ source of truth for data provenance. The parent collector's
 and should not be used as a label for a returned batch.
 
 The recommended path is `track_policy_version=True`: let the collector own
-the transform. Passing a [`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)
+the transform. Passing a [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)
 instance directly is reserved for advanced use cases that wire up a
 `PolicyVersion` **without** going through a collector. With multi-process
 collectors that pre-built tracker lives in the *parent* and is not propagated
@@ -700,7 +700,7 @@ Context manager that pauses the collector if it is running free.
 The parent-side policy version.
 
 For multi-process collectors, worker-local
-[`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)
+[`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)
 transforms write the per-frame `"policy_version"` values in returned
 batches. Those tensor entries are the source of truth for collected
 data; this property is only the parent-side tracker state.

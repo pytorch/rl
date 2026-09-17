@@ -43,7 +43,7 @@ Examples
 ```
 
 Integration with [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector) and
-`PolicyVersion`:
+[`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion):
 
 ```
 from torchrl.collectors import Collector

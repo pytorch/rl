@@ -1717,6 +1717,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextObservationDelta.html">NextObservationDelta</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextStateReconstructor.html">NextStateReconstructor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyAgeFilter.html">PolicyAgeFilter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html">PolicyVersion</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NoopResetEnv.html">NoopResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationNorm.html">ObservationNorm</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationTransform.html">ObservationTransform</a></li>
@@ -1865,7 +1866,6 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.KLComputation.html">KLComputation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.KLRewardTransform.html">KLRewardTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.MCPToolTransform.html">MCPToolTransform</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html">PolicyVersion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.RayDataLoadingPrimer.html">RayDataLoadingPrimer</a></li>
@@ -2885,15 +2885,15 @@ and values are WeightSyncScheme instances configured to receive weights.
 This enables cascading weight updates in hierarchies like:
 RPCCollector -&gt; MultiSyncCollector -&gt; Collector.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>track_policy_version</strong> (<em>bool</em><em> or </em><a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><em>PolicyVersion</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the collector will track the version of the policy.
-A <a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.policy_version.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform is
+<li><p><strong>track_policy_version</strong> (<em>bool</em><em> or </em><a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion" title="torchrl.envs.transforms.PolicyVersion"><em>PolicyVersion</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the collector will track the version of the policy.
+A <a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion" title="torchrl.envs.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform is
 installed on the environment, tagging every collected frame with the current version
 under the <code class="docutils literal notranslate"><span class="pre">&quot;policy_version&quot;</span></code> key. The transform’s version is bumped exactly once
 per <a class="reference internal" href="#torchrl.collectors.Collector.update_policy_weights_" title="torchrl.collectors.Collector.update_policy_weights_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_policy_weights_()</span></code></a> call — for multi-process collectors this happens
 in each worker after the new weights have actually been applied, so per-frame
 tagging tracks real weight updates rather than rollout iterations.</p>
 <p>The recommended path is <code class="docutils literal notranslate"><span class="pre">track_policy_version=True</span></code>: let the collector own the
-transform. Passing a <a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.policy_version.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>
+transform. Passing a <a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion" title="torchrl.envs.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>
 instance directly is reserved for advanced use cases that wire up a <code class="docutils literal notranslate"><span class="pre">PolicyVersion</span></code>
 <strong>without</strong> going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
 a transform and passing it to a collector is supported but discouraged because it

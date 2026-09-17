@@ -61,12 +61,12 @@ Feedback, issues and PRs are welcome!
 ### Policy Version Tracking
 
 LLM Collectors also allow to track the version of the policy, which is useful for some use cases.
-This is done by adding a [`PolicyVersion`](generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion) transform to the environment, which is
+This is done by adding a [`PolicyVersion`](generated/torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion) transform to the environment, which is
 then incremented by the collector after each weight update. To do this, one either provides the stateful version of the
 transform, or a boolean to the collector constructor.
 
 ```
->>> from torchrl.envs.llm.transforms import PolicyVersion
+>>> from torchrl.envs.transforms import PolicyVersion
 >>> from torchrl.collectors.llm import LLMCollector
 >>> from torchrl.weight_update.llm import VLLMWeightSyncScheme, get_model_metadata
 >>> env = make_env() # place your code here
@@ -149,7 +149,7 @@ Transforms are the main way to extend ChatEnv with specific capabilities:
 execution, [`MCPToolTransform`](generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform) for general tool calling.
 - **Data loading**: [`DataLoadingPrimer`](generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer) for loading prompts from datasets
 - **Thinking prompts**: [`AddThinkingPrompt`](generated/torchrl.envs.llm.transforms.AddThinkingPrompt.html#torchrl.envs.llm.transforms.AddThinkingPrompt) for chain-of-thought reasoning
-- **Policy tracking**: [`PolicyVersion`](generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion) for version control
+- **Policy tracking**: [`PolicyVersion`](generated/torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion) for version control
 - **Step counting**: Built-in step tracking and reset management using [`StepCounter`](generated/torchrl.envs.transforms.StepCounter.html#torchrl.envs.transforms.StepCounter).
 
 #### Integration with LLM Wrappers
@@ -460,7 +460,6 @@ By following these design principles, reward transforms can be effectively integ
 | [`KLComputation`](generated/torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation)([gen_log_probs_full_key, ...]) | A transform to compute KL divergence between two log-prob tensors and optionally add it to the reward. |
 | [`KLRewardTransform`](generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform)(*args[, use_ray_service, ...]) | A legacy transform for computing KL divergence-based rewards. |
 | [`MCPToolTransform`](generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform)(servers[, ...]) | A transform that executes tools via the Model Context Protocol (MCP). |
-| [`PolicyVersion`](generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)(version_type, ] =) | A transform that keeps track of the version of the policy. |
 | [`PythonExecutorService`](generated/torchrl.envs.llm.transforms.PythonExecutorService.html#torchrl.envs.llm.transforms.PythonExecutorService)([pool_size, timeout]) | Ray actor that manages a pool of persistent Python interpreters. |
 | [`PythonInterpreter`](generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter)([tokenizer, tool_name, ...]) | A transform that executes Python code in the LLM response. |
 | [`RayDataLoadingPrimer`](generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer)(*[, dataloader, ...]) | A [`DataLoadingPrimer`](generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer) that creates a single actor that can be shared by multiple environments. |

@@ -76,7 +76,7 @@ raising in the consumer.
 Note
 
 The default `"policy_version"` key is shared on purpose with the
-[`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion) transform and the
+[`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion) transform and the
 collectors' `track_policy_version` mechanism: they stamp the same
 concept (the behavior-policy version that produced the data), so
 consumers such as

@@ -308,6 +308,7 @@ to be able to create this other composition:
 | [`NextObservationDelta`](generated/torchrl.envs.transforms.NextObservationDelta.html#torchrl.envs.transforms.NextObservationDelta)([in_keys, delta_dtype, ...]) | Stores `("next", obs)` as a low-precision delta in a sibling key. |
 | [`NextStateReconstructor`](generated/torchrl.envs.transforms.NextStateReconstructor.html#torchrl.envs.transforms.NextStateReconstructor)([keys, traj_key, ...]) | Re-hydrate `("next", obs)` keys at sampling time by shifting along the batch. |
 | [`PolicyAgeFilter`](generated/torchrl.envs.transforms.PolicyAgeFilter.html#torchrl.envs.transforms.PolicyAgeFilter)(current_version, ...[, ...]) | Filter out data produced by a behavior policy that is too old. |
+| [`PolicyVersion`](generated/torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)(version_type, ] =) | A transform that keeps track of the version of the policy. |
 | [`NoopResetEnv`](generated/torchrl.envs.transforms.NoopResetEnv.html#torchrl.envs.transforms.NoopResetEnv)([noops, random]) | Runs a series of random actions when an environment is reset. |
 | [`ObservationNorm`](generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm)([loc, scale, in_keys, ...]) | Observation affine transformation layer. |
 | [`ObservationTransform`](generated/torchrl.envs.transforms.ObservationTransform.html#torchrl.envs.transforms.ObservationTransform)([in_keys, out_keys, ...]) | Abstract class for transformations of the observations. |

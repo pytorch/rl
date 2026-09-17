@@ -2,12 +2,12 @@
 <!DOCTYPE html>
 
 
-<html lang="en" data-content_root="../../../../../" >
+<html lang="en" data-content_root="../../../../" >
 
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>torchrl.envs.llm.transforms.policy_version &#8212; torchrl main documentation</title>
+    <title>torchrl.envs.transforms.policy_version &#8212; torchrl main documentation</title>
   
   
   
@@ -17,40 +17,40 @@
   </script>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
 
   
-  <link href="../../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
 
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=a746c00c" />
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=a6c16915" />
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=c83e6b79" />
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
-    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=064f27fb" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
-<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
-  <script src="../../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../../../../../_static/documentation_options.js?v=a8da1a53"></script>
-    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
-    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="../../../../../_static/sg-tags.js?v=d80f6fa4"></script>
-    <script src="../../../../../_static/js/search-tuning.js?v=87be1517"></script>
-    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/envs/llm/transforms/policy_version';</script>
-    <script src="../../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
-    <link rel="index" title="Index" href="../../../../../genindex.html" />
-    <link rel="search" title="Search" href="../../../../../search.html" />
+    <script src="../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/js/search-tuning.js?v=87be1517"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/envs/transforms/policy_version';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -60,7 +60,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="torchrl.envs.llm.transforms.policy_version - Documentation for torchrl, part of the PyTorch ecosystem.">
+<meta name="llm:description" content="torchrl.envs.transforms.policy_version - Documentation for torchrl, part of the PyTorch ecosystem.">
 
 
 
@@ -128,13 +128,13 @@
 </style>
 
 
-<link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css" crossorigin="anonymous">
-<script type="text/javascript" src="../../../../../_static/js/theme.js"></script>
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
 <meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
-<link rel="stylesheet" href="../../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
 <meta http-equiv="Content-Security-Policy"
   content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
 <meta name="pytorch_project" content="torchrl">
@@ -372,7 +372,7 @@
     <div class="search-button__overlay"></div>
     <div class="search-button__search-container">
 <form class="bd-search d-flex align-items-center"
-      action="../../../../../search.html"
+      action="../../../../search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -416,7 +416,7 @@
   
 
 
-<a class="navbar-brand logo" href="../../../../../index.html">
+<a class="navbar-brand logo" href="../../../../index.html">
   
     <span class="logo__title">TorchRL</span>
   
@@ -443,7 +443,7 @@
   
 
 
-<a class="navbar-brand logo" href="../../../../../index.html">
+<a class="navbar-brand logo" href="../../../../index.html">
   
     <span class="logo__title">TorchRL</span>
   
@@ -456,7 +456,7 @@
         
         <div class="navbar-item desktop-only-version">
           
-  <a href="../../../../../index.html" class="version">main (0.14.0)</a>
+  <a href="../../../../index.html" class="version">main (0.14.0)</a>
 
         </div>
       
@@ -489,7 +489,7 @@
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-0.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
             Get started with Environments, TED and transforms
           </a>
         
@@ -498,7 +498,7 @@
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-1.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
             Get started with TorchRL’s modules
           </a>
         
@@ -507,7 +507,7 @@
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-2.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
             Getting started with model optimization
           </a>
         
@@ -516,7 +516,7 @@
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-3.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
             Get started with data collection and storage
           </a>
         
@@ -525,7 +525,7 @@
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-4.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
             Get started with logging
           </a>
         
@@ -534,7 +534,7 @@
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-5.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
             Get started with your own first training loop
           </a>
         
@@ -543,7 +543,7 @@
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ppo.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
             Reinforcement Learning (PPO) with TorchRL Tutorial
           </a>
         
@@ -561,145 +561,145 @@
         <ul id="pst-nav-more-links" class="dropdown-menu">
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/pendulum.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
                 Pendulum: Writing your environment and transforms with TorchRL
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/torchrl_demo.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
                 Introduction to TorchRL
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multiagent_ppo.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
                 Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/torchrl_envs.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
                 TorchRL envs
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/pretrained_models.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
                 Using pretrained models
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/dqn_with_rnn.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
                 Recurrent DQN: Training recurrent policies
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/recurrent_sequence_training.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/recurrent_sequence_training.html">
                 Recurrent training on sequence batches
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/mujoco_cube_bowl_macros.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
                 MuJoCo scripted manipulation with human-readable robot actions
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/microduck.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/microduck.html">
                 MicroDuck: tasks as data, rewards as a registry, one policy for all of them
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/collector_trajectory_assembly.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
                 Collectors Deep Dive: Trajectory Assembly
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/evaluator.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
                 Using the Evaluator
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/rlrender.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rlrender.html">
                 Render policy rollouts with rlrender
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/rb_tutorial.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
                 Using Replay Buffers
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/checkpointing.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/checkpointing.html">
                 Unified checkpointing in TorchRL
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/memory_efficient_rl.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
                 Memory-Efficient RL Training
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/export.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
                 Exporting TorchRL modules
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/vla.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/vla.html">
                 Vision-Language-Action (VLA) policies with TorchRL
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
                 Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multi_task.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
                 Task-specific policy in multi-task environments
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/coding_ddpg.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
                 TorchRL objectives: Coding a DDPG loss
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/coding_dqn.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
                 TorchRL trainer: A DQN example
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/trl_interop.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/trl_interop.html">
                 TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/index.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
                 API Reference
               </a>
             </li>
           
             <li class="">
-              <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/knowledge_base.html">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
                 Knowledge Base
               </a>
             </li>
@@ -731,7 +731,7 @@
         <div class="navbar-item">
   
 <form class="bd-search d-flex align-items-center"
-      action="../../../../../search.html"
+      action="../../../../search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -832,7 +832,7 @@ document.write(`
     <div class="sidebar-header-items__start">
       <div class="navbar-item">
         
-  <a href="../../../../../index.html" class="version">main (0.14.0)</a>
+  <a href="../../../../index.html" class="version">main (0.14.0)</a>
 
       </div>
     </div>
@@ -866,7 +866,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-0.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
             Get started with Environments, TED and transforms
           </a>
         
@@ -875,7 +875,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-1.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
             Get started with TorchRL’s modules
           </a>
         
@@ -884,7 +884,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-2.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
             Getting started with model optimization
           </a>
         
@@ -893,7 +893,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-3.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
             Get started with data collection and storage
           </a>
         
@@ -902,7 +902,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-4.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
             Get started with logging
           </a>
         
@@ -911,7 +911,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-5.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
             Get started with your own first training loop
           </a>
         
@@ -920,7 +920,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ppo.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
             Reinforcement Learning (PPO) with TorchRL Tutorial
           </a>
         
@@ -929,7 +929,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/pendulum.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
             Pendulum: Writing your environment and transforms with TorchRL
           </a>
         
@@ -938,7 +938,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/torchrl_demo.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
             Introduction to TorchRL
           </a>
         
@@ -947,7 +947,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/multiagent_ppo.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
             Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
           </a>
         
@@ -956,7 +956,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/torchrl_envs.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
             TorchRL envs
           </a>
         
@@ -965,7 +965,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/pretrained_models.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
             Using pretrained models
           </a>
         
@@ -974,7 +974,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/dqn_with_rnn.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
             Recurrent DQN: Training recurrent policies
           </a>
         
@@ -983,7 +983,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/recurrent_sequence_training.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/recurrent_sequence_training.html">
             Recurrent training on sequence batches
           </a>
         
@@ -992,7 +992,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/mujoco_cube_bowl_macros.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
             MuJoCo scripted manipulation with human-readable robot actions
           </a>
         
@@ -1001,7 +1001,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/microduck.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/microduck.html">
             MicroDuck: tasks as data, rewards as a registry, one policy for all of them
           </a>
         
@@ -1010,7 +1010,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/collector_trajectory_assembly.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
             Collectors Deep Dive: Trajectory Assembly
           </a>
         
@@ -1019,7 +1019,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/evaluator.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
             Using the Evaluator
           </a>
         
@@ -1028,7 +1028,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/rlrender.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/rlrender.html">
             Render policy rollouts with rlrender
           </a>
         
@@ -1037,7 +1037,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/rb_tutorial.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
             Using Replay Buffers
           </a>
         
@@ -1046,7 +1046,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/checkpointing.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/checkpointing.html">
             Unified checkpointing in TorchRL
           </a>
         
@@ -1055,7 +1055,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/memory_efficient_rl.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
             Memory-Efficient RL Training
           </a>
         
@@ -1064,7 +1064,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/export.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
             Exporting TorchRL modules
           </a>
         
@@ -1073,7 +1073,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/vla.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/vla.html">
             Vision-Language-Action (VLA) policies with TorchRL
           </a>
         
@@ -1082,7 +1082,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
             Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
           </a>
         
@@ -1091,7 +1091,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/multi_task.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
             Task-specific policy in multi-task environments
           </a>
         
@@ -1100,7 +1100,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ddpg.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
             TorchRL objectives: Coding a DDPG loss
           </a>
         
@@ -1109,7 +1109,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_dqn.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
             TorchRL trainer: A DQN example
           </a>
         
@@ -1118,7 +1118,7 @@ document.write(`
       <li class="nav-item">
         
           
-          <a class="nav-link nav-internal" href="../../../../../tutorials/trl_interop.html">
+          <a class="nav-link nav-internal" href="../../../../tutorials/trl_interop.html">
             TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
           </a>
         
@@ -1128,110 +1128,110 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="../../../../../reference/index.html">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
               API Reference
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-30">
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/collectors.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
                   torchrl.collectors package
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/checkpoint.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/checkpoint.html">
                   Checkpointing
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/data.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
                   torchrl.data package
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/data_layout.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
                   Data layout: contiguous trajectories
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/envs.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
                   torchrl.envs package
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/llms.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
                   LLM Interface
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/modules.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
                   torchrl.modules package
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/objectives.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
                   torchrl.objectives package
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/render.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/render.html">
                   Rendering applications
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/services.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
                   Service Registry
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/services_workflow.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services_workflow.html">
                   Designing Training Applications with Services
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/trainers.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
                   torchrl.trainers package
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/utils.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
                   torchrl._utils package
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/vla.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/vla.html">
                   Vision-Language-Action (VLA)
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/config.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
                   TorchRL Configuration System
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/profiling.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
                   Profiling collectors and envs
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/glossary.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
                   Glossary
                 </a>
               </li>
@@ -1244,80 +1244,80 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="../../../../../reference/knowledge_base.html">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
               Knowledge Base
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-31">
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
                   Things to consider when debugging RL
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
                   Installing dm_control
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
                   Flaky Test Resolution Guide
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/GYM.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
                   Working with gym
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/HABITAT.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
                   Working with habitat-lab
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
                   IsaacLab Guide
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/MINECRAFT.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MINECRAFT.html">
                   Minecraft (CraftGround) Guide
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
                   Working with MuJoCo-based environments
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
                   Common PyTorch errors and solutions
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/RESOURCES.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
                   Useful resources
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
                   Versioning Issues
                 </a>
               </li>
             
               <li class=" ">
-                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
                   Customising Video Renders
                 </a>
               </li>
@@ -1354,7 +1354,7 @@ document.write(`
           <div class="navbar-item">
   
 <form class="bd-search d-flex align-items-center"
-      action="../../../../../search.html"
+      action="../../../../search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -1455,12 +1455,12 @@ document.write(`
   <ul class="bd-breadcrumbs">
     
     <li class="breadcrumb-item breadcrumb-home">
-      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
     
-    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
     
     <li class="breadcrumb-item active" aria-current="page">torchrl.envs...</li>
   </ul>
@@ -1504,13 +1504,13 @@ document.write(`
   <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <link itemprop="item" href="../../../../index.html">
+      <link itemprop="item" href="../../../index.html">
       <meta itemprop="name" content="Module code">
       <meta itemprop="position" content="1">
     </div>
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="torchrl.envs.llm.transforms.policy_version">
+      <meta itemprop="name" content="torchrl.envs.transforms.policy_version">
       <meta itemprop="position" content="2">
     </div>
   </div>
@@ -1518,24 +1518,24 @@ document.write(`
   
   
   <div class="pytorch-call-to-action-links">
-    <div id="tutorial-type">_modules/torchrl/envs/llm/transforms/policy_version</div>
+    <div id="tutorial-type">_modules/torchrl/envs/transforms/policy_version</div>
     <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
       <div id="google-colab-link">
-        <img class="call-to-action-img" src="../../../../../_static/img/pytorch-colab.svg" />
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
         <div class="call-to-action-desktop-view">Run in Google Colab</div>
         <div class="call-to-action-mobile-view">Colab</div>
       </div>
     </a>
     <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
       <div id="download-notebook-link">
-        <img class="call-to-action-notebook-img" src="../../../../../_static/img/pytorch-download.svg" />
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
         <div class="call-to-action-desktop-view">Download Notebook</div>
         <div class="call-to-action-mobile-view">Notebook</div>
       </div>
     </a>
     <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
       <div id="github-view-link">
-        <img class="call-to-action-img" src="../../../../../_static/img/pytorch-github.svg" />
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
         <div class="call-to-action-desktop-view">View on GitHub</div>
         <div class="call-to-action-mobile-view">GitHub</div>
       </div>
@@ -1549,7 +1549,7 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for torchrl.envs.llm.transforms.policy_version</h1><div class="highlight"><pre>
+  <h1>Source code for torchrl.envs.transforms.policy_version</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
@@ -1577,40 +1577,31 @@ document.write(`
 
 
 <div class="viewcode-block" id="PolicyVersion">
-<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion">[docs]</a>
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion">[docs]</a>
 <span class="k">class</span> <span class="nc">PolicyVersion</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform that keeps track of the version of the policy.</span>
 
 <span class="sd">    This transform is used to track policy versions during training, particularly in asynchronous</span>
-<span class="sd">    settings where policy weights are updated periodically. It is designed to work seamlessly with</span>
-<span class="sd">    :class:`~torchrl.collectors.llm.LLMCollector` to ensure data collection and training remain in sync.</span>
+<span class="sd">    settings where policy weights are updated periodically. It works with TorchRL collectors to</span>
+<span class="sd">    ensure data collection and training remain in sync.</span>
 
-<span class="sd">    The version can be either a UUID (string) or an integer counter. When used with :class:`~torchrl.collectors.llm.LLMCollector`,</span>
-<span class="sd">    the version is automatically incremented each time the policy weights are updated.</span>
-
-<span class="sd">    Example usage with :class:`~torchrl.collectors.llm.LLMCollector`:</span>
-
-<span class="sd">    .. code-block:: python</span>
-
-<span class="sd">        &gt;&gt;&gt; # Create a policy version tracker</span>
-<span class="sd">        &gt;&gt;&gt; policy_version = PolicyVersion(version_type=&quot;int&quot;)  # or &quot;uuid&quot; for UUID-based versioning</span>
-<span class="sd">        &gt;&gt;&gt; # Create collector with version tracking</span>
-<span class="sd">        &gt;&gt;&gt; collector = LLMCollector(</span>
-<span class="sd">        ...     env=env,</span>
-<span class="sd">        ...     policy=policy,</span>
-<span class="sd">        ...     track_policy_version=policy_version,  # Pass the version tracker</span>
-<span class="sd">        ...     # ... other arguments</span>
-<span class="sd">        ... )</span>
-<span class="sd">        &gt;&gt;&gt; # The version will be automatically incremented when weights are updated</span>
-<span class="sd">        &gt;&gt;&gt; collector.update_policy_weights_(new_weights)</span>
-<span class="sd">        &gt;&gt;&gt; # The version is stored in the collected data</span>
-<span class="sd">        &gt;&gt;&gt; for batch in collector:</span>
-<span class="sd">        ...     current_version = batch[&quot;policy_version&quot;]</span>
+<span class="sd">    The version can be either a UUID (string) or an integer counter. When passed to a collector as</span>
+<span class="sd">    its ``track_policy_version`` argument, the version is automatically incremented each time the</span>
+<span class="sd">    policy weights are updated.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        version_type: The type of versioning to use. Can be either:</span>
 <span class="sd">            - str or &quot;uuid&quot;: Uses UUID4 for versions (good for distributed systems)</span>
 <span class="sd">            - int or &quot;int&quot;: Uses incrementing integers (good for debugging)</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.transforms import PolicyVersion</span>
+<span class="sd">        &gt;&gt;&gt; policy_version = PolicyVersion(version_type=&quot;int&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; policy_version.version</span>
+<span class="sd">        0</span>
+<span class="sd">        &gt;&gt;&gt; policy_version.increment_version()</span>
+<span class="sd">        &gt;&gt;&gt; policy_version.version</span>
+<span class="sd">        1</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">version_type</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;uuid&quot;</span><span class="p">,</span> <span class="s2">&quot;int&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">):</span>
@@ -1633,11 +1624,11 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_version</span> <span class="o">=</span> <span class="n">value</span>
 
 <div class="viewcode-block" id="PolicyVersion.increment_version">
-<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.increment_version">[docs]</a>
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion.increment_version">[docs]</a>
     <span class="k">def</span> <span class="nf">increment_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment the version number.</span>
 
-<span class="sd">        This is called automatically by LLMCollector when policy weights are updated.</span>
+<span class="sd">        This is called automatically by collectors when policy weights are updated.</span>
 <span class="sd">        Can also be called manually if needed.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_increment_version</span><span class="p">()</span></div>
@@ -1732,7 +1723,7 @@ document.write(`
         <span class="k">return</span> <span class="n">next_tensordict</span>
 
 <div class="viewcode-block" id="PolicyVersion.transform_observation_spec">
-<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_observation_spec">[docs]</a>
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion.transform_observation_spec">[docs]</a>
     <span class="k">def</span> <span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Update the environment spec to include the version field.</span>
 
@@ -1837,8 +1828,8 @@ document.write(`
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
-<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
 
   
 
@@ -2013,11 +2004,11 @@ document.write(`
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "torchrl.envs.llm.transforms.policy_version",
-       "headline": "torchrl.envs.llm.transforms.policy_version",
+       "name": "torchrl.envs.transforms.policy_version",
+       "headline": "torchrl.envs.transforms.policy_version",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
-       "url": "/_modules/torchrl/envs/llm/transforms/policy_version.html",
-       "articleBody": "Source code for torchrl.envs.llm.transforms.policy_version # Copyright (c) Meta Platforms, Inc. and affiliates. # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import uuid from dataclasses import dataclass from datetime import datetime from typing import cast, Literal import torch from tensordict import NonTensorData, TensorDictBase from torchrl.data.tensor_specs import Composite, NonTensor, Unbounded from torchrl.envs.transforms.transforms import Transform @dataclass class VersionChange: \"\"\"Records a single version change event.\"\"\" timestamp: datetime old_version: str | int | None new_version: str | int [docs] class PolicyVersion(Transform): \"\"\"A transform that keeps track of the version of the policy. This transform is used to track policy versions during training, particularly in asynchronous settings where policy weights are updated periodically. It is designed to work seamlessly with :class:`~torchrl.collectors.llm.LLMCollector` to ensure data collection and training remain in sync. The version can be either a UUID (string) or an integer counter. When used with :class:`~torchrl.collectors.llm.LLMCollector`, the version is automatically incremented each time the policy weights are updated. Example usage with :class:`~torchrl.collectors.llm.LLMCollector`: .. code-block:: python \u003e\u003e\u003e # Create a policy version tracker \u003e\u003e\u003e policy_version = PolicyVersion(version_type=\"int\") # or \"uuid\" for UUID-based versioning \u003e\u003e\u003e # Create collector with version tracking \u003e\u003e\u003e collector = LLMCollector( ... env=env, ... policy=policy, ... track_policy_version=policy_version, # Pass the version tracker ... # ... other arguments ... ) \u003e\u003e\u003e # The version will be automatically incremented when weights are updated \u003e\u003e\u003e collector.update_policy_weights_(new_weights) \u003e\u003e\u003e # The version is stored in the collected data \u003e\u003e\u003e for batch in collector: ... current_version = batch[\"policy_version\"] Args: version_type: The type of versioning to use. Can be either: - str or \"uuid\": Uses UUID4 for versions (good for distributed systems) - int or \"int\": Uses incrementing integers (good for debugging) \"\"\" def __init__(self, version_type: type | Literal[\"uuid\", \"int\"] = int): super().__init__() self.version_type = version_type self.version_history: list[VersionChange] = [] # Track version changes self._current_version: str | int | None = None self._increment_version(init=True) self.cal_on_reset = True @property def version(self) -\u003e str | int: \"\"\"The current version of the policy.\"\"\" if self._current_version is None: raise RuntimeError(\"Version not initialized\") return self._current_version @version.setter def version(self, value: str | int) -\u003e None: self._current_version = value [docs] def increment_version(self) -\u003e None: \"\"\"Increment the version number. This is called automatically by LLMCollector when policy weights are updated. Can also be called manually if needed. \"\"\" self._increment_version() def _increment_version(self, init: bool = False) -\u003e str | int: \"\"\"Internal method to handle version incrementing with history tracking.\"\"\" old_version = self._current_version if self.version_type in (str, \"uuid\"): self._increment_version_uuid(init) elif self.version_type in (int, \"int\"): self._increment_version_int(init) else: raise ValueError(f\"Invalid version type: {self.version_type}\") # Record the version change self.version_history.append( VersionChange( timestamp=datetime.now(), old_version=old_version, new_version=self.version, ) ) return self.version def _increment_version_uuid(self, init: bool = False) -\u003e None: \"\"\"Generate a new UUID version. Args: init: If True, this is the initial version creation. \"\"\" self.version = str(uuid.uuid4()) def _increment_version_int(self, init: bool = False) -\u003e None: \"\"\"Increment the integer version counter. Args: init: If True, initialize counter to 0, otherwise increment by 1. \"\"\" if init: self.version = 0 else: # Cast to int to ensure type safety current = cast(int, self.version) self.version = current + 1 def _reset( self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase ) -\u003e TensorDictBase: \"\"\"Reset the environment and update version in the new tensordict. Args: tensordict: The current tensordict tensordict_reset: The tensordict to reset to Returns: The reset tensordict with updated version \"\"\" tensordict_reset = self._step(None, tensordict_reset) return tensordict_reset def _step( self, tensordict: TensorDictBase, next_tensordict: TensorDictBase ) -\u003e TensorDictBase: \"\"\"Add the current version to the tensordict. This method is called on each environment step to ensure the collected data is tagged with the correct policy version. Args: tensordict: The tensordict to update with version info Returns: The tensordict with added version information \"\"\" if self.version_type in (str, \"uuid\"): version = NonTensorData(self.version).expand(next_tensordict.shape) elif self.version_type in (int, \"int\"): device = next_tensordict.device kwargs = {\"dtype\": torch.int64} if device is not None: kwargs[\"device\"] = device version = torch.full( next_tensordict.shape, cast(int, self.version), **kwargs, ) else: raise ValueError(f\"Invalid version type: {self.version_type}\") next_tensordict.set(\"policy_version\", version) return next_tensordict [docs] def transform_observation_spec(self, spec: Composite) -\u003e Composite: \"\"\"Update the environment spec to include the version field. Args: spec: The environment spec to update Returns: Updated spec including the version field \"\"\" if self.version_type in (str, \"uuid\"): spec[\"policy_version\"] = NonTensor( example_data=uuid.uuid4(), shape=spec.shape, device=spec.device ) elif self.version_type in (int, \"int\"): spec[\"policy_version\"] = Unbounded( shape=spec.shape, dtype=torch.int64, device=spec.device ) else: raise ValueError(f\"Invalid version type: {self.version_type}\") return spec",
+       "url": "/_modules/torchrl/envs/transforms/policy_version.html",
+       "articleBody": "Source code for torchrl.envs.transforms.policy_version # Copyright (c) Meta Platforms, Inc. and affiliates. # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import uuid from dataclasses import dataclass from datetime import datetime from typing import cast, Literal import torch from tensordict import NonTensorData, TensorDictBase from torchrl.data.tensor_specs import Composite, NonTensor, Unbounded from torchrl.envs.transforms.transforms import Transform @dataclass class VersionChange: \"\"\"Records a single version change event.\"\"\" timestamp: datetime old_version: str | int | None new_version: str | int [docs] class PolicyVersion(Transform): \"\"\"A transform that keeps track of the version of the policy. This transform is used to track policy versions during training, particularly in asynchronous settings where policy weights are updated periodically. It works with TorchRL collectors to ensure data collection and training remain in sync. The version can be either a UUID (string) or an integer counter. When passed to a collector as its ``track_policy_version`` argument, the version is automatically incremented each time the policy weights are updated. Args: version_type: The type of versioning to use. Can be either: - str or \"uuid\": Uses UUID4 for versions (good for distributed systems) - int or \"int\": Uses incrementing integers (good for debugging) Examples: \u003e\u003e\u003e from torchrl.envs.transforms import PolicyVersion \u003e\u003e\u003e policy_version = PolicyVersion(version_type=\"int\") \u003e\u003e\u003e policy_version.version 0 \u003e\u003e\u003e policy_version.increment_version() \u003e\u003e\u003e policy_version.version 1 \"\"\" def __init__(self, version_type: type | Literal[\"uuid\", \"int\"] = int): super().__init__() self.version_type = version_type self.version_history: list[VersionChange] = [] # Track version changes self._current_version: str | int | None = None self._increment_version(init=True) self.cal_on_reset = True @property def version(self) -\u003e str | int: \"\"\"The current version of the policy.\"\"\" if self._current_version is None: raise RuntimeError(\"Version not initialized\") return self._current_version @version.setter def version(self, value: str | int) -\u003e None: self._current_version = value [docs] def increment_version(self) -\u003e None: \"\"\"Increment the version number. This is called automatically by collectors when policy weights are updated. Can also be called manually if needed. \"\"\" self._increment_version() def _increment_version(self, init: bool = False) -\u003e str | int: \"\"\"Internal method to handle version incrementing with history tracking.\"\"\" old_version = self._current_version if self.version_type in (str, \"uuid\"): self._increment_version_uuid(init) elif self.version_type in (int, \"int\"): self._increment_version_int(init) else: raise ValueError(f\"Invalid version type: {self.version_type}\") # Record the version change self.version_history.append( VersionChange( timestamp=datetime.now(), old_version=old_version, new_version=self.version, ) ) return self.version def _increment_version_uuid(self, init: bool = False) -\u003e None: \"\"\"Generate a new UUID version. Args: init: If True, this is the initial version creation. \"\"\" self.version = str(uuid.uuid4()) def _increment_version_int(self, init: bool = False) -\u003e None: \"\"\"Increment the integer version counter. Args: init: If True, initialize counter to 0, otherwise increment by 1. \"\"\" if init: self.version = 0 else: # Cast to int to ensure type safety current = cast(int, self.version) self.version = current + 1 def _reset( self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase ) -\u003e TensorDictBase: \"\"\"Reset the environment and update version in the new tensordict. Args: tensordict: The current tensordict tensordict_reset: The tensordict to reset to Returns: The reset tensordict with updated version \"\"\" tensordict_reset = self._step(None, tensordict_reset) return tensordict_reset def _step( self, tensordict: TensorDictBase, next_tensordict: TensorDictBase ) -\u003e TensorDictBase: \"\"\"Add the current version to the tensordict. This method is called on each environment step to ensure the collected data is tagged with the correct policy version. Args: tensordict: The tensordict to update with version info Returns: The tensordict with added version information \"\"\" if self.version_type in (str, \"uuid\"): version = NonTensorData(self.version).expand(next_tensordict.shape) elif self.version_type in (int, \"int\"): device = next_tensordict.device kwargs = {\"dtype\": torch.int64} if device is not None: kwargs[\"device\"] = device version = torch.full( next_tensordict.shape, cast(int, self.version), **kwargs, ) else: raise ValueError(f\"Invalid version type: {self.version_type}\") next_tensordict.set(\"policy_version\", version) return next_tensordict [docs] def transform_observation_spec(self, spec: Composite) -\u003e Composite: \"\"\"Update the environment spec to include the version field. Args: spec: The environment spec to update Returns: Updated spec including the version field \"\"\" if self.version_type in (str, \"uuid\"): spec[\"policy_version\"] = NonTensor( example_data=uuid.uuid4(), shape=spec.shape, device=spec.device ) elif self.version_type in (int, \"int\"): spec[\"policy_version\"] = Unbounded( shape=spec.shape, dtype=torch.int64, device=spec.device ) else: raise ValueError(f\"Invalid version type: {self.version_type}\") return spec",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
@@ -2026,7 +2017,7 @@ document.write(`
        "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
        "mainEntityOfPage": {
          "@type": "WebPage",
-         "@id": "/_modules/torchrl/envs/llm/transforms/policy_version.html"
+         "@id": "/_modules/torchrl/envs/transforms/policy_version.html"
        },
        "datePublished": "2023-01-01T00:00:00Z",
        "dateModified": "2023-01-01T00:00:00Z"

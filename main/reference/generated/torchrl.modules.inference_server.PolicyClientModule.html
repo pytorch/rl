@@ -1717,6 +1717,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextObservationDelta.html">NextObservationDelta</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextStateReconstructor.html">NextStateReconstructor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyAgeFilter.html">PolicyAgeFilter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html">PolicyVersion</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NoopResetEnv.html">NoopResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationNorm.html">ObservationNorm</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationTransform.html">ObservationTransform</a></li>
@@ -1865,7 +1866,6 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.KLComputation.html">KLComputation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.KLRewardTransform.html">KLRewardTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.MCPToolTransform.html">MCPToolTransform</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html">PolicyVersion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.RayDataLoadingPrimer.html">RayDataLoadingPrimer</a></li>
@@ -2673,7 +2673,7 @@ raising in the consumer.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The default <code class="docutils literal notranslate"><span class="pre">&quot;policy_version&quot;</span></code> key is shared on purpose with the
-<a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform and the
+<a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion" title="torchrl.envs.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform and the
 collectors’ <code class="docutils literal notranslate"><span class="pre">track_policy_version</span></code> mechanism: they stamp the same
 concept (the behavior-policy version that produced the data), so
 consumers such as

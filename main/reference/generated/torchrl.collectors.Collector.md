@@ -294,10 +294,10 @@ and values are WeightSyncScheme instances configured to receive weights.
 This enables cascading weight updates in hierarchies like:
 RPCCollector -> MultiSyncCollector -> Collector.
 Defaults to `None`.
-- **track_policy_version** (*bool**or*[*PolicyVersion*](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)*,**optional*) -
+- **track_policy_version** (*bool**or*[*PolicyVersion*](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)*,**optional*) -
 
 if `True`, the collector will track the version of the policy.
-A [`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion) transform is
+A [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion) transform is
 installed on the environment, tagging every collected frame with the current version
 under the `"policy_version"` key. The transform's version is bumped exactly once
 per `update_policy_weights_()` call -- for multi-process collectors this happens
@@ -305,7 +305,7 @@ in each worker after the new weights have actually been applied, so per-frame
 tagging tracks real weight updates rather than rollout iterations.
 
 The recommended path is `track_policy_version=True`: let the collector own the
-transform. Passing a [`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)
+transform. Passing a [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)
 instance directly is reserved for advanced use cases that wire up a `PolicyVersion`
 **without** going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
 a transform and passing it to a collector is supported but discouraged because it

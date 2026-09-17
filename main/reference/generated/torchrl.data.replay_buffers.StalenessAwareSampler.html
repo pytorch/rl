@@ -1717,6 +1717,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextObservationDelta.html">NextObservationDelta</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextStateReconstructor.html">NextStateReconstructor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyAgeFilter.html">PolicyAgeFilter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html">PolicyVersion</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NoopResetEnv.html">NoopResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationNorm.html">ObservationNorm</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationTransform.html">ObservationTransform</a></li>
@@ -1865,7 +1866,6 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.KLComputation.html">KLComputation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.KLRewardTransform.html">KLRewardTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.MCPToolTransform.html">MCPToolTransform</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html">PolicyVersion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.RayDataLoadingPrimer.html">RayDataLoadingPrimer</a></li>
@@ -2640,7 +2640,7 @@ the policy version. Defaults to <code class="docutils literal notranslate"><span
 </pre></div>
 </div>
 <p>Integration with <a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a> and
-<code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code>:</p>
+<a class="reference internal" href="torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion" title="torchrl.envs.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="n">PolicyVersion</span>
 <span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">TensorDictReplayBuffer</span><span class="p">,</span> <span class="n">LazyTensorStorage</span>

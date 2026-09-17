@@ -151,16 +151,16 @@ Defaults to `False`.
 See [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
 for when these markers are needed to sample trajectories from a
 replay buffer.
-- **track_policy_version** (*bool**or*[*PolicyVersion*](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)*,**optional*) -
+- **track_policy_version** (*bool**or*[*PolicyVersion*](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)*,**optional*) -
 
 if `True`, the collector will track the version of the policy.
-A [`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion) transform is
+A [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion) transform is
 installed on the environment, tagging every collected frame with the current version
 under the `"policy_version"` key. The transform's version is bumped exactly once
 per `update_policy_weights_()` call.
 
 The recommended path is `track_policy_version=True`: let the collector own the
-transform. Passing a [`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)
+transform. Passing a [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)
 instance directly is reserved for advanced use cases that wire up a `PolicyVersion`
 **without** going through a collector (e.g. a hand-rolled rollout loop).
 
@@ -415,7 +415,7 @@ Context manager that pauses the collector if it is running free.
 The parent-side policy version.
 
 For multi-process collectors, worker-local
-[`PolicyVersion`](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)
+[`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)
 transforms write the per-frame `"policy_version"` values in returned
 batches. Those tensor entries are the source of truth for collected
 data; this property is only the parent-side tracker state.
