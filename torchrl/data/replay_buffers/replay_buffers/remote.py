@@ -58,13 +58,29 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
             cancel_event=cancel_event,
         )
 
-    def add(self, data: TensorDictBase) -> int:
-        return super().add(data)
+    def add(
+        self,
+        data: TensorDictBase,
+        *,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> int | None:
+        return super().add(data, timeout=timeout, cancel_event=cancel_event)
 
     def extend(
-        self, tensordicts: list | TensorDictBase, *, update_priority: bool | None = None
-    ) -> torch.Tensor:
-        return super().extend(tensordicts, update_priority=update_priority)
+        self,
+        tensordicts: list | TensorDictBase,
+        *,
+        update_priority: bool | None = None,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> torch.Tensor | None:
+        return super().extend(
+            tensordicts,
+            update_priority=update_priority,
+            timeout=timeout,
+            cancel_event=cancel_event,
+        )
 
     def update_priority(
         self, index: int | torch.Tensor, priority: int | torch.Tensor

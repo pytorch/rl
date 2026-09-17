@@ -203,6 +203,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         batch_size: int | None = None,
         dim_extend: int | None = None,
         delayed_init: bool = False,
+        producer_admission: Literal[
+            "overwrite_oldest", "block", "drop_newest", "raise"
+        ] = "overwrite_oldest",
+        producer_high_watermark: int | None = None,
+        producer_resume_watermark: int | None = None,
         transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
         transport_options: dict[str, Any] | None = None,
     ) -> None:
@@ -240,6 +245,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             batch_size=batch_size,
             dim_extend=dim_extend,
             delayed_init=delayed_init,
+            producer_admission=producer_admission,
+            producer_high_watermark=producer_high_watermark,
+            producer_resume_watermark=producer_resume_watermark,
             transport=transport,
             transport_options=transport_options,
         )

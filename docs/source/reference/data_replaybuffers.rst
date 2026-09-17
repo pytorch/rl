@@ -87,6 +87,60 @@ uses 64-bit storage for long-running jobs. Circular-buffer capacity is not a
 producer-backpressure signal: after warm-up, writes continue to overwrite old
 slots even though physical utilization remains 100 percent.
 
+Producer admission and backpressure
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Circular overwrite remains the default. To protect unconsumed data, configure
+``producer_admission`` as ``"block"``, ``"drop_newest"`` or ``"raise"`` and
+set high and resume watermarks. Admission applies to an entire call: an
+``extend`` either reserves space for every incoming item or writes nothing.
+Once occupancy reaches the high watermark, hysteresis keeps the buffer under
+pressure until occupancy falls to or below the resume watermark.
+
+.. code-block:: python
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(1024),
+        batch_size=64,
+        consume_after_n_samples=1,
+        producer_admission="block",
+        producer_high_watermark=960,
+        producer_resume_watermark=896,
+    )
+    rb.extend(torch.arange(960))
+    batch = rb.sample()
+    rb.extend(torch.arange(64), timeout=5.0)
+
+For consuming replay, occupancy means the number of sampleable records, so
+sampling releases producer capacity. For an ordinary non-consuming buffer it
+means physical storage size; sampling does not release capacity, and a blocked
+producer can resume only after :meth:`~torchrl.data.ReplayBuffer.empty` or
+another operation removes storage. Use circular overwrite or a replay-rate and
+policy-lag controller for continuously overwritten asynchronous replay rather
+than treating physical utilization as a steady-state pressure signal.
+
+``drop_newest`` drops the complete incoming batch and returns ``None``;
+``raise`` raises :class:`BufferError`; and ``block`` accepts ``timeout`` and
+``cancel_event`` in :meth:`~torchrl.data.ReplayBuffer.add` and
+:meth:`~torchrl.data.ReplayBuffer.extend`. A batch larger than the high
+watermark is dropped under ``drop_newest``, raises :class:`BufferError` under
+``raise``, and raises :class:`ValueError` under ``block`` because it can never
+fit. :meth:`~torchrl.data.ReplayBuffer.wait_until_writable` provides an
+advisory condition-driven wait; actual writes repeat admission atomically.
+
+Direct and shared-memory buffers support every policy. Ray-owned replay
+supports the non-blocking ``drop_newest`` and ``raise`` policies, but rejects
+``block`` because a blocked actor method could prevent the releasing operation
+from reaching the owner. The fixed-layout distributed transport rejects all
+non-default producer policies because it cannot represent a variable dropped
+write response. Unsupported modes fail during construction.
+
+The statistics snapshot includes cumulative ``overwrites``,
+``dropped_new_items``, ``blocked_producer_calls`` and
+``blocked_producer_time`` counters, plus the current ``producer_waiters`` and
+``producer_under_pressure`` gauges. They are shared across worker processes and
+checkpointed with the replay buffer.
+
 
 Replay-ratio limiting
 ---------------------

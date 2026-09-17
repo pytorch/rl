@@ -241,6 +241,11 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         generator: torch.Generator | None = None,
         shared: bool = False,
         compilable: bool = False,
+        producer_admission: Literal[
+            "overwrite_oldest", "block", "drop_newest", "raise"
+        ] = "overwrite_oldest",
+        producer_high_watermark: int | None = None,
+        producer_resume_watermark: int | None = None,
         transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
         transport_options: dict[str, Any] | None = None,
     ) -> None:
@@ -280,6 +285,9 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             generator=generator,
             shared=shared,
             compilable=compilable,
+            producer_admission=producer_admission,
+            producer_high_watermark=producer_high_watermark,
+            producer_resume_watermark=producer_resume_watermark,
             transport=transport,
             transport_options=transport_options,
         )
@@ -417,6 +425,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         if self._transform is not None and len(self._transform):
             with data.unlock_(), _set_dispatch_td_nn_modules(True):
                 data = self._transform(data)
+        if self._producer_admission != "overwrite_oldest":
+            self._notify_replay_state_change()
         return data, info
 
     @_maybe_delay_init

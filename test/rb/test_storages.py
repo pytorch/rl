@@ -962,6 +962,17 @@ class TestSharedStorageInit:
         queue.put(sample["x"].tolist())
         completed.set()
 
+
+    def admission_worker(self, rb, queue):
+        try:
+            index = rb.extend(
+                TensorDict({"x": torch.arange(10, 12)}, batch_size=(2,)),
+                timeout=5,
+            )
+            queue.put(("done", index.tolist()))
+        except Exception as error:
+            queue.put(("error", str(error)))
+
     def revision_worker(self, rb, queue):
         rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
         queue.put(rb.storage._mutation_revision)
@@ -1164,6 +1175,40 @@ class TestSharedStorageInit:
         assert stats["write_count"] == 2
         assert stats["samples_returned"] == 2
         assert stats["sample_wait_count"] >= 1
+
+
+    def test_shared_replay_producer_unblocks_after_consumption(self):
+        storage = LazyTensorStorage(max_size=4, shared_init=True)
+        rb = TensorDictReplayBuffer(
+            storage=storage,
+            batch_size=2,
+            consume_after_n_samples=1,
+            producer_admission="block",
+            producer_high_watermark=2,
+            producer_resume_watermark=0,
+        ).share(True)
+        rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+        queue = mp.Queue()
+        process = mp.Process(target=self.admission_worker, args=(rb, queue))
+        process.start()
+
+        deadline = time.monotonic() + 5
+        with rb._readiness_condition:
+            while not rb.stats()["producer_waiters"]:
+                remaining = deadline - time.monotonic()
+                assert remaining > 0
+                rb._readiness_condition.wait(remaining)
+        rb.sample()
+
+        process.join(timeout=5)
+        assert process.exitcode == 0
+        status, index = queue.get(timeout=1)
+        assert status == "done"
+        assert len(index) == 2
+        stats = rb.stats()
+        assert stats["blocked_producer_calls"] == 1
+        assert stats["producer_waiters"] == 0
+        assert stats["overwrites"] == 0
 
     def test_shared_init_reconciles_non_cpu_device(self):
         """Shared init installs a CPU memmap backing; a non-cpu storage device

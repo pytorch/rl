@@ -154,6 +154,12 @@ class _DistributedReplayService:
                 "write_count": torch.zeros((), dtype=torch.int64),
                 "sample_calls": torch.zeros((), dtype=torch.int64),
                 "samples_returned": torch.zeros((), dtype=torch.int64),
+                "overwrites": torch.zeros((), dtype=torch.int64),
+                "dropped_new_items": torch.zeros((), dtype=torch.int64),
+                "blocked_producer_calls": torch.zeros((), dtype=torch.int64),
+                "blocked_producer_time": torch.zeros((), dtype=torch.float64),
+                "producer_waiters": torch.zeros((), dtype=torch.int64),
+                "producer_under_pressure": torch.zeros((), dtype=torch.bool),
             },
             batch_size=[],
         )
@@ -296,6 +302,12 @@ class _DistributedReplayService:
                     ),
                     "sample_calls": 0,
                     "samples_returned": 0,
+                    "overwrites": 0,
+                    "dropped_new_items": 0,
+                    "blocked_producer_calls": 0,
+                    "blocked_producer_time": 0.0,
+                    "producer_waiters": 0,
+                    "producer_under_pressure": False,
                 }
             else:
                 stats = get_stats()
@@ -308,20 +320,38 @@ class _DistributedReplayService:
                     ),
                     "sample_calls": 0,
                     "samples_returned": 0,
+                    "overwrites": 0,
+                    "dropped_new_items": 0,
+                    "blocked_producer_calls": 0,
+                    "blocked_producer_time": 0.0,
+                    "producer_waiters": 0,
+                    "producer_under_pressure": False,
                     **stats,
                 }
         return [
             TensorDict(
                 {
-                    key: torch.tensor(int(stats[key]), dtype=torch.int64)
-                    for key in (
-                        "size",
-                        "storage_size",
-                        "sampleable_size",
-                        "write_count",
-                        "sample_calls",
-                        "samples_returned",
-                    )
+                    **{
+                        key: torch.tensor(int(stats[key]), dtype=torch.int64)
+                        for key in (
+                            "size",
+                            "storage_size",
+                            "sampleable_size",
+                            "write_count",
+                            "sample_calls",
+                            "samples_returned",
+                            "overwrites",
+                            "dropped_new_items",
+                            "blocked_producer_calls",
+                            "producer_waiters",
+                        )
+                    },
+                    "blocked_producer_time": torch.tensor(
+                        float(stats["blocked_producer_time"]), dtype=torch.float64
+                    ),
+                    "producer_under_pressure": torch.tensor(
+                        bool(stats["producer_under_pressure"]), dtype=torch.bool
+                    ),
                 },
                 batch_size=[],
             )

@@ -17,12 +17,16 @@ if TYPE_CHECKING:
     _ReplayServiceBackend = Literal["direct", "ray"]
     _ReplayTransport = Literal["auto", "direct", "ray", "distributed"]
     _SliceOutputLayout = Literal["flat", "batch_time"]
+    _ReplayProducerAdmission = Literal[
+        "overwrite_oldest", "block", "drop_newest", "raise"
+    ]
 else:
     # OmegaConf structured configs resolve these aliases at runtime and do not
     # support Literal on all TorchRL-supported versions.
     _ReplayServiceBackend = str
     _ReplayTransport = str
     _SliceOutputLayout = str
+    _ReplayProducerAdmission = str
 
 
 @dataclass
@@ -435,6 +439,9 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     checkpointer: Any = None
     generator: Any = None
     consume_after_n_samples: int | None = None
+    producer_admission: _ReplayProducerAdmission = "overwrite_oldest"
+    producer_high_watermark: int | None = None
+    producer_resume_watermark: int | None = None
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None
@@ -468,6 +475,9 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     checkpointer: Any = None
     generator: Any = None
     consume_after_n_samples: int | None = None
+    producer_admission: _ReplayProducerAdmission = "overwrite_oldest"
+    producer_high_watermark: int | None = None
+    producer_resume_watermark: int | None = None
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None

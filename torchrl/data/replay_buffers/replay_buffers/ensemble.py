@@ -223,6 +223,12 @@ class ReplayBufferEnsemble(ReplayBuffer):
         **kwargs,
     ):
 
+        if kwargs.get("producer_admission", "overwrite_oldest") != "overwrite_oldest":
+            raise ValueError(
+                "ReplayBufferEnsemble does not support non-default producer "
+                "admission because routed writes cannot reserve every member "
+                "atomically. Configure admission on independently written buffers."
+            )
         if routing_key is not None and routing_dim is not None:
             raise ValueError("routing_key and routing_dim are mutually exclusive.")
         if routing_key is not None:
@@ -278,6 +284,15 @@ class ReplayBufferEnsemble(ReplayBuffer):
                     transforms,
                     collate_fns,
                 )
+            )
+        if any(
+            getattr(rb, "_producer_admission", "overwrite_oldest") != "overwrite_oldest"
+            for rb in rbs
+        ):
+            raise ValueError(
+                "ReplayBufferEnsemble does not support non-default producer "
+                "admission because routed writes cannot reserve every member "
+                "atomically. Configure admission on independently written buffers."
             )
         self._rbs = rbs
         self._collate_fns = collate_fns
@@ -726,7 +741,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 )
                 member.sampler._end_stream(index, storage=member.storage)
 
-    def stats(self) -> dict[str, int | float | bool]:
+    def stats(self) -> dict[str, int | float | bool | str | None]:
         """Returns aggregate scalar statistics across ensemble members."""
         if not self.initialized:
             return {
@@ -736,11 +751,21 @@ class ReplayBufferEnsemble(ReplayBuffer):
                 "write_count": 0,
                 "sample_calls": self._counter_value(self._sample_call_count_value),
                 "samples_returned": self._counter_value(self._sampled_item_count_value),
+                "overwrites": 0,
+                "dropped_new_items": 0,
+                "blocked_producer_calls": 0,
+                "blocked_producer_time": 0.0,
+                "producer_waiters": 0,
+                "producer_under_pressure": False,
+                "producer_admission": "overwrite_oldest",
+                "producer_high_watermark": None,
+                "producer_resume_watermark": None,
                 "prefetch_queue_size": 0,
                 "initialized": False,
                 "num_buffers": len(self._init_storage._storages),
             }
         with self._replay_lock:
+            member_stats = [member.stats() for member in self._rbs]
             storage_size = sum(len(storage) for storage in self._storage._storages)
             sampleable_size = sum(len(member) for member in self._rbs)
             capacity = sum(storage.max_size for storage in self._storage._storages)
@@ -755,6 +780,25 @@ class ReplayBufferEnsemble(ReplayBuffer):
             "write_count": int(write_count),
             "sample_calls": self._counter_value(self._sample_call_count_value),
             "samples_returned": self._counter_value(self._sampled_item_count_value),
+            "overwrites": sum(int(stats["overwrites"]) for stats in member_stats),
+            "dropped_new_items": sum(
+                int(stats["dropped_new_items"]) for stats in member_stats
+            ),
+            "blocked_producer_calls": sum(
+                int(stats["blocked_producer_calls"]) for stats in member_stats
+            ),
+            "blocked_producer_time": sum(
+                float(stats["blocked_producer_time"]) for stats in member_stats
+            ),
+            "producer_waiters": sum(
+                int(stats["producer_waiters"]) for stats in member_stats
+            ),
+            "producer_under_pressure": any(
+                bool(stats["producer_under_pressure"]) for stats in member_stats
+            ),
+            "producer_admission": "overwrite_oldest",
+            "producer_high_watermark": None,
+            "producer_resume_watermark": None,
             "prefetch_queue_size": int(prefetch_queue_size),
             "initialized": True,
             "capacity": int(capacity),

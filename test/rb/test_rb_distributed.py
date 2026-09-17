@@ -59,6 +59,12 @@ def test_distributed_replay_control_reports_flow_counters():
         "write_count": 4,
         "sample_calls": 1,
         "samples_returned": 2,
+        "overwrites": 0,
+        "dropped_new_items": 0,
+        "blocked_producer_calls": 0,
+        "blocked_producer_time": 0.0,
+        "producer_waiters": 0,
+        "producer_under_pressure": False,
     }
 
 
@@ -83,6 +89,13 @@ def test_distributed_client_rejects_blocking_sample_without_dispatch():
         client.sample(wait=True)
     with pytest.raises(NotImplementedError, match="wait_until_sampleable"):
         client.wait_until_sampleable()
+
+
+def test_ray_owner_rejects_blocking_writable_wait_without_dispatch():
+    replay_buffer = object.__new__(RayReplayBuffer)
+
+    with pytest.raises(NotImplementedError, match="wait_until_writable"):
+        replay_buffer.wait_until_writable(timeout=1.0)
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
