@@ -293,7 +293,9 @@ def main(cfg: DictConfig):
                             evaluation_metrics, collected_frames
                         )
                     timing_metrics = timeit.todict()
-                    timing_metrics["speed"] = pbar.format_dict["rate"]
+                    speed = pbar.format_dict["rate"]
+                    if speed is not None:
+                        timing_metrics["speed"] = speed
                     if timing_metrics:
                         timing_logger.log_metrics(timing_metrics, collected_frames)
 

@@ -214,15 +214,19 @@ commands = {
   logger.backend=
 """,
     "sac": """python sota-implementations/sac/sac.py \
+  env.max_episode_steps=20 \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
-  collector.env_per_collector=2 \
+  collector.env_per_collector=1 \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
-  logger.backend=
+  logger.backend=csv \
+  logger.video=False \
+  logger.eval_iter=16 \
+  hydra.run.dir=$SOTA_LOG_DIR/sac
 """,
     "tqc": """python sota-implementations/tqc/tqc.py \
   collector.total_frames=48 \
@@ -520,17 +524,22 @@ def test_commands(algo, monkeypatch, tmp_path):
     if dataset_id is not None:
         monkeypatch.setenv("HOME", str(tmp_path))
         _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
-    if algo == "ppo_mujoco":
+    if algo in {"ppo_mujoco", "sac"}:
         monkeypatch.setenv("SOTA_LOG_DIR", str(tmp_path))
     run_command(commands[algo])
-    if algo == "ppo_mujoco":
+    if algo in {"ppo_mujoco", "sac"}:
         scalar_roots = list(tmp_path.rglob("scalars"))
         assert len(scalar_roots) == 1
         scalar_names = {
             path.relative_to(scalar_roots[0]).as_posix()
             for path in scalar_roots[0].rglob("*.csv")
         }
-        assert "training/loss_objective.csv" in scalar_names
+        expected_training_metric = (
+            "training/loss_objective.csv"
+            if algo == "ppo_mujoco"
+            else "training/q_loss.csv"
+        )
+        assert expected_training_metric in scalar_names
         assert "evaluation/reward.csv" in scalar_names
         assert scalar_names
         assert all(
