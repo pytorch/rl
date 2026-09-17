@@ -43,7 +43,7 @@ from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs import EnvBase, EnvCreator
-from torchrl.envs.llm.transforms import PolicyVersion
+from torchrl.envs.transforms import PolicyVersion
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
@@ -347,7 +347,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             Received weights are automatically propagated to sub-collectors if matching model_ids exist.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            A :class:`~torchrl.envs.transforms.PolicyVersion` transform is
             installed on each worker's environment, tagging every collected frame with the
             current version under the ``"policy_version"`` key. Each worker's transform is
             bumped after the new weights have actually been applied in that worker, so
@@ -366,7 +366,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             and should not be used as a label for a returned batch.
 
             The recommended path is ``track_policy_version=True``: let the collector own
-            the transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            the transform. Passing a :class:`~torchrl.envs.transforms.PolicyVersion`
             instance directly is reserved for advanced use cases that wire up a
             ``PolicyVersion`` **without** going through a collector. With multi-process
             collectors that pre-built tracker lives in the *parent* and is not propagated
@@ -2086,7 +2086,7 @@ also that the state dict is synchronised across processes if needed."""
         """The parent-side policy version.
 
         For multi-process collectors, worker-local
-        :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+        :class:`~torchrl.envs.transforms.PolicyVersion`
         transforms write the per-frame ``"policy_version"`` values in returned
         batches. Those tensor entries are the source of truth for collected
         data; this property is only the parent-side tracker state.

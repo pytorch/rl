@@ -49,7 +49,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase, EnvCreator, StepCounter, TransformedEnv
 from torchrl.envs.common import _do_nothing
-from torchrl.envs.llm.transforms import PolicyVersion
+from torchrl.envs.transforms import PolicyVersion
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     _make_compatible_policy,
@@ -565,7 +565,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             RPCCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            A :class:`~torchrl.envs.transforms.PolicyVersion` transform is
             installed on the environment, tagging every collected frame with the current version
             under the ``"policy_version"`` key. The transform's version is bumped exactly once
             per :meth:`update_policy_weights_` call — for multi-process collectors this happens
@@ -573,7 +573,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             tagging tracks real weight updates rather than rollout iterations.
 
             The recommended path is ``track_policy_version=True``: let the collector own the
-            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            transform. Passing a :class:`~torchrl.envs.transforms.PolicyVersion`
             instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
             **without** going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
             a transform and passing it to a collector is supported but discouraged because it

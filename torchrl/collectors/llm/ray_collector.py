@@ -17,7 +17,7 @@ from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import EnvBase
-from torchrl.envs.llm.transforms.policy_version import PolicyVersion
+from torchrl.envs.transforms import PolicyVersion
 
 RAY_ERR = None
 try:

@@ -29,7 +29,11 @@ from torchrl.envs.llm.transforms import (
     ToolRegistry,
     XMLBlockParser,
 )
-from torchrl.envs.transforms import Tokenizer as EnvTokenizer, TransformedEnv
+from torchrl.envs.transforms import (
+    PolicyVersion as EnvPolicyVersion,
+    Tokenizer as EnvTokenizer,
+    TransformedEnv,
+)
 from torchrl.testing.mocking_classes import CountingEnv
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -815,6 +819,9 @@ class TestTokenizer:
 
 
 class TestPolicyVersion:
+    def test_compatibility_alias(self):
+        assert PolicyVersion is EnvPolicyVersion
+
     def test_int_version_dtype_and_device(self):
         """Integer policy version must stay int64 and follow the tensordict device.
 
