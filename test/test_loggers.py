@@ -424,6 +424,50 @@ def wandb_tmp_logger(tmp_path):
     del logger
 
 
+@pytest.mark.parametrize("directory_arg", ["save_dir", "log_dir"])
+def test_wandb_creates_save_directory_before_init(monkeypatch, tmp_path, directory_arg):
+    if directory_arg == "save_dir":
+        requested_dir = tmp_path / "save" / "nested"
+        expected_dir = requested_dir
+        expected_dir.mkdir(parents=True)
+    else:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        requested_dir = pathlib.Path("~/log/nested")
+        expected_dir = tmp_path / "log" / "nested"
+
+    init_kwargs = {}
+
+    def init(**kwargs):
+        assert expected_dir.is_dir()
+        init_kwargs.update(kwargs)
+        return argparse.Namespace(config={})
+
+    monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+    monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+
+    logger = WandbLogger(
+        exp_name="test",
+        log_env_packages=False,
+        **{directory_arg: requested_dir},
+    )
+
+    assert init_kwargs["dir"] == str(expected_dir)
+    assert logger.log_dir == str(expected_dir)
+
+
+def test_wandb_rejects_file_save_directory_before_init(monkeypatch, tmp_path):
+    save_dir = tmp_path / "not-a-directory"
+    save_dir.write_text("file")
+    init = mock.Mock()
+    monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+    monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+
+    with pytest.raises(FileExistsError):
+        WandbLogger(exp_name="test", save_dir=save_dir, log_env_packages=False)
+
+    init.assert_not_called()
+
+
 @pytest.mark.parametrize("source", ["logger", "dreamer_v3"])
 def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     calls = []
