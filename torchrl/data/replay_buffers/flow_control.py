@@ -28,6 +28,11 @@ class ReplayFlowControl:
     versions in the latest sampled batch. Physical buffer occupancy is not
     used as a pressure signal.
 
+    With ``max_policy_lag`` enabled, publication is disabled until at least one
+    controlled sample establishes a version baseline. The gate compares a
+    candidate against the oldest version in the latest batch, so every record
+    in that batch must satisfy the configured lag bound.
+
     The coordinator does not change replay-buffer behavior. All controlled
     learner samples must go through :meth:`sample`; direct calls to the replay
     buffer are still possible but count against the same cumulative sample
@@ -43,7 +48,8 @@ class ReplayFlowControl:
             transitions per inserted transition. Must be finite and positive.
         max_policy_lag (int, optional): maximum allowed difference between a
             candidate publication version and the oldest policy version in the
-            latest sampled batch. ``None`` disables publication gating.
+            latest sampled batch. Publication is disabled until a sample has
+            established this baseline. ``None`` disables publication gating.
         policy_version_key (NestedKey, optional): TensorDict key containing the
             behavior-policy version. Defaults to
             ``("next", "policy_version")``.
@@ -75,7 +81,9 @@ class ReplayFlowControl:
     .. note::
         ``ReplayFlowControl`` controls a cumulative sample-to-insert ratio, not
         instantaneous throughput. Checkpoint the replay buffer and the
-        coordinator together so their cumulative counters stay aligned.
+        coordinator together so their cumulative counters stay aligned. The
+        coordinator checkpoint does not contain the replay buffer's
+        ``write_count`` or ``samples_returned`` values.
     """
 
     def __init__(
@@ -283,7 +291,11 @@ class ReplayFlowControl:
                 f"Could not find policy-version key {self.policy_version_key!r} "
                 "in the sampled TensorDict."
             )
-        versions = torch.as_tensor(versions)
+        if not isinstance(versions, torch.Tensor):
+            raise TypeError(
+                "Policy versions must use an integer tensor; UUID and other "
+                "non-tensor policy versions are not supported."
+            )
         if versions.numel() == 0:
             raise RuntimeError("The sampled policy-version tensor is empty.")
         if versions.is_floating_point() or versions.is_complex():
@@ -361,6 +373,9 @@ class ReplayFlowControl:
                 self._record_policy_versions(data)
         finally:
             with condition:
+                # Release the full reservation even when a sampler returns a
+                # short batch. The replay buffer counts only returned records,
+                # leaving the unspent ratio budget available to another call.
                 self._increment("_reserved_samples", -batch_size)
                 condition.notify_all()
         if return_info:
@@ -368,7 +383,7 @@ class ReplayFlowControl:
         return data
 
     def can_publish(self, policy_version: int) -> bool:
-        """Returns whether a candidate policy version satisfies the lag cap."""
+        """Returns whether a candidate satisfies the latest batch's oldest version."""
         self._validate_policy_version(policy_version)
         condition = self.replay_buffer._readiness_condition
         with condition:
@@ -396,6 +411,14 @@ class ReplayFlowControl:
                 )
             if policy_version == current:
                 return
+            if (
+                self.max_policy_lag is not None
+                and int(self._get("_policy_lag_count")) == 0
+            ):
+                raise RuntimeError(
+                    "Policy publication with max_policy_lag requires at least one "
+                    "controlled replay sample to establish a version baseline."
+                )
             if not self.can_publish(policy_version):
                 raise RuntimeError(
                     f"Policy version {policy_version} exceeds max_policy_lag="

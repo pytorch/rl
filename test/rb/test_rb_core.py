@@ -16,7 +16,7 @@ import pytest
 import torch
 import torchrl
 from _rb_common import OLD_TORCH, ReplayBufferRNG, TensorDictReplayBufferRNG
-from tensordict import assert_allclose_td, TensorDict, TensorDictBase
+from tensordict import assert_allclose_td, NonTensorData, TensorDict, TensorDictBase
 
 from torchrl._utils import rl_warnings
 from torchrl.data import (
@@ -2034,6 +2034,9 @@ class TestReplayFlowControl:
             initial_policy_version=5,
         )
 
+        assert not control.can_publish(6)
+        with pytest.raises(RuntimeError, match="requires at least one"):
+            control.record_policy_publication(6)
         control.sample(timeout=1)
         assert control.can_publish(6)
         control.record_policy_publication(6)
@@ -2053,6 +2056,51 @@ class TestReplayFlowControl:
         assert stats["policy_lag_mean"] == 1.0
         assert stats["policy_lag_min"] == stats["policy_lag_max"] == 1
         assert stats["sample_wait_count"] == 2**31 + 1
+
+    def test_policy_lag_uses_oldest_version_in_latest_batch(self):
+        version_key = ("collector", "policy_version")
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(2), batch_size=2)
+        rb.extend(
+            TensorDict(
+                {
+                    "value": torch.arange(2),
+                    version_key: torch.tensor([3, 7]),
+                },
+                batch_size=[2],
+            )
+        )
+        control = ReplayFlowControl(
+            rb,
+            samples_per_insert=1.0,
+            max_policy_lag=1,
+            policy_version_key=version_key,
+            initial_policy_version=7,
+        )
+
+        control.sample(timeout=1)
+        assert not control.can_publish(8)
+
+    def test_policy_lag_rejects_uuid_versions_with_actionable_error(self):
+        version_key = ("collector", "policy_version")
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(2), batch_size=2)
+        rb.extend(
+            TensorDict(
+                {
+                    "value": torch.arange(2),
+                    version_key: NonTensorData("policy-uuid").expand(2),
+                },
+                batch_size=[2],
+            )
+        )
+        control = ReplayFlowControl(
+            rb,
+            samples_per_insert=1.0,
+            max_policy_lag=1,
+            policy_version_key=version_key,
+        )
+
+        with pytest.raises(TypeError, match="UUID"):
+            control.sample(timeout=1)
 
 
 class _RepeatTwiceUnit(SampleUnit):

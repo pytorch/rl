@@ -104,7 +104,10 @@ sampling eligibility. The coordinator records the policy versions in each
 sampled TensorDict and reports whether the next weight publication is allowed;
 it does not reject or reweight individual replay entries. Use a sampler such as
 :class:`~torchrl.data.StalenessAwareSampler` when hard per-entry filtering is
-required.
+required. Before the first controlled sample, no publication beyond the
+``initial_policy_version`` is allowed. Thereafter, the candidate version is
+compared with the oldest version in the latest sampled batch, which ensures
+that every record in that batch is within ``max_policy_lag``.
 
 .. code-block:: python
 
@@ -140,8 +143,9 @@ cumulative counts and measured sample-to-insert ratio, available sample budget,
 policy-lag summaries, and cumulative wait count and time. The controller state
 is checkpointable with ``state_dict()`` / ``load_state_dict()``. Checkpoint it
 together with the replay buffer so both sides of the cumulative ratio remain
-aligned. ``shutdown()`` releases blocked controller calls without taking
-ownership of replay-buffer shutdown.
+aligned: the controller checkpoint does not duplicate the buffer-owned
+``write_count`` or ``samples_returned`` counters. ``shutdown()`` releases
+blocked controller calls without taking ownership of replay-buffer shutdown.
 
 
 Sample units
