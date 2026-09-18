@@ -19,11 +19,13 @@ What you will learn
 
 - Build a task library and choose which task each simulator runs.
 - Inspect observations, actions and reward diagnostics.
+- Build the recurrent, task-conditioned policy used to train a skill library.
 - Add a reward term and run the supplied gait controller.
+- Deploy a frozen skill artifact inside a high-level environment.
 - Choose a simulator backend and record a rollout.
 
-Allow 10–15 minutes to read and try the tutorial on a CPU. A follow-up tutorial
-can then train low-level skills with PPO and deploy them inside a new task.
+Allow 10–15 minutes to read and try the tutorial on a CPU. The full PPO recipe
+linked below uses the same environment and policy objects.
 
 Watch the learned skills
 ------------------------
@@ -73,13 +75,16 @@ import torch
 import torchrl
 from tensordict import TensorDict, TensorDictBase
 from torchrl.envs import (
+    Compose,
+    InitTracker,
     MicroDuckEnv,
     MicroDuckSkillEnv,
     MicroDuckTaskSampler,
     TransformedEnv,
 )
 from torchrl.envs.utils import check_env_specs
-from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
+from torchrl.modules import get_primers_from_module
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkillPolicy, MicroDuckSkills
 
 fast = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
 rollout_steps = 100 if fast else 300
@@ -187,6 +192,38 @@ paired_reset = paired.reset()
 paired.close()
 paired_reset["task_id"], paired_reset["command"]
 
+# %%
+# Build the policy that learns the skills
+# ---------------------------------------
+#
+# :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkillPolicy` is the
+# recurrent TensorDict policy used by the published artifact. It reads the
+# observation and ``task_id`` directly, so the task library controls both the
+# reward and the learned task embedding. ``InitTracker`` supplies ``is_init``;
+# the primer derived from the policy carries its GRU state between steps.
+
+skill_policy = MicroDuckSkillPolicy(
+    hidden_size=128,
+    num_tasks=tasks.shape[0],
+    observation_dim=MicroDuckEnv.OBSERVATION_DIM,
+    num_actions=MicroDuckEnv.NUM_JOINTS,
+)
+training_env = TransformedEnv(
+    MicroDuckEnv(download=True, backend="mujoco", tasks=tasks, seed=0),
+    Compose(InitTracker(), get_primers_from_module(skill_policy)),
+)
+check_env_specs(training_env)
+policy_output = skill_policy(training_env.reset())
+training_env.close()
+policy_output["action"].shape, policy_output["next", "recurrent_state"].shape
+
+# %%
+# The actor is now ready for a collector and PPO loss; no MicroDuck-specific
+# wrapper is needed during low-level training. The complete recurrent PPO
+# recipe is ``examples/microduck/ppo_mujoco.py``. After training, package this
+# policy with the same ``tasks`` and ``action_scale`` as a
+# :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills` artifact.
+#
 # %%
 # Design a reward term
 # --------------------

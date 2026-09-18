@@ -374,34 +374,33 @@ intact, through `MJLabWrapper(log_extras=True)` so mjlab's episode metrics are
 logged alongside the PPO losses. It requires a CUDA GPU and the pinned
 `microduck_rl` environment; see the module docstring for the `uv run` command.
 
-### Nine-skill prior
+### Skill artifacts
 
-The training recipe retains standing, four walking directions and forward hopping
-at indices 0-5, then appends left turning, right turning and hopping in place.
-Each hopping task is sampled three times as often as each other task.
-`head_level` uses the head IMU frame's forward axis and penalizes gaze pitch
-relative to the horizon and yaw relative to the trunk. The IMU-to-beak line
-is not the forward axis: it points about 41 degrees down inside the head.
+`MicroDuckSkillPolicy` is the recurrent TensorDict policy trained by the
+low-level recipe. For deployment, `MicroDuckSkills` keeps that policy together
+with the ordered task library and action scale that give its task embeddings
+their meaning. Load and deploy the published artifact without manually
+reconstructing those coupled values:
 
-To initialize from the released six-skill checkpoint and train only the prior:
+```python
+from torchrl.envs import MicroDuckEnv, MicroDuckSkillEnv
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
 
-```bash
-python -m examples.microduck.train_skills \
-  --init-from /path/to/released-six-skill-walker.ckpt \
-  --low-level-only --num-envs 16 --low-level-frames 12000000 \
-  --evaluation-episodes 32 --seed 20260913 --output-dir nine-skills
+skills = MicroDuckSkills.from_pretrained()
+base_env = MicroDuckEnv(
+    download=True,
+    tasks=MicroDuckEnv.tracking_task(0.2),
+    action_scale=skills.action_scale,
+)
+env = MicroDuckSkillEnv.from_env(
+    base_env, skills, control_steps_per_decision=5, group_key=None
+)
 ```
 
-The existing task embeddings are copied unchanged; turns start from standing,
-and in-place hopping starts from the existing hopping embedding. Optimizer
-state is fresh. Evaluation uses a separate seed and reports per-skill head
-angles, yaw rate, airborne fraction, takeoffs, landings, height and survival.
-A high airborne fraction alone does not establish controlled hopping.
-The hop rhythm and launch rewards measure world-vertical velocity, while the
-stationary drift penalty measures world-horizontal velocity. Using the tilted
-body frame would reward horizontal travel as a launch and penalize a vertical
-hop as drift.
-
-Always load the ordered task library and action scale from the checkpoint.
-Existing navigation and football policies remain paired with their original
-walker revisions; replacing the walker alone does not retrain their selectors.
+The released library contains standing, four walking directions, forward
+hopping, left and right turning, and hopping in place. Evaluation uses a
+separate seed and reports per-skill head angles, yaw rate, airborne fraction,
+takeoffs, landings, height and survival. A high airborne fraction alone does
+not establish controlled hopping. Existing navigation and football policies
+remain paired with their original skill artifacts; replacing the low-level
+artifact alone does not retrain their high-level selectors.
