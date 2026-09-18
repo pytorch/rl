@@ -307,8 +307,9 @@ label.
 For multi-process collectors, the `"policy_version"` entries in the
 collected tensordict are produced by worker-local transforms and are the
 source of truth for data provenance. The parent collector's
-`policy_version` property exposes only the parent-side tracker state
-and should not be used as a label for a returned batch.
+`policy_version` property is only available while all workers are
+known to have acknowledged the same sequence of weight updates. Use
+`worker_policy_versions()` for an explicit per-worker snapshot.
 
 The recommended path is `track_policy_version=True`: let the collector own
 the transform. Passing a [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)
@@ -530,16 +531,15 @@ Raises:
 
 get_policy_version() → str | int | None[[source]](../../_modules/torchrl/collectors/_multi_base.html#MultiCollector.get_policy_version)
 
-Get the parent-side policy version.
+Get the policy version acknowledged by every worker.
 
 This method exists to support remote calls in Ray actors, since properties
 cannot be accessed directly through Ray's RPC mechanism.
 
 Returns:
 
-The parent-side version number (int) or UUID (str), or `None` if
-version tracking is disabled. For collected data, prefer the
-per-frame `"policy_version"` tensor in returned batches.
+The aggregate version number (int) or UUID (str), or `None` if
+version tracking is disabled or workers may differ.
 
 getattr_env(*attr*)[[source]](../../_modules/torchrl/collectors/_multi_base.html#MultiCollector.getattr_env)
 
@@ -612,13 +612,15 @@ Context manager that pauses the collector if it is running free.
 
 *property*policy_version*: str | int | None*
 
-The parent-side policy version.
+The policy version acknowledged by every worker.
 
 For multi-process collectors, worker-local
 [`PolicyVersion`](torchrl.envs.transforms.PolicyVersion.html#torchrl.envs.transforms.PolicyVersion)
 transforms write the per-frame `"policy_version"` values in returned
-batches. Those tensor entries are the source of truth for collected
-data; this property is only the parent-side tracker state.
+batches and remain the source of truth for collected data. This property
+returns `None` after a partial-worker or asynchronous update because
+no single scalar is then known to describe every worker. Worker-local
+versions can be queried explicitly with `worker_policy_versions()`.
 
 *property*post_collect_hook*: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None*
 
@@ -876,88 +878,14 @@ this shares the control channel with other coordinator
 commands, it should not race with concurrent control calls
 such as weight updates issued from other threads.
 
-update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | dict | None = None*, ***, *weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | dict | None = None*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, *model_id: str | None = None*, *weights_dict: dict[str, Any] | None = None*, ***kwargs*) → None
+update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | dict | None = None*, ***, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/collectors/_multi_base.html#MultiCollector.update_policy_weights_)
 
-Update policy weights for the data collector.
+Update worker policy weights and track an acknowledged version.
 
-This method synchronizes the policy weights used by the collector with the latest
-trained weights. It supports both local and remote weight updates, depending on
-the collector configuration.
-
-The method accepts weights in multiple forms for convenience:
-
-Examples
-
-```
->>> # Pass policy module as positional argument
->>> collector.update_policy_weights_(policy_module)
->>>
->>> # Pass TensorDict weights as positional argument
->>> collector.update_policy_weights_(weights_tensordict)
->>>
->>> # Use keyword arguments for clarity
->>> collector.update_policy_weights_(weights=weights_td, model_id="actor")
->>> collector.update_policy_weights_(policy=actor_module, model_id="actor")
->>>
->>> # Update multiple models atomically
->>> collector.update_policy_weights_(weights_dict={
-... "actor": actor_weights,
-... "critic": critic_weights,
-... })
->>>
->>> # Per-worker weight updates (for distinct policy factories)
->>> # Each worker can have independently updated weights
->>> collector.update_policy_weights_({
-... 0: worker_0_weights,
-... 1: worker_1_weights,
-... 2: worker_2_weights,
-... })
-```
-
-Parameters:
-
-**policy_or_weights** -
-
-The weights to update with. Can be:
-
-- `nn.Module`: A policy module whose weights will be extracted
-- `TensorDictModuleBase`: A TensorDict module whose weights will be extracted
-- `TensorDictBase`: A TensorDict containing weights
-- `dict`: A regular dict containing weights
-- `dict[int, TensorDictBase]`: Per-worker weights where keys are worker indices.
-This is used with distinct policy factories where each worker has independent weights.
-- `None`: Will try to get weights from server using `_get_server_weights()`
-
-Keyword Arguments:
-
-- **weights** - Alternative to positional argument. A TensorDict or dict containing
-weights to update. Cannot be used together with `policy_or_weights` or `policy`.
-- **policy** - Alternative to positional argument. An `nn.Module` or `TensorDictModuleBase`
-whose weights will be extracted. Cannot be used together with `policy_or_weights`
-or `weights`.
-- **worker_ids** - Identifiers for the workers to update. Relevant when the collector
-has multiple workers. Can be int, list of ints, device, or list of devices.
-- **model_id** - The model identifier to update (default: `"policy"`).
-Cannot be used together with `weights_dict`.
-- **weights_dict** - Dictionary mapping model_id to weights for updating
-multiple models atomically. Keys should match model_ids registered in
-`weight_sync_schemes`. Cannot be used together with `model_id`,
-`policy_or_weights`, `weights`, or `policy`.
-
-Raises:
-
-- **TypeError** - If `worker_ids` is provided but no `weight_updater` is configured.
-- **ValueError** - If conflicting parameters are provided.
-
-Note
-
-Users should extend the `WeightUpdaterBase` classes to customize
-the weight update logic for specific use cases.
-
-See also
-
-`LocalWeightsUpdaterBase` and
-`RemoteWeightsUpdaterBase()`.
+The aggregate `policy_version` is advanced only when every worker
+synchronously acknowledges the update. Partial or asynchronous updates
+invalidate the aggregate because a single version can no longer describe
+every worker.
 
 *property*worker_idx*: int | None*
 
@@ -970,3 +898,17 @@ The worker index (0-indexed).
 Raises:
 
 **RuntimeError** - If worker_idx has not been set.
+
+worker_policy_versions() → dict[int, str | int | None][[source]](../../_modules/torchrl/collectors/_multi_base.html#MultiCollector.worker_policy_versions)
+
+Query the policy version currently reported by each worker.
+
+Unlike `policy_version`, this method performs worker RPCs and can
+expose divergent versions after partial updates. It shares the worker
+control channels with other coordinator commands and therefore should
+not race with weight updates issued from another thread.
+
+Returns:
+
+A mapping from worker index to its local policy version. Values are
+`None` when policy-version tracking is disabled.
