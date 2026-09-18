@@ -20,10 +20,13 @@ import pytest
 import torch
 
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModuleBase
+from torchrl.data import Binary, Composite, Unbounded
 from torchrl.envs import (
     AntEnv,
     Compose,
     CubeBowlEnv,
+    EnvBase,
     ExplorationType,
     HopperEnv,
     HumanoidEnv,
@@ -33,6 +36,7 @@ from torchrl.envs import (
     MenagerieEnv,
     MenagerieTask,
     MicroDuckEnv,
+    MicroDuckSkillEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
     ParallelEnv,
@@ -40,6 +44,7 @@ from torchrl.envs import (
     SatelliteEnv,
     SerialEnv,
     set_exploration_type,
+    TensorDictPrimer,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
@@ -68,6 +73,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
 from torchrl.render import load_checkpoint
 
 if _has_mujoco:
@@ -229,6 +235,7 @@ class TestMujoco:
         assert env.tasks.shape == (3,)
         reset = env.reset()
         assert reset["observation"].shape == (num_envs, MicroDuckEnv.OBSERVATION_DIM)
+        assert not reset["fallen"].any()
         torch.testing.assert_close(
             reset["observation"][..., :3],
             torch.tensor([[0.0, 0.0, -1.0]]).expand(num_envs, -1),
@@ -326,6 +333,8 @@ class TestMujoco:
         fallen["qpos"][..., 2] = 0.01
         fallen["qpos"][..., 3:7] = torch.tensor([0.0, 1.0, 0.0, 0.0])
         assert env._compute_done(state, fallen).all()
+        fallen_observation = env.reset(fallen, set_state=True)
+        assert fallen_observation["fallen"].all()
         torch.testing.assert_close(
             env._reward_components(fallen, action)["diagnostic_reward_termination"],
             torch.full((num_envs, 1), -MicroDuckEnv.FALL_PENALTY),
@@ -3350,6 +3359,168 @@ class TestMujoco:
         td = env.rollout(3)
         assert td.shape == torch.Size([num_envs, 3])
         assert torch.isfinite(td.get(("next", "observation"))).all()
+
+
+class _MicroDuckResetSignalEnv(EnvBase):
+    """Small task env with a controller reset distinct from the fall report."""
+
+    def __init__(self):
+        super().__init__(batch_size=(1,))
+        self.observation_spec = Composite(
+            observation=Unbounded((1, MicroDuckEnv.OBSERVATION_DIM)),
+            fallen=Binary(n=1, shape=(1, 1), dtype=torch.bool),
+            respawned=Binary(n=1, shape=(1, 1), dtype=torch.bool),
+            shape=(1,),
+        )
+        self.action_spec = Unbounded((1, MicroDuckEnv.NUM_JOINTS))
+        self.reward_spec = Unbounded((1, 1))
+        self.done_spec = Binary(n=1, shape=(1, 1), dtype=torch.bool)
+        self._steps = 0
+
+    def _set_seed(self, seed):
+        return seed
+
+    def _reset(self, tensordict=None, **kwargs):
+        self._steps = 0
+        return self.observation_spec.zero().update(self.full_done_spec.zero())
+
+    def _step(self, td):
+        self._steps += 1
+        result = self.observation_spec.zero()
+        result["observation"] = td["observation"].clone()
+        result["observation"][..., 0] += 1
+        result["respawned"] = torch.full_like(result["respawned"], self._steps == 2)
+        result["reward"] = td["action"].sum(-1, keepdim=True)
+        return result.update(self.full_done_spec.zero())
+
+
+class _MicroDuckMemoryPolicy(TensorDictModuleBase):
+    in_keys = ["observation", "task_id", "memory", "is_init"]
+    out_keys = ["action", ("next", "memory")]
+
+    def make_tensordict_primer(self):
+        return TensorDictPrimer(memory=Unbounded((1,)), default_value=0)
+
+    def forward(self, td):
+        observation = td["observation"]
+        action = observation.new_zeros((*td.batch_size, MicroDuckEnv.NUM_JOINTS))
+        action[..., :2] = observation[
+            ..., MicroDuckEnv.COMMAND_START : MicroDuckEnv.COMMAND_START + 2
+        ]
+        action[..., 2:3] = td["task_id"]
+        start = MicroDuckEnv.GAIT_PHASE_START
+        action[..., 3:6] = observation[..., start : start + 3]
+        action[..., 6:7] = td["memory"]
+        td["action"] = action
+        td["next", "memory"] = td["memory"] + 1
+        return td
+
+
+class TestMicroDuckSkillEnv:
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_skill_env_wraps_microduck_env(self, tmp_path):
+        tasks = [
+            MicroDuckEnv.standing_task(),
+            MicroDuckEnv.tracking_task(0.2),
+        ]
+        base_env = MicroDuckEnv(
+            TestMujoco._write_microduck_fixture(tmp_path),
+            backend="mujoco",
+            tasks=tasks,
+            num_envs=1,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        env = MicroDuckSkillEnv.from_env(
+            base_env,
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(tasks),
+                action_scale=base_env.action_scale,
+            ),
+            control_steps_per_decision=2,
+            group_key=None,
+        )
+        try:
+            check_env_specs(env)
+            td = env.reset().set("skill", torch.ones(1, dtype=torch.long))
+            transition = env.step(td)
+            assert torch.isfinite(transition["next", "reward"]).all()
+            assert transition["next", "observation"].shape[-1] == (
+                MicroDuckEnv.OBSERVATION_DIM + len(tasks)
+            )
+            torch.testing.assert_close(
+                transition["next", "controller", "memory"], torch.full((1, 1), 2.0)
+            )
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("parameterized", [False, True])
+    def test_skill_maps_task_command_and_gait(self, parameterized):
+        tasks = [
+            MicroDuckEnv.standing_task(),
+            MicroDuckEnv.speed_range_task(0.1, 0.3),
+            MicroDuckEnv.sidestep_task(-0.2),
+        ]
+        argument_key = ("command", "argument") if parameterized else None
+        env = MicroDuckSkillEnv.from_env(
+            _MicroDuckResetSignalEnv(),
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(tasks),
+                action_scale=1.0,
+            ),
+            skill_ids=[2, 1],
+            control_steps_per_decision=1,
+            group_key=None,
+            argument_key=argument_key,
+        )
+        td = env.reset().set("skill", torch.zeros(1, dtype=torch.long))
+        argument = torch.tensor([[-0.5, 0.75]])
+        if parameterized:
+            td[argument_key] = argument
+        transition = env.step(td)
+        row = tasks[2]
+        command = (
+            row.command_low
+            + 0.5 * (argument + 1) * (row.command_high - row.command_low)
+            if parameterized
+            else (row.command_low + row.command_high) / 2
+        )
+        expected_reward = (
+            command.sum(-1)
+            + 2
+            + math.sin(MicroDuckEnv.GAIT_PHASE_OFFSET)
+            + math.cos(MicroDuckEnv.GAIT_PHASE_OFFSET)
+        ).expand(1)
+        torch.testing.assert_close(
+            transition["next", "reward"].squeeze(-1), expected_reward
+        )
+        torch.testing.assert_close(
+            transition["next", "controller", "memory"], torch.ones(1, 1)
+        )
+        env.close()
+
+    def test_skill_env_forwards_reset_key(self):
+        env = MicroDuckSkillEnv.from_env(
+            _MicroDuckResetSignalEnv(),
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(MicroDuckEnv.standing_task()),
+                action_scale=1.0,
+            ),
+            control_steps_per_decision=3,
+            group_key=None,
+            reset_key="respawned",
+        )
+        check_env_specs(env)
+        transition = env.rand_step(env.reset())
+        # The signal on physical step two resets memory before step three.
+        torch.testing.assert_close(
+            transition["next", "controller", "memory"], torch.ones(1, 1)
+        )
+        assert not transition["next", "fallen"].any()
+        env.close()
 
 
 if __name__ == "__main__":

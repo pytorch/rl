@@ -38,6 +38,8 @@ Reward
 
 Termination
     A physical fall (low base height or tilted torso) or a non-finite state.
+    The same per-environment signal is exposed as the boolean ``fallen``
+    observation for controller-state resets.
 """
 
 from __future__ import annotations
@@ -394,6 +396,12 @@ class MicroDuckTask:
         tensor(4.)
         >>> task.params["tracking_std"], task.warm_start_fraction
         (tensor(0.2000), tensor(0.5000))
+
+    .. seealso::
+        :class:`MicroDuckEnv` consumes an ordered library of these rows;
+        :class:`MicroDuckTaskSampler` chooses a row at reset; and
+        :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills`
+        preserves the library alongside a trained skill policy.
     """
 
     command_low: torch.Tensor
@@ -426,8 +434,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     (14), joint velocity (14), the sine, cosine and ramp of the gait clock
     (3), and the previous action (14). The command and the index of the env's
     task in the library are also exposed under the ``command`` and ``task_id``
-    keys; task parameters are not in the observation, and an embedding of the
-    id stands for them.
+    keys; the boolean ``fallen`` observation reports physical failure for
+    per-agent controller resets. Task parameters are not in the observation,
+    and an embedding of the id stands for them.
 
     The env holds a library of :class:`MicroDuckTask` rows in :attr:`tasks`
     (``env.tasks.name`` lists their labels).
@@ -592,6 +601,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         ...     return torch.exp(-features["angular_velocity"][..., 2].square() / params["heading_std"].square())
         >>> task = MicroDuckEnv.tracking_task(0.2, reward_weights={"heading": 1.0}, heading_std=0.5)
         >>> env = MicroDuckEnv(download=True, tasks=task)  # doctest: +SKIP
+
+    .. seealso::
+        :class:`MicroDuckTask` represents one locomotion objective;
+        :class:`MicroDuckTaskSampler` controls task selection at reset; and
+        :class:`MicroDuckSkillEnv` promotes compatible joint-level dynamics to
+        a high-level environment whose actions select trained skills.
 
     Reference:
         Pollen Robotics, MicroDuck (https://github.com/pollen-robotics/microduck)
@@ -1510,6 +1525,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 dtype=torch.long,
                 device=self.device,
             ),
+            fallen=Binary(
+                n=1,
+                shape=(self.num_envs, 1),
+                dtype=torch.bool,
+                device=self.device,
+            ),
             shape=(self.num_envs,),
             device=self.device,
         )
@@ -1533,6 +1554,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         observation = super()._build_obs_dict(state)
         observation["command"] = self._command.clone()
         observation["task_id"] = self._task_id.unsqueeze(-1).clone()
+        observation["fallen"] = self._fallen(
+            state["qpos"].to(self.dtype), state["qvel"].to(self.dtype)
+        ).unsqueeze(-1)
         if self.diagnostics:
             observation.update(self._diagnostics(state, self._observation_action))
         return observation
@@ -2240,6 +2264,12 @@ class MicroDuckTaskSampler(Transform):
 
         >>> MicroDuckTaskSampler.fixed([1, 2, 0, 2]).sample(torch.Size([4]))[:, 0]
         tensor([1, 2, 0, 2])
+
+    .. seealso::
+        :class:`MicroDuckTask` defines one row of the sampled library;
+        :class:`MicroDuckEnv` consumes the selected task id; and
+        :class:`MicroDuckSkillController` uses the same ordered library to
+        interpret high-level skill decisions.
     """
 
     def __init__(
