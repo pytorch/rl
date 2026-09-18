@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -271,12 +272,30 @@ class MicroDuckSkills:
         *,
         device: torch.device | str = "cpu",
         freeze: bool = True,
+        sha256: str | None = None,
     ) -> MicroDuckSkills:
-        """Rebuild the policy and deployment metadata from a checkpoint."""
+        """Rebuild the policy and deployment metadata from a checkpoint.
+
+        Args:
+            checkpoint: Local checkpoint path or an already loaded payload.
+            device: Device for the rebuilt policy.
+            freeze: Load in evaluation mode and disable gradients.
+            sha256: Expected SHA-256 digest for a path. This cannot be used
+                with an already loaded payload.
+        """
         # Runtime import avoids envs importing the modules package while the
         # module-zoo namespace is being initialized.
         from torchrl.envs.custom.mujoco.microduck import MicroDuckEnv
 
+        if sha256 is not None:
+            if isinstance(checkpoint, Mapping):
+                raise TypeError("sha256 cannot verify an already loaded payload.")
+            path = Path(checkpoint).expanduser().resolve()
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest != sha256.lower():
+                raise ValueError(
+                    f"The checkpoint {path} has SHA-256 {digest}, expected {sha256}."
+                )
         payload = cls._checkpoint_payload(checkpoint)
         config = payload.get("config") or {}
         env_config = config.get("env") or {}
@@ -321,6 +340,7 @@ class MicroDuckSkills:
         revision: str | None = None,
         device: torch.device | str = "cpu",
         freeze: bool = True,
+        sha256: str | None = None,
         **hub_kwargs: Any,
     ) -> MicroDuckSkills:
         """Download the pinned published skills and rebuild them.
@@ -334,6 +354,8 @@ class MicroDuckSkills:
                 six-skill policy revision.
             device: Device for the rebuilt policy.
             freeze: Load in evaluation mode and disable gradients.
+            sha256: Expected checkpoint digest. This is useful in addition to
+                an immutable Hub revision when reproducing published results.
             **hub_kwargs: Extra arguments for
                 :func:`huggingface_hub.hf_hub_download`.
 
@@ -354,4 +376,6 @@ class MicroDuckSkills:
             revision=revision or cls.DEFAULT_REVISION,
             **hub_kwargs,
         )
-        return cls.from_checkpoint(path, device=device, freeze=freeze)
+        return cls.from_checkpoint(
+            path, device=device, freeze=freeze, sha256=sha256
+        )

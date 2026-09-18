@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import hashlib
 import importlib.util
 import sys
 import threading
@@ -85,7 +86,7 @@ _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _vmap = None
 
 
-def test_microduck_skills_checkpoint_reconstructs_frozen_policy():
+def test_microduck_skills_checkpoint_reconstructs_frozen_policy(tmp_path):
     policy = MicroDuckSkillPolicy(
         hidden_size=8,
         num_tasks=2,
@@ -106,7 +107,11 @@ def test_microduck_skills_checkpoint_reconstructs_frozen_policy():
         "model_state_dict": policy.state_dict(),
     }
 
-    skills = MicroDuckSkills.from_checkpoint(payload)
+    checkpoint = tmp_path / "skills.ckpt"
+    torch.save(payload, checkpoint)
+    digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+
+    skills = MicroDuckSkills.from_checkpoint(checkpoint, sha256=digest)
 
     assert list(skills.task_library.name) == ["standing", "tracking+0.20"]
     assert skills.action_scale == 0.35
@@ -127,6 +132,9 @@ def test_microduck_skills_checkpoint_reconstructs_frozen_policy():
     assert td["action"].shape == (3, 14)
     assert torch.isfinite(td["action"]).all()
     assert td["next", "recurrent_state"].shape == (3, 1, 8)
+
+    with pytest.raises(ValueError, match="expected 0{64}"):
+        MicroDuckSkills.from_checkpoint(checkpoint, sha256="0" * 64)
 
 
 def _get_vmap():
