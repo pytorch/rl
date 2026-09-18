@@ -219,6 +219,7 @@ _CONFIG_PARITY_SIGNATURE_OVERRIDES = {
 
 _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
     {
+        "CatTensorsConfig",
         "CollectorConfig",
         "ClosedLoopMultiActionConfig",
         "LowLevelControllerConfig",
@@ -5092,6 +5093,27 @@ class TestTransformConfigs:
         cfg = InitTrackerConfig(init_key="is_test_init")
         assert cfg.init_key == "is_test_init"
         instantiate(cfg)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_cat_tensors_config(self):
+        from hydra.utils import instantiate
+        from torchrl.envs.transforms import CatTensors
+        from torchrl.trainers.algorithms.configs.transforms import CatTensorsConfig
+
+        transform = instantiate(
+            CatTensorsConfig(in_keys=["position", "velocity"], out_key="observation")
+        )
+        assert isinstance(transform, CatTensors)
+
+        td = TensorDict(
+            {
+                "position": torch.ones(2, 2),
+                "velocity": torch.ones(2, 1),
+            },
+            batch_size=[2],
+        )
+        transformed = transform(td)
+        assert transformed["observation"].shape == (2, 3)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_last_action_config(self):
