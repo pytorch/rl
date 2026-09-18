@@ -47,7 +47,7 @@ from torchrl.checkpoint import (
     resolve_checkpoint_path,
     StopOnSignal,
 )
-from torchrl.collectors import BaseCollector
+from torchrl.collectors import BaseCollector, Evaluator
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
@@ -3051,6 +3051,205 @@ def _resolve_module(trainer: Trainer, path: str):
     for attr in path.split("."):
         obj = getattr(obj, attr)
     return obj
+
+
+class EvaluatorHook(TrainerHookBase):
+    """Schedule asynchronous evaluation from a :class:`~torchrl.trainers.Trainer`.
+
+    The hook snapshots the training policy when an evaluation is triggered, polls
+    completed results after each collected batch, and logs them under the
+    ``evaluation/`` namespace. If several evaluation intervals elapse while an
+    evaluation is running, they are coalesced into one evaluation with the latest
+    policy weights when the evaluator becomes available.
+
+    Args:
+        evaluator (Evaluator): Evaluator service used to run rollouts.
+
+    Keyword Args:
+        every_frames (int): Number of collected frames between evaluations.
+        policy (str or Callable, optional): Dot-separated path resolved from the
+            trainer, or a callable receiving the trainer and returning an
+            :class:`~torch.nn.Module` or :class:`~tensordict.TensorDictBase`.
+            Defaults to ``"loss_module.actor_network"``.
+        run_at_start (bool, optional): Whether to evaluate the initial policy.
+            Defaults to ``False``.
+        run_at_end (bool, optional): Whether to request a final evaluation with
+            the latest policy weights. A final evaluation is skipped when the
+            latest completed evaluation already used the same frame count.
+            Defaults to ``True``.
+        wait_at_end (bool, optional): Whether shutdown waits for pending and final
+            evaluations so their metrics are logged. When ``False``, outstanding
+            work is handed to :meth:`Evaluator.shutdown` and may be cancelled by
+            the evaluator backend. Defaults to ``True``.
+        wait_at_end_timeout (float or None, optional): Maximum seconds to wait for
+            a pending evaluation during shutdown. ``None`` waits without a time
+            limit. Defaults to ``60.0``.
+
+    Examples:
+        >>> from torchrl.collectors import Evaluator
+        >>> from torchrl.trainers import EvaluatorHook
+        >>> evaluator = Evaluator(make_eval_env, eval_policy, max_steps=1_000)  # doctest: +SKIP
+        >>> EvaluatorHook(evaluator, every_frames=10_000).register(trainer)  # doctest: +SKIP
+
+    .. note::
+        Checkpoints contain only the next due frame and the last completed
+        evaluation frame. In-flight evaluator work is intentionally not
+        serialized and is discarded when resuming from a checkpoint.
+    """
+
+    def __init__(
+        self,
+        evaluator: Evaluator,
+        *,
+        every_frames: int,
+        policy: str
+        | Callable[[Trainer], nn.Module | TensorDictBase] = (
+            "loss_module.actor_network"
+        ),
+        run_at_start: bool = False,
+        run_at_end: bool = True,
+        wait_at_end: bool = True,
+        wait_at_end_timeout: float | None = 60.0,
+    ):
+        if isinstance(every_frames, bool) or not isinstance(every_frames, int):
+            raise TypeError("every_frames must be an integer.")
+        if every_frames <= 0:
+            raise ValueError("every_frames must be positive.")
+        if not isinstance(policy, str) and not callable(policy):
+            raise TypeError("policy must be a string path or a callable.")
+        self.evaluator = evaluator
+        self.every_frames = every_frames
+        self.policy = policy
+        self.run_at_start = run_at_start
+        self.run_at_end = run_at_end
+        self.wait_at_end = wait_at_end
+        self.wait_at_end_timeout = wait_at_end_timeout
+        self._next_due_frame = 0 if run_at_start else every_frames
+        self._last_completed_frame: int | None = None
+        self._last_triggered_frame: int | None = None
+        self._trainer: Trainer | None = None
+
+    def _policy_weights(self) -> TensorDictBase:
+        source = self.policy
+        if isinstance(source, str):
+            source = _resolve_module(self._trainer, source)
+        elif not isinstance(source, nn.Module):
+            source = source(self._trainer)
+        if isinstance(source, nn.Module):
+            return Evaluator.extract_weights(source)
+        if isinstance(source, TensorDictBase):
+            return source.detach().clone().cpu()
+        raise TypeError(
+            "EvaluatorHook policy must resolve to an nn.Module or TensorDictBase, "
+            f"got {type(source).__name__}."
+        )
+
+    def _trigger(self, step: int) -> bool:
+        accepted = self.evaluator.trigger_eval(self._policy_weights(), step=step)
+        if accepted:
+            self._last_triggered_frame = step
+        return accepted
+
+    @staticmethod
+    def _evaluation_name(name: str) -> str:
+        _, separator, suffix = name.partition("/")
+        return f"evaluation/{suffix if separator else name}"
+
+    def _log_result(self, result: Mapping[str, Any]) -> None:
+        if not result:
+            return
+        normalized = {
+            self._evaluation_name(name): value for name, value in result.items()
+        }
+        step_value = normalized.get("evaluation/step", self._last_triggered_frame)
+        if isinstance(step_value, torch.Tensor):
+            step_value = step_value.item()
+        if step_value is None:
+            step_value = self._trainer.collected_frames
+        step = int(step_value)
+        self._last_completed_frame = step
+        if step >= self._next_due_frame:
+            intervals = (step - self._next_due_frame) // self.every_frames + 1
+            self._next_due_frame += intervals * self.every_frames
+
+        scalar_metrics = {}
+        for name, value in normalized.items():
+            if name.endswith("/video"):
+                if self._trainer.logger is not None:
+                    self._trainer.logger.log_video(name, value, step=step)
+                continue
+            self._trainer._log_dict[name].append(value)
+            self._trainer._last_log[name] = step
+            scalar_metrics[name] = value
+        if scalar_metrics and self._trainer.logger is not None:
+            self._trainer.logger.log_metrics(scalar_metrics, step=step)
+
+    def _poll(self) -> None:
+        while True:
+            result = self.evaluator.poll()
+            if result is None:
+                return
+            self._log_result(result)
+
+    def _schedule(self) -> None:
+        self._poll()
+        frames = int(self._trainer.collected_frames)
+        if frames < self._next_due_frame or self.evaluator.pending:
+            return
+        self._trigger(frames)
+
+    def _setup(self) -> None:
+        try:
+            self._schedule()
+        except BaseException:
+            self.evaluator.shutdown()
+            raise
+
+    def _drain(self) -> None:
+        self._poll()
+        while self.evaluator.pending:
+            result = self.evaluator.wait(timeout=self.wait_at_end_timeout)
+            if result is not None:
+                self._log_result(result)
+            elif self.evaluator.pending:
+                raise RuntimeError(
+                    "Evaluator.wait() returned without completing pending work."
+                )
+        self._poll()
+
+    def _shutdown(self) -> None:
+        try:
+            self._poll()
+            if self.wait_at_end:
+                self._drain()
+            frames = int(self._trainer.collected_frames)
+            if self.run_at_end and self._last_completed_frame != frames:
+                if not self.evaluator.pending and self._trigger(frames):
+                    if self.wait_at_end:
+                        self._drain()
+        finally:
+            self.evaluator.shutdown()
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "next_due_frame": self._next_due_frame,
+            "last_completed_frame": self._last_completed_frame,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self._next_due_frame = int(state_dict["next_due_frame"])
+        last_completed_frame = state_dict.get("last_completed_frame")
+        self._last_completed_frame = (
+            None if last_completed_frame is None else int(last_completed_frame)
+        )
+        self._last_triggered_frame = None
+
+    def register(self, trainer: Trainer, name: str = "evaluator_hook") -> None:
+        self._trainer = trainer
+        trainer.register_module(name, self)
+        trainer.register_op("setup", self._setup)
+        trainer.register_op("post_steps", self._schedule)
+        trainer.register_op("shutdown", self._shutdown)
 
 
 class UpdateWeights(TrainerHookBase):

@@ -13,6 +13,7 @@ Hooks for customizing the training loop at various points.
     ClearCudaCache
     CountFramesLog
     EarlyStopping
+    EvaluatorHook
     LogScalar
     LRSchedulerHook
     OptimizerHook

@@ -16,6 +16,7 @@ import warnings
 from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
+from operator import attrgetter
 from os import path, walk
 from time import sleep
 
@@ -45,7 +46,7 @@ from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import TanhNormal
 from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
 from torchrl.testing import PONG_VERSIONED
-from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers import EvaluatorHook, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
@@ -2455,6 +2456,169 @@ class TestSetupShutdownHooks:
 
         assert call_order == ["setup", "pre_steps", "pre_steps", "shutdown"]
         assert collector.shutdown_calls == 1
+
+
+class _HookEvaluator:
+    def __init__(self, *, auto_complete=False, wait_error=None, shutdown_error=None):
+        self.auto_complete = auto_complete
+        self.wait_error = wait_error
+        self.shutdown_error = shutdown_error
+        self.pending = False
+        self.triggers = []
+        self.results = []
+        self.shutdown_calls = 0
+        self.wait_timeout = None
+
+    def trigger_eval(self, weights, step):
+        self.triggers.append((step, weights.clone()))
+        self.pending = True
+        if self.auto_complete:
+            self.complete()
+        return True
+
+    def complete(self):
+        step = self.triggers[-1][0]
+        self.pending = False
+        self.results.append({"eval/reward": float(step), "eval/step": step})
+
+    def poll(self):
+        if self.results:
+            return self.results.pop(0)
+        return None
+
+    def wait(self, timeout=None):
+        self.wait_timeout = timeout
+        if self.wait_error is not None:
+            raise self.wait_error
+        if self.pending:
+            self.complete()
+        return self.poll()
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+        if self.shutdown_error is not None:
+            raise self.shutdown_error
+
+
+class _HookLogger:
+    def __init__(self):
+        self.metrics = []
+        self.videos = []
+
+    def log_metrics(self, metrics, step):
+        self.metrics.append((step, dict(metrics)))
+
+    def log_video(self, name, video, step):
+        self.videos.append((name, video, step))
+
+
+class TestEvaluatorHook:
+    def test_cadence_coalescing_logging_and_no_duplicate_final(self):
+        evaluator = _HookEvaluator(auto_complete=True)
+        logger = _HookLogger()
+        trainer = mocking_trainer(optimizer=None, logger=logger, with_policy=True)
+        hook = EvaluatorHook(
+            evaluator, every_frames=10, run_at_start=True, run_at_end=True
+        )
+        hook.register(trainer)
+
+        trainer._setup_hook()
+        for frames in (5, 10, 35):
+            trainer.collected_frames = frames
+            trainer._post_steps_hook()
+        trainer._shutdown_hook()
+
+        assert [step for step, _ in evaluator.triggers] == [0, 10, 35]
+        assert hook._next_due_frame == 40
+        assert [step for step, _ in logger.metrics] == [0, 10, 35]
+        assert all(
+            set(metrics) == {"evaluation/reward", "evaluation/step"}
+            for _, metrics in logger.metrics
+        )
+        assert evaluator.shutdown_calls == 1
+
+    def test_busy_intervals_coalesce_to_latest_policy(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+        trainer.collected_frames = 25
+        trainer._post_steps_hook()
+        assert [step for step, _ in evaluator.triggers] == [10]
+        assert hook._next_due_frame == 10
+
+        evaluator.complete()
+        trainer.collected_frames = 30
+        trainer._post_steps_hook()
+        assert [step for step, _ in evaluator.triggers] == [10, 30]
+        assert hook._next_due_frame == 20
+
+    def test_final_evaluation_uses_latest_callable_policy(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(
+            evaluator,
+            every_frames=10,
+            policy=attrgetter("loss_module.actor_network"),
+        )
+        hook.register(trainer)
+
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+        with torch.no_grad():
+            trainer.loss_module.actor_network.weight.fill_(3)
+        trainer.collected_frames = 15
+        trainer._shutdown_hook()
+
+        assert [step for step, _ in evaluator.triggers] == [10, 15]
+        torch.testing.assert_close(
+            evaluator.triggers[-1][1]["weight"],
+            torch.full_like(evaluator.triggers[-1][1]["weight"], 3),
+        )
+
+    def test_resume_keeps_only_completed_schedule_state(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+
+        state = hook.state_dict()
+        assert state == {"next_due_frame": 10, "last_completed_frame": None}
+        evaluator.complete()
+        trainer.collected_frames = 15
+        trainer._post_steps_hook()
+        assert hook.state_dict() == {
+            "next_due_frame": 20,
+            "last_completed_frame": 10,
+        }
+
+        restored_evaluator = _HookEvaluator(auto_complete=True)
+        restored_trainer = mocking_trainer(optimizer=None, with_policy=True)
+        restored = EvaluatorHook(restored_evaluator, every_frames=10)
+        restored.register(restored_trainer)
+        restored.load_state_dict(state)
+        restored_trainer.collected_frames = 15
+        restored_trainer._setup_hook()
+
+        assert [step for step, _ in restored_evaluator.triggers] == [15]
+
+    def test_shutdown_cleans_up_when_wait_fails(self):
+        evaluator = _HookEvaluator(wait_error=RuntimeError("evaluation failed"))
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+
+        with pytest.raises(RuntimeError, match="evaluation failed"):
+            trainer._shutdown_hook()
+        assert evaluator.wait_timeout == 60.0
+        assert evaluator.shutdown_calls == 1
 
 
 class TestEarlyStopping:
