@@ -3334,7 +3334,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`UnsqueezeTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.UnsqueezeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.UnsqueezeTransformConfig)([dim, in_keys, ...]) | Configuration for UnsqueezeTransform. |
 | [`SqueezeTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.SqueezeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.SqueezeTransformConfig)([dim, in_keys, ...]) | Configuration for SqueezeTransform. |
 | [`PermuteTransformConfig`](generated/torchrl.trainers.algorithms.configs.transforms.PermuteTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.PermuteTransformConfig)([dims, in_keys, ...]) | Configuration for PermuteTransform. |
-| [`CatTensorsConfig`](generated/torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig.html#torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig)([dim, in_keys, out_keys, ...]) | Configuration for CatTensors transform. |
+| [`CatTensorsConfig`](generated/torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig.html#torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig)([dim, in_keys, out_key, ...]) | Configuration for CatTensors transform. |
 | [`StackConfig`](generated/torchrl.trainers.algorithms.configs.transforms.StackConfig.html#torchrl.trainers.algorithms.configs.transforms.StackConfig)([dim, in_keys, out_keys, _target_]) | Configuration for Stack transform. |
 | [`DiscreteActionProjectionConfig`](generated/torchrl.trainers.algorithms.configs.transforms.DiscreteActionProjectionConfig.html#torchrl.trainers.algorithms.configs.transforms.DiscreteActionProjectionConfig)([...]) | Configuration for DiscreteActionProjection transform. |
 | [`TensorDictPrimerConfig`](generated/torchrl.trainers.algorithms.configs.transforms.TensorDictPrimerConfig.html#torchrl.trainers.algorithms.configs.transforms.TensorDictPrimerConfig)([primer_spec, ...]) | Configuration for TensorDictPrimer transform. |
@@ -34885,7 +34885,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f03141d6610>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f85fb6a6d90>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -48625,7 +48625,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0316fb49a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f85fe5789a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -277758,7 +277758,7 @@ Configuration for CatFrames transform.
 
 # torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig
 
-*class*torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig(*dim: int = -1*, *in_keys: list[str] | None = None*, *out_keys: list[str] | None = None*, *_target_: str = 'torchrl.envs.transforms.transforms.CatTensors'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/transforms.html#CatTensorsConfig)
+*class*torchrl.trainers.algorithms.configs.transforms.CatTensorsConfig(*dim: int = -1*, *in_keys: list[str] | None = None*, *out_key: Any = 'observation_vector'*, *_target_: str = 'torchrl.envs.transforms.transforms.CatTensors'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/transforms.html#CatTensorsConfig)
 
 Configuration for CatTensors transform.
 
