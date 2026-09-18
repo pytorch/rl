@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable
 from typing import Any
 
 import torch
@@ -13,7 +15,7 @@ from tensordict import TensorDictBase, unravel_key_list
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from torch import nn
 
-from torchrl._utils import is_compiling
+from torchrl._utils import implement_for, is_compiling
 from torchrl.modules.tensordict_module.rnn import recurrent_mode
 
 
@@ -136,13 +138,14 @@ class CausalTransformer(nn.Module):
     contract consumed by :class:`~torchrl.modules.TransformerModule`:
 
     - ``forward(features, positions, mask=None, kv_cache=None) -> (out, kv_cache)``
-    - ``new_kv_cache(batch_size, device=None) -> kv_cache``
+    - ``new_kv_cache(batch_size, device=None, dtype=None) -> kv_cache``
     - ``reset_kv_cache(kv_cache, mask) -> kv_cache``
 
     together with ``num_layers``, ``num_heads``, ``head_dim`` and
     ``max_seq_len`` attributes. The cache object is opaque to the module: the
     backbone decides its layout, dtype and device and how a reset clears the
-    rows selected by a boolean mask over the batch. Any module honoring that
+    rows selected by a boolean mask over the batch. ``dtype`` is the autocast
+    dtype, or ``None``; a backbone may ignore it. Any module honoring that
     contract can be used in its place, including adapters over an inference
     engine that keeps the cache in its own representation.
 
@@ -365,6 +368,16 @@ _BACKBONE_ATTRIBUTES = ("num_layers", "num_heads", "head_dim", "max_seq_len")
 _BACKBONE_METHODS = ("new_kv_cache", "reset_kv_cache")
 
 
+def _accepts_dtype(new_kv_cache: Callable[..., Any]) -> bool:
+    try:
+        parameters = inspect.signature(new_kv_cache).parameters.values()
+    except (TypeError, ValueError):
+        return True
+    return any(
+        p.name == "dtype" or p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters
+    )
+
+
 def _autocast_dtype(device: torch.device) -> torch.dtype | None:
     """Return the active autocast dtype for ``device``, or ``None`` when disabled."""
     device_type = device.type
@@ -550,6 +563,12 @@ class TransformerModule(ModuleBase):
                         f"{method!r}; see CausalTransformer for the backbone "
                         "contract."
                     )
+            if not _accepts_dtype(transformer.new_kv_cache):
+                raise ValueError(
+                    "The transformer backbone's new_kv_cache must accept a "
+                    "dtype keyword; see CausalTransformer for the backbone "
+                    "contract."
+                )
         else:
             if input_size is None or hidden_size is None:
                 raise ValueError("input_size and hidden_size must be passed.")
@@ -657,6 +676,31 @@ class TransformerModule(ModuleBase):
             (p.data_ptr(), int(p._version)) for p in self.transformer.parameters()
         )
 
+    def _new_state(
+        self, batch_size: int, device: torch.device, dtype: torch.dtype | None
+    ) -> tuple[Any, torch.Tensor]:
+        kv_cache = self.transformer.new_kv_cache(batch_size, device=device, dtype=dtype)
+        positions = torch.zeros(batch_size, dtype=torch.long, device=device)
+        return kv_cache, positions
+
+    @implement_for("torch", "2.2", compilable=True)
+    def _allocate_state(
+        self, batch_size: int, device: torch.device, dtype: torch.dtype | None
+    ) -> tuple[Any, torch.Tensor]:
+        """Allocate outside inference mode so the state stays writable afterwards."""
+        with torch.inference_mode(False):
+            return self._new_state(batch_size, device, dtype)
+
+    @implement_for("torch", None, "2.2", compilable=True)
+    def _allocate_state(  # noqa: F811
+        self, batch_size: int, device: torch.device, dtype: torch.dtype | None
+    ) -> tuple[Any, torch.Tensor]:
+        """Dynamo traces inference_mode from torch 2.2; older compiled steps allocate as is."""
+        if is_compiling():
+            return self._new_state(batch_size, device, dtype)
+        with torch.inference_mode(False):
+            return self._new_state(batch_size, device, dtype)
+
     def _restart_mask(self, value: torch.Tensor) -> torch.Tensor:
         """Return the mask of streams whose cache must restart for this batch.
 
@@ -679,11 +723,8 @@ class TransformerModule(ModuleBase):
             version = self._current_weights_version()
             stale = version != self._weights_version
         if stale:
-            self._kv_cache = self.transformer.new_kv_cache(
-                batch_size, device=value.device, dtype=cache_dtype
-            )
-            self._positions = torch.zeros(
-                batch_size, dtype=torch.long, device=value.device
+            self._kv_cache, self._positions = self._allocate_state(
+                batch_size, value.device, cache_dtype
             )
             self._cache_dtype = cache_dtype
             if not is_compiling():

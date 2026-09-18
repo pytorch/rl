@@ -8,6 +8,7 @@ import argparse
 import copy
 import os
 import pickle
+import warnings
 
 import pytest
 import torch
@@ -15,7 +16,7 @@ from tensordict import from_module, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 
-from torchrl.collectors import Collector
+from torchrl.collectors import Collector, VanillaWeightUpdater
 from torchrl.envs import InitTracker, SerialEnv, TransformedEnv
 from torchrl.modules import CausalTransformer, set_recurrent_mode, TransformerModule
 from torchrl.modules.tensordict_module.transformer import (
@@ -76,6 +77,36 @@ def _run_steps(module, obs, is_init, batch_shape):
         assert "transformer_state" not in td.keys()
         outs.append(td["embed"].clone())
     return torch.stack(outs, dim=-2)
+
+
+class _MinimalBackbone(nn.Module):
+    """Contract-only backbone: a projection standing in for attention."""
+
+    def __init__(self, input_size, hidden_size, max_seq_len):
+        super().__init__()
+        self.proj = nn.Linear(input_size, hidden_size)
+        self.num_layers = 1
+        self.num_heads = 1
+        self.head_dim = hidden_size
+        self.max_seq_len = max_seq_len
+        self.cache_dtypes = []
+
+    def forward(self, features, positions, mask=None, kv_cache=None):
+        out = self.proj(features)
+        if kv_cache is not None:
+            rows = torch.arange(out.shape[0], device=out.device)
+            kv_cache[rows, positions.squeeze(-1)] = out.squeeze(1).to(kv_cache.dtype)
+        return out, kv_cache
+
+    def new_kv_cache(self, batch_size, *, device=None, dtype=None):
+        self.cache_dtypes.append(dtype)
+        dtype = self.proj.weight.dtype if dtype is None else dtype
+        return torch.zeros(
+            batch_size, self.max_seq_len, self.head_dim, device=device, dtype=dtype
+        )
+
+    def reset_kv_cache(self, kv_cache, mask):
+        return kv_cache.masked_fill_(mask.view(-1, 1, 1), 0)
 
 
 class TestTransformerModule:
@@ -167,6 +198,17 @@ class TestTransformerModule:
                 out_key="embed",
             )
 
+        class _NoDtype(_MinimalBackbone):
+            def new_kv_cache(self, batch_size, *, device=None):
+                return super().new_kv_cache(batch_size, device=device)
+
+        with pytest.raises(ValueError, match="dtype keyword"):
+            TransformerModule(
+                transformer=_NoDtype(3, 8, max_seq_len=8),
+                in_key="observation",
+                out_key="embed",
+            )
+
     @pytest.mark.parametrize("shape", [[3], [2, 3]])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_step_vs_window_parity(self, shape, device):
@@ -248,6 +290,23 @@ class TestTransformerModule:
         wider = _run_steps(module, wider_obs, wider_init, [3])
         torch.testing.assert_close(wider[:2], first)
 
+    def test_inference_mode_step_keeps_cache_usable(self):
+        module = self._make_module()
+        reference = copy.deepcopy(module)
+        obs, is_init = self._trajectory([2], 3)
+        is_init[0, 2] = True
+        outs = []
+        with torch.inference_mode():
+            td = _window(obs[:, 0], is_init[:, 0], [2])
+            module(td)
+            outs.append(td["embed"].clone())
+        for step in (1, 2):
+            td = _window(obs[:, step], is_init[:, step], [2])
+            module(td)
+            outs.append(td["embed"].clone())
+        expected = _run_steps(reference, obs, is_init, [2])
+        torch.testing.assert_close(torch.stack(outs, dim=-2), expected)
+
     @pytest.mark.parametrize("transfer", ["pickle", "deepcopy"])
     def test_copies_start_with_an_empty_cache(self, transfer):
         module = self._make_module()
@@ -310,13 +369,22 @@ class TestTransformerModule:
             module(_window(obs, is_init, [2, 3]))
 
     def test_custom_backbone(self):
-        backbone = CausalTransformer(5, 16, 1, num_heads=2, max_seq_len=6)
+        backbone = _MinimalBackbone(5, 16, max_seq_len=6)
         module = TransformerModule(
             transformer=backbone, in_key="observation", out_key="embed"
         )
         td = _window(torch.randn(2, 5), torch.ones(2, 1, dtype=torch.bool), [2])
         module(td)
         assert td["embed"].shape == (2, 16)
+        is_init = torch.zeros(2, 3, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        window = _window(torch.randn(2, 3, 5), is_init, [2, 3])
+        with set_recurrent_mode(True):
+            module(window)
+        assert window["embed"].shape == (2, 3, 16)
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            module(td)
+        assert backbone.cache_dtypes == [None, torch.bfloat16]
 
     def test_nested_in_key(self):
         module = TransformerModule(
@@ -394,9 +462,10 @@ class TestTransformerModule:
             window["embed"], episode["embed"], atol=1e-5, rtol=1e-5
         )
 
+    @pytest.mark.parametrize("update", ["fallback", "legacy", "state_dict"])
     @pytest.mark.parametrize("compile", [False, True], ids=["eager", "compiled"])
-    def test_collector_weight_update_restarts_streams(self, compile):
-        """The collector's weight sync writes through ``.data``; the cache must restart."""
+    def test_collector_weight_update_restarts_streams(self, update, compile):
+        """Every collector weight path must restart the streams, eager and compiled."""
         if compile and os.name == "nt":
             pytest.skip("inductor is not available on Windows")
         env = self._make_env()
@@ -405,13 +474,27 @@ class TestTransformerModule:
         policy = self._make_policy(env, module)
         if compile:
             policy.module[0] = torch.compile(module)
-        collector = Collector(env, policy, frames_per_batch=4, total_frames=8)
+        kwargs = {}
+        if update == "legacy":
+            kwargs["weight_updater"] = VanillaWeightUpdater(
+                policy_weights=TensorDict.from_module(policy).data.lock_()
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            collector = Collector(
+                env, policy, frames_per_batch=4, total_frames=8, **kwargs
+            )
         try:
             iterator = iter(collector)
             next(iterator)
             weights = TensorDict.from_module(policy).data.clone()
             weights.apply_(lambda t: t.add_(0.5) if t.is_floating_point() else t)
-            collector.update_policy_weights_(weights)
+            if update == "state_dict":
+                state = collector.state_dict()
+                state["policy_state_dict"] = weights.flatten_keys(".").to_dict()
+                collector.load_state_dict(state)
+            else:
+                collector.update_policy_weights_(weights)
             second = next(iterator).clone()
         finally:
             collector.shutdown()
