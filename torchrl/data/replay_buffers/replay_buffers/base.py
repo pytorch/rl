@@ -265,21 +265,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             many times. The default value of ``None`` keeps the standard replay
             buffer behavior. Passing ``1`` makes each item available for a
             single sample before it is consumed.
-        producer_admission (str, optional): admission policy applied when a write
-            would cross ``producer_high_watermark``. ``"overwrite_oldest"``
-            preserves the traditional circular replay behavior, ``"block"``
-            waits for space, ``"drop_newest"`` drops the complete incoming
-            write, and ``"raise"`` raises :class:`BufferError`. Defaults to
-            ``"overwrite_oldest"``. For a non-consuming buffer, sampling does
-            not free space, so a blocked producer resumes only after
-            :meth:`empty` or another operation removes storage.
-        producer_high_watermark (int, optional): maximum number of occupied
-            records admitted by a non-default producer policy. Defaults to the
-            storage capacity. The watermark counts sampleable records for a
-            consuming replay buffer and physical records otherwise.
-        producer_resume_watermark (int, optional): occupancy at or below which
-            pressure is cleared after reaching the high watermark. Defaults to
-            ``producer_high_watermark - 1``.
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
         compilable (bool, optional): whether the writer is compilable.
@@ -423,11 +408,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         | None = None,  # noqa: F821
         generator: torch.Generator | None = None,
         consume_after_n_samples: int | None = None,
-        producer_admission: Literal[
-            "overwrite_oldest", "block", "drop_newest", "raise"
-        ] = "overwrite_oldest",
-        producer_high_watermark: int | None = None,
-        producer_resume_watermark: int | None = None,
         shared: bool = False,
         compilable: bool | None = None,
         delayed_init: bool | None = None,
@@ -453,44 +433,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             if consume_after_n_samples < 1:
                 raise ValueError("consume_after_n_samples must be a positive integer.")
             consume_after_n_samples = int(consume_after_n_samples)
-        valid_admission = {"overwrite_oldest", "block", "drop_newest", "raise"}
-        if producer_admission not in valid_admission:
-            raise ValueError(
-                "producer_admission must be one of 'overwrite_oldest', 'block', "
-                f"'drop_newest' or 'raise', got {producer_admission!r}."
-            )
-        for name, value in (
-            ("producer_high_watermark", producer_high_watermark),
-            ("producer_resume_watermark", producer_resume_watermark),
-        ):
-            if value is not None and (
-                isinstance(value, bool) or not isinstance(value, INT_CLASSES)
-            ):
-                raise TypeError(f"{name} must be an integer or None.")
-        if producer_high_watermark is not None and producer_high_watermark < 1:
-            raise ValueError("producer_high_watermark must be positive.")
-        if producer_resume_watermark is not None and producer_resume_watermark < 0:
-            raise ValueError("producer_resume_watermark must be non-negative.")
-        if producer_admission == "overwrite_oldest" and (
-            producer_high_watermark is not None or producer_resume_watermark is not None
-        ):
-            raise ValueError(
-                "Producer watermarks require producer_admission='block', "
-                "'drop_newest' or 'raise'."
-            )
 
         self._delayed_init = delayed_init
         self._initialized = False
         self._service_shutdown = False
         self._sample_call_count_value = 0
         self._sampled_item_count_value = 0
-        self._overwrite_count_value = 0
-        self._dropped_new_item_count_value = 0
-        self._blocked_producer_count_value = 0
-        self._blocked_producer_time_value = 0.0
-        self._producer_waiter_count_value = 0
-        self._producer_pressure_value = 0
-        self._service_shutdown_value = 0
 
         # Store init parameters for potential delayed initialization
         self._init_storage = storage
@@ -504,17 +452,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._init_compilable = compilable
         self._init_consume_after_n_samples = consume_after_n_samples
         self._consume_after_n_samples = consume_after_n_samples
-        self._producer_admission = producer_admission
-        self._producer_high_watermark = (
-            int(producer_high_watermark)
-            if producer_high_watermark is not None
-            else None
-        )
-        self._producer_resume_watermark = (
-            int(producer_resume_watermark)
-            if producer_resume_watermark is not None
-            else None
-        )
 
         if transform is not None and transform_factory is not None:
             raise TypeError(
@@ -606,7 +543,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             self._writer = self._maybe_make_writer(self._init_writer)
             self._writer.register_storage(self._storage)
             self._validate_consuming_writer()
-            self._validate_producer_admission()
 
             # Initialize collate function
             self._get_collate_fn(self._init_collate_fn)
@@ -666,14 +602,14 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     def start(self) -> Self:
         """Return this already-started direct replay buffer."""
-        if self._shutdown_requested():
+        if self._service_shutdown:
             raise RuntimeError("A shut down replay buffer cannot be restarted.")
         return self
 
     @property
     def is_alive(self) -> bool:
         """Whether this direct replay buffer remains available."""
-        return not self._shutdown_requested()
+        return not self._service_shutdown
 
     @property
     def service_backend(self) -> str:
@@ -766,10 +702,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """
         del timeout
         with self._futures_lock:
-            if self._shutdown_requested():
+            if self._service_shutdown:
                 return
             self._service_shutdown = True
-            self._set_scalar("_service_shutdown_value", 1)
         self._notify_replay_state_change()
 
         error = None
@@ -900,44 +835,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "write_at(index, data) method."
             )
 
-    def _validate_producer_admission(self) -> None:
-        if self._producer_admission == "overwrite_oldest":
-            return
-        if getattr(self._writer, "_compilable", False):
-            raise ValueError(
-                "Non-default producer admission is not compatible with "
-                "compilable replay-buffer writers."
-            )
-        if self._storage.ndim != 1:
-            raise ValueError(
-                "Non-default producer admission requires a 1-dimensional storage."
-            )
-        capacity = getattr(self._storage, "max_size", None)
-        if not isinstance(capacity, INT_CLASSES) or capacity < 1:
-            raise ValueError(
-                "Non-default producer admission requires storage with a positive "
-                "integer max_size."
-            )
-        capacity = int(capacity)
-        high = self._producer_high_watermark
-        if high is None:
-            high = capacity
-        if high > capacity:
-            raise ValueError(
-                f"producer_high_watermark ({high}) cannot exceed storage capacity "
-                f"({capacity})."
-            )
-        resume = self._producer_resume_watermark
-        if resume is None:
-            resume = high - 1
-        if resume >= high:
-            raise ValueError(
-                "producer_resume_watermark must be smaller than "
-                "producer_high_watermark."
-            )
-        self._producer_high_watermark = high
-        self._producer_resume_watermark = resume
-
     def _maybe_make_writer(
         self, writer: Writer | Callable[[], Writer] | None
     ) -> Writer:
@@ -1010,34 +907,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
     def share(self, shared: bool = True) -> Self:
         sample_calls = self._counter_value(self._sample_call_count_value)
         sampled_items = self._counter_value(self._sampled_item_count_value)
-        overwrites = self._counter_value(self._overwrite_count_value)
-        dropped_items = self._counter_value(self._dropped_new_item_count_value)
-        blocked_producers = self._counter_value(self._blocked_producer_count_value)
-        blocked_time = self._scalar_value(self._blocked_producer_time_value)
-        producer_waiters = self._counter_value(self._producer_waiter_count_value)
-        under_pressure = self._counter_value(self._producer_pressure_value)
-        shutdown_requested = self._counter_value(self._service_shutdown_value)
         self.shared = shared
         if self.shared:
             self._write_lock = multiprocessing.Lock()
             self._readiness_condition = multiprocessing.Condition()
             self._sample_call_count_value = multiprocessing.Value("q", sample_calls)
             self._sampled_item_count_value = multiprocessing.Value("q", sampled_items)
-            self._overwrite_count_value = multiprocessing.Value("q", overwrites)
-            self._dropped_new_item_count_value = multiprocessing.Value(
-                "q", dropped_items
-            )
-            self._blocked_producer_count_value = multiprocessing.Value(
-                "q", blocked_producers
-            )
-            self._blocked_producer_time_value = multiprocessing.Value("d", blocked_time)
-            self._producer_waiter_count_value = multiprocessing.Value(
-                "q", producer_waiters
-            )
-            self._producer_pressure_value = multiprocessing.Value("b", under_pressure)
-            self._service_shutdown_value = multiprocessing.Value(
-                "b", shutdown_requested
-            )
             if getattr(self, "_initialized", False):
                 self._share_replay_buffer_transform()
         else:
@@ -1045,50 +920,24 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             self._readiness_condition = threading.Condition()
             self._sample_call_count_value = sample_calls
             self._sampled_item_count_value = sampled_items
-            self._overwrite_count_value = overwrites
-            self._dropped_new_item_count_value = dropped_items
-            self._blocked_producer_count_value = blocked_producers
-            self._blocked_producer_time_value = blocked_time
-            self._producer_waiter_count_value = producer_waiters
-            self._producer_pressure_value = under_pressure
-            self._service_shutdown_value = shutdown_requested
         return self
 
     @compile_disable()
     def _notify_replay_state_change(self) -> None:
         condition = self._readiness_condition
         with condition:
-            if (
-                getattr(self, "_initialized", False)
-                and getattr(self, "_producer_admission", "overwrite_oldest")
-                != "overwrite_oldest"
-                and self._counter_value(self._producer_pressure_value)
-            ):
-                with self._replay_lock:
-                    occupancy = self._producer_occupancy_locked()
-                if occupancy <= self._producer_resume_watermark:
-                    self._set_counter("_producer_pressure_value", 0)
             condition.notify_all()
 
     @staticmethod
-    def _scalar_value(counter) -> int | float:
+    def _counter_value(counter) -> int:
         if not hasattr(counter, "get_lock"):
-            return counter
+            return int(counter)
         lock = counter.get_lock()
         with lock:
-            return counter.value
-
-    @classmethod
-    def _counter_value(cls, counter) -> int:
-        return int(cls._scalar_value(counter))
-
-    def _shutdown_requested(self) -> bool:
-        return bool(
-            self._service_shutdown or self._counter_value(self._service_shutdown_value)
-        )
+            return int(counter.value)
 
     @compile_disable()
-    def _increment_counter(self, name: str, increment: int | float) -> None:
+    def _increment_counter(self, name: str, increment: int) -> None:
         counter = getattr(self, name)
         if not hasattr(counter, "get_lock"):
             with self._readiness_condition:
@@ -1098,12 +947,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             counter.value += increment
 
     def _set_counter(self, name: str, value: int) -> None:
-        self._set_scalar(name, value)
-
-    def _set_scalar(self, name: str, value: int | float) -> None:
         counter = getattr(self, name)
         if not hasattr(counter, "get_lock"):
-            setattr(self, name, value)
+            with self._readiness_condition:
+                setattr(self, name, value)
             return
         with counter.get_lock():
             counter.value = value
@@ -1174,12 +1021,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """
         prev_storage = self._storage
         self._storage = storage
-        try:
-            self._validate_consuming_sampler()
-            self._validate_producer_admission()
-        except Exception:
-            self._storage = prev_storage
-            raise
+        self._validate_consuming_sampler()
         self._get_collate_fn(collate_fn)
         self._notify_replay_state_change()
 
@@ -1228,7 +1070,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """The total number of items written so far in the buffer through add and extend."""
         return self._writer._write_count
 
-    def stats(self) -> dict[str, int | float | bool | str | None]:
+    def stats(self) -> dict[str, int | float | bool]:
         """Returns a cheap, serializable snapshot of the buffer's operational state.
 
         The snapshot only contains scalar counters and gauges. It never
@@ -1254,14 +1096,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
               :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter`);
             - ``"sample_calls"``: number of completed calls to :meth:`sample`;
             - ``"samples_returned"``: total number of records returned by :meth:`sample`;
-            - ``"overwrites"``: estimated number of live records evicted by
-              circular writes (consumed-slot reuse can make this an upper bound
-              for consuming buffers);
-            - ``"dropped_new_items"``: incoming records dropped by producer admission;
-            - ``"blocked_producer_calls"`` and ``"blocked_producer_time"``:
-              cumulative blocking count and elapsed seconds;
-            - ``"producer_waiters"``: producers currently waiting for admission;
-            - ``"producer_under_pressure"``: current hysteresis state;
             - ``"prefetch_queue_size"``: number of pending prefetched batches;
             - ``"initialized"``: whether the buffer components are initialized;
             - ``"capacity"``: maximum number of elements the storage can hold
@@ -1288,25 +1122,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "write_count": 0,
                 "sample_calls": self._counter_value(self._sample_call_count_value),
                 "samples_returned": self._counter_value(self._sampled_item_count_value),
-                "overwrites": self._counter_value(self._overwrite_count_value),
-                "dropped_new_items": self._counter_value(
-                    self._dropped_new_item_count_value
-                ),
-                "blocked_producer_calls": self._counter_value(
-                    self._blocked_producer_count_value
-                ),
-                "blocked_producer_time": float(
-                    self._scalar_value(self._blocked_producer_time_value)
-                ),
-                "producer_waiters": self._counter_value(
-                    self._producer_waiter_count_value
-                ),
-                "producer_under_pressure": bool(
-                    self._counter_value(self._producer_pressure_value)
-                ),
-                "producer_admission": self._producer_admission,
-                "producer_high_watermark": self._producer_high_watermark,
-                "producer_resume_watermark": self._producer_resume_watermark,
                 "prefetch_queue_size": 0,
                 "initialized": False,
             }
@@ -1331,23 +1146,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             "write_count": int(write_count),
             "sample_calls": self._counter_value(self._sample_call_count_value),
             "samples_returned": self._counter_value(self._sampled_item_count_value),
-            "overwrites": self._counter_value(self._overwrite_count_value),
-            "dropped_new_items": self._counter_value(
-                self._dropped_new_item_count_value
-            ),
-            "blocked_producer_calls": self._counter_value(
-                self._blocked_producer_count_value
-            ),
-            "blocked_producer_time": float(
-                self._scalar_value(self._blocked_producer_time_value)
-            ),
-            "producer_waiters": self._counter_value(self._producer_waiter_count_value),
-            "producer_under_pressure": bool(
-                self._counter_value(self._producer_pressure_value)
-            ),
-            "producer_admission": self._producer_admission,
-            "producer_high_watermark": self._producer_high_watermark,
-            "producer_resume_watermark": self._producer_resume_watermark,
             "prefetch_queue_size": int(prefetch_queue_size),
             "initialized": True,
         }
@@ -1375,206 +1173,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         # consistent with process-shared writers, just as in _sample().
         with self._replay_lock, self._write_lock:
             return self._sampler.can_sample(self._storage, batch_size)
-
-    def _producer_occupancy_locked(self) -> int:
-        if self._is_consuming():
-            return int(self._sampler._num_sampleable(self._storage))
-        return int(len(self._storage))
-
-    def _producer_has_room_locked(self, num_items: int) -> bool:
-        occupancy = self._producer_occupancy_locked()
-        under_pressure = bool(self._counter_value(self._producer_pressure_value))
-        if under_pressure and occupancy <= self._producer_resume_watermark:
-            self._set_counter("_producer_pressure_value", 0)
-            under_pressure = False
-        if under_pressure:
-            return False
-        if occupancy + num_items <= self._producer_high_watermark:
-            return True
-        self._set_counter("_producer_pressure_value", 1)
-        return False
-
-    @contextlib.contextmanager
-    def _reserve_producer_admission(
-        self,
-        num_items: int,
-        *,
-        timeout: float | None,
-        cancel_event: Any | None,
-    ) -> Iterator[bool]:
-        if self._producer_admission == "overwrite_oldest":
-            yield True
-            return
-        if timeout is not None:
-            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
-                raise TypeError("timeout must be a non-negative number or None.")
-            if timeout < 0:
-                raise ValueError("timeout must be non-negative.")
-            deadline = time.monotonic() + timeout
-        else:
-            deadline = None
-        high = self._producer_high_watermark
-        if num_items > high:
-            if self._producer_admission == "drop_newest":
-                self._increment_counter("_dropped_new_item_count_value", num_items)
-                yield False
-                return
-            if self._producer_admission == "raise":
-                raise BufferError(
-                    f"A write of {num_items} items exceeds producer_high_watermark "
-                    f"{high}; the write was not applied."
-                )
-            raise ValueError(
-                f"A blocking write of {num_items} items can never fit below "
-                f"producer_high_watermark {high}."
-            )
-
-        condition = self._readiness_condition
-        blocked_at = None
-        with condition:
-            try:
-                while True:
-                    if self._shutdown_requested():
-                        raise RuntimeError(
-                            "A shut down replay buffer cannot admit producer writes."
-                        )
-                    if cancel_event is not None and cancel_event.is_set():
-                        if self._producer_admission == "block":
-                            raise RuntimeError(
-                                "Replay-buffer producer admission was cancelled."
-                            )
-                        yield False
-                        return
-                    with self._replay_lock:
-                        has_room = self._producer_has_room_locked(num_items)
-                    if has_room:
-                        if blocked_at is not None:
-                            self._increment_counter("_producer_waiter_count_value", -1)
-                            self._increment_counter(
-                                "_blocked_producer_time_value",
-                                time.monotonic() - blocked_at,
-                            )
-                            blocked_at = None
-                        yield True
-                        with self._replay_lock:
-                            if (
-                                self._producer_occupancy_locked()
-                                >= self._producer_high_watermark
-                            ):
-                                self._set_counter("_producer_pressure_value", 1)
-                        return
-                    if self._producer_admission == "drop_newest":
-                        self._increment_counter(
-                            "_dropped_new_item_count_value", num_items
-                        )
-                        yield False
-                        return
-                    if self._producer_admission == "raise":
-                        raise BufferError(
-                            "Replay-buffer producer admission is under pressure; "
-                            "the write was not applied."
-                        )
-                    if blocked_at is None:
-                        blocked_at = time.monotonic()
-                        self._increment_counter("_blocked_producer_count_value", 1)
-                        self._increment_counter("_producer_waiter_count_value", 1)
-                        condition.notify_all()
-                    wait_time = None
-                    if deadline is not None:
-                        wait_time = deadline - time.monotonic()
-                        if wait_time <= 0:
-                            raise TimeoutError(
-                                "Replay buffer did not become writable within "
-                                f"{timeout} seconds."
-                            )
-                    if cancel_event is not None:
-                        wait_time = 0.1 if wait_time is None else min(wait_time, 0.1)
-                    condition.wait(wait_time)
-            finally:
-                if blocked_at is not None:
-                    self._increment_counter("_producer_waiter_count_value", -1)
-                    self._increment_counter(
-                        "_blocked_producer_time_value",
-                        time.monotonic() - blocked_at,
-                    )
-
-    @_maybe_delay_init
-    def wait_until_writable(
-        self,
-        num_items: int = 1,
-        timeout: float | None = None,
-        cancel_event: Any | None = None,
-    ) -> bool:
-        """Waits until a complete producer write can be admitted.
-
-        The result is advisory: another producer may write before the caller.
-        :meth:`add` and :meth:`extend` perform their own atomic admission.
-        Circular replay buffers using the default ``"overwrite_oldest"``
-        policy are always writable. Advisory waits do not change producer
-        blocking counters, the current producer-waiter gauge or hysteresis.
-
-        Args:
-            num_items (int, optional): number of items in the prospective
-                write. Defaults to ``1``.
-            timeout (float, optional): maximum number of seconds to wait.
-            cancel_event (optional): event-like object exposing ``is_set()``.
-
-        Returns:
-            ``True`` when the whole write fits and ``False`` after timeout or
-            cancellation.
-        """
-        if isinstance(num_items, bool) or not isinstance(num_items, INT_CLASSES):
-            raise TypeError("num_items must be a positive integer.")
-        if num_items < 1:
-            raise ValueError("num_items must be a positive integer.")
-        num_items = int(num_items)
-        if self._shutdown_requested():
-            raise RuntimeError("A shut down replay buffer cannot become writable.")
-        if self._producer_admission == "overwrite_oldest":
-            return True
-        if num_items > self._producer_high_watermark:
-            raise ValueError(
-                f"A write of {num_items} items can never fit below "
-                f"producer_high_watermark {self._producer_high_watermark}."
-            )
-        if timeout is not None:
-            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
-                raise TypeError("timeout must be a non-negative number or None.")
-            if timeout < 0:
-                raise ValueError("timeout must be non-negative.")
-            deadline = time.monotonic() + timeout
-        else:
-            deadline = None
-        condition = self._readiness_condition
-        with condition:
-            while True:
-                if self._shutdown_requested():
-                    raise RuntimeError(
-                        "A shut down replay buffer cannot become writable."
-                    )
-                if cancel_event is not None and cancel_event.is_set():
-                    return False
-                with self._replay_lock:
-                    occupancy = self._producer_occupancy_locked()
-                    under_pressure = bool(
-                        self._counter_value(self._producer_pressure_value)
-                    )
-                    if under_pressure and occupancy > self._producer_resume_watermark:
-                        has_room = False
-                    else:
-                        has_room = (
-                            occupancy + num_items <= self._producer_high_watermark
-                        )
-                    if has_room:
-                        return True
-                wait_time = None
-                if deadline is not None:
-                    wait_time = deadline - time.monotonic()
-                    if wait_time <= 0:
-                        return False
-                if cancel_event is not None:
-                    wait_time = 0.1 if wait_time is None else min(wait_time, 0.1)
-                condition.wait(wait_time)
 
     @_maybe_delay_init
     def wait_until_sampleable(
@@ -1636,7 +1234,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         condition = self._readiness_condition
         with condition:
             while True:
-                if self._shutdown_requested():
+                if self._service_shutdown:
                     raise RuntimeError(
                         "A shut down replay buffer cannot become sampleable."
                     )
@@ -1798,7 +1396,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         if events:
             operation = ft.partial(_run_after_events, events, operation)
         with self._futures_lock:
-            if self._shutdown_requested():
+            if self._service_shutdown:
                 raise RuntimeError("A shut down replay buffer cannot accept updates.")
             while (
                 self._pending_update_futures and self._pending_update_futures[0].done()
@@ -2449,19 +2047,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "_consume_after_n_samples": self._consume_after_n_samples,
                 "_sample_calls": self._counter_value(self._sample_call_count_value),
                 "_sampled_items": self._counter_value(self._sampled_item_count_value),
-                "_overwrites": self._counter_value(self._overwrite_count_value),
-                "_dropped_new_items": self._counter_value(
-                    self._dropped_new_item_count_value
-                ),
-                "_blocked_producer_calls": self._counter_value(
-                    self._blocked_producer_count_value
-                ),
-                "_blocked_producer_time": float(
-                    self._scalar_value(self._blocked_producer_time_value)
-                ),
-                "_producer_under_pressure": self._counter_value(
-                    self._producer_pressure_value
-                ),
                 "_rng": (self._rng.get_state().clone(), str(self._rng.device))
                 if self._rng is not None
                 else None,
@@ -2490,26 +2075,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 self._set_counter(
                     "_sampled_item_count_value", state_dict.get("_sampled_items", 0)
                 )
-                self._set_counter(
-                    "_overwrite_count_value", state_dict.get("_overwrites", 0)
-                )
-                self._set_counter(
-                    "_dropped_new_item_count_value",
-                    state_dict.get("_dropped_new_items", 0),
-                )
-                self._set_counter(
-                    "_blocked_producer_count_value",
-                    state_dict.get("_blocked_producer_calls", 0),
-                )
-                self._set_scalar(
-                    "_blocked_producer_time_value",
-                    state_dict.get("_blocked_producer_time", 0.0),
-                )
-                self._set_counter(
-                    "_producer_pressure_value",
-                    state_dict.get("_producer_under_pressure", 0),
-                )
-                self._set_counter("_producer_waiter_count_value", 0)
                 rng = state_dict.get("_rng")
                 if rng is not None:
                     state, device = rng
@@ -2588,19 +2153,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                         "sampled_items": self._counter_value(
                             self._sampled_item_count_value
                         ),
-                        "overwrites": self._counter_value(self._overwrite_count_value),
-                        "dropped_new_items": self._counter_value(
-                            self._dropped_new_item_count_value
-                        ),
-                        "blocked_producer_calls": self._counter_value(
-                            self._blocked_producer_count_value
-                        ),
-                        "blocked_producer_time": float(
-                            self._scalar_value(self._blocked_producer_time_value)
-                        ),
-                        "producer_under_pressure": self._counter_value(
-                            self._producer_pressure_value
-                        ),
                     },
                     file,
                 )
@@ -2646,26 +2198,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 self._set_counter(
                     "_sampled_item_count_value", metadata.get("sampled_items", 0)
                 )
-                self._set_counter(
-                    "_overwrite_count_value", metadata.get("overwrites", 0)
-                )
-                self._set_counter(
-                    "_dropped_new_item_count_value",
-                    metadata.get("dropped_new_items", 0),
-                )
-                self._set_counter(
-                    "_blocked_producer_count_value",
-                    metadata.get("blocked_producer_calls", 0),
-                )
-                self._set_scalar(
-                    "_blocked_producer_time_value",
-                    metadata.get("blocked_producer_time", 0.0),
-                )
-                self._set_counter(
-                    "_producer_pressure_value",
-                    metadata.get("producer_under_pressure", 0),
-                )
-                self._set_counter("_producer_waiter_count_value", 0)
                 # This method owns the freshly unpickled queue, so moving its
                 # results into completed futures avoids a redundant deep copy.
                 self._restore_prefetch_queue_locked(prefetch_state, clone_queue=False)
@@ -2711,25 +2243,11 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._storage.register_load_hook(hook)
 
     @_maybe_delay_init
-    def add(
-        self,
-        data: Any,
-        *,
-        timeout: float | None = None,
-        cancel_event: Any | None = None,
-    ) -> int | None:
+    def add(self, data: Any) -> int:
         """Add a single element to the replay buffer.
 
         Args:
             data (Any): data to be added to the replay buffer
-
-        Keyword Args:
-            timeout (float, optional): maximum producer-admission wait for a
-                blocking policy. ``None`` waits indefinitely.
-            cancel_event (optional): event-like object that cancels a blocked
-                write when set. Under ``"drop_newest"`` and ``"raise"``, a
-                cancelled admission returns ``None`` without applying the
-                write.
 
         Returns:
             index where the data lives in the replay buffer.
@@ -2760,7 +2278,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "You can silence this warning by setting the `RL_WARNINGS` environment variable to `'0'`."
             )
 
-        return self._add(data, timeout=timeout, cancel_event=cancel_event)
+        return self._add(data)
 
     def _is_consuming(self) -> bool:
         return isinstance(self._sampler, ConsumingSampler)
@@ -2801,9 +2319,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._writer._cursor = cursor
         return torch.as_tensor(write_indices, dtype=torch.long, device=device)
 
-    def _add_unchecked(self, data, *, is_comp: bool):
+    def _add(self, data):
         with self._replay_lock, self._write_lock:
-            occupancy = self._producer_occupancy_locked() if not is_comp else 0
             if self._is_consuming():
                 consumed_index = self._sampler._pop_consumed_indices(self._storage, 1)
                 if consumed_index.numel():
@@ -2815,41 +2332,17 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             else:
                 index = self._writer.add(data)
                 self._sampler.add(index)
-            capacity = getattr(self._storage, "max_size", None)
-            overwrites = (
-                max(0, occupancy + 1 - int(capacity))
-                if not is_comp and capacity is not None
-                else 0
-            )
-        return index, overwrites
-
-    def _add(
-        self,
-        data,
-        *,
-        timeout: float | None = None,
-        cancel_event: Any | None = None,
-    ):
-        is_comp = is_compiling()
-        if self._producer_admission == "overwrite_oldest":
-            index, overwrites = self._add_unchecked(data, is_comp=is_comp)
-        else:
-            with self._reserve_producer_admission(
-                1, timeout=timeout, cancel_event=cancel_event
-            ) as admitted:
-                if not admitted:
-                    return None
-                index, overwrites = self._add_unchecked(data, is_comp=False)
-        if overwrites:
-            self._increment_counter("_overwrite_count_value", overwrites)
         self._notify_replay_state_change()
         return index
 
-    def _extend_unchecked(self, data, batch_size: int, *, is_comp: bool):
+    def _extend(self, data: Sequence, *, update_priority: bool = True) -> torch.Tensor:
+        is_comp = is_compiling()
         nc = contextlib.nullcontext()
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
-            occupancy = self._producer_occupancy_locked() if not is_comp else 0
+            if self.dim_extend > 0:
+                data = self._transpose(data)
             if self._is_consuming():
+                batch_size = self._get_batch_size(data)
                 consumed_index = self._sampler._pop_consumed_indices(
                     self._storage, batch_size
                 )
@@ -2870,53 +2363,13 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             else:
                 index = self._writer.extend(data)
                 self._sampler.extend(index)
-            capacity = getattr(self._storage, "max_size", None)
-            overwrites = (
-                max(0, occupancy + batch_size - int(capacity))
-                if not is_comp and capacity is not None
-                else 0
-            )
-        return index, overwrites
-
-    def _extend(
-        self,
-        data: Sequence,
-        *,
-        update_priority: bool = True,
-        timeout: float | None = None,
-        cancel_event: Any | None = None,
-    ) -> torch.Tensor | None:
-        is_comp = is_compiling()
-        if self.dim_extend > 0:
-            data = self._transpose(data)
-        batch_size = self._get_batch_size(data)
-        if self._producer_admission == "overwrite_oldest":
-            index, overwrites = self._extend_unchecked(
-                data, batch_size, is_comp=is_comp
-            )
-        else:
-            with self._reserve_producer_admission(
-                batch_size, timeout=timeout, cancel_event=cancel_event
-            ) as admitted:
-                if not admitted:
-                    return None
-                index, overwrites = self._extend_unchecked(
-                    data, batch_size, is_comp=False
-                )
-        if overwrites:
-            self._increment_counter("_overwrite_count_value", overwrites)
         self._notify_replay_state_change()
         return index
 
     @_maybe_delay_init
     def extend(
-        self,
-        data: Sequence,
-        *,
-        update_priority: bool | None = None,
-        timeout: float | None = None,
-        cancel_event: Any | None = None,
-    ) -> torch.Tensor | None:
+        self, data: Sequence, *, update_priority: bool | None = None
+    ) -> torch.Tensor:
         """Extends the replay buffer with one or more elements contained in an iterable.
 
         If present, the inverse transforms will be called.`
@@ -2928,12 +2381,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         Keyword Args:
             update_priority (bool, optional): Whether to update the priority of the data. Defaults to True.
                 Without effect in this class. See :meth:`~torchrl.data.TensorDictReplayBuffer.extend` for more details.
-            timeout (float, optional): maximum producer-admission wait for a
-                blocking policy. ``None`` waits indefinitely.
-            cancel_event (optional): event-like object that cancels a blocked
-                write when set. Under ``"drop_newest"`` and ``"raise"``, a
-                cancelled admission returns ``None`` without applying the
-                write.
 
         Returns:
             Indices of the data added to the replay buffer.
@@ -2958,12 +2405,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 data = self._transform.inv(data)
         if data is None:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
-        return self._extend(
-            data,
-            update_priority=update_priority,
-            timeout=timeout,
-            cancel_event=cancel_event,
-        )
+        return self._extend(data, update_priority=update_priority)
 
     @_maybe_delay_init
     def update_priority(
@@ -3002,8 +2444,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             ):
                 data = self._transform(data)
 
-        if self._producer_admission != "overwrite_oldest":
-            self._notify_replay_state_change()
         return data, info
 
     @_maybe_delay_init
@@ -3053,7 +2493,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             A batch of data selected in the replay buffer.
             A tuple containing this batch and info if return_info flag is set to True.
         """
-        if self._shutdown_requested():
+        if self._service_shutdown:
             raise RuntimeError("A shut down replay buffer cannot be sampled.")
         if (
             batch_size is not None
@@ -3370,40 +2810,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             if get_spawning_popen() is None:
                 sample_calls = self._counter_value(self._sample_call_count_value)
                 sampled_items = self._counter_value(self._sampled_item_count_value)
-                counter_context = {
-                    "sample_calls": sample_calls,
-                    "sampled_items": sampled_items,
-                    "overwrites": self._counter_value(self._overwrite_count_value),
-                    "dropped_new_items": self._counter_value(
-                        self._dropped_new_item_count_value
-                    ),
-                    "blocked_producer_calls": self._counter_value(
-                        self._blocked_producer_count_value
-                    ),
-                    "blocked_producer_time": float(
-                        self._scalar_value(self._blocked_producer_time_value)
-                    ),
-                    "producer_waiters": 0,
-                    "producer_under_pressure": self._counter_value(
-                        self._producer_pressure_value
-                    ),
-                    "service_shutdown": self._counter_value(
-                        self._service_shutdown_value
-                    ),
-                }
-                for name in (
-                    "_sample_call_count_value",
-                    "_sampled_item_count_value",
-                    "_overwrite_count_value",
-                    "_dropped_new_item_count_value",
-                    "_blocked_producer_count_value",
-                    "_blocked_producer_time_value",
-                    "_producer_waiter_count_value",
-                    "_producer_pressure_value",
-                    "_service_shutdown_value",
-                ):
-                    state.pop(name, None)
-                state["_replay_counter_context"] = counter_context
+                state.pop("_sample_call_count_value", None)
+                state.pop("_sampled_item_count_value", None)
+                state["_sample_calls_context"] = sample_calls
+                state["_sampled_items_context"] = sampled_items
             if get_spawning_popen() is None or not self.shared:
                 state.pop("_readiness_condition", None)
                 state["_readiness_condition_placeholder"] = None
@@ -3435,38 +2845,20 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             state.pop("_futures_lock_placeholder")
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
-        counter_context = state.pop("_replay_counter_context", None)
-        if counter_context is None:
-            sample_calls = state.pop("_sample_calls_context", None)
-            sampled_items = state.pop("_sampled_items_context", None)
-            if sample_calls is not None or sampled_items is not None:
-                counter_context = {
-                    "sample_calls": sample_calls or 0,
-                    "sampled_items": sampled_items or 0,
-                }
-        if counter_context is not None:
-            shared = state.get("shared", False)
-            for name, key, kind in (
-                ("_sample_call_count_value", "sample_calls", "q"),
-                ("_sampled_item_count_value", "sampled_items", "q"),
-                ("_overwrite_count_value", "overwrites", "q"),
-                ("_dropped_new_item_count_value", "dropped_new_items", "q"),
-                (
-                    "_blocked_producer_count_value",
-                    "blocked_producer_calls",
-                    "q",
-                ),
-                (
-                    "_blocked_producer_time_value",
-                    "blocked_producer_time",
-                    "d",
-                ),
-                ("_producer_waiter_count_value", "producer_waiters", "q"),
-                ("_producer_pressure_value", "producer_under_pressure", "b"),
-                ("_service_shutdown_value", "service_shutdown", "b"),
-            ):
-                value = counter_context.get(key, 0)
-                state[name] = multiprocessing.Value(kind, value) if shared else value
+        sample_calls = state.pop("_sample_calls_context", None)
+        sampled_items = state.pop("_sampled_items_context", None)
+        if sample_calls is not None:
+            state["_sample_call_count_value"] = (
+                multiprocessing.Value("q", sample_calls)
+                if state.get("shared", False)
+                else sample_calls
+            )
+        if sampled_items is not None:
+            state["_sampled_item_count_value"] = (
+                multiprocessing.Value("q", sampled_items)
+                if state.get("shared", False)
+                else sampled_items
+            )
         if "_readiness_condition_placeholder" in state:
             state.pop("_readiness_condition_placeholder")
             state["_readiness_condition"] = (
@@ -3497,24 +2889,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             state["_sampled_item_count_value"] = (
                 multiprocessing.Value("q", 0) if state.get("shared", False) else 0
             )
-        for name, kind, default in (
-            ("_overwrite_count_value", "q", 0),
-            ("_dropped_new_item_count_value", "q", 0),
-            ("_blocked_producer_count_value", "q", 0),
-            ("_blocked_producer_time_value", "d", 0.0),
-            ("_producer_waiter_count_value", "q", 0),
-            ("_producer_pressure_value", "b", 0),
-            ("_service_shutdown_value", "b", 0),
-        ):
-            if name not in state:
-                state[name] = (
-                    multiprocessing.Value(kind, default)
-                    if state.get("shared", False)
-                    else default
-                )
-        state.setdefault("_producer_admission", "overwrite_oldest")
-        state.setdefault("_producer_high_watermark", None)
-        state.setdefault("_producer_resume_watermark", None)
         if "_readiness_condition" not in state:
             state["_readiness_condition"] = (
                 multiprocessing.Condition()

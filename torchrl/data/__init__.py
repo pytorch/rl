@@ -32,6 +32,7 @@ from .map import (
 )
 from .postprocs import DensifyReward, MultiStep
 from .replay_buffers import (
+    BlockingReplayBuffer,
     CompressedListStorage,
     CompressedListStorageCheckpointer,
     ConditionalUpdateResult,
@@ -130,6 +131,7 @@ __all__ = [
     "AdaptiveKLController",
     "Binary",
     "BinaryToDecimal",
+    "BlockingReplayBuffer",
     "Bounded",
     "BoundedContinuous",
     "Categorical",

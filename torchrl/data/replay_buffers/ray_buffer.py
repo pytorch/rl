@@ -379,20 +379,6 @@ class RayReplayBuffer(ReplayBuffer):
         delayed_init: bool = False,
         **kwargs,
     ) -> None:
-        producer_admission = kwargs.get("producer_admission", "overwrite_oldest")
-        if producer_admission == "block":
-            raise ValueError(
-                "producer_admission='block' is not supported by Ray replay "
-                "buffers because a blocking actor call can prevent the owner "
-                "from processing the sample or reset that releases pressure."
-            )
-        if transport == "distributed" and producer_admission != "overwrite_oldest":
-            raise ValueError(
-                "Non-default producer admission is not supported by the "
-                "distributed replay transport. Use transport='ray' with "
-                "producer_admission='drop_newest' or 'raise', or use a direct "
-                "shared replay buffer for blocking admission."
-            )
         if not _has_ray:
             raise RuntimeError(
                 "ray library not found, unable to create a RayReplayBuffer. "
@@ -537,18 +523,6 @@ class RayReplayBuffer(ReplayBuffer):
         del min_items, timeout, cancel_event
         raise NotImplementedError(
             "wait_until_sampleable is not supported by Ray replay buffers."
-        )
-
-    def wait_until_writable(
-        self,
-        num_items: int = 1,
-        timeout: float | None = None,
-        cancel_event: Any | None = None,
-    ) -> bool:
-        """Raises because synchronous Ray actors cannot safely block for reads."""
-        del num_items, timeout, cancel_event
-        raise NotImplementedError(
-            "wait_until_writable is not supported by Ray replay buffers."
         )
 
     def extend(self, *args, **kwargs):

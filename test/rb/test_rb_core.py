@@ -19,6 +19,7 @@ from _rb_common import OLD_TORCH, ReplayBufferRNG, TensorDictReplayBufferRNG
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl._utils import rl_warnings
 from torchrl.data import (
+    BlockingReplayBuffer,
     PrioritizedReplayBuffer,
     RateLimitedReplayBuffer,
     ReplayBuffer,
@@ -1160,6 +1161,47 @@ class TestReplayBufferConsumption:
             )
 
 
+class TestBlockingReplayBuffer:
+    def test_extend_is_atomic_and_unblocks_after_consumption(self):
+        rb = BlockingReplayBuffer(storage=LazyTensorStorage(3))
+        rb.extend(torch.arange(3))
+
+        with pytest.raises(TimeoutError, match="write capacity"):
+            rb.extend(torch.arange(3, 5), timeout=0)
+        assert rb.stats()["write_count"] == 3
+
+        started = threading.Event()
+        completed = threading.Event()
+
+        def write():
+            started.set()
+            rb.extend(torch.arange(3, 5), timeout=5)
+            completed.set()
+
+        thread = threading.Thread(target=write)
+        thread.start()
+        assert started.wait(timeout=1)
+        assert not completed.wait(timeout=0.05)
+        rb.sample(2)
+        assert completed.wait(timeout=1)
+        thread.join(timeout=1)
+
+        assert rb.stats()["write_count"] == 5
+        assert len(rb) == 3
+
+    def test_cancelled_write_does_not_modify_buffer(self):
+        rb = BlockingReplayBuffer(storage=LazyTensorStorage(1))
+        rb.add(torch.tensor(0))
+        cancel_event = threading.Event()
+        cancel_event.set()
+
+        with pytest.raises(RuntimeError, match="cancelled"):
+            rb.add(torch.tensor(1), cancel_event=cancel_event)
+
+        assert rb.stats()["write_count"] == 1
+        assert rb[:].item() == 0
+
+
 @pytest.mark.parametrize("size", [10, 15, 20])
 @pytest.mark.parametrize("drop_last", [True, False])
 def test_replay_buffer_iter(size, drop_last):
@@ -1805,7 +1847,7 @@ class TestBufferStats:
     @pytest.mark.parametrize("checkpoint", ["state_dict", "dumps", "pickle"])
     def test_stats_counters_checkpoint_roundtrip(self, checkpoint, tmp_path):
         source = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
-        source.extend(torch.arange(14))
+        source.extend(torch.arange(4))
         source.sample()
 
         if checkpoint == "pickle":
@@ -1822,7 +1864,6 @@ class TestBufferStats:
 
         assert restored.stats()["sample_calls"] == 1
         assert restored.stats()["samples_returned"] == 2
-        assert restored.stats()["overwrites"] == 4
 
     def test_stats_does_not_initialize_buffer(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(10), delayed_init=True)
@@ -2052,191 +2093,6 @@ class TestRateLimitedReplayBuffer:
         assert stats["samples_returned"] == 2
         assert stats["sample_budget"] == 2
 
-
-
-class TestReplayProducerAdmission:
-    def test_circular_default_overwrites_and_counts_evictions(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(3))
-
-        index = rb.extend(torch.arange(5))
-
-        assert index.tolist() == [0, 1, 2, 0, 1]
-        assert rb.stats()["overwrites"] == 2
-        assert rb.stats()["producer_admission"] == "overwrite_oldest"
-
-    def test_blocking_admission_uses_hysteresis_and_whole_batch_reservation(self):
-        rb = ReplayBuffer(
-            storage=LazyTensorStorage(6),
-            consume_after_n_samples=1,
-            producer_admission="block",
-            producer_high_watermark=4,
-            producer_resume_watermark=2,
-        )
-        rb.extend(torch.arange(4))
-        completed = threading.Event()
-        result = []
-
-        def write():
-            result.append(rb.extend(torch.arange(10, 12), timeout=5))
-            completed.set()
-
-        thread = threading.Thread(target=write)
-        thread.start()
-        assert not completed.wait(timeout=0.05)
-        rb.sample(1)
-        assert not completed.wait(timeout=0.05)
-        rb.sample(1)
-        assert completed.wait(timeout=1)
-        thread.join(timeout=1)
-
-        assert result[0].numel() == 2
-        stats = rb.stats()
-        assert stats["sampleable_size"] == 4
-        assert stats["overwrites"] == 0
-        assert stats["blocked_producer_calls"] == 1
-        assert stats["blocked_producer_time"] > 0
-        assert stats["producer_waiters"] == 0
-        assert stats["producer_under_pressure"]
-
-    def test_concurrent_producers_cannot_cross_high_watermark(self):
-        rb = ReplayBuffer(
-            storage=LazyTensorStorage(6),
-            consume_after_n_samples=1,
-            producer_admission="block",
-            producer_high_watermark=4,
-            producer_resume_watermark=0,
-        )
-        rb.extend(torch.arange(2))
-        completed = [threading.Event(), threading.Event()]
-
-        def write(worker):
-            rb.extend(torch.arange(worker * 2 + 10, worker * 2 + 12), timeout=5)
-            completed[worker].set()
-
-        threads = [
-            threading.Thread(target=write, args=(worker,)) for worker in range(2)
-        ]
-        for thread in threads:
-            thread.start()
-        assert completed[0].wait(timeout=1) or completed[1].wait(timeout=1)
-        assert not all(event.is_set() for event in completed)
-        rb.sample(4)
-        for thread in threads:
-            thread.join(timeout=1)
-
-        assert all(event.is_set() for event in completed)
-        assert rb.stats()["sampleable_size"] == 2
-        assert rb.stats()["overwrites"] == 0
-
-    @pytest.mark.parametrize(
-        ("policy", "error", "dropped"),
-        [
-            ("drop_newest", None, 2),
-            ("raise", BufferError, 0),
-            ("block", TimeoutError, 0),
-        ],
-    )
-    def test_full_batch_overflow_policy(self, policy, error, dropped):
-        rb = ReplayBuffer(
-            storage=LazyTensorStorage(4),
-            producer_admission=policy,
-            producer_high_watermark=2,
-            producer_resume_watermark=1,
-        )
-        rb.extend(torch.arange(2))
-
-        if error is None:
-            assert rb.extend(torch.arange(2, 4)) is None
-        else:
-            with pytest.raises(error):
-                rb.extend(torch.arange(2, 4), timeout=0)
-
-        assert rb.stats()["write_count"] == 2
-        assert rb.stats()["dropped_new_items"] == dropped
-
-    def test_oversized_batch_and_wait_cancellation(self):
-        drop = ReplayBuffer(
-            storage=LazyTensorStorage(4),
-            producer_admission="drop_newest",
-            producer_high_watermark=2,
-        )
-        assert drop.extend(torch.arange(3)) is None
-        assert drop.stats()["dropped_new_items"] == 3
-
-        block = ReplayBuffer(
-            storage=LazyTensorStorage(4),
-            producer_admission="block",
-            producer_high_watermark=2,
-        )
-        with pytest.raises(ValueError, match="can never fit"):
-            block.extend(torch.arange(3))
-        block.add(torch.tensor(0))
-        assert not block.wait_until_writable(num_items=2, timeout=0)
-        assert block.stats()["blocked_producer_calls"] == 0
-        assert block.stats()["producer_waiters"] == 0
-        assert not block.stats()["producer_under_pressure"]
-
-        block.add(torch.tensor(1))
-
-        cancel = threading.Event()
-        cancel.set()
-        assert not block.wait_until_writable(cancel_event=cancel)
-        with pytest.raises(RuntimeError, match="cancelled"):
-            block.add(torch.tensor(3), cancel_event=cancel)
-
-    def test_empty_and_shutdown_release_blocked_producers(self):
-        rb = ReplayBuffer(
-            storage=LazyTensorStorage(2),
-            producer_admission="block",
-        )
-        rb.extend(torch.arange(2))
-        completed = threading.Event()
-
-        def write_until_empty():
-            rb.add(torch.tensor(2))
-            completed.set()
-
-        thread = threading.Thread(target=write_until_empty)
-        thread.start()
-        assert not completed.wait(timeout=0.05)
-        rb.empty()
-        assert completed.wait(timeout=1)
-        thread.join(timeout=1)
-
-        errors = []
-        rb.add(torch.tensor(4))
-
-        def write_after_full():
-            try:
-                rb.add(torch.tensor(3))
-            except RuntimeError as error:
-                errors.append(str(error))
-
-        thread = threading.Thread(target=write_after_full)
-        thread.start()
-        assert not rb.wait_until_writable(timeout=0.05)
-        rb.shutdown()
-        thread.join(timeout=1)
-        assert errors and "shut down" in errors[0]
-
-    @pytest.mark.parametrize(
-        ("transport", "policy", "message"),
-        [
-            ("ray", "block", "blocking actor call"),
-            ("distributed", "drop_newest", "distributed replay transport"),
-        ],
-    )
-    def test_remote_admission_contract_rejects_unsafe_modes(
-        self, transport, policy, message
-    ):
-        with pytest.raises(ValueError, match=message):
-            ReplayBuffer(
-                storage=LazyTensorStorage(4),
-                service_backend="ray",
-                service_backend_options={"remote_config": {"num_cpus": 0}},
-                transport=transport,
-                producer_admission=policy,
-            )
 
 
 class _RepeatTwiceUnit(SampleUnit):

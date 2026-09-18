@@ -10,6 +10,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 from torchrl.data import (
+    BlockingReplayBuffer,
     LazyMemmapStorage,
     LazyStackStorage,
     LazyTensorStorage,
@@ -359,27 +360,15 @@ def test_rate_limited_replay_ready_check(benchmark):
     assert benchmark(replay_buffer.can_sample)
 
 
-@pytest.mark.parametrize("producer_admission", ["overwrite_oldest", "block"])
-def test_replay_buffer_producer_admission(benchmark, producer_admission):
-    kwargs = {}
-    if producer_admission == "block":
-        kwargs.update(
-            producer_high_watermark=64,
-            producer_resume_watermark=0,
-        )
-    replay_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(64),
-        consume_after_n_samples=1,
-        producer_admission=producer_admission,
-        **kwargs,
-    )
-    data = torch.arange(32)
+def test_blocking_replay_consume_and_refill(benchmark):
+    replay_buffer = BlockingReplayBuffer(storage=LazyTensorStorage(64), batch_size=32)
+    replay_buffer.extend(torch.arange(64))
 
-    def extend_and_consume():
-        replay_buffer.extend(data)
-        replay_buffer.sample(32)
+    def consume_and_refill():
+        replay_buffer.sample()
+        replay_buffer.extend(torch.arange(32))
 
-    benchmark(extend_and_consume)
+    benchmark(consume_and_refill)
 
 
 def sample_prioritized_sampler(sampler, storage, batch_size):
