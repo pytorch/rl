@@ -12,6 +12,7 @@ from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import wraps
+from typing import Any
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
@@ -1969,6 +1970,10 @@ class GAE(ValueEstimatorBase):
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
+    For recurrent value networks, use the :meth:`for_recurrent` alternative
+    constructor. It selects correctness-first recurrent defaults and validates
+    the required reset markers and recurrent state inputs.
+
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
@@ -2131,6 +2136,113 @@ class GAE(ValueEstimatorBase):
             in_keys.append(key)
         return in_keys
 
+    @classmethod
+    def for_recurrent(
+        cls,
+        *,
+        gamma: float | torch.Tensor,
+        lmbda: float | torch.Tensor,
+        value_network: TensorDictModuleBase,
+        average_gae: bool = True,
+        shifted: bool = False,
+        deactivate_vmap: bool = True,
+        group_key: NestedKey | None = None,
+        valid: NestedKey | None = None,
+        **kwargs: Any,
+    ) -> GAE:
+        """Construct GAE with correctness-first recurrent-network defaults.
+
+        This constructor disables ``vmap`` and uses the two-call value path by
+        default, requires time to be the last batch dimension, and validates
+        the recurrent reset markers and state tensors before calling the value
+        network. The estimator is bound to the network passed at construction;
+        construct another estimator if the value network changes.
+        ``shifted=True`` remains available as an explicit optimization when its
+        one-step observation invariant is known to hold.
+
+        Args:
+            gamma (scalar): exponential mean discount.
+            lmbda (scalar): trajectory discount.
+            value_network (TensorDictModule): recurrent value operator. Its
+                external inputs must include ``"is_init"`` and at least one
+                state key whose corresponding ``("next", ...)`` key is an
+                output.
+            average_gae (bool, optional): if ``True``, standardize advantages.
+                Defaults to ``True``.
+            shifted (bool, optional): if ``True``, use the explicit single-call
+                shifted path. Defaults to ``False``.
+            deactivate_vmap (bool, optional): if ``True``, replace ``vmap``
+                with sequential calls. Defaults to ``True``.
+            group_key (NestedKey, optional): key used for group-wise advantage
+                normalization. Defaults to ``None``.
+            valid (NestedKey, optional): valid-transition mask key. Defaults to
+                ``None``.
+            **kwargs: explicit overrides accepted by :class:`GAE`, including
+                ``time_dim`` and ``vectorized``.
+
+        Returns:
+            A recurrent-input-validating :class:`GAE` instance.
+
+        Examples:
+            >>> from torch import nn
+            >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+            >>> from torchrl.modules import GRUModule
+            >>> gru = GRUModule(
+            ...     input_size=3,
+            ...     hidden_size=4,
+            ...     in_keys=["obs", "hidden"],
+            ...     out_keys=["features", ("next", "hidden")],
+            ... )
+            >>> critic = TensorDictSequential(
+            ...     gru,
+            ...     TensorDictModule(
+            ...         nn.Linear(4, 1), ["features"], ["state_value"]
+            ...     ),
+            ... )
+            >>> gae = GAE.for_recurrent(
+            ...     gamma=0.99, lmbda=0.95, value_network=critic
+            ... )
+            >>> gae.deactivate_vmap
+            True
+        """
+        if value_network is None:
+            raise ValueError("GAE.for_recurrent requires a value_network.")
+        in_keys = [unravel_key(key) for key in value_network.in_keys]
+        out_keys = {unravel_key(key) for key in value_network.out_keys}
+        if "is_init" not in in_keys:
+            raise ValueError(
+                "GAE.for_recurrent requires value_network.in_keys to include "
+                "'is_init'. Add InitTracker data and expose the marker through "
+                "the recurrent value network."
+            )
+        state_keys = []
+        for key in in_keys:
+            if key == "is_init":
+                continue
+            next_key = ("next", *key) if isinstance(key, tuple) else ("next", key)
+            if next_key in out_keys:
+                state_keys.append(key)
+        if not state_keys:
+            raise ValueError(
+                "GAE.for_recurrent could not identify a recurrent-state input. "
+                "The value network must expose an input key and its matching "
+                "('next', ...) output key."
+            )
+        estimator = cls(
+            gamma=gamma,
+            lmbda=lmbda,
+            value_network=value_network,
+            average_gae=average_gae,
+            shifted=shifted,
+            deactivate_vmap=deactivate_vmap,
+            group_key=group_key,
+            **kwargs,
+        )
+        if valid is not None:
+            estimator.set_keys(valid=valid)
+        estimator._recurrent_state_keys = tuple(state_keys)
+        return estimator
+
     def __init__(
         self,
         *,
@@ -2190,6 +2302,81 @@ class GAE(ValueEstimatorBase):
         self.time_dim = time_dim
         self.auto_reset_env = auto_reset_env
         self.deactivate_vmap = deactivate_vmap
+
+    def _validate_recurrent_inputs(
+        self, tensordict: TensorDictBase, time_dim: int | None
+    ) -> None:
+        state_keys = getattr(self, "_recurrent_state_keys", None)
+        if state_keys is None:
+            return
+        resolved_time_dim = self._get_time_dim(time_dim, tensordict)
+        if resolved_time_dim != tensordict.batch_dims - 1:
+            raise RuntimeError(
+                "GAE.for_recurrent requires time to be the last batch dimension "
+                "because recurrent value modules consume [batch, time] layouts. "
+                f"Resolved time_dim={resolved_time_dim} for batch names "
+                f"{tensordict.names}. Transpose the tensordict so 'time' is last "
+                "or pass a matching time_dim."
+            )
+
+        required_keys = ["is_init", *state_keys]
+        missing = []
+        for key in required_keys:
+            next_key = ("next", *key) if isinstance(key, tuple) else ("next", key)
+            if tensordict.get(key, default=None) is None:
+                missing.append(key)
+            if tensordict.get(next_key, default=None) is None:
+                missing.append(next_key)
+        if missing:
+            raise KeyError(
+                "GAE.for_recurrent requires root and next reset/state inputs; "
+                f"missing keys: {missing}. Preserve recurrent state and is_init "
+                "when writing trajectories to replay."
+            )
+
+        for key in ("is_init", ("next", "is_init")):
+            marker = tensordict.get(key)
+            if not isinstance(marker, Tensor):
+                raise TypeError(
+                    f"GAE.for_recurrent expected {key!r} to contain a Tensor, "
+                    f"got {type(marker)}."
+                )
+            if marker.dtype is not torch.bool:
+                raise TypeError(
+                    f"GAE.for_recurrent expected {key!r} to have dtype "
+                    f"torch.bool, got {marker.dtype}."
+                )
+            event_shape = marker.shape[tensordict.batch_dims :]
+            if event_shape not in (torch.Size(), torch.Size([1])):
+                raise RuntimeError(
+                    f"GAE.for_recurrent expected {key!r} to have the batch "
+                    "layout or one trailing singleton, but got shape "
+                    f"{tuple(marker.shape)} for batch size "
+                    f"{tuple(tensordict.batch_size)}."
+                )
+
+        for key in state_keys:
+            next_key = ("next", *key) if isinstance(key, tuple) else ("next", key)
+            state = tensordict.get(key)
+            next_state = tensordict.get(next_key)
+            if not isinstance(state, Tensor) or not isinstance(next_state, Tensor):
+                raise TypeError(
+                    "GAE.for_recurrent expected recurrent state keys "
+                    f"{key!r} and {next_key!r} to contain tensors."
+                )
+            if state.ndim <= tensordict.batch_dims:
+                raise RuntimeError(
+                    f"GAE.for_recurrent expected state key {key!r} to have "
+                    "trailing recurrent dimensions after the batch layout; got "
+                    f"shape {tuple(state.shape)} for batch size "
+                    f"{tuple(tensordict.batch_size)}."
+                )
+            if state.shape != next_state.shape:
+                raise RuntimeError(
+                    "GAE.for_recurrent requires matching root and next state "
+                    f"layouts for {key!r}; got {tuple(state.shape)} and "
+                    f"{tuple(next_state.shape)}."
+                )
 
     @property
     def vectorized(self):
@@ -2285,6 +2472,7 @@ class GAE(ValueEstimatorBase):
                 "Expected input tensordict to have at least one dimension, got "
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
+        self._validate_recurrent_inputs(tensordict, time_dim)
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         if self.gamma.device != device:
@@ -2564,6 +2752,7 @@ class GAE(ValueEstimatorBase):
                 "Expected input tensordict to have at least one dimensions, got"
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
+        self._validate_recurrent_inputs(tensordict, time_dim)
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         if self.gamma.device != device:
