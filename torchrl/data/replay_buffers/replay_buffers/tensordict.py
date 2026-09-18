@@ -525,6 +525,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
+        data = self._sampler._set_sample_names(data)
         if self._transform is not None and len(self._transform):
             with data.unlock_(), _set_dispatch_td_nn_modules(True):
                 data = self._transform(data)

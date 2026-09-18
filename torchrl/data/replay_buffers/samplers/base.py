@@ -80,6 +80,10 @@ class Sampler(ABC, metaclass=_SamplerMeta):
             return bool(count.gt(0).item())
         return count > 0
 
+    def _set_sample_names(self, data):
+        """Applies sampler-specific names to a sampled batch."""
+        return data
+
     def add(self, index: int) -> None:
         return
 

@@ -2434,6 +2434,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
+        data = self._sampler._set_sample_names(data)
         if self._transform is not None and len(self._transform):
             is_td = is_tensor_collection(data)
             with data.unlock_() if is_td else contextlib.nullcontext(), _set_dispatch_td_nn_modules(

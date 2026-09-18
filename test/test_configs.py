@@ -261,7 +261,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "SamplerEnsembleConfig",
         "SelectTransformConfig",
         "SignTransformConfig",
-        "SliceSamplerConfig",
         "SliceSamplerWithoutReplacementConfig",
         "SqueezeTransformConfig",
         "StackConfig",
@@ -1026,6 +1025,24 @@ class TestDataConfigs:
         sampler = SliceSampler(num_slices=10)
         assert isinstance(sampler, SliceSampler)
         assert sampler.num_slices == 10
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_slice_sampler_structured_config_instantiation(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.data import SliceSamplerConfig
+
+        sampler = instantiate(
+            SliceSamplerConfig(
+                num_slices=2,
+                output_layout="batch_time",
+                slice_end_key=("metadata", "slice_end"),
+                time_dim_name="sequence",
+            )
+        )
+
+        assert sampler.output_layout == "batch_time"
+        assert sampler.slice_end_key == ("metadata", "slice_end")
+        assert sampler.time_dim_name == "sequence"
 
     def test_streaming_slice_sampler_config(self):
         """Test StreamingSliceSamplerConfig."""

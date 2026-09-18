@@ -225,8 +225,9 @@ def test_slice_sampler_boundary_query_benchmark(
         pytest.param("shuffled", id="fragmented-shuffled"),
     ],
 )
+@pytest.mark.parametrize("output_layout", ["flat", "batch_time"])
 @pytest.mark.parametrize("size", [1_000, 100_000])
-def test_slice_sampler_sample(benchmark, size, layout, cache_state):
+def test_slice_sampler_sample(benchmark, size, layout, cache_state, output_layout):
     device = _replay_boundary_device()
     num_trajectories = 8
     trajectory_length = size // num_trajectories
@@ -261,6 +262,7 @@ def test_slice_sampler_sample(benchmark, size, layout, cache_state):
                 step_key="step",
                 cache_values=True,
                 fragmented=fragmented,
+                output_layout=output_layout,
             ),
             batch_size=256,
             generator=torch.Generator(device=device).manual_seed(0),

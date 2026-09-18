@@ -16,11 +16,13 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 if TYPE_CHECKING:
     _ReplayServiceBackend = Literal["direct", "ray"]
     _ReplayTransport = Literal["auto", "direct", "ray", "distributed"]
+    _SliceOutputLayout = Literal["flat", "batch_time"]
 else:
     # OmegaConf structured configs resolve these aliases at runtime and do not
     # support Literal on all TorchRL-supported versions.
     _ReplayServiceBackend = str
     _ReplayTransport = str
+    _SliceOutputLayout = str
 
 
 @dataclass
@@ -156,7 +158,7 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
 
 @dataclass
 class SliceSamplerWithoutReplacementConfig(SamplerConfig):
-    """Configuration for slice sampling without replacement."""
+    """Hydra configuration for :class:`~torchrl.data.SliceSamplerWithoutReplacement`."""
 
     _target_: str = "torchrl.data.replay_buffers.SliceSamplerWithoutReplacement"
     num_slices: int | None = None
@@ -170,6 +172,9 @@ class SliceSamplerWithoutReplacementConfig(SamplerConfig):
     truncated_key: Any = ("next", "truncated")
     init_key: Any = "is_init"
     strict_length: bool = True
+    output_layout: _SliceOutputLayout = "flat"
+    slice_end_key: Any = ("collector", "slice_end")
+    time_dim_name: str | None = "time"
     compile: Any = False
     span: Any = False
     use_gpu: Any = False
@@ -177,7 +182,7 @@ class SliceSamplerWithoutReplacementConfig(SamplerConfig):
 
 @dataclass
 class SliceSamplerConfig(SamplerConfig):
-    """Configuration for slice sampling from replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.SliceSampler`."""
 
     _target_: str = "torchrl.data.replay_buffers.SliceSampler"
     num_slices: int | None = None
@@ -193,6 +198,10 @@ class SliceSamplerConfig(SamplerConfig):
     truncated_key: Any = ("next", "truncated")
     init_key: Any = "is_init"
     strict_length: bool = True
+    pad_output: bool = False
+    output_layout: _SliceOutputLayout = "flat"
+    slice_end_key: Any = ("collector", "slice_end")
+    time_dim_name: str | None = "time"
     compile: Any = False
     span: Any = False
     use_gpu: Any = False
