@@ -9,6 +9,7 @@ import asyncio
 import os
 import sys
 import threading
+import warnings
 from copy import copy
 from importlib import import_module
 from unittest import mock
@@ -16,6 +17,7 @@ from unittest import mock
 import pytest
 
 import torch
+import torchrl
 
 import torchrl.envs.libs.gym as _gym_lib
 from packaging import version
@@ -42,6 +44,8 @@ from torchrl.testing import get_default_devices, gym_helpers as _gym_helpers
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
+_SPAWN_BOOTSTRAP_WARNING = "TorchRL spawn-bootstrap test warning"
+
 
 def test_backend_contexts_are_nested_and_process_local():
     assert _get_service_backend() is None
@@ -65,6 +69,68 @@ def test_backend_contexts_are_nested_and_process_local():
 
     assert _get_service_backend() is None
     assert _get_transport_backend() is None
+
+
+@pytest.mark.parametrize(
+    "process_cls", [_utils._ProcessNoWarn, _utils._ProcessNoWarnSpawn]
+)
+@pytest.mark.parametrize("filter_warnings", [True, False])
+def test_process_spawn_filters_bootstrap_warnings(
+    process_cls, filter_warnings, tmp_path, monkeypatch, capfd
+):
+    module_name = f"_torchrl_spawn_warning_{os.getpid()}_{filter_warnings}"
+    module_path = tmp_path / f"{module_name}.py"
+    module_path.write_text(
+        "import warnings\n"
+        f"warnings.warn({_SPAWN_BOOTSTRAP_WARNING!r}, UserWarning)\n"
+        "def target():\n"
+        "    pass\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with warnings.catch_warnings(record=True) as parent_warnings:
+        warnings.simplefilter("always")
+        module = import_module(module_name)
+    assert [str(item.message) for item in parent_warnings] == [_SPAWN_BOOTSTRAP_WARNING]
+
+    monkeypatch.setattr(torchrl, "filter_warnings_subprocess", filter_warnings)
+    monkeypatch.setenv("PYTHONWARNINGS", "always")
+    process = process_cls(target=module.target)
+    capfd.readouterr()
+    try:
+        process.start()
+        process.join(timeout=30)
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=30)
+        assert process.exitcode == 0
+    finally:
+        process.close()
+        sys.modules.pop(module_name, None)
+
+    assert os.environ["PYTHONWARNINGS"] == "always"
+    captured = capfd.readouterr()
+    warning_line = f"UserWarning: {_SPAWN_BOOTSTRAP_WARNING}"
+    assert captured.err.count(warning_line) == int(not filter_warnings)
+
+
+def test_process_spawn_restores_warning_environment_on_start_failure(monkeypatch):
+    monkeypatch.setattr(torchrl, "filter_warnings_subprocess", True)
+    monkeypatch.setenv("PYTHONWARNINGS", "error::DeprecationWarning")
+    process_cls = _utils._make_process_no_warn_cls(
+        torch.multiprocessing.get_context("spawn")
+    )
+    process = process_cls()
+
+    def fail_start(process):
+        assert os.environ["PYTHONWARNINGS"] == "ignore"
+        raise RuntimeError("start failed")
+
+    with mock.patch.object(_utils._spawn_ctx.Process, "start", fail_start):
+        with pytest.raises(RuntimeError, match="start failed"):
+            process.start()
+
+    assert os.environ["PYTHONWARNINGS"] == "error::DeprecationWarning"
 
 
 def test_backend_contexts_restore_after_error_and_do_not_cross_threads():

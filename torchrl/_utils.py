@@ -19,7 +19,7 @@ import time
 import traceback
 import warnings
 from collections.abc import Callable
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from functools import wraps
 from textwrap import indent
 from typing import Any, cast, TypeVar
@@ -853,6 +853,38 @@ def get_trace():
     traceback.print_stack()
 
 
+_PROCESS_START_LOCK = threading.Lock()
+
+
+@contextmanager
+def _filter_warnings_during_spawn(process):
+    """Filter warnings while a spawned interpreter imports its bootstrap modules.
+
+    This extends the existing run-time suppression backwards to cover imports
+    performed while the spawned interpreter bootstraps.
+    """
+    start_method = getattr(process, "_start_method", None)
+    if start_method is None:
+        start_method = mp.get_start_method()
+    if start_method != "spawn":
+        yield
+        return
+
+    with _PROCESS_START_LOCK:
+        if not process.filter_warnings_subprocess:
+            yield
+            return
+        previous = os.environ.get("PYTHONWARNINGS")
+        os.environ["PYTHONWARNINGS"] = "ignore"
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop("PYTHONWARNINGS", None)
+            else:
+                os.environ["PYTHONWARNINGS"] = previous
+
+
 def _make_process_no_warn_cls(ctx=None):
     """Create a _ProcessNoWarn class that inherits from the appropriate Process class.
 
@@ -917,6 +949,10 @@ class _ProcessNoWarn(mp.Process):
                 return mp.Process.run(self, *args, **kwargs)
         return mp.Process.run(self, *args, **kwargs)
 
+    def start(self):
+        with _filter_warnings_during_spawn(self):
+            return super().start()
+
 
 # Pre-defined _ProcessNoWarn classes for different multiprocessing start methods.
 # These must be defined at module level to be picklable with the "spawn" start method.
@@ -946,6 +982,10 @@ class _ProcessNoWarnMixin:
                 warnings.simplefilter("ignore")
                 return super().run(*args, **kwargs)
         return super().run(*args, **kwargs)
+
+    def start(self):
+        with _filter_warnings_during_spawn(self):
+            return super().start()
 
 
 # Spawn-specific class (for macOS default and Windows)
