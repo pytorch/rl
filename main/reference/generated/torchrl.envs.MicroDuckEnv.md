@@ -1342,9 +1342,20 @@ See also
 
 [Locking environment specs](../envs_api.html#environment-lock).
 
-*classmethod*jump_task(***, *weight: float = 1.0*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.jump_task)
+*classmethod*jump_task(*speed: float = 0.0*, ***, *weight: float = 1.0*, ***overrides: Any*) → [MicroDuckTask](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)[[source]](../../_modules/torchrl/envs/custom/mujoco/microduck.html#MicroDuckEnv.jump_task)
 
-Hop in place under a zero command.
+Hop in place or track a forward hopping speed.
+
+Parameters:
+
+- **speed** (*float**,**optional*) - Forward speed in m/s. Defaults to zero
+(hop in place). A nonzero speed disables the stationary drift
+penalty and uses velocity tracking alongside the hop terms.
+- **weight** (*float**,**optional*) - Relative task sampling weight. Defaults
+to 1.0. Set to 3.0 to sample hopping three times as often as a
+task with unit weight.
+- ****overrides** - Task fields and reward parameters forwarded to
+`make_task()`.
 
 Three terms shape the hop, in the order a policy discovers it.
 `hop_rhythm` (weight 1) pays, linearly up to the
@@ -2301,11 +2312,12 @@ Register a reward term that every task weights.
 Used as a decorator on a function `(features, params) -> Tensor` of
 shape `(num_envs,)`. `features` is the step's feature TensorDict
 with entries `body_velocity` (body frame, `(num_envs, 3)`),
+`world_velocity` (world frame, `(num_envs, 3)`),
 `angular_velocity` (3), `upright` (cosine of the tilt), `base_height`,
 `standing_height`, `joint_error` (14), `joint_velocity` (14),
 `action` (14), `previous_action` (14), `contacts` (bool, 2),
 `foot_heights` (2), `head_pitch` (gaze pitch above the horizontal,
-radians), `head_yaw` (gaze yaw relative to the body, radians),
+radians), `head_yaw` (gaze yaw relative to the trunk, radians),
 `touchdown_air_time` (2), `gait_phase`
 (radians), `command` (2) and `fallen` (bool). `params` is the
 per-env TensorDict of task parameters, each of shape `(num_envs,)`.

@@ -483,8 +483,8 @@ Here two pinned episodes, one per task, form the batch.
 
  .. code-block:: none
 
-    standing       per-task: mean=-0.000 std=0.995 | pooled: mean=-0.126 std=1.005
-    tracking+0.20  per-task: mean=+0.000 std=0.995 | pooled: mean=+0.126 std=0.984
+    standing       per-task: mean=+0.000 std=0.995 | pooled: mean=-0.178 std=1.017
+    tracking+0.20  per-task: mean=+0.000 std=0.995 | pooled: mean=+0.178 std=0.955
 
 
 
@@ -636,7 +636,7 @@ only ever need the task id.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 52.646 seconds)
+   **Total running time of the script:** (0 minutes 52.837 seconds)
 
 
 .. _sphx_glr_download_tutorials_microduck.py:
