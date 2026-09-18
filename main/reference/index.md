@@ -120,6 +120,7 @@
 - [Distribution Classes](modules_distributions.html)
 - [Sampling utilities](modules_distributions.html#sampling-utilities)
 - [Inference Server](modules_inference_server.html)
+- [Task-specific module zoo](modules_zoo.html)
 - [Utilities and Helpers](modules_utils.html)
 - [Recurrent state lifecycle](recurrent_state_lifecycle.html)
 - [DreamerV3 recurrent components](modules.html#dreamerv3-recurrent-components)

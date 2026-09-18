@@ -138,6 +138,10 @@ actor = ProbabilisticActor(
 - [Core API](modules_inference_server.html#core-api)
 - [Transport Backends](modules_inference_server.html#transport-backends)
 - [Usage](modules_inference_server.html#usage)
+- [Task-specific module zoo](modules_zoo.html)
+
+- [MicroDuckSkillPolicy](generated/torchrl.modules.tensordict_module.zoo.MicroDuckSkillPolicy.html)
+- [MicroDuckSkills](generated/torchrl.modules.tensordict_module.zoo.MicroDuckSkills.html)
 - [Utilities and Helpers](modules_utils.html)
 
 - [ActorValueOperator](generated/torchrl.modules.ActorValueOperator.html)
