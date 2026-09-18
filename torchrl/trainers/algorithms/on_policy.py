@@ -238,6 +238,13 @@ class _OnPolicyTelemetry:
         self._optimization_timer.start()
         trainer._log_standard(metrics)
 
+    def replay_reward_metrics(self, batch: TensorDictBase) -> None:
+        # Async collection has no learner-side collected batch. Summarize the
+        # sampled rewards, but do not interpret replay slice ends as episode ends.
+        reward = self._masked(batch, _next_key(self.trainer.reward_key))
+        if reward is not None and reward.numel():
+            self.trainer._log_standard(self._summary("rewards", reward))
+
     def optimization_metrics(
         self, optim_steps: int, average_losses: TensorDictBase | None
     ) -> None:
@@ -266,6 +273,8 @@ class _OnPolicyTelemetry:
     def register(self) -> None:
         self.trainer.register_op("setup", self.setup)
         self.trainer.register_op("pre_steps_log", self.batch_metrics)
+        if self.trainer.async_collection and self.trainer.log_rewards:
+            self.trainer.register_op("post_optim_log", self.replay_reward_metrics)
         self.trainer.register_op("post_optim_complete_log", self.optimization_metrics)
         self.trainer.register_op("post_steps", self.start_collection)
 
@@ -344,10 +353,13 @@ class OnPolicyTrainer(Trainer):
         observation_key (NestedKey, optional): Observation key used for logging. Default: "observation".
         telemetry ("minimal" or "standard", optional): Diagnostic telemetry level.
             ``"minimal"`` preserves the legacy logging set and performs no
-            additional metric collection. ``"standard"`` also records frame,
+            additional metric collection. ``"standard"`` records frame,
             episode, terminal, reward, optimizer, throughput, collector and replay
             diagnostics under the ``training/`` logger namespace. Missing optional
-            fields are omitted. Default: ``"standard"``.
+            fields are omitted. Legacy reward and terminal metric aliases are
+            emitted only in minimal mode. In async mode, reward summaries use
+            replay samples; episode and terminal metrics require a collected
+            batch and are omitted. Default: ``"standard"``.
     """
 
     # Overridden by subclasses: name used in warnings and number of epochs used
@@ -591,6 +603,14 @@ class OnPolicyTrainer(Trainer):
         for key, value in metrics.items():
             history_key = f"training/{key}"
             self._log_dict[history_key].append(value)
+            if self.progress_bar and key in (
+                "rewards/mean",
+                "rewards/std",
+                "terminals/done_rate",
+            ):
+                self._pbar_str[key] = (
+                    value.item() if isinstance(value, torch.Tensor) else value
+                )
             if (
                 self.collected_frames - self._last_log.get(history_key, 0)
                 > self._log_interval
@@ -614,18 +634,19 @@ class OnPolicyTrainer(Trainer):
         # is None there, so hooks run on the optimization sub-batches instead.
         log_dest = "pre_steps_log" if not self.async_collection else "post_optim_log"
 
-        # Always log done states as percentage (episode completion rate)
-        log_done_percentage = LogScalar(
-            key=_next_key(self.done_key),
-            logname="done_percentage",
-            log_pbar=True,
-            include_std=False,  # No std for binary values
-            reduction="mean",
-        )
-        self.register_op(log_dest, log_done_percentage)
+        # Standard telemetry supplies canonical reward and terminal metrics.
+        if self.telemetry == "minimal":
+            log_done_percentage = LogScalar(
+                key=_next_key(self.done_key),
+                logname="done_percentage",
+                log_pbar=True,
+                include_std=False,  # No std for binary values
+                reduction="mean",
+            )
+            self.register_op(log_dest, log_done_percentage)
 
         # Log rewards if enabled
-        if self.log_rewards:
+        if self.log_rewards and self.telemetry == "minimal":
             # 1. Log training rewards (most important on-policy metric)
             log_rewards = LogScalar(
                 key=_next_key(self.reward_key),

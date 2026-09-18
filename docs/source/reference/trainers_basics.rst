@@ -31,10 +31,17 @@ are available. Optional metrics are omitted when the collected batch does not
 contain enough information to compute them; for example, complete-episode
 returns require trajectory identifiers and reset markers.
 
+Standard mode uses ``training/rewards/{min,mean,std,max}`` for transition reward
+summaries, without emitting legacy reward or terminal aliases. Synchronous
+training summarizes the collected batch. Fully asynchronous training summarizes
+valid transitions in replay samples instead, since no collected batch reaches
+the learner. Episode and terminal metrics are omitted in that mode: replay slices
+may be incomplete or carry artificial boundaries used for advantage estimation.
+
 Set ``telemetry="minimal"`` to retain the legacy metric set without querying
 collector or replay statistics or computing the additional reductions. Legacy
-metric names such as ``r_training`` and ``done_percentage`` are unchanged in
-both modes.
+metric names such as ``r_training`` and ``done_percentage`` are emitted only in
+minimal mode.
 
 .. currentmodule:: torchrl.trainers.algorithms
 
