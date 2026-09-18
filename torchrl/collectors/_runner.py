@@ -96,6 +96,7 @@ def _main_async_collector_impl(
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     compact_obs: bool = False,
     _inner_collector_ref: list[BaseCollector] | None = None,
+    collector_progress=None,
 ) -> None:
     # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
     # Runs before any CUDA/torchrl work in the child process.
@@ -181,6 +182,7 @@ def _main_async_collector_impl(
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
             compact_obs=compact_obs,
+            _collector_progress=collector_progress,
             **replay_write_kwargs,
         )
         if _inner_collector_ref is not None:
@@ -379,6 +381,7 @@ def _main_async_collector_impl(
                         next_data, replay_buffer
                     )
                     replay_buffer.extend(next_data)
+                    inner_collector._record_replay_write(next_data.numel())
 
                 if run_free:
                     continue

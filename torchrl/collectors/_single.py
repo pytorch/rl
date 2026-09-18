@@ -738,6 +738,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         # complete constructor API. Subclasses reach this implementation with
         # the defaults only.
         del backend, backend_options, num_collectors, sync
+        collector_progress = kwargs.pop("_collector_progress", None)
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
@@ -756,6 +757,11 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
         )
+        if collector_progress is not None:
+            self._collector_progress = collector_progress
+            self._collector_progress_worker_idx = (
+                worker_idx if worker_idx is not None else 0
+            )
 
         # Note: weight_sync_schemes can be used to send weights to components
         # within the environment (e.g., RayModuleTransform), not just sub-collectors
@@ -1858,6 +1864,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                         tensordict_out, self.replay_buffer
                     )
                     self.replay_buffer.extend(tensordict_out)
+                    self._record_replay_write(tensordict_out.numel())
                     yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
@@ -2174,6 +2181,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     carrier_for_out = self._carrier.exclude(*self._compact_next_keys)
                 else:
                     carrier_for_out = self._carrier
+                self._record_stepped_frames(carrier_for_out.numel())
 
                 if (
                     self.replay_buffer is not None
@@ -2181,6 +2189,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     and not self.extend_buffer
                 ):
                     self.replay_buffer.add(carrier_for_out)
+                    self._record_replay_write(carrier_for_out.numel())
                     if self._increment_frames(carrier_for_out.numel()):
                         return
                 else:
@@ -2382,6 +2391,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                 ):
                     self._thread.join(timeout=timeout)
                 self.closed = True
+                self._clear_pending_trajectory_progress()
                 del self._carrier
                 if self._use_buffers:
                     del self._final_rollout
@@ -2431,7 +2441,13 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         else:
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
-        state_dict.update({"frames": self._frames, "iter": self._iter})
+        state_dict.update(
+            {
+                "frames": self._frames,
+                "iter": self._iter,
+                "collector_progress": self._progress_state_dict(),
+            }
+        )
         if self.track_traj_ids:
             state_dict["traj_pool"] = self._traj_pool.state_dict()
         if self.policy_version_tracker is not None:
@@ -2460,6 +2476,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             )
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        self._flush_trajectory_assembly()
+        self._load_progress_state_dict(state_dict.get("collector_progress"))
         if self.track_traj_ids:
             traj_pool_state = state_dict.get("traj_pool")
             if traj_pool_state is not None:

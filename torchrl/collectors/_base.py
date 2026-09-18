@@ -19,6 +19,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
 from torchrl.collectors.utils import (
+    _CollectorProgress,
     _map_weight,
     _maybe_normalize_replay_buffer_tensordict_device,
     _traj_emit,
@@ -366,6 +367,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     ):
         self._pre_collect_hook = pre_collect_hook
         self._post_collect_hook = post_collect_hook
+        self._collector_progress = _CollectorProgress()
+        self._collector_progress_worker_idx = 0
 
     @property
     def pre_collect_hook(self) -> Callable[[], None] | None:
@@ -429,13 +432,30 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         Entries are only present when the corresponding state exists on the
         collector:
 
-        - ``"frames"``: total number of frames collected so far;
+        - ``"frames"``: total number of frames delivered so far (the existing
+          collector-specific semantics are unchanged);
+        - ``"stepped_frames"``: environment transitions collected, including
+          frames still held in an unfinished trajectory;
+        - ``"trajectory_completed_frames"``: frames belonging to trajectories
+          that have reached a terminal boundary;
+        - ``"trajectory_pending_frames"``: current in-flight trajectory frames;
+        - ``"replay_written_frames"``: frames successfully inserted in the
+          attached replay buffer;
+        - ``"completed_trajectories"``: trajectories that reached a terminal
+          boundary;
         - ``"batches"``: number of batches delivered so far;
         - ``"total_frames"``: requested total frames (absent for endless collectors);
         - ``"completed"``: whether the frame budget has been reached;
         - ``"requested_frames_per_batch"``: the per-batch frame budget;
         - ``"policy_version"``: current policy version, when the collector
           tracks it with an integer version.
+
+        The progress entries are cumulative except for
+        ``"trajectory_pending_frames"``, which is a gauge. Reset and shutdown
+        drop in-flight trajectory assembly, so they clear that gauge without
+        changing the cumulative entries. Checkpoints restore the cumulative
+        entries but start the gauge at zero because collector checkpoints do
+        not serialize the environment state or partial trajectory payloads.
 
         Multi-worker collectors extend this signature with a ``workers``
         argument controlling aggregate versus per-worker views.
@@ -457,6 +477,15 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             20
         """
         stats: dict[str, int | float | bool] = {}
+        progress = getattr(self, "_collector_progress", None)
+        if progress is not None:
+            stats.update(
+                progress.snapshot(
+                    None
+                    if getattr(self, "_collector_progress_aggregate", False)
+                    else getattr(self, "_collector_progress_worker_idx", 0)
+                )
+            )
         frames = getattr(self, "_frames", None)
         if frames is not None:
             stats["frames"] = int(frames)
@@ -478,6 +507,42 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if isinstance(version, int):
             stats["policy_version"] = version
         return stats
+
+    def _record_stepped_frames(self, frames: int) -> None:
+        self._collector_progress.increment_stepped(
+            self._collector_progress_worker_idx,
+            frames,
+            trajectory_pending=(
+                self.trajs_per_batch is not None
+                or getattr(self, "replay_write_mode", None) == "trajectory"
+            ),
+        )
+
+    def _record_trajectory_completion(self, frames: int, trajectories: int) -> None:
+        self._collector_progress.record_trajectory_completion(
+            self._collector_progress_worker_idx, frames, trajectories
+        )
+
+    def _record_pending_trajectory_frames(self, frames: int) -> None:
+        self._collector_progress.record_trajectory_pending(
+            self._collector_progress_worker_idx, frames
+        )
+
+    def _record_replay_write(self, frames: int) -> None:
+        self._collector_progress.record_replay_write(
+            self._collector_progress_worker_idx, frames
+        )
+
+    def _clear_pending_trajectory_progress(self) -> None:
+        self._collector_progress.clear_pending(self._collector_progress_worker_idx)
+
+    def _progress_state_dict(self) -> dict[str, int]:
+        return self._collector_progress.snapshot(self._collector_progress_worker_idx)
+
+    def _load_progress_state_dict(self, state: dict[str, int] | None) -> None:
+        self._collector_progress.load_snapshot(
+            self._collector_progress_worker_idx, state or {}
+        )
 
     def enable_profile(
         self,
@@ -1494,7 +1559,15 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             for batch in self.iterator():
                 if batch is None:
                     continue
-                _traj_ingest(batch, partial_trajs, complete_trajs)
+                if getattr(self, "_collector_progress_pending_on_ingest", False):
+                    self._record_pending_trajectory_frames(batch.numel())
+                completed_frames, completed_trajectories = _traj_ingest(
+                    batch, partial_trajs, complete_trajs
+                )
+                if completed_trajectories:
+                    self._record_trajectory_completion(
+                        completed_frames, completed_trajectories
+                    )
                 if has_rb:
                     # Write each complete trajectory to the replay buffer
                     # immediately as a flat sequence — no padding, no
@@ -1518,6 +1591,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                             trajs, rb
                         )
                         rb.extend(trajs)
+                        self._record_replay_write(trajs.numel())
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:
@@ -1555,6 +1629,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if assembly is not None:
             assembly[0].clear()
             assembly[1].clear()
+        self._clear_pending_trajectory_progress()
 
     @abc.abstractmethod
     def shutdown(
