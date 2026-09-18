@@ -376,6 +376,4 @@ class MicroDuckSkills:
             revision=revision or cls.DEFAULT_REVISION,
             **hub_kwargs,
         )
-        return cls.from_checkpoint(
-            path, device=device, freeze=freeze, sha256=sha256
-        )
+        return cls.from_checkpoint(path, device=device, freeze=freeze, sha256=sha256)

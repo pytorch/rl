@@ -64,10 +64,7 @@ from torchrl.modules.tensordict_module.rnn import (
     _canonical_contiguous,
     _canonical_stride,
 )
-from torchrl.modules.tensordict_module.zoo import (
-    MicroDuckSkillPolicy,
-    MicroDuckSkills,
-)
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkillPolicy, MicroDuckSkills
 from torchrl.modules.utils import (
     get_env_transforms_from_module,
     get_primers_from_module,
@@ -116,9 +113,7 @@ def test_microduck_skills_checkpoint_reconstructs_frozen_policy(tmp_path):
     assert list(skills.task_library.name) == ["standing", "tracking+0.20"]
     assert skills.action_scale == 0.35
     assert not skills.policy.training
-    assert not any(
-        parameter.requires_grad for parameter in skills.policy.parameters()
-    )
+    assert not any(parameter.requires_grad for parameter in skills.policy.parameters())
     td = TensorDict(
         {
             "observation": torch.randn(3, 56),
