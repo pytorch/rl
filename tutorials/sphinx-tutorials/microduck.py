@@ -72,8 +72,14 @@ from pathlib import Path
 import torch
 import torchrl
 from tensordict import TensorDict, TensorDictBase
-from torchrl.envs import MicroDuckEnv, MicroDuckTaskSampler, TransformedEnv
+from torchrl.envs import (
+    MicroDuckEnv,
+    MicroDuckSkillEnv,
+    MicroDuckTaskSampler,
+    TransformedEnv,
+)
 from torchrl.envs.utils import check_env_specs
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
 
 fast = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
 rollout_steps = 100 if fast else 300
@@ -258,6 +264,63 @@ gait_metrics(gait_rollout).to_dict()
 # is useful for checking the simulator and reward design; the training tutorial
 # learns a broader task-conditioned skill library.
 #
+# Turn a skill policy into environment dynamics
+# ----------------------------------------------
+#
+# A task-conditioned low-level policy can perform several locomotion skills;
+# it is not itself the policy that solves a football match or another game.
+# :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills` keeps that
+# policy together with the ordered task library that gives each ``task_id`` its
+# meaning and with the motor scale used during training.
+#
+# :class:`~torchrl.envs.MicroDuckSkillEnv` then makes the frozen skill policy
+# part of the environment. A separate high-level policy acts on this new
+# environment by choosing a skill. During each high-level transition, the
+# controller recomputes joint targets from fresh observations:
+#
+# .. code-block:: text
+#
+#    high-level policy --skill id--> MicroDuckSkillEnv
+#                                      |
+#                                      v
+#                           MicroDuckSkillController
+#                                      |
+#                         observation + task_id
+#                                      v
+#                              skill_policy --joint target--> physics
+#
+# Load the published artifact, build the joint-level task, and explicitly
+# promote it to the skill-level MDP. ``group_key=None`` is appropriate here
+# because this is a single duck at the root; multi-duck games use an ``agents``
+# group instead.
+
+skills = MicroDuckSkills.from_pretrained()
+skill_task = MicroDuckEnv.tracking_task(0.2)
+joint_env = MicroDuckEnv(
+    download=True,
+    backend="mujoco",
+    tasks=skill_task,
+    action_scale=skills.action_scale,
+    seed=0,
+)
+skill_env = MicroDuckSkillEnv.from_env(
+    joint_env,
+    skills,
+    skill_ids=[0, 1, 2],
+    control_steps_per_decision=5,
+    group_key=None,
+)
+check_env_specs(skill_env)
+skill_rollout = skill_env.rollout(4)
+skill_env.close()
+skill_rollout["skill"], skill_rollout["next", "reward"]
+
+# %%
+# The high-level rollout has four decisions but may contain up to twenty
+# physical steps. The exact low-level policy, task-id meanings and action scale
+# remain encapsulated in ``skills``; the high-level policy only sees the
+# skill-level action and observation specs.
+#
 # Choose a backend
 # ----------------
 #
@@ -314,14 +377,17 @@ gait_metrics(gait_rollout).to_dict()
 #
 # Tasks are rows of data: a command, reward weights and parameters. Samplers
 # decide who runs each row; diagnostics show what happened. The same interface
-# supports the supplied gait, a learned policy, and batched simulators.
-# A follow-up tutorial trains a walker with PPO, loads a trained checkpoint,
-# and learns when to choose its skills for a new task.
+# supports the supplied gait, a learned skill policy, and batched simulators.
+# A follow-up tutorial trains that low-level policy with PPO; a high-level
+# policy can then learn when to choose each frozen skill in a new task.
 #
 # Further reading
 # ---------------
 #
 # - :class:`~torchrl.envs.MicroDuckTask` documents all task fields.
 # - :class:`~torchrl.envs.MicroDuckEnv` documents presets and reward terms.
+# - :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills` documents
+#   loading and packaging the deployable skill artifact.
+# - :class:`~torchrl.envs.MicroDuckSkillEnv` documents the skill-level MDP.
 # - :class:`~torchrl.envs.MujocoEnv` documents simulator backends.
 # - :doc:`rlrender` covers rendering checkpoints outside training.
