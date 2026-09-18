@@ -2523,7 +2523,7 @@ class LogScalar(TrainerHookBase):
 
         # Add standard deviation if requested
         if self.include_std and tensor.numel() > 1:
-            std_value = tensor.std().item()
+            std_value = tensor.float().std().item()
             result[f"{self.logname}_std"] = std_value
 
         return result
