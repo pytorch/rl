@@ -1160,10 +1160,13 @@ class TestMujoco:
                 [[[0.0], [0.01], [0.0], [0.01], [0.0], [99.0]]]
             )
         rollout["next", "diagnostic_time"] = torch.arange(6).view(1, 6, 1).float()
-        for name in ("head_pitch", "head_yaw", "yaw_rate", "height_gain"):
+        for name in ("head_pitch", "head_yaw", "yaw_rate"):
             rollout["next", f"diagnostic_{name}"] = torch.tensor(
                 [[[0.0]] * 5 + [[99.0]]]
             )
+        rollout["next", "diagnostic_height_gain"] = torch.tensor(
+            [[[-1.0]] * 5 + [[99.0]]]
+        )
         # Crossing +/-pi is a small positive turn, not a reversed full turn.
         rollout["next", "diagnostic_heading"] = torch.tensor(
             [[[3.0], [3.1], [-3.0831853], [-2.9831853], [-2.8831853], [0.0]]]
@@ -1176,6 +1179,7 @@ class TestMujoco:
         assert metrics["takeoffs_per_episode"] == 2.0
         assert metrics["landings_per_episode"] == 2.0
         assert metrics["head_pitch_abs_p95"] == 0.0
+        assert metrics["hop_height_max"] == -1.0
         # Ground speed comes from displacement and time, independently of
         # the tilted body-frame velocity in the policy observation.
         rollout["next", "diagnostic_heading"].zero_()

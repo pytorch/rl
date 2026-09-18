@@ -642,7 +642,9 @@ def microduck_metrics(
             if name != "yaw_rate":
                 metrics[f"{name}_abs_p95"] = float(values[mask].abs().quantile(0.95))
         height = trajectories["next", "diagnostic_height_gain"][..., 0]
-        metrics["hop_height_max"] = float(height.masked_fill(~mask, 0).amax(-1).mean())
+        metrics["hop_height_max"] = float(
+            height.masked_fill(~mask, -torch.inf).amax(-1).mean()
+        )
         metrics["planar_speed"] = float(velocity.norm(dim=-1)[mask].mean())
         pairs = mask[..., 1:] & mask[..., :-1]
         takeoffs = (airborne[..., 1:] > airborne[..., :-1]) & pairs
