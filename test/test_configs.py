@@ -27,7 +27,12 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.checkpoint import Checkpoint
-from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
+from torchrl.collectors import (
+    AsyncCollector,
+    BaseCollector,
+    MultiAsyncCollector,
+    MultiSyncCollector,
+)
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     TensorDictReplayBuffer,
@@ -71,6 +76,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.record.loggers import (
     trackio as trackio_logger_module,
@@ -2641,6 +2647,53 @@ class TestTrainerConfigs:
         )
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
+        assert cfg.telemetry == "standard"
+
+    def test_ppo_telemetry_config_and_factory_parity(self):
+        from omegaconf import OmegaConf
+        from torchrl.trainers.algorithms.configs.trainers import (
+            _make_onpolicy_trainer,
+            PPOTrainerConfig,
+        )
+
+        config = PPOTrainerConfig(
+            collector=None,
+            total_frames=100,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+        config = OmegaConf.merge(
+            OmegaConf.structured(config), OmegaConf.create({"telemetry": "minimal"})
+        )
+        assert config.telemetry == "minimal"
+
+        collector = MagicMock(spec=BaseCollector)
+        loss_module = MagicMock(spec=LossModule)
+        loss_module.critic_network = torch.nn.Linear(1, 1)
+        parameter = torch.nn.Parameter(torch.ones(()))
+        optimizer = torch.optim.SGD([parameter], lr=0.1)
+
+        class CapturingTrainer:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        trainer = _make_onpolicy_trainer(
+            CapturingTrainer,
+            collector=collector,
+            total_frames=100,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            logger=None,
+            replay_buffer=None,
+            add_gae=False,
+            telemetry=config.telemetry,
+        )
+        assert trainer.kwargs["telemetry"] == "minimal"
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_a2c_trainer_config(self):

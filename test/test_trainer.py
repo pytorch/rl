@@ -45,6 +45,7 @@ from torchrl.data import (
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import TanhNormal
 from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
+from torchrl.record.loggers.common import PrefixLogger
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import EvaluatorHook, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
@@ -2746,6 +2747,187 @@ class _RecordingLogger:
         if isinstance(value, torch.Tensor):
             value = value.item()
         self.records.setdefault(name, []).append((step, value))
+
+    def log_metrics(self, metrics, step=None, **kwargs):
+        for name, value in metrics.items():
+            self.log_scalar(name, value, step)
+        return metrics
+
+    def with_prefix(self, prefix):
+        return PrefixLogger(self, prefix)
+
+
+class TestOnPolicyTelemetry:
+    @staticmethod
+    def _make_trainer(
+        *, telemetry="standard", collector=None, log_rewards=True, replay_buffer=None
+    ):
+        torch.manual_seed(0)
+        actor = ProbabilisticTensorDictSequential(
+            TensorDictModule(
+                nn.Sequential(nn.Linear(3, 8), NormalParamExtractor()),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            ),
+        )
+        critic = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["observation"], out_keys=["state_value"]
+        )
+        loss_module = ClipPPOLoss(actor, critic, entropy_bonus=False)
+        logger = _RecordingLogger()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            trainer = PPOTrainer(
+                collector=collector or MockingCollector(),
+                total_frames=8,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss_module,
+                optimizer=torch.optim.SGD(loss_module.parameters(), lr=0.1),
+                logger=logger,
+                replay_buffer=replay_buffer,
+                num_epochs=1,
+                add_gae=False,
+                progress_bar=False,
+                log_interval=0,
+                log_rewards=log_rewards,
+                log_actions=False,
+                done_key=("agents", "done"),
+                terminated_key=("agents", "terminated"),
+                reward_key=("agents", "reward"),
+                episode_reward_key=("agents", "reward"),
+                telemetry=telemetry,
+            )
+        return trainer, loss_module, logger
+
+    @staticmethod
+    def _batch(loss_module):
+        done = torch.zeros(8, 1, dtype=torch.bool)
+        done[[3, 7]] = True
+        terminated = torch.zeros_like(done)
+        terminated[3] = True
+        truncated = torch.zeros_like(done)
+        truncated[7] = True
+        is_init = torch.zeros_like(done)
+        is_init[[0, 4]] = True
+        return TensorDict(
+            {
+                "observation": torch.randn(8, 3),
+                "action": torch.rand(8, 4) * 1.8 - 0.9,
+                loss_module.tensor_keys.sample_log_prob: torch.randn(8),
+                "advantage": torch.randn(8, 1),
+                "value_target": torch.randn(8, 1),
+                "is_init": is_init,
+                ("collector", "traj_ids"): torch.zeros(8, dtype=torch.long),
+                ("next", "agents", "reward"): torch.arange(1.0, 9.0).view(8, 1),
+                ("next", "agents", "done"): done,
+                ("next", "agents", "terminated"): terminated,
+                ("next", "agents", "truncated"): truncated,
+            },
+            [8],
+        )
+
+    def test_standard_telemetry_for_finite_ppo_update_with_nested_keys(self):
+        trainer, loss_module, logger = self._make_trainer()
+        trainer.optimizer.add_param_group(
+            {"params": [nn.Parameter(torch.zeros(()))], "lr": 0.2}
+        )
+        batch = self._batch(loss_module)
+
+        trainer._setup_hook()
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+        trainer.optim_steps(batch)
+
+        expected = {
+            "training/frames/collected",
+            "training/frames/batch",
+            "training/episodes/completed",
+            "training/terminals/done_rate",
+            "training/terminals/terminated_rate",
+            "training/terminals/truncated_rate",
+            "training/rewards/min",
+            "training/rewards/mean",
+            "training/rewards/std",
+            "training/rewards/max",
+            "training/episodes/return/mean",
+            "training/episodes/length/mean",
+            "training/optimizer/learning_rate",
+            "training/optimizer/learning_rate/group_0",
+            "training/optimizer/learning_rate/group_1",
+            "training/optimizer/gradient_norm",
+            "training/throughput/collection_frames_per_second",
+            "training/throughput/optimizer_updates_per_second",
+        }
+        assert expected <= logger.records.keys()
+        assert "done_percentage" in logger.records
+        assert "r_training" in logger.records
+        for name in expected:
+            assert torch.isfinite(torch.as_tensor(logger.records[name][-1][1]))
+        assert logger.records["training/episodes/completed"][-1][1] == 2
+        assert logger.records["training/episodes/return/mean"][-1][1] == 18.0
+        assert logger.records["training/episodes/length/mean"][-1][1] == 4.0
+        assert logger.records["training/optimizer/learning_rate"][-1][1] == 0.1
+        assert logger.records["training/optimizer/learning_rate/group_1"][-1][1] == 0.2
+
+    def test_minimal_avoids_standard_collection_work(self):
+        class FailingStatsCollector(MockingCollector):
+            def stats(self):
+                raise AssertionError("minimal telemetry must not query stats")
+
+        trainer, loss_module, logger = self._make_trainer(
+            telemetry="minimal",
+            collector=FailingStatsCollector(),
+            log_rewards=False,
+        )
+        batch = self._batch(loss_module).exclude(
+            ("collector", "traj_ids"),
+            ("next", "agents", "reward"),
+            ("next", "agents", "terminated"),
+            ("next", "agents", "truncated"),
+        )
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+
+        assert logger.records.keys() == {"done_percentage"}
+        assert not hasattr(trainer, "_standard_telemetry")
+        assert not any(key.startswith("training/") for key in trainer._log_dict)
+
+    def test_standard_logs_runtime_stats_and_omits_unavailable_batch_metrics(self):
+        class StatsCollector(MockingCollector):
+            def stats(self):
+                return {"frames": 4}
+
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(16),
+            sampler=SamplerWithoutReplacement(),
+        )
+        replay_buffer.extend(TensorDict({"value": torch.ones(4, 1)}, [4]))
+        trainer, loss_module, logger = self._make_trainer(
+            collector=StatsCollector(),
+            log_rewards=False,
+            replay_buffer=replay_buffer,
+        )
+        batch = self._batch(loss_module).exclude(
+            ("collector", "traj_ids"),
+            ("next", "agents", "reward"),
+            ("next", "agents", "terminated"),
+            ("next", "agents", "truncated"),
+        )
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+
+        assert "training/collector/frames" in logger.records
+        assert logger.records["training/replay/size"][-1][1] == 4
+        assert logger.records["training/replay/capacity"][-1][1] == 16
+        assert not any("rewards/" in key for key in logger.records)
+        assert not any("episodes/return" in key for key in logger.records)
 
 
 class _CountingWeightSender:
