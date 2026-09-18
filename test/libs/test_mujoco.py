@@ -1367,6 +1367,39 @@ class TestMujoco:
             env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.parametrize(
+        "noise_name,noisy_slice",
+        [
+            ("gyro_noise_std", slice(3, 6)),
+            ("joint_position_noise_std", slice(8, 22)),
+            ("joint_velocity_noise_std", slice(22, 36)),
+        ],
+    )
+    def test_microduck_sensor_noise_respects_proprioception_layout(
+        self, tmp_path, noise_name, noisy_slice
+    ):
+        scene = self._write_microduck_fixture(tmp_path)
+        common = {
+            "backend": "mujoco",
+            "observations": "proprioception",
+            "reset_noise_scale": 0.0,
+            "seed": 0,
+        }
+        reference = MicroDuckEnv(scene, **common)
+        noisy = MicroDuckEnv(scene, sensor_kwargs={noise_name: 1.0}, **common)
+        try:
+            expected = reference.reset()["proprioception"]
+            actual = noisy.reset()["proprioception"]
+            delta = actual - expected
+            untouched = torch.ones(delta.shape[-1], dtype=torch.bool)
+            untouched[noisy_slice] = False
+            assert delta[..., noisy_slice].abs().sum() > 0
+            assert not delta[..., untouched].any()
+        finally:
+            reference.close()
+            noisy.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_camera_snapshot_preserves_history(self, tmp_path):
         env = MicroDuckEnv(
             self._write_microduck_fixture(tmp_path),
