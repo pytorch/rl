@@ -83,7 +83,14 @@ def get_primers_from_module(module, warn=True, strict=True):
                 raise
             failures.append(f"{type(submodule).__name__}: {e}")
 
-    module.apply(make_primers)
+    def visit(submodule):
+        # Controller wrappers already include their children's remapped state.
+        if not getattr(submodule, "_owns_tensordict_primers", False):
+            for child in submodule.children():
+                visit(child)
+        make_primers(submodule)
+
+    visit(module)
     if failures:
         warnings.warn(
             "Could not auto-wire tensordict primers from these submodules: "
