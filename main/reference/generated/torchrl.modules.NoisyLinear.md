@@ -45,7 +45,7 @@ module.apply(reset_noise)
 cadence: when `cfg.noisy` is set it registers
 `loss_module.apply(reset_noise)` on the trainer's
 `pre_optim_steps` hook, which runs once per
-`optim_steps()` call, not after
+[`optim_steps()`](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.optim_steps) call, not after
 every inner optimizer step, and only on `loss_module`.
 Do not resample on every forward: that would change the behavior of
 every NoisyNet user, including data collection, where a fixed sample

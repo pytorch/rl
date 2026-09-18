@@ -130,6 +130,15 @@ Note
 `file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
 directory, in which case its newest checkpoint is restored.
 
+optim_steps(*batch: ~tensordict.base.TensorDictBase*, ***, *optim_steps_per_batch: int | None | object = <object object>*, *num_epochs: int | object = <object object>*) → None[[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.optim_steps)
+
+Run the configured optimization loop for one collected batch.
+
+Keyword overrides are applied only to this call and do not change the
+trainer configuration. They are useful for algorithms that need a
+one-time optimization schedule while retaining the standard Trainer
+hooks and logging behavior.
+
 request_stop(*reason: str | None = None*) → None[[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.request_stop)
 
 Signal that training should stop at the next loop boundary.

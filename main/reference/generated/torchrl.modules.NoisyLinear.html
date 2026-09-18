@@ -2650,7 +2650,7 @@ step (section 3.1). Callers that want that cadence should apply
 cadence: when <code class="docutils literal notranslate"><span class="pre">cfg.noisy</span></code> is set it registers
 <code class="docutils literal notranslate"><span class="pre">loss_module.apply(reset_noise)</span></code> on the trainer’s
 <code class="docutils literal notranslate"><span class="pre">pre_optim_steps</span></code> hook, which runs once per
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">optim_steps()</span></code> call, not after
+<a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.optim_steps" title="torchrl.trainers.Trainer.optim_steps"><code class="xref py py-meth docutils literal notranslate"><span class="pre">optim_steps()</span></code></a> call, not after
 every inner optimizer step, and only on <code class="docutils literal notranslate"><span class="pre">loss_module</span></code>.
 Do not resample on every forward: that would change the behavior of
 every NoisyNet user, including data collection, where a fixed sample
