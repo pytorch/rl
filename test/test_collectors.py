@@ -6119,7 +6119,16 @@ class TestCollectorStats:
         finally:
             collector.shutdown()
 
-    def test_complete_trajectory_progress_and_checkpoint(self):
+    @pytest.mark.parametrize(
+        "write_kwargs",
+        [
+            pytest.param({"trajs_per_batch": 1}, id="legacy"),
+            pytest.param(
+                {"replay_write_mode": "trajectory"}, id="explicit-trajectory"
+            ),
+        ],
+    )
+    def test_complete_trajectory_progress_and_checkpoint(self, write_kwargs):
         env = TransformedEnv(CountingEnv(max_steps=2), StepCounter(2))
         replay_buffer = ReplayBuffer(storage=LazyTensorStorage(32))
         collector = Collector(
@@ -6128,7 +6137,7 @@ class TestCollectorStats:
             frames_per_batch=1,
             total_frames=8,
             replay_buffer=replay_buffer,
-            trajs_per_batch=1,
+            **write_kwargs,
         )
         try:
             collector_iter = iter(collector)
@@ -6167,7 +6176,7 @@ class TestCollectorStats:
             frames_per_batch=1,
             total_frames=8,
             replay_buffer=ReplayBuffer(storage=LazyTensorStorage(32)),
-            trajs_per_batch=1,
+            **write_kwargs,
         )
         try:
             resumed.load_state_dict(checkpoint, strict=False)
@@ -6183,7 +6192,16 @@ class TestCollectorStats:
             resumed.shutdown()
             resumed_env.close(raise_if_closed=False)
 
-    def test_multiprocess_trajectory_progress_is_parent_shared(self):
+    @pytest.mark.parametrize(
+        "write_kwargs",
+        [
+            pytest.param({"trajs_per_batch": 1}, id="legacy"),
+            pytest.param(
+                {"replay_write_mode": "trajectory"}, id="explicit-trajectory"
+            ),
+        ],
+    )
+    def test_multiprocess_trajectory_progress_is_parent_shared(self, write_kwargs):
         max_steps = 1_000_000
 
         def make_env():
@@ -6202,7 +6220,7 @@ class TestCollectorStats:
             frames_per_batch=1,
             total_frames=-1,
             replay_buffer=ReplayBuffer(storage=LazyTensorStorage(64), shared=True),
-            trajs_per_batch=1,
+            **write_kwargs,
         )
         try:
             collector.start()
@@ -6239,7 +6257,7 @@ class TestCollectorStats:
             frames_per_batch=1,
             total_frames=-1,
             replay_buffer=ReplayBuffer(storage=LazyTensorStorage(64), shared=True),
-            trajs_per_batch=1,
+            **write_kwargs,
         )
         try:
             resumed.load_state_dict(checkpoint)
