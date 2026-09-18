@@ -5,6 +5,7 @@ import abc
 
 import contextlib
 import sys
+import time
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
@@ -476,6 +477,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         compact_obs: bool = False,
     ):
         self.closed = True
+        self._shutdown_complete = False
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
@@ -1390,6 +1392,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             if strategy is not None:
                 mp.set_sharing_strategy(strategy)
         queue_out = ctx.Queue(self._queue_len)  # sends data from proc to main
+        self.queue_out = queue_out
         self.procs = []
         self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
 
@@ -2033,47 +2036,94 @@ also that the state dict is synchronised across processes if needed."""
     def _shutdown_main(self, timeout: float | None = None) -> None:
         if timeout is None:
             timeout = 10
+        if timeout < 0:
+            raise ValueError(f"timeout must be non-negative, got {timeout}.")
+        if getattr(self, "_shutdown_complete", False):
+            return
+
+        # Claim shutdown before touching any IPC resource. This makes repeated
+        # calls no-ops even when the first call finds an already-dead worker or
+        # a pipe that the worker has closed.
+        self.closed = True
+        started_at = time.monotonic()
+        # Reserve part of the caller's single deadline for forced cleanup:
+        # terminate after 80%, then retain the final 5% for a kill fallback.
+        graceful_timeout = timeout * 0.8
+        terminate_timeout = timeout * 0.95
+        procs = getattr(self, "procs", ())
+        pipes = getattr(self, "pipes", ())
         try:
-            if self.closed:
-                return
-            _check_for_faulty_process(self.procs)
-            all_closed = [False] * self.num_workers
-            rep = 0
-            for idx in range(self.num_workers):
-                if all_closed[idx]:
+            for proc, pipe in zip(procs, pipes):
+                if proc._closed or not proc.is_alive():
                     continue
-                if not self.procs[idx].is_alive():
-                    continue
-                self.pipes[idx].send((None, "close"))
+                try:
+                    pipe.send((None, "close"))
+                except (EOFError, OSError, ValueError):
+                    # The worker may already have observed the parent closing
+                    # its end of the channel. It will be joined below.
+                    pass
 
-            while not all(all_closed) and rep < 1000:
-                rep += 1
-                for idx in range(self.num_workers):
-                    if all_closed[idx]:
-                        continue
-                    if not self.procs[idx].is_alive():
-                        all_closed[idx] = True
-                        continue
-                    try:
-                        if self.pipes[idx].poll(timeout / 1000 / self.num_workers):
-                            msg = self.pipes[idx].recv()
-                            if msg != "closed":
-                                raise RuntimeError(f"got {msg} but expected 'close'")
-                            all_closed[idx] = True
-                        else:
-                            continue
-                    except BrokenPipeError:
-                        all_closed[idx] = True
-                        continue
-            self.closed = True
+            # Workers acknowledge "close" on their control pipes, but process
+            # exit is the shutdown contract; draining those replies would spend
+            # the same bounded deadline without improving teardown guarantees.
 
-            self.queue_out.close()
-            for pipe in self.pipes:
-                pipe.close()
-            for proc in self.procs:
-                proc.join(1.0)
+            pending = {
+                idx
+                for idx, proc in enumerate(procs)
+                if not proc._closed and proc.is_alive()
+            }
+            while pending and time.monotonic() - started_at < graceful_timeout:
+                for idx in tuple(pending):
+                    proc = procs[idx]
+                    if proc._closed or not proc.is_alive():
+                        pending.remove(idx)
+                        continue
+                    remaining = graceful_timeout - (time.monotonic() - started_at)
+                    if remaining <= 0:
+                        break
+                    proc.join(timeout=min(0.05, remaining))
+                    if proc._closed or not proc.is_alive():
+                        pending.remove(idx)
+
+            stragglers = [
+                proc for proc in procs if not proc._closed and proc.is_alive()
+            ]
+            for proc in stragglers:
+                try:
+                    proc.terminate()
+                except (OSError, ValueError):
+                    pass
+            for proc in stragglers:
+                remaining = terminate_timeout - (time.monotonic() - started_at)
+                proc.join(timeout=max(remaining, 0.0))
+
+            stragglers = [
+                proc for proc in procs if not proc._closed and proc.is_alive()
+            ]
+            for proc in stragglers:
+                try:
+                    proc.kill()
+                except (AttributeError, OSError, ValueError):
+                    # ``kill`` is unavailable on older Python versions. The
+                    # earlier terminate request still bounds the parent call.
+                    pass
+            for proc in stragglers:
+                remaining = timeout - (time.monotonic() - started_at)
+                proc.join(timeout=max(remaining, 0.0))
         finally:
             import torchrl
+
+            queue_out = getattr(self, "queue_out", None)
+            if queue_out is not None:
+                try:
+                    queue_out.close()
+                except (OSError, ValueError):
+                    pass
+            for pipe in pipes:
+                try:
+                    pipe.close()
+                except (OSError, ValueError):
+                    pass
 
             num_threads = min(
                 torchrl._THREAD_POOL_INIT,
@@ -2081,10 +2131,7 @@ also that the state dict is synchronised across processes if needed."""
                 + self._total_workers_from_env(self.create_env_fn),
             )
             torch.set_num_threads(num_threads)
-
-            for proc in self.procs:
-                if proc.is_alive():
-                    proc.terminate()
+            self._shutdown_complete = True
 
     def async_shutdown(self, timeout: float | None = None):
         return self.shutdown(timeout=timeout)
