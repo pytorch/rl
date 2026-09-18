@@ -341,6 +341,13 @@ def test_replay_buffer_direct_client_identity(benchmark):
     assert client is replay_buffer
 
 
+def test_replay_buffer_ready_check(benchmark):
+    replay_buffer = ReplayBuffer(storage=ListStorage(64), batch_size=32)
+    replay_buffer.extend(torch.arange(64))
+
+    assert benchmark(replay_buffer.wait_until_sampleable)
+
+
 def sample_prioritized_sampler(sampler, storage, batch_size):
     sampler.sample(storage, batch_size)
     if sampler.device.type == "cuda":

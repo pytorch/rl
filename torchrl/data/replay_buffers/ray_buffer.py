@@ -107,6 +107,10 @@ class _RayReplayBufferClient:
         ray.get(self._actor._setattr.remote("dim_extend", value))
 
     def sample(self, *args, **kwargs):
+        if kwargs.get("wait", False):
+            raise NotImplementedError(
+                "Blocking replay sampling is not supported by Ray actors."
+            )
         return ray.get(self._actor.sample.remote(*args, **kwargs))
 
     def extend(self, *args, **kwargs):
@@ -240,7 +244,20 @@ class _LazyDistributedReplayClient:
             return result.reshape(()).item()
         return result
 
-    def sample(self, batch_size: int | None = None, *, timeout: float | None = None):
+    def sample(
+        self,
+        batch_size: int | None = None,
+        *,
+        wait: bool = False,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ):
+        del cancel_event
+        if wait:
+            raise NotImplementedError(
+                "Blocking replay sampling is not supported by the distributed "
+                "replay transport."
+            )
         if batch_size is None:
             batch_size = self.batch_size
         if batch_size is None:
@@ -277,6 +294,19 @@ class _LazyDistributedReplayClient:
             device=getattr(self._sample_client, "_device", None),
         )
         return self._sample_client(request, timeout=timeout)
+
+    def wait_until_sampleable(
+        self,
+        min_items: int | None = None,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> bool:
+        """Raises because distributed transport clients cannot block for writes."""
+        del min_items, timeout, cancel_event
+        raise NotImplementedError(
+            "wait_until_sampleable is not supported by the distributed replay "
+            "transport."
+        )
 
     def update_tensordict_priority(
         self, data: TensorDictBase, *, timeout: float | None = None
@@ -482,6 +512,18 @@ class RayReplayBuffer(ReplayBuffer):
 
     def sample(self, *args, **kwargs):
         return self._client.sample(*args, **kwargs)
+
+    def wait_until_sampleable(
+        self,
+        min_items: int | None = None,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> bool:
+        """Raises because synchronous Ray actors cannot safely block for writes."""
+        del min_items, timeout, cancel_event
+        raise NotImplementedError(
+            "wait_until_sampleable is not supported by Ray replay buffers."
+        )
 
     def extend(self, *args, **kwargs):
         return self._client.extend(*args, **kwargs)

@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from functools import partial
 from pathlib import Path
@@ -927,6 +928,12 @@ class TestSharedStorageInit:
         assert (rb[index] == data).all()
         queue.put("done")
 
+    def readiness_worker(self, rb, release, queue):
+        release.wait()
+        rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+        rb.sample()
+        queue.put("done")
+
     def revision_worker(self, rb, queue):
         rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
         queue.put(rb.storage._mutation_revision)
@@ -1009,6 +1016,38 @@ class TestSharedStorageInit:
         expected = {0.0, 1.0, 2.0, 3.0}
         assert expected.issubset(values)
         assert len(storage) >= 8
+
+    def test_shared_replay_wait_unblocks_after_worker_write(self):
+        storage = LazyTensorStorage(max_size=8, shared_init=True)
+        rb = TensorDictReplayBuffer(storage=storage, batch_size=2).share(True)
+        # Bind the shared storage in the parent, then empty it. The worker
+        # write, rather than first-use memmap initialization, is the event
+        # this test exercises.
+        rb.extend(TensorDict({"x": torch.tensor([-1])}, batch_size=(1,)))
+        rb.empty()
+        release = mp.Event()
+        queue = mp.Queue()
+        process = mp.Process(target=self.readiness_worker, args=(rb, release, queue))
+        process.start()
+        completed = threading.Event()
+        results = []
+
+        def wait_for_replay():
+            results.append(rb.wait_until_sampleable(timeout=30))
+            completed.set()
+
+        thread = threading.Thread(target=wait_for_replay)
+        thread.start()
+        assert not completed.wait(timeout=0.05)
+        release.set()
+        assert completed.wait(timeout=30)
+        thread.join(timeout=1)
+        process.join(timeout=30)
+        assert process.exitcode == 0
+        assert queue.get(timeout=1) == "done"
+        assert results == [True]
+        assert rb.stats()["sample_calls"] == 1
+        assert rb.stats()["samples_returned"] == 2
 
     def test_shared_init_reconciles_non_cpu_device(self):
         """Shared init installs a CPU memmap backing; a non-cpu storage device
