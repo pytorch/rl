@@ -35,8 +35,8 @@ from torchrl.envs import (
     MacroPrimitiveTransform,
     MenagerieEnv,
     MenagerieTask,
-    microduck_skill_env,
     MicroDuckEnv,
+    MicroDuckSkillEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
     ParallelEnv,
@@ -73,6 +73,7 @@ from torchrl.envs.custom.mujoco.microduck import (
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
 from torchrl.render import load_checkpoint
 
 if _has_mujoco:
@@ -3415,25 +3416,29 @@ class _MicroDuckMemoryPolicy(TensorDictModuleBase):
         return td
 
 
-class TestMicroDuckController:
+class TestMicroDuckSkillEnv:
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_skill_env_wraps_microduck_env(self, tmp_path):
         tasks = [
             MicroDuckEnv.standing_task(),
             MicroDuckEnv.tracking_task(0.2),
         ]
-        env = microduck_skill_env(
-            MicroDuckEnv(
-                TestMujoco._write_microduck_fixture(tmp_path),
-                backend="mujoco",
-                tasks=tasks,
-                num_envs=1,
-                reset_noise_scale=0.0,
-                seed=0,
+        base_env = MicroDuckEnv(
+            TestMujoco._write_microduck_fixture(tmp_path),
+            backend="mujoco",
+            tasks=tasks,
+            num_envs=1,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        env = MicroDuckSkillEnv.from_env(
+            base_env,
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(tasks),
+                action_scale=base_env.action_scale,
             ),
-            _MicroDuckMemoryPolicy(),
-            tasks,
-            steps=2,
+            control_steps_per_decision=2,
             group_key=None,
         )
         try:
@@ -3458,12 +3463,15 @@ class TestMicroDuckController:
             MicroDuckEnv.sidestep_task(-0.2),
         ]
         argument_key = ("command", "argument") if parameterized else None
-        env = microduck_skill_env(
+        env = MicroDuckSkillEnv.from_env(
             _MicroDuckResetSignalEnv(),
-            _MicroDuckMemoryPolicy(),
-            tasks,
-            skills=[2, 1],
-            steps=1,
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(tasks),
+                action_scale=1.0,
+            ),
+            skill_ids=[2, 1],
+            control_steps_per_decision=1,
             group_key=None,
             argument_key=argument_key,
         )
@@ -3494,11 +3502,14 @@ class TestMicroDuckController:
         env.close()
 
     def test_skill_env_forwards_reset_key(self):
-        env = microduck_skill_env(
+        env = MicroDuckSkillEnv.from_env(
             _MicroDuckResetSignalEnv(),
-            _MicroDuckMemoryPolicy(),
-            MicroDuckEnv.standing_task(),
-            steps=3,
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(MicroDuckEnv.standing_task()),
+                action_scale=1.0,
+            ),
+            control_steps_per_decision=3,
             group_key=None,
             reset_key="respawned",
         )

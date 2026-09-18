@@ -1133,7 +1133,6 @@ class ClosedLoopMultiAction(MultiAction):
     Use :meth:`from_env` to install controller primers before this transform.
     The base environment must honor partial-step masks, as for MultiAction.
     Discount factors on the resulting environment count high-level decisions.
-    See also :class:`~torchrl.trainers.algorithms.configs.ClosedLoopMultiActionConfig`.
 
     Examples:
         >>> import torch
@@ -1150,6 +1149,14 @@ class ClosedLoopMultiAction(MultiAction):
         >>> env.step(td)["next", "observation"]
         tensor([3], dtype=torch.int32)
         >>> env.close()
+
+    .. seealso::
+        :class:`~torchrl.modules.LowLevelController` provides independent
+        recurrent state for each controlled instance;
+        :class:`~torchrl.envs.MicroDuckSkillEnv` uses this transform to expose
+        skill decisions as environment actions; and
+        :class:`~torchrl.trainers.algorithms.configs.ClosedLoopMultiActionConfig`
+        exposes this class through Hydra configuration.
     """
 
     def __init__(

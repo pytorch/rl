@@ -393,9 +393,9 @@ state into the parent batch. Boolean masks are not supported.
     HumanoidEnv
     MenagerieEnv
     MenagerieTask
-    MicroDuckController
+    MicroDuckSkillController
     MicroDuckEnv
-    microduck_skill_env
+    MicroDuckSkillEnv
     MicroDuckTask
     MicroDuckTaskSampler
     SatelliteEnv

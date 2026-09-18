@@ -39,8 +39,8 @@ from torchrl.envs.custom.mujoco.microduck import (
     MicroDuckTaskSampler,
 )
 from torchrl.envs.custom.mujoco.microduck_controller import (
-    microduck_skill_env,
-    MicroDuckController,
+    MicroDuckSkillController,
+    MicroDuckSkillEnv,
 )
 from torchrl.envs.custom.mujoco.satellite import SatelliteEnv
 from torchrl.envs.custom.mujoco.walker import Walker2dEnv
@@ -53,8 +53,8 @@ __all__ = [
     "HumanoidEnv",
     "MenagerieEnv",
     "MenagerieTask",
-    "microduck_skill_env",
-    "MicroDuckController",
+    "MicroDuckSkillController",
+    "MicroDuckSkillEnv",
     "MicroDuckEnv",
     "MicroDuckTask",
     "MicroDuckTaskSampler",

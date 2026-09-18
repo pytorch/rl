@@ -51,8 +51,7 @@ class LowLevelController(TensorDictModuleBase):
 
     The module does not disable gradients or change the policy's training mode.
     :class:`~torchrl.envs.transforms.ClosedLoopMultiAction` controls inference
-    when the controller is deployed in an environment. See also
-    :class:`~torchrl.trainers.algorithms.configs.LowLevelControllerConfig`.
+    when the controller is deployed in an environment.
 
     Examples:
         >>> import torch
@@ -69,6 +68,14 @@ class LowLevelController(TensorDictModuleBase):
         >>> env.step(td)["next", "observation"]
         tensor([2], dtype=torch.int32)
         >>> env.close()
+
+    .. seealso::
+        :class:`~torchrl.envs.transforms.ClosedLoopMultiAction` repeatedly
+        executes the controller against fresh observations;
+        :class:`~torchrl.envs.MicroDuckSkillController` specializes the
+        controller for a task-conditioned MicroDuck policy; and
+        :class:`~torchrl.trainers.algorithms.configs.LowLevelControllerConfig`
+        exposes this class through Hydra configuration.
     """
 
     _owns_tensordict_primers = True

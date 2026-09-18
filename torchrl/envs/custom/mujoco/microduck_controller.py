@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey
@@ -23,9 +24,12 @@ from torchrl.envs.transforms import (
 )
 from torchrl.modules.tensordict_module.controllers import LowLevelController
 
+if TYPE_CHECKING:
+    from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
+
 
 class _MicroDuckAdapter(TensorDictModuleBase):
-    def __init__(self, tasks, skills, argument_key, control_period_s):
+    def __init__(self, task_library, skill_ids, argument_key, control_period_s):
         super().__init__()
         self.argument_key = argument_key
         self.control_period_s = control_period_s
@@ -38,8 +42,8 @@ class _MicroDuckAdapter(TensorDictModuleBase):
             ("next", "gait_phase"),
             ("next", "gait_elapsed"),
         ]
-        self.register_buffer("skill_task_ids", skills)
-        rows = tasks[skills]
+        self.register_buffer("skill_task_ids", skill_ids)
+        rows = task_library[skill_ids]
         for name in (
             "command_low",
             "command_high",
@@ -88,52 +92,66 @@ class _MicroDuckAdapter(TensorDictModuleBase):
         return td
 
 
-class MicroDuckController(LowLevelController):
-    """Deploy a MicroDuck locomotion policy using discrete or parameterized skills.
+class MicroDuckSkillController(LowLevelController):
+    """Translate high-level MicroDuck skill decisions into joint targets.
 
-    A skill selects a row of the task library used to train the walker. The
+    A skill selects a row of the library used to train ``skill_policy``. The
     adapter replaces the command and gait fields in the leading MicroDuck
     observation and supplies the original task id. The generic controller
     manages independent recurrent state and gait clocks for all agents.
 
     Args:
-        walker (TensorDictModuleBase): policy reading observation and optionally
-            task_id and explicit recurrent state, and writing action.
-        tasks (MicroDuckTask or sequence of MicroDuckTask): training task library
-            in its original task-id order.
+        skill_policy: Policy reading ``observation``, ``task_id`` and any
+            explicit recurrent state, and writing the joint ``action``.
+        task_library: Training task library in its original task-id order.
 
     Keyword Args:
-        skills (sequence of int, optional): task indices offered as skills.
+        skill_ids: Task indices offered as high-level skills.
             Defaults to all tasks. High-level skill values index this selection.
-        group_key (NestedKey, optional): agent group. Defaults to "agents".
+        group_key: Agent group. Defaults to ``"agents"``.
             Pass None for a single controller at the root.
-        argument_key (NestedKey, optional): normalized two-dimensional command
-            argument in [-1, 1], relative to the group. Defaults to None, using
-            the selected task's command-box midpoint.
-        control_period_s (float, optional): seconds per physical step.
+        argument_key: Normalized two-dimensional command argument in
+            ``[-1, 1]``, relative to the group. Defaults to None, using the
+            selected task's command-box midpoint.
+        control_period_s: Seconds per physical step.
             Defaults to 0.02; must match the deployed environment.
-        reset_key (NestedKey, optional): per-agent respawn signal relative to the
+        reset_key: Per-agent respawn signal relative to the
             group. Defaults to "fallen". Pass None if only episodes reset.
 
     Examples:
+        Bind a policy to the exact task ids represented by its embeddings:
+
+        >>> import torch
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.modules import MLP
-        >>> tasks = [MicroDuckEnv.standing_task(), MicroDuckEnv.tracking_task(0.2)]
-        >>> walker = TensorDictModule(
+        >>> task_library = torch.stack([
+        ...     MicroDuckEnv.standing_task(),
+        ...     MicroDuckEnv.tracking_task(0.2),
+        ... ])
+        >>> skill_policy = TensorDictModule(
         ...     MLP(in_features=MicroDuckEnv.OBSERVATION_DIM,
         ...         out_features=MicroDuckEnv.NUM_JOINTS, num_cells=[32]),
         ...     in_keys=["observation"], out_keys=["action"])
-        >>> controller = MicroDuckController(walker, tasks, skills=[1, 0])
+        >>> controller = MicroDuckSkillController(
+        ...     skill_policy, task_library, skill_ids=[1, 0]
+        ... )
         >>> controller.decision_spec["skill"].n
         2
+
+    .. seealso::
+        :class:`MicroDuckSkillEnv` incorporates this controller into a
+        high-level environment; :class:`~torchrl.modules.LowLevelController`
+        supplies the generic state routing; and
+        :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills`
+        packages a trained policy with its task library.
     """
 
     def __init__(
         self,
-        walker: TensorDictModuleBase,
-        tasks: MicroDuckTask | Sequence[MicroDuckTask],
+        skill_policy: TensorDictModuleBase,
+        task_library: MicroDuckTask | Sequence[MicroDuckTask],
         *,
-        skills: Sequence[int] | None = None,
+        skill_ids: Sequence[int] | None = None,
         group_key: NestedKey | None = "agents",
         argument_key: NestedKey | None = None,
         control_period_s: float = 0.02,
@@ -141,33 +159,38 @@ class MicroDuckController(LowLevelController):
     ):
         if not math.isfinite(control_period_s) or control_period_s <= 0:
             raise ValueError("control_period_s must be finite and positive.")
-        library = MicroDuckEnv.stack_tasks(tasks)
+        task_library = MicroDuckEnv.stack_tasks(task_library)
         tensor = next(
-            iter(walker.parameters()), next(iter(walker.buffers()), library.command_low)
+            iter(skill_policy.parameters()),
+            next(iter(skill_policy.buffers()), task_library.command_low),
         )
-        library = library.to(tensor.device)
-        if skills is None:
-            skills = list(range(library.shape[0]))
-        if not len(skills) or any(
+        task_library = task_library.to(tensor.device)
+        if skill_ids is None:
+            skill_ids = list(range(task_library.shape[0]))
+        if not len(skill_ids) or any(
             not isinstance(skill, int)
             or isinstance(skill, bool)
             or skill < 0
-            or skill >= library.shape[0]
-            for skill in skills
+            or skill >= task_library.shape[0]
+            for skill in skill_ids
         ):
-            raise ValueError("skills must be non-empty integer indices into tasks.")
-        skill_ids = torch.tensor(skills, dtype=torch.long, device=tensor.device)
+            raise ValueError(
+                "skill_ids must be non-empty integer indices into task_library."
+            )
+        skill_ids = torch.tensor(skill_ids, dtype=torch.long, device=tensor.device)
         argument_key = None if argument_key is None else unravel_key(argument_key)
-        decision_spec = Composite(skill=Categorical(len(skills), device=tensor.device))
+        decision_spec = Composite(
+            skill=Categorical(len(skill_ids), device=tensor.device)
+        )
         if argument_key is not None:
             decision_spec[argument_key] = Bounded(
                 -1.0, 1.0, shape=(2,), device=tensor.device
             )
         super().__init__(
-            walker,
+            skill_policy,
             decision_spec,
             adapter=_MicroDuckAdapter(
-                library, skill_ids, argument_key, control_period_s
+                task_library, skill_ids, argument_key, control_period_s
             ),
             group_key=group_key,
             reset_key=reset_key,
@@ -256,72 +279,108 @@ class _MicroDuckSkillObservation(Transform):
         return spec
 
 
-def microduck_skill_env(
-    env: EnvBase,
-    walker: TensorDictModuleBase,
-    tasks: MicroDuckTask | Sequence[MicroDuckTask],
-    *,
-    skills: Sequence[int] | None = None,
-    steps: int = 5,
-    control_period_s: float = 0.02,
-    group_key: NestedKey | None = "agents",
-    argument_key: NestedKey | None = None,
-    reset_key: NestedKey | None = "fallen",
-) -> TransformedEnv:
-    """Wrap a task with skill decisions, summed rewards, and MicroDuck observations.
+class MicroDuckSkillEnv(TransformedEnv):
+    """High-level environment whose actions select frozen MicroDuck skills.
 
-    Uses :class:`MicroDuckController` and
-    :class:`~torchrl.envs.transforms.ClosedLoopMultiAction` for all execution
-    and recurrent state. A one-hot encoding of the last skill is appended to
-    each observation. The returned ``fallen`` flag reports any fall during the
-    current decision; raw inner fall signals reset the corresponding controller
-    first.
+    A :class:`MicroDuckSkills` object is part of this environment's transition
+    dynamics: each high-level decision is held fixed while its policy computes
+    fresh joint targets for up to ``control_steps_per_decision`` physical
+    steps. Rewards are summed, termination can end the decision early, and
+    recurrent policy state is reset independently for ducks that fall.
 
-    Args:
-        env (EnvBase): joint-level task exposing observation and fallen in the
-            selected group. Its leading observation must use MicroDuck's layout.
-        walker (TensorDictModuleBase): pretrained MicroDuck policy.
-        tasks (MicroDuckTask or sequence of MicroDuckTask): walker's task library.
-
-    Keyword Args:
-        skills (sequence of int, optional): selected library indices, in decision
-            order. Defaults to all tasks.
-        steps (int, optional): physical steps per decision. Defaults to 5.
-        control_period_s (float, optional): physical step duration. Defaults to 0.02.
-        group_key (NestedKey, optional): controller group. Defaults to "agents".
-        argument_key (NestedKey, optional): normalized command argument key.
-            Defaults to None for discrete decisions.
-        reset_key (NestedKey, optional): per-agent respawn signal relative to the
-            group. Defaults to "fallen". Pass None if only episodes reset.
-
-    Returns:
-        TransformedEnv: high-level task usable by ordinary collectors and losses.
+    Construct this class with :meth:`from_env`; the wrapped task environment
+    supplies physics, observations and rewards, while this class changes its
+    action space from joint targets to skill decisions.
 
     Examples:
-        >>> # Given a task env and a walker trained on this library:
-        >>> env = microduck_skill_env(task_env, walker, tasks, steps=5)  # doctest: +SKIP
-        >>> data = env.rollout(10, high_level_actor)  # doctest: +SKIP
+        Load the published skill policy and promote a joint-level game into a
+        high-level skill environment:
+
+        >>> from torchrl.envs import MicroDuckSkillEnv
+        >>> from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
+        >>> skills = MicroDuckSkills.from_pretrained()  # doctest: +SKIP
+        >>> base_env = make_microduck_game_env()  # doctest: +SKIP
+        >>> env = MicroDuckSkillEnv.from_env(  # doctest: +SKIP
+        ...     base_env, skills, control_steps_per_decision=5
+        ... )
+        >>> rollout = env.rollout(10, high_level_policy)  # doctest: +SKIP
+
+    .. seealso::
+        :class:`MicroDuckSkillController` maps one skill decision to policy
+        inputs and joint targets;
+        :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills`
+        keeps the policy and task metadata together; and
+        :class:`~torchrl.envs.transforms.ClosedLoopMultiAction` implements the
+        generic repeated closed-loop execution.
     """
-    controller = MicroDuckController(
-        walker,
-        tasks,
-        skills=skills,
-        group_key=group_key,
-        argument_key=argument_key,
-        control_period_s=control_period_s,
-        reset_key=reset_key,
-    )
-    controller.to(env.device)
-    spec = (
-        env.observation_spec if group_key is None else env.observation_spec[group_key]
-    )
-    if spec["observation"].shape[-1] < MicroDuckEnv.OBSERVATION_DIM:
-        raise ValueError(
-            "The task observation must start with the MicroDuck observation."
+
+    @classmethod
+    def from_env(
+        cls,
+        env: EnvBase,
+        skills: MicroDuckSkills,
+        *,
+        skill_ids: Sequence[int] | None = None,
+        control_steps_per_decision: int = 5,
+        control_period_s: float = 0.02,
+        group_key: NestedKey | None = "agents",
+        argument_key: NestedKey | None = None,
+        reset_key: NestedKey | None = "fallen",
+    ) -> MicroDuckSkillEnv:
+        """Build a skill-level environment from joint-level task dynamics.
+
+        Args:
+            env: Joint-level task exposing a leading MicroDuck observation and
+                a fall signal in the selected group.
+            skills: Policy, ordered task library and action scale to deploy.
+            skill_ids: Task-library rows offered as high-level skills.
+            control_steps_per_decision: Maximum physical controller steps per
+                high-level decision.
+            control_period_s: Duration of one physical step in seconds.
+            group_key: Agent group, or None for a controller at the root.
+            argument_key: Optional normalized two-dimensional command argument.
+            reset_key: Per-agent reset signal, or None for episode resets only.
+
+        Returns:
+            A high-level :class:`MicroDuckSkillEnv`.
+        """
+        env_action_scale = getattr(env, "action_scale", None)
+        if env_action_scale is not None and not math.isclose(
+            float(env_action_scale), skills.action_scale
+        ):
+            raise ValueError(
+                "The skill policy was trained with "
+                f"action_scale={skills.action_scale}; the environment uses "
+                f"action_scale={float(env_action_scale)}."
+            )
+        controller = MicroDuckSkillController(
+            skills.policy,
+            skills.task_library,
+            skill_ids=skill_ids,
+            group_key=group_key,
+            argument_key=argument_key,
+            control_period_s=control_period_s,
+            reset_key=reset_key,
         )
-    num_skills = controller.decision_spec["skill"].n
-    result = ClosedLoopMultiAction.from_env(env, controller, steps=steps)
-    result.insert_transform(-1, _MicroDuckSkillHistory(env, group_key, num_skills))
-    return TransformedEnv(
-        result, _MicroDuckSkillObservation(group_key, num_skills), auto_unwrap=False
-    )
+        controller.to(env.device)
+        spec = (
+            env.observation_spec
+            if group_key is None
+            else env.observation_spec[group_key]
+        )
+        if spec["observation"].shape[-1] < MicroDuckEnv.OBSERVATION_DIM:
+            raise ValueError(
+                "The task observation must start with the MicroDuck observation."
+            )
+        num_skills = controller.decision_spec["skill"].n
+        inner = ClosedLoopMultiAction.from_env(
+            env, controller, steps=control_steps_per_decision
+        )
+        inner.insert_transform(
+            -1, _MicroDuckSkillHistory(env, group_key, num_skills)
+        )
+        return cls(
+            inner,
+            _MicroDuckSkillObservation(group_key, num_skills),
+            auto_unwrap=False,
+        )

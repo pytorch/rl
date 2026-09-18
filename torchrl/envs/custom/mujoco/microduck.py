@@ -396,6 +396,12 @@ class MicroDuckTask:
         tensor(4.)
         >>> task.params["tracking_std"], task.warm_start_fraction
         (tensor(0.2000), tensor(0.5000))
+
+    .. seealso::
+        :class:`MicroDuckEnv` consumes an ordered library of these rows;
+        :class:`MicroDuckTaskSampler` chooses a row at reset; and
+        :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills`
+        preserves the library alongside a trained skill policy.
     """
 
     command_low: torch.Tensor
@@ -595,6 +601,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         ...     return torch.exp(-features["angular_velocity"][..., 2].square() / params["heading_std"].square())
         >>> task = MicroDuckEnv.tracking_task(0.2, reward_weights={"heading": 1.0}, heading_std=0.5)
         >>> env = MicroDuckEnv(download=True, tasks=task)  # doctest: +SKIP
+
+    .. seealso::
+        :class:`MicroDuckTask` represents one locomotion objective;
+        :class:`MicroDuckTaskSampler` controls task selection at reset; and
+        :class:`MicroDuckSkillEnv` promotes compatible joint-level dynamics to
+        a high-level environment whose actions select trained skills.
 
     Reference:
         Pollen Robotics, MicroDuck (https://github.com/pollen-robotics/microduck)
@@ -2252,6 +2264,12 @@ class MicroDuckTaskSampler(Transform):
 
         >>> MicroDuckTaskSampler.fixed([1, 2, 0, 2]).sample(torch.Size([4]))[:, 0]
         tensor([1, 2, 0, 2])
+
+    .. seealso::
+        :class:`MicroDuckTask` defines one row of the sampled library;
+        :class:`MicroDuckEnv` consumes the selected task id; and
+        :class:`MicroDuckSkillController` uses the same ordered library to
+        interpret high-level skill decisions.
     """
 
     def __init__(
