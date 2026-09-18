@@ -52,6 +52,11 @@ Get started with TorchRL's modules
 [Collectors Deep Dive: Trajectory Assembly](collector_trajectory_assembly.html)
 
 Collectors Deep Dive: Trajectory Assembly
+![](../_images/sphx_glr_low_level_controller_thumb.png)
+
+[Deploying low-level policies for high-level reinforcement learning](low_level_controller.html)
+
+Deploying low-level policies for high-level reinforcement learning
 ![](../_images/sphx_glr_multi_task_thumb.png)
 
 [Task-specific policy in multi-task environments](multi_task.html)

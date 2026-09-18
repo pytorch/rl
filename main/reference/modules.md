@@ -141,6 +141,7 @@ actor = ProbabilisticActor(
 - [Utilities and Helpers](modules_utils.html)
 
 - [ActorValueOperator](generated/torchrl.modules.ActorValueOperator.html)
+- [LowLevelController](generated/torchrl.modules.LowLevelController.html)
 - [ActorCriticOperator](generated/torchrl.modules.ActorCriticOperator.html)
 - [ActorCriticWrapper](generated/torchrl.modules.ActorCriticWrapper.html)
 - [get_primers_from_module](generated/torchrl.modules.get_primers_from_module.html)

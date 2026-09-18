@@ -189,6 +189,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="What you will learn -------------------">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_low_level_controller_thumb.png
+    :alt:
+
+  :doc:`/tutorials/low_level_controller`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Deploying low-level policies for high-level reinforcement learning</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Task-specific policy in multi-task environments">
 
 .. only:: html
@@ -547,6 +564,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/getting-started-5
    /tutorials/getting-started-1
    /tutorials/collector_trajectory_assembly
+   /tutorials/low_level_controller
    /tutorials/multi_task
    /tutorials/vla
    /tutorials/checkpointing

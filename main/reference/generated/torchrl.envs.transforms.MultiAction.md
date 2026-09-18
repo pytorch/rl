@@ -1,6 +1,6 @@
 # MultiAction
 
-*class*torchrl.envs.transforms.MultiAction(***, *dim: int = 1*, *stack_rewards: bool = True*, *stack_observations: bool = False*, *action_key: NestedKey | None = None*, *chunk_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#MultiAction)
+*class*torchrl.envs.transforms.MultiAction(***, *dim: int = 1*, *stack_rewards: bool = True*, *stack_observations: bool = False*, *action_key: NestedKey | None = None*, *chunk_key: NestedKey | None = None*, *reward_aggregation: Literal['last', 'stack', 'sum', 'mean'] | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#MultiAction)
 
 A transform to execute multiple actions in the parent environment.
 
@@ -70,6 +70,11 @@ compatibility. Set this to values such as
 `("vla_action", "chunk")` when a chunk policy should act through
 `MultiAction` without re-keying its output. See also
 `from_vla()`.
+- **reward_aggregation** (*str**,**optional*) - "last", "stack", "sum", or "mean".
+An explicit value overrides stack_rewards. Sum and mean reduce
+only executed steps without allocating a reward stack. Defaults
+to None, preserving the stack_rewards behavior. See also
+`MultiActionConfig`.
 
 See also
 

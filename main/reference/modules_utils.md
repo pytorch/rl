@@ -4,6 +4,7 @@ Utility modules and helper functions for building RL networks.
 
 | [`ActorValueOperator`](generated/torchrl.modules.ActorValueOperator.html#torchrl.modules.ActorValueOperator)(*args, **kwargs) | Actor-value operator. |
 | --- | --- |
+| [`LowLevelController`](generated/torchrl.modules.LowLevelController.html#torchrl.modules.LowLevelController)(*args, **kwargs) | Deploy a TensorDict policy on independent controller instances. |
 | [`ActorCriticOperator`](generated/torchrl.modules.ActorCriticOperator.html#torchrl.modules.ActorCriticOperator)(*args, **kwargs) | Actor-critic operator. |
 | [`ActorCriticWrapper`](generated/torchrl.modules.ActorCriticWrapper.html#torchrl.modules.ActorCriticWrapper)(*args, **kwargs) | Actor-value operator without common module. |
 | [`get_primers_from_module`](generated/torchrl.modules.get_primers_from_module.html#torchrl.modules.get_primers_from_module)(module[, warn, strict]) | Get all tensordict primers from all submodules of a module. |

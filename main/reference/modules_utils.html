@@ -1716,6 +1716,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.MeanActionSelector.html">MeanActionSelector</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.ModuleTransform.html">ModuleTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.MultiAction.html">MultiAction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.ClosedLoopMultiAction.html">ClosedLoopMultiAction</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.NextObservationDelta.html">NextObservationDelta</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.NextStateReconstructor.html">NextStateReconstructor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.PolicyAgeFilter.html">PolicyAgeFilter</a></li>
@@ -2006,6 +2007,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Utilities and Helpers</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.ActorValueOperator.html">ActorValueOperator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.LowLevelController.html">LowLevelController</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.ActorCriticOperator.html">ActorCriticOperator</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.ActorCriticWrapper.html">ActorCriticWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.get_primers_from_module.html">get_primers_from_module</a></li>
@@ -2356,6 +2358,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig.html">torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig.html">torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.MultiActionConfig.html">torchrl.trainers.algorithms.configs.transforms.MultiActionConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig.html">torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.TimerConfig.html">torchrl.trainers.algorithms.configs.transforms.TimerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig.html">torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.transforms.FiniteTensorDictCheckConfig.html">torchrl.trainers.algorithms.configs.transforms.FiniteTensorDictCheckConfig</a></li>
@@ -2596,16 +2599,19 @@ document.write(`
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.ActorValueOperator.html#torchrl.modules.ActorValueOperator" title="torchrl.modules.ActorValueOperator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorValueOperator</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Actor-value operator.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.ActorCriticOperator.html#torchrl.modules.ActorCriticOperator" title="torchrl.modules.ActorCriticOperator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorCriticOperator</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.LowLevelController.html#torchrl.modules.LowLevelController" title="torchrl.modules.LowLevelController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LowLevelController</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Deploy a TensorDict policy on independent controller instances.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.ActorCriticOperator.html#torchrl.modules.ActorCriticOperator" title="torchrl.modules.ActorCriticOperator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorCriticOperator</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Actor-critic operator.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.ActorCriticWrapper.html#torchrl.modules.ActorCriticWrapper" title="torchrl.modules.ActorCriticWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorCriticWrapper</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.ActorCriticWrapper.html#torchrl.modules.ActorCriticWrapper" title="torchrl.modules.ActorCriticWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ActorCriticWrapper</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Actor-value operator without common module.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.get_primers_from_module.html#torchrl.modules.get_primers_from_module" title="torchrl.modules.get_primers_from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_primers_from_module</span></code></a>(module[, warn, strict])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.get_primers_from_module.html#torchrl.modules.get_primers_from_module" title="torchrl.modules.get_primers_from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_primers_from_module</span></code></a>(module[, warn, strict])</p></td>
 <td><p>Get all tensordict primers from all submodules of a module.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.get_env_transforms_from_module.html#torchrl.modules.get_env_transforms_from_module" title="torchrl.modules.get_env_transforms_from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_env_transforms_from_module</span></code></a>(module[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.get_env_transforms_from_module.html#torchrl.modules.get_env_transforms_from_module" title="torchrl.modules.get_env_transforms_from_module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_env_transforms_from_module</span></code></a>(module[, ...])</p></td>
 <td><p>Return all <a class="reference internal" href="generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv" title="torchrl.envs.transforms.TransformedEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code></a> transforms needed for a recurrent module.</p></td>
 </tr>
 </tbody>
@@ -3015,7 +3021,7 @@ document.write(`
        "headline": "Utilities and Helpers",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules_utils.html",
-       "articleBody": "Utilities and Helpers# Utility modules and helper functions for building RL networks. ActorValueOperator(*args, **kwargs) Actor-value operator. ActorCriticOperator(*args, **kwargs) Actor-critic operator. ActorCriticWrapper(*args, **kwargs) Actor-value operator without common module. get_primers_from_module(module[, warn, strict]) Get all tensordict primers from all submodules of a module. get_env_transforms_from_module(module[, ...]) Return all TransformedEnv transforms needed for a recurrent module. get_recurrent_matmul_precision() Resolve the currently effective precision to a concrete mode. set_recurrent_matmul_precision(mode) Set the process-global precision for the triton RNN backend. torchrl.modules.RecurrentMatmulPrecision# alias of Literal[\u2018ieee\u2019, \u2018tf32\u2019, \u2018tf32x3\u2019] torchrl.modules.RecurrentMatmulPrecisionUserMode# alias of Literal[\u2018auto\u2019, \u2018fast\u2019, \u2018high-prec\u2019, \u2018ieee\u2019, \u2018tf32\u2019, \u2018tf32x3\u2019] SquashDims([ndims_in]) A squashing layer.",
+       "articleBody": "Utilities and Helpers# Utility modules and helper functions for building RL networks. ActorValueOperator(*args, **kwargs) Actor-value operator. LowLevelController(*args, **kwargs) Deploy a TensorDict policy on independent controller instances. ActorCriticOperator(*args, **kwargs) Actor-critic operator. ActorCriticWrapper(*args, **kwargs) Actor-value operator without common module. get_primers_from_module(module[, warn, strict]) Get all tensordict primers from all submodules of a module. get_env_transforms_from_module(module[, ...]) Return all TransformedEnv transforms needed for a recurrent module. get_recurrent_matmul_precision() Resolve the currently effective precision to a concrete mode. set_recurrent_matmul_precision(mode) Set the process-global precision for the triton RNN backend. torchrl.modules.RecurrentMatmulPrecision# alias of Literal[\u2018ieee\u2019, \u2018tf32\u2019, \u2018tf32x3\u2019] torchrl.modules.RecurrentMatmulPrecisionUserMode# alias of Literal[\u2018auto\u2019, \u2018fast\u2019, \u2018high-prec\u2019, \u2018ieee\u2019, \u2018tf32\u2019, \u2018tf32x3\u2019] SquashDims([ndims_in]) A squashing layer.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

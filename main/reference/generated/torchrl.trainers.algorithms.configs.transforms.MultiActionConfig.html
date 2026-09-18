@@ -52,7 +52,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="torchrl.trainers.algorithms.configs.transforms.TimerConfig" href="torchrl.trainers.algorithms.configs.transforms.TimerConfig.html" />
+    <link rel="next" title="torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig" href="torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig.html" />
     <link rel="prev" title="torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig" href="torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1716,6 +1716,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.MeanActionSelector.html">MeanActionSelector</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ModuleTransform.html">ModuleTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.MultiAction.html">MultiAction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ClosedLoopMultiAction.html">ClosedLoopMultiAction</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextObservationDelta.html">NextObservationDelta</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextStateReconstructor.html">NextStateReconstructor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyAgeFilter.html">PolicyAgeFilter</a></li>
@@ -2006,6 +2007,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../modules_utils.html">Utilities and Helpers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.ActorValueOperator.html">ActorValueOperator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.LowLevelController.html">LowLevelController</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.ActorCriticOperator.html">ActorCriticOperator</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.ActorCriticWrapper.html">ActorCriticWrapper</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.get_primers_from_module.html">get_primers_from_module</a></li>
@@ -2356,6 +2358,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig.html">torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig.html">torchrl.trainers.algorithms.configs.transforms.ConditionalSkipConfig</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">torchrl.trainers.algorithms.configs.transforms.MultiActionConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig.html">torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.transforms.TimerConfig.html">torchrl.trainers.algorithms.configs.transforms.TimerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig.html">torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.transforms.FiniteTensorDictCheckConfig.html">torchrl.trainers.algorithms.configs.transforms.FiniteTensorDictCheckConfig</a></li>
@@ -2592,8 +2595,8 @@ document.write(`
 <h1>torchrl.trainers.algorithms.configs.transforms.MultiActionConfig<a class="headerlink" href="#torchrl-trainers-algorithms-configs-transforms-multiactionconfig" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.trainers.algorithms.configs.transforms.MultiActionConfig">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.algorithms.configs.transforms.</span></span><span class="sig-name descname"><span class="pre">MultiActionConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_rewards</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_target_</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrl.envs.transforms.transforms.MultiAction'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/algorithms/configs/transforms.html#MultiActionConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.algorithms.configs.transforms.MultiActionConfig" title="Link to this definition">#</a></dt>
-<dd><p>Configuration for MultiAction transform.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.algorithms.configs.transforms.</span></span><span class="sig-name descname"><span class="pre">MultiActionConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_rewards</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stack_observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward_aggregation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_target_</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrl.envs.transforms.transforms.MultiAction'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/algorithms/configs/transforms.html#MultiActionConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.algorithms.configs.transforms.MultiActionConfig" title="Link to this definition">#</a></dt>
+<dd><p>Hydra configuration for <a class="reference internal" href="torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction" title="torchrl.envs.transforms.MultiAction"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAction</span></code></a>.</p>
 </dd></dl>
 
 </section>
@@ -2650,11 +2653,11 @@ document.write(`
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.trainers.algorithms.configs.transforms.TimerConfig.html"
+       href="torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">torchrl.trainers.algorithms.configs.transforms.TimerConfig</p>
+        <p class="prev-next-title">torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2689,11 +2692,11 @@ document.write(`
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.trainers.algorithms.configs.transforms.TimerConfig.html"
+       href="torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">torchrl.trainers.algorithms.configs.transforms.TimerConfig</p>
+        <p class="prev-next-title">torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2968,7 +2971,7 @@ document.write(`
        "headline": "torchrl.trainers.algorithms.configs.transforms.MultiActionConfig",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.trainers.algorithms.configs.transforms.MultiActionConfig.html",
-       "articleBody": "torchrl.trainers.algorithms.configs.transforms.MultiActionConfig# class torchrl.trainers.algorithms.configs.transforms.MultiActionConfig(dim: int = 1, stack_rewards: bool = True, stack_observations: bool = False, action_key: Any | None = None, chunk_key: Any | None = None, _target_: str = \u0027torchrl.envs.transforms.transforms.MultiAction\u0027)[source]# Configuration for MultiAction transform.",
+       "articleBody": "torchrl.trainers.algorithms.configs.transforms.MultiActionConfig# class torchrl.trainers.algorithms.configs.transforms.MultiActionConfig(dim: int = 1, stack_rewards: bool = True, stack_observations: bool = False, action_key: Any | None = None, chunk_key: Any | None = None, reward_aggregation: str | None = None, _target_: str = \u0027torchrl.envs.transforms.transforms.MultiAction\u0027)[source]# Hydra configuration for MultiAction.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
