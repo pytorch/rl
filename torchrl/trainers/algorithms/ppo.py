@@ -107,7 +107,9 @@ class PPOTrainer(OnPolicyTrainer):
                 GAE already normalizes advantages (e.g. within each task).
             gae_kwargs (Mapping, optional): Extra GAE arguments. For per-task
                 normalization, pass ``{"group_key": "task_id", "average_gae": True}``.
-                Recurrent windows default to ``shifted=True, deactivate_vmap=True``.
+                Recurrent windows default to ``shifted=False, deactivate_vmap=True``
+                because their value networks may depend on recurrent state that
+                cannot be reconstructed by shifting observations alone.
             collector_kwargs (Mapping, optional): Extra ``Collector`` arguments,
                 such as ``policy_device`` and ``storing_device``.
             **trainer_kwargs: Additional :class:`OnPolicyTrainer` options, such
@@ -192,7 +194,7 @@ class PPOTrainer(OnPolicyTrainer):
         gae_options.setdefault("gamma", trainer_kwargs.get("gamma", 0.99))
         gae_options.setdefault("lmbda", trainer_kwargs.get("lmbda", 0.95))
         if sub_traj_len is not None:
-            gae_options.setdefault("shifted", True)
+            gae_options.setdefault("shifted", False)
             gae_options.setdefault("deactivate_vmap", True)
         loss_options = dict(loss_kwargs or {})
         loss_options.setdefault(

@@ -2323,6 +2323,8 @@ class TestPPOFromEnv:
             return trainer, actor, critic
 
         trainer, actor, critic = build(32)
+        if recurrent:
+            assert not trainer._modules["value_estimator"].value_estimator.shifted
         actor_before = [p.detach().clone() for p in actor.parameters()]
         critic_before = [p.detach().clone() for p in critic.parameters()]
         trainer.train()
