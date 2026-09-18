@@ -33,7 +33,28 @@ from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
 
 
-def _main_async_collector(
+def _main_async_collector(*args, **kwargs) -> None:
+    """Run a collector worker and clean up expected parent-side disconnects."""
+    inner_collector_ref = []
+    try:
+        _main_async_collector_impl(
+            *args, _inner_collector_ref=inner_collector_ref, **kwargs
+        )
+    except (EOFError, BrokenPipeError, KeyboardInterrupt):
+        # The parent owns the worker lifecycle. Its pipe disappearing, or a
+        # process-group interrupt reaching the child, is a normal shutdown path.
+        pass
+    finally:
+        if inner_collector_ref:
+            try:
+                inner_collector_ref[0].shutdown()
+            except Exception:
+                # Cleanup must not mask an exception raised by collection or
+                # turn a parent-initiated shutdown into a child traceback.
+                pass
+
+
+def _main_async_collector_impl(
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
     create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],  # noqa: F821
@@ -73,6 +94,7 @@ def _main_async_collector(
     pre_collect_hook: Callable[[], None] | None = None,
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     compact_obs: bool = False,
+    _inner_collector_ref: list[BaseCollector] | None = None,
 ) -> None:
     # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
     # Runs before any CUDA/torchrl work in the child process.
@@ -152,6 +174,8 @@ def _main_async_collector(
             post_collect_hook=post_collect_hook,
             compact_obs=compact_obs,
         )
+        if _inner_collector_ref is not None:
+            _inner_collector_ref.append(inner_collector)
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
         if weight_sync_schemes:
@@ -514,6 +538,8 @@ def _main_async_collector(
                     stop()
             del collected_tensordict, data, next_data, data_in
             inner_collector.shutdown()
+            if _inner_collector_ref is not None:
+                _inner_collector_ref.clear()
             del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:
