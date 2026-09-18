@@ -28,6 +28,22 @@ from torchrl.envs.libs.gym import GymWrapper
 _has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_isaaclab_newton = importlib.util.find_spec("isaaclab_newton") is not None
 _has_isaaclab_ov = importlib.util.find_spec("isaaclab_ov") is not None
+_has_isaaclab_experimental = (
+    importlib.util.find_spec("isaaclab_experimental") is not None
+)
+
+
+def _isaac_data_to_torch(value: Any) -> torch.Tensor:
+    """Converts an Isaac Lab data buffer (2.x torch.Tensor, 3.x warp ProxyArray or warp array) to a torch.Tensor."""
+    if isinstance(value, torch.Tensor):
+        return value
+    torch_view = getattr(value, "torch", None)
+    if isinstance(torch_view, torch.Tensor):
+        return torch_view
+    try:
+        return torch.from_dlpack(value)
+    except Exception:
+        return torch.as_tensor(value)
 
 
 class IsaacLabWrapper(GymWrapper):
@@ -128,6 +144,13 @@ class IsaacLabWrapper(GymWrapper):
 
         >>> env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
         >>> env = IsaacLabWrapper(env)
+
+    .. note:: With Isaac Lab 3.x, the ``AppLauncher`` boilerplate above is
+        replaced by the ``isaaclab_tasks.utils`` helpers
+        (``add_launcher_args``, ``launch_simulation``,
+        ``resolve_task_config``), and the physics backend is selected through
+        a Hydra-style preset override such as ``physics=newton_mjwarp`` or
+        ``physics=ovphysx``. The wrapper itself supports both versions.
 
     """
 
@@ -295,7 +318,9 @@ class IsaacLabWrapper(GymWrapper):
                     channels = camera.data.output[self.tiled_camera_data_type].shape[-1]
             dtype = self.pixels_dtype
             if dtype is None:
-                dtype = camera.data.output[self.tiled_camera_data_type].dtype
+                dtype = _isaac_data_to_torch(
+                    camera.data.output[self.tiled_camera_data_type]
+                ).dtype
             shape = (*self.batch_size, cfg.height, cfg.width, channels)
             if dtype == torch.uint8:
                 pixels_spec = Bounded(
@@ -324,7 +349,7 @@ class IsaacLabWrapper(GymWrapper):
 
     def _read_tiled_camera_pixels(self) -> torch.Tensor:
         pixels = self._get_tiled_camera().data.output[self.tiled_camera_data_type]
-        pixels = torch.as_tensor(pixels, device=self.device)
+        pixels = _isaac_data_to_torch(pixels).to(self.device)
         if self.pixels_channels is not None:
             pixels = pixels[..., : self.pixels_channels]
         if self.pixels_dtype is not None and pixels.dtype != self.pixels_dtype:
@@ -366,7 +391,7 @@ class IsaacLabWrapper(GymWrapper):
         observations, reward, terminated, truncated, info = step_outputs_tuple
         observations = self._add_tiled_camera_pixels(observations)
         done = terminated | truncated
-        reward = reward.unsqueeze(-1)  # to get to (num_envs, 1)
+        reward = reward.clone().unsqueeze(-1)  # to get to (num_envs, 1)
         return (
             observations,
             reward,
@@ -557,7 +582,16 @@ class IsaacLabWrapper(GymWrapper):
             # that DirectRLEnv / DirectMARLEnv reset() would normally do.
             if seed is not None:
                 unwrapped.seed(seed)
-            unwrapped._reset_idx(env_ids)
+            if self._direct_reset_uses_mask(unwrapped):
+                mask = torch.zeros(
+                    self.batch_size.numel(),
+                    dtype=torch.bool,
+                    device=unwrapped.device,
+                )
+                mask[env_ids] = True
+                unwrapped._reset_idx(mask)
+            else:
+                unwrapped._reset_idx(env_ids)
             unwrapped.scene.write_data_to_sim()
             unwrapped.sim.forward()
             return unwrapped._get_observations(), unwrapped.extras
@@ -567,6 +601,15 @@ class IsaacLabWrapper(GymWrapper):
             f"{type(unwrapped).__name__}. Supported bases are ManagerBasedEnv "
             "(and subclasses), DirectRLEnv and DirectMARLEnv."
         )
+
+    @staticmethod
+    def _direct_reset_uses_mask(env: Any) -> bool:
+        """Whether ``env._reset_idx`` expects a boolean mask (Isaac Lab 3.x ``DirectRLEnvWarp``) rather than indices."""
+        if not _has_isaaclab_experimental:
+            return False
+        from isaaclab_experimental.envs.direct_rl_env_warp import DirectRLEnvWarp
+
+        return isinstance(env, DirectRLEnvWarp)
 
     def _build_reset_tensordict(self, obs: Any, info: dict | None) -> TensorDictBase:
         """Rebuild a torchrl-style reset tensordict from Isaac's (obs, info)."""
