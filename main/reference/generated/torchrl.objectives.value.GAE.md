@@ -7,6 +7,10 @@ A class wrapper around the generalized advantage estimate functional.
 Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
 [https://arxiv.org/pdf/1506.02438.pdf](https://arxiv.org/pdf/1506.02438.pdf) for more context.
 
+For recurrent value networks, use the `for_recurrent()` alternative
+constructor. It selects correctness-first recurrent defaults and validates
+the required reset markers and recurrent state inputs.
+
 Parameters:
 
 - **gamma** (*scalar*) - exponential mean discount.
@@ -150,6 +154,68 @@ and `"next"` data.
 default_keys
 
 alias of `_AcceptedKeys`
+
+*classmethod*for_recurrent(***, *gamma: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *lmbda: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *value_network: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)*, *average_gae: bool = True*, *shifted: bool = False*, *deactivate_vmap: bool = True*, *group_key: NestedKey | None = None*, *valid: NestedKey | None = None*, ***kwargs: Any*) → GAE[[source]](../../_modules/torchrl/objectives/value/advantages.html#GAE.for_recurrent)
+
+Construct GAE with correctness-first recurrent-network defaults.
+
+This constructor disables `vmap` and uses the two-call value path by
+default, requires time to be the last batch dimension, and validates
+the recurrent reset markers and state tensors before calling the value
+network. The estimator is bound to the network passed at construction;
+construct another estimator if the value network changes.
+`shifted=True` remains available as an explicit optimization when its
+one-step observation invariant is known to hold.
+
+Parameters:
+
+- **gamma** (*scalar*) - exponential mean discount.
+- **lmbda** (*scalar*) - trajectory discount.
+- **value_network** (*TensorDictModule*) - recurrent value operator. Its
+external inputs must include `"is_init"` and at least one
+state key whose corresponding `("next", ...)` key is an
+output.
+- **average_gae** (*bool**,**optional*) - if `True`, standardize advantages.
+Defaults to `True`.
+- **shifted** (*bool**,**optional*) - if `True`, use the explicit single-call
+shifted path. Defaults to `False`.
+- **deactivate_vmap** (*bool**,**optional*) - if `True`, replace `vmap`
+with sequential calls. Defaults to `True`.
+- **group_key** (*NestedKey**,**optional*) - key used for group-wise advantage
+normalization. Defaults to `None`.
+- **valid** (*NestedKey**,**optional*) - valid-transition mask key. Defaults to
+`None`.
+- ****kwargs** - explicit overrides accepted by `GAE`, including
+`time_dim` and `vectorized`.
+
+Returns:
+
+A recurrent-input-validating `GAE` instance.
+
+Examples
+
+```
+>>> from torch import nn
+>>> from tensordict.nn import TensorDictModule, TensorDictSequential
+>>> from torchrl.modules import GRUModule
+>>> gru = GRUModule(
+... input_size=3,
+... hidden_size=4,
+... in_keys=["obs", "hidden"],
+... out_keys=["features", ("next", "hidden")],
+... )
+>>> critic = TensorDictSequential(
+... gru,
+... TensorDictModule(
+... nn.Linear(4, 1), ["features"], ["state_value"]
+... ),
+... )
+>>> gae = GAE.for_recurrent(
+... gamma=0.99, lmbda=0.95, value_network=critic
+... )
+>>> gae.deactivate_vmap
+True
+```
 
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*, ***, *params: list[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | None = None*, *target_params: list[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | None = None*, *time_dim: int | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/objectives/value/advantages.html#GAE.forward)
 

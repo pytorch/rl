@@ -105,11 +105,10 @@ rb = TensorDictReplayBuffer(
  sampler=SliceSampler(slice_len=slice_len),
  batch_size=num_slices * slice_len,
 )
-advantage = GAE(
+advantage = GAE.for_recurrent(
  gamma=0.99,
  lmbda=0.95,
  value_network=critic,
- deactivate_vmap=True,
 )
 loss_module = ClipPPOLoss(actor, critic, clip_epsilon=0.2, entropy_coeff=0.0)
 
@@ -143,6 +142,16 @@ The signal that ties it together is the `"is_init"` key: a boolean per
 batch element that says "this is the first step of a fresh trajectory,
 do not use the hidden state coming in." Every reset of recurrent state
 in TorchRL ultimately ties back to this flag.
+
+[`for_recurrent()`](generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE.for_recurrent) selects the safe two-call
+value path, disables `vmap`, and standardizes advantages by default. It also
+checks that both root and next `is_init` and recurrent-state tensors survived
+replay. Recurrent value modules require time to be the last batch dimension;
+the usual GAE time-dimension resolution still applies. The estimator is bound
+to the value network passed to the factory, so replacing the network requires a
+new estimator. The shifted single-call optimization remains available with
+`shifted=True` when the rollout satisfies its documented one-step observation
+invariant.
 
 ## The path at a glance
 
