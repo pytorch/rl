@@ -376,9 +376,7 @@ class MicroDuckSkillEnv(TransformedEnv):
         inner = ClosedLoopMultiAction.from_env(
             env, controller, steps=control_steps_per_decision
         )
-        inner.insert_transform(
-            -1, _MicroDuckSkillHistory(env, group_key, num_skills)
-        )
+        inner.insert_transform(-1, _MicroDuckSkillHistory(env, group_key, num_skills))
         return cls(
             inner,
             _MicroDuckSkillObservation(group_key, num_skills),
