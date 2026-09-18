@@ -23,7 +23,11 @@ from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.utils import (
+    _NON_NN_POLICY_WEIGHTS,
+    _validate_replay_write_mode,
+    split_trajectories,
+)
 from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -315,6 +319,13 @@ class RayCollector(BaseCollector):
             See :class:`~torchrl.collectors.BaseCollector` for the full
             description of the completeness guarantee and storage contract.
             Defaults to ``None``.
+        replay_write_mode (``"rollout"``, ``"trajectory"``, optional): Selects
+            fixed-frame rollout writes or flat complete-trajectory writes to
+            the replay service. Passed through to every remote collector.
+            Defaults to ``None``.
+        trajs_per_write (int, optional): Number of completed trajectories to
+            group in each replay-buffer ``extend`` call in trajectory mode.
+            Defaults to ``None``.
 
     Examples:
         >>> from torch import nn
@@ -384,6 +395,8 @@ class RayCollector(BaseCollector):
         use_env_creator: bool = False,
         no_cuda_sync: bool | None = None,
         trajs_per_batch: int | None = None,
+        trajs_per_write: int | None = None,
+        replay_write_mode: Literal["rollout", "trajectory"] | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     ):
@@ -401,6 +414,13 @@ class RayCollector(BaseCollector):
 
         if collector_kwargs is None:
             collector_kwargs = {}
+        self.replay_write_mode = _validate_replay_write_mode(
+            replay_write_mode,
+            has_replay_buffer=replay_buffer is not None,
+            trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
+        )
+        self._trajectory_writes_in_workers = self.replay_write_mode == "trajectory"
         if pre_collect_hook is not None:
             if isinstance(collector_kwargs, dict):
                 collector_kwargs.setdefault("pre_collect_hook", pre_collect_hook)
@@ -432,6 +452,18 @@ class RayCollector(BaseCollector):
             else:
                 for ck in collector_kwargs:
                     ck.setdefault("trajs_per_batch", trajs_per_batch)
+        if trajs_per_write is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("trajs_per_write", trajs_per_write)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("trajs_per_write", trajs_per_write)
+        if replay_write_mode is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("replay_write_mode", replay_write_mode)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("replay_write_mode", replay_write_mode)
 
         # Make sure input parameters are consistent
         def check_consistency_with_num_collectors(param, param_name, num_collectors):

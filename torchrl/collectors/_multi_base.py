@@ -38,6 +38,7 @@ from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import (
     _make_meta_policy_cm,
     _TrajectoryPool,
+    _validate_replay_write_mode,
     _validate_traj_format,
 )
 from torchrl.collectors.weight_update import WeightUpdaterBase
@@ -267,28 +268,20 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             invisible to a :class:`~torchrl.data.replay_buffers.SliceSampler`;
             see :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
             and :ref:`collectors_replay_trajs` for the trade-offs.
-        trajs_per_batch (int, optional): When set together with ``replay_buffer``,
-            trajectory assembly is delegated to each worker's inner
-            :class:`~torchrl.collectors.Collector`.  Each worker calls
-            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`
-            independently and writes **complete trajectories** (episodes whose
-            last step has ``("next", "done") == True``) to the shared replay
-            buffer as flat 1-D sequences — no padding, no accumulation.
-
-            When set *without* ``replay_buffer``, the multi-collector
+        trajs_per_batch (int, optional): When set without ``replay_buffer``,
+            the multi-collector
             assembles trajectories from the worker batches and yields
             zero-padded batches of shape ``(trajs_per_batch, max_traj_len)``
             with a ``("collector", "mask")`` boolean field, or flat unpadded
             concatenations with ``traj_format="cat"``.
 
-            Both the iteration pattern (``for data in collector``) and the
-            async ``start()`` pattern are supported.
-
             Defaults to ``None`` (fixed-frame batches).
-
-            See :class:`~torchrl.collectors.BaseCollector` for the full
-            description of the completeness guarantee and replay-buffer
-            storage contract.
+        replay_write_mode (``"rollout"``, ``"trajectory"``, optional): Selects
+            fixed-frame rollout writes or complete-trajectory writes to the
+            shared replay buffer. In trajectory mode, assembly is delegated
+            to each worker and only flat, completed trajectories are inserted.
+            Defaults to ``None``; the legacy combination of ``replay_buffer``
+            and ``trajs_per_batch`` still selects trajectory writes.
         traj_format (str, optional): layout of the batches yielded when
             ``trajs_per_batch`` is set without a ``replay_buffer``:
             ``"padded"`` for zero-padded
@@ -469,6 +462,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        replay_write_mode: Literal["rollout", "trajectory"] | None = None,
         traj_format: Literal["padded", "cat"] | None = None,
         init_fn: Callable[[], None] | None = None,
         auto_register_policy_transforms: bool | None = None,
@@ -481,6 +475,17 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.replay_write_mode = _validate_replay_write_mode(
+            replay_write_mode,
+            has_replay_buffer=replay_buffer is not None,
+            trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
+        )
+        # Preserve the raw selector for workers. In the legacy
+        # replay_buffer + trajs_per_batch form it must stay None so that the
+        # worker can resolve that combination without seeing two selectors.
+        self._worker_replay_write_mode = replay_write_mode
+        self._trajectory_writes_in_workers = self.replay_write_mode == "trajectory"
         self.traj_format = _validate_traj_format(
             traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
         )
@@ -690,7 +695,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             and hasattr(replay_buffer, "shared")
             and not replay_buffer.shared
         ):
-            torchrl_logger.warning("Replay buffer is not shared. Sharing it.")
+            torchrl_logger.info("Replay buffer is not shared. Sharing it.")
             replay_buffer.share()
 
     def _setup_policy_factory(
@@ -1063,7 +1068,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         if self.replay_buffer is None:
             return
 
-        # Warn when a SliceSampler is used without trajs_per_batch: workers
+        # Warn when a SliceSampler is used without trajectory writes: workers
         # write batches independently so adjacent frames in the buffer can
         # come from different episodes without an intervening done signal.
         # This hazard is specific to multi-process collectors: a single
@@ -1075,32 +1080,34 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         from torchrl.data.replay_buffers.samplers import SliceSampler
 
         if (
-            getattr(self, "trajs_per_batch", None) is None
+            self.replay_write_mode != "trajectory"
             and isinstance(getattr(self.replay_buffer, "_sampler", None), SliceSampler)
             and not self.set_truncated
         ):
             warnings.warn(
                 "A SliceSampler is used with a multi-process collector but "
-                "trajs_per_batch is not set and set_truncated is False. "
+                "replay_write_mode='trajectory' is not set and "
+                "set_truncated is False. "
                 "Adjacent frames in the replay buffer may come from different "
                 "workers and different episodes, causing SliceSampler to "
                 "sample slices that cross trajectory boundaries. "
-                "Consider setting trajs_per_batch to write only complete "
-                "trajectories, or set_truncated=True to mark batch "
+                "Consider setting replay_write_mode='trajectory' to write "
+                "only complete trajectories, or set_truncated=True to mark batch "
                 "boundaries (note: this introduces artificial truncations).",
                 category=UserWarning,
                 stacklevel=2,
             )
 
-        if getattr(self, "trajs_per_batch", None) is not None:
+        if self.replay_write_mode == "trajectory":
             # Trajectory assembly will happen at the worker level: each worker's
             # inner Collector uses _iter_by_trajectories() to assemble complete
             # trajectories and write them to the shared replay buffer.
             # Null out trajs_per_batch on the multi-collector so that __iter__
             # routes to self.iterator() directly (not _iter_by_trajectories,
             # which would spin forever on the None yields from the RB path).
-            self._worker_trajs_per_batch = self.trajs_per_batch
-            self.trajs_per_batch = None
+            if self.trajs_per_batch is not None:
+                self._worker_trajs_per_batch = self.trajs_per_batch
+                self.trajs_per_batch = None
         is_init = hasattr(self.replay_buffer, "_storage") and getattr(
             self.replay_buffer._storage, "initialized", True
         )
@@ -1128,8 +1135,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
             fake_td = self._add_collector_outputs_to_fake_td(fake_td)
-            if getattr(self, "_worker_trajs_per_batch", None) is not None:
-                # With trajs_per_batch, workers write flat 1-D timesteps to
+            if self.replay_write_mode == "trajectory":
+                # In trajectory mode, workers write flat 1-D timesteps to
                 # the buffer.  Initialise the storage as 1-D so that the
                 # shapes match when real trajectories are written.
                 fake_td = fake_td.reshape(-1)[:1]
@@ -1526,6 +1533,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "init_random_frames": self.init_random_frames,
                     "trajs_per_batch": self._worker_trajs_per_batch,
                     "trajs_per_write": self.trajs_per_write,
+                    "replay_write_mode": self._worker_replay_write_mode,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
                     "track_policy_version": self.policy_version_tracker is not None,

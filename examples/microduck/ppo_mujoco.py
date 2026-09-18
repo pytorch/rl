@@ -839,7 +839,7 @@ def train_ppo(
         frames_per_batch=num_envs * min(50, max_episode_steps),
         total_frames=-1,
         replay_buffer=replay_buffer,
-        trajs_per_batch=1,
+        replay_write_mode="trajectory",
         trajs_per_write=1,
         storing_device="cpu",
     )
