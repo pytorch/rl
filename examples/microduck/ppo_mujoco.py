@@ -583,50 +583,6 @@ def load_parameters(
 # ----------------------------------------------------------------------
 
 
-def microduck_metrics(
-    trajectories: TensorDictBase, *, jumping: bool = False
-) -> dict[str, float]:
-    """Task metrics of the padded trajectory batch an :class:`Evaluator` collects.
-
-    Speeds are the body-frame velocities read from the observation, so a
-    policy that turns is still credited for walking. Means are taken over
-    transitions, so an episode that falls after twenty steps does not weigh as
-    much as one that walks for five hundred. ``task_score`` is in ``[0, 1]``
-    for every task: velocity tracking error relative to the commanded speed
-    for walking and sidestepping, stillness for standing, and with
-    ``jumping=True`` the fraction of time with both feet off the ground
-    (which needs the env's ``diagnostics``).
-    """
-    mask = trajectories["collector", "mask"]
-    lengths = mask.sum(-1)
-    velocity = trajectories["next", "observation"][..., 6:8]
-    command = trajectories["command"]
-    error = (velocity - command).norm(dim=-1)
-    velocity_score = 1 - (error / command.norm(dim=-1).clamp_min(0.1)).clamp(max=1.0)
-    if ("next", "diagnostic_left_foot_contact") in trajectories.keys(True):
-        airborne = (
-            (trajectories["next", "diagnostic_left_foot_contact"][..., 0] < 0.5)
-            & (trajectories["next", "diagnostic_right_foot_contact"][..., 0] < 0.5)
-        ).float()
-    else:
-        airborne = torch.zeros_like(error)
-    score = airborne if jumping else velocity_score
-    episode_score = (score * mask).sum(-1) / lengths
-    last = trajectories["next", "terminated"][..., 0].gather(
-        -1, (lengths - 1).unsqueeze(-1)
-    )
-    return {
-        "tracking_error": float(error[mask].mean()),
-        "forward_speed": float(velocity[..., 0][mask].mean()),
-        "lateral_speed": float(velocity[..., 1][mask].mean()),
-        "airborne_fraction": float(airborne[mask].mean()),
-        "survival_rate": float((~last).float().mean()),
-        "episode_length_min": float(lengths.min()),
-        "task_score": float(score[mask].mean()),
-        "task_score_min": float(episode_score.min()),
-    }
-
-
 def make_evaluator(
     env: TransformedEnv,
     actor: ProbabilisticActor,
@@ -639,9 +595,10 @@ def make_evaluator(
     """Deterministic evaluator of ``actor`` on an env pinned to one task.
 
     Metrics are logged under ``evaluation/<label>/``; the evaluator adds
-    ``reward`` and ``episode_length`` to :func:`microduck_metrics`, whose
-    ``task_score`` measures airborne time when ``jumping`` is set. The actor's
-    recurrent-state primer is appended to ``env``.
+    ``reward`` and ``episode_length`` to
+    :meth:`MicroDuckEnv.trajectory_metrics`, whose ``task_score`` measures
+    airborne time when ``jumping`` is set. The actor's recurrent-state primer
+    is appended to ``env``.
     """
     env.append_transform(get_primers_from_module(actor))
     return Evaluator(
@@ -649,7 +606,7 @@ def make_evaluator(
         actor,
         num_trajectories=num_episodes,
         max_steps=steps,
-        metrics_fn=partial(microduck_metrics, jumping=jumping),
+        metrics_fn=partial(MicroDuckEnv.trajectory_metrics, jumping=jumping),
         log_prefix=f"evaluation/{label}",
     )
 
