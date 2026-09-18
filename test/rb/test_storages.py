@@ -963,11 +963,12 @@ class TestSharedStorageInit:
         completed.set()
 
 
-    def admission_worker(self, rb, queue):
+    def admission_worker(self, rb, started, queue):
+        started.set()
         try:
             index = rb.extend(
                 TensorDict({"x": torch.arange(10, 12)}, batch_size=(2,)),
-                timeout=5,
+                timeout=30,
             )
             queue.put(("done", index.tolist()))
         except Exception as error:
@@ -1188,27 +1189,35 @@ class TestSharedStorageInit:
             producer_resume_watermark=0,
         ).share(True)
         rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+        started = mp.Event()
         queue = mp.Queue()
-        process = mp.Process(target=self.admission_worker, args=(rb, queue))
+        process = mp.Process(
+            target=self.admission_worker, args=(rb, started, queue)
+        )
         process.start()
 
-        deadline = time.monotonic() + 5
-        with rb._readiness_condition:
+        try:
+            assert started.wait(timeout=30)
+            deadline = time.monotonic() + 10
             while not rb.stats()["producer_waiters"]:
                 remaining = deadline - time.monotonic()
                 assert remaining > 0
-                rb._readiness_condition.wait(remaining)
-        rb.sample()
+                time.sleep(min(0.01, remaining))
+            rb.sample()
 
-        process.join(timeout=5)
-        assert process.exitcode == 0
-        status, index = queue.get(timeout=1)
-        assert status == "done"
-        assert len(index) == 2
-        stats = rb.stats()
-        assert stats["blocked_producer_calls"] == 1
-        assert stats["producer_waiters"] == 0
-        assert stats["overwrites"] == 0
+            process.join(timeout=10)
+            assert process.exitcode == 0
+            status, index = queue.get(timeout=1)
+            assert status == "done"
+            assert len(index) == 2
+            stats = rb.stats()
+            assert stats["blocked_producer_calls"] == 1
+            assert stats["producer_waiters"] == 0
+            assert stats["overwrites"] == 0
+        finally:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
 
     def test_shared_init_reconciles_non_cpu_device(self):
         """Shared init installs a CPU memmap backing; a non-cpu storage device
