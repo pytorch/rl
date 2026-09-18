@@ -1191,9 +1191,7 @@ class TestSharedStorageInit:
         rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
         started = mp.Event()
         queue = mp.Queue()
-        process = mp.Process(
-            target=self.admission_worker, args=(rb, started, queue)
-        )
+        process = mp.Process(target=self.admission_worker, args=(rb, started, queue))
         process.start()
 
         try:
