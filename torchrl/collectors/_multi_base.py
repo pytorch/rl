@@ -13,7 +13,7 @@ from typing import Any, Literal
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import CudaGraphModule, TensorDictModule
+from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp, nn
 from torchrl import logger as torchrl_logger
@@ -362,8 +362,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             For multi-process collectors, the ``"policy_version"`` entries in the
             collected tensordict are produced by worker-local transforms and are the
             source of truth for data provenance. The parent collector's
-            :attr:`policy_version` property exposes only the parent-side tracker state
-            and should not be used as a label for a returned batch.
+            :attr:`policy_version` property is only available while all workers are
+            known to have acknowledged the same sequence of weight updates. Use
+            :meth:`worker_policy_versions` for an explicit per-worker snapshot.
 
             The recommended path is ``track_policy_version=True``: let the collector own
             the transform. Passing a :class:`~torchrl.envs.transforms.PolicyVersion`
@@ -840,6 +841,97 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "PolicyVersion is not available. Please install the LLM dependencies or set track_policy_version=False."
                 )
             self.policy_version_tracker = None
+        self._acknowledged_policy_version = (
+            self.policy_version_tracker.version
+            if self.policy_version_tracker is not None
+            else None
+        )
+
+    def update_policy_weights_(
+        self,
+        policy_or_weights: (
+            TensorDictBase | TensorDictModuleBase | nn.Module | dict | None
+        ) = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
+    ) -> None:
+        """Update worker policy weights and track an acknowledged version.
+
+        The aggregate :attr:`policy_version` is advanced only when every worker
+        synchronously acknowledges the update. Partial or asynchronous updates
+        invalidate the aggregate because a single version can no longer describe
+        every worker.
+        """
+        acknowledged_version = self._acknowledged_policy_version
+        if self.policy_version_tracker is not None:
+            # If synchronization fails after some workers have applied the update,
+            # retaining the previous aggregate would be misleading.
+            self._acknowledged_policy_version = None
+
+        super().update_policy_weights_(
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
+        )
+
+        if self.policy_version_tracker is None or acknowledged_version is None:
+            return
+
+        if worker_ids is None:
+            all_workers_targeted = True
+        elif isinstance(worker_ids, int):
+            all_workers_targeted = self.num_workers == 1 and worker_ids == 0
+        elif isinstance(worker_ids, torch.device):
+            all_workers_targeted = False
+        elif all(isinstance(worker_id, int) for worker_id in worker_ids):
+            all_workers_targeted = len(worker_ids) == self.num_workers and set(
+                worker_ids
+            ) == set(range(self.num_workers))
+        else:
+            all_workers_targeted = False
+
+        weights = kwargs.get("weights", policy_or_weights)
+        per_worker_weights = (
+            isinstance(weights, dict)
+            and bool(weights)
+            and all(isinstance(worker_id, int) for worker_id in weights)
+        )
+        if per_worker_weights:
+            all_workers_targeted = all_workers_targeted and set(weights) == set(
+                range(self.num_workers)
+            )
+
+        weights_dict = kwargs.get("weights_dict")
+        if weights_dict is not None:
+            model_ids = list(weights_dict)
+            for model_weights in weights_dict.values():
+                if (
+                    isinstance(model_weights, dict)
+                    and model_weights
+                    and all(isinstance(worker_id, int) for worker_id in model_weights)
+                ):
+                    all_workers_targeted = all_workers_targeted and set(
+                        model_weights
+                    ) == set(range(self.num_workers))
+        else:
+            model_ids = [kwargs.get("model_id") or "policy"]
+
+        if not model_ids:
+            self._acknowledged_policy_version = acknowledged_version
+            return
+
+        schemes = self._weight_sync_schemes
+        synchronously_acknowledged = bool(schemes) and all(
+            model_id in schemes and getattr(schemes[model_id], "sync", True)
+            for model_id in model_ids
+        )
+        if all_workers_targeted and synchronously_acknowledged:
+            # BaseCollector synchronizes each model separately, and the worker
+            # cascade increments its local tracker once per synced model.
+            # Rebuild the aggregate with that same per-model count only after
+            # every worker has acknowledged the full synchronous update.
+            self.policy_version_tracker.version = acknowledged_version
+            for _ in model_ids:
+                self.increment_version()
 
     # TODO: Remove this
     def _setup_fallback_policy(
@@ -2102,9 +2194,11 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
-        policy_version = state_dict.get("policy_version")
-        if policy_version is not None and self.policy_version_tracker is not None:
-            self.policy_version_tracker.version = policy_version
+        if "policy_version" in state_dict and self.policy_version_tracker is not None:
+            policy_version = state_dict["policy_version"]
+            self._acknowledged_policy_version = policy_version
+            if policy_version is not None:
+                self.policy_version_tracker.version = policy_version
 
     def increment_version(self):
         """Increment the policy version."""
@@ -2114,33 +2208,54 @@ also that the state dict is synchronised across processes if needed."""
                     "Policy version tracker is not a PolicyVersion instance. Please pass a PolicyVersion instance to the collector."
                 )
             self.policy_version_tracker.increment_version()
+            self._acknowledged_policy_version = self.policy_version_tracker.version
 
     @property
     def policy_version(self) -> str | int | None:
-        """The parent-side policy version.
+        """The policy version acknowledged by every worker.
 
         For multi-process collectors, worker-local
         :class:`~torchrl.envs.transforms.PolicyVersion`
         transforms write the per-frame ``"policy_version"`` values in returned
-        batches. Those tensor entries are the source of truth for collected
-        data; this property is only the parent-side tracker state.
+        batches and remain the source of truth for collected data. This property
+        returns ``None`` after a partial-worker or asynchronous update because
+        no single scalar is then known to describe every worker. Worker-local
+        versions can be queried explicitly with :meth:`worker_policy_versions`.
         """
-        if not hasattr(self.policy_version_tracker, "version"):
-            return None
-        return self.policy_version_tracker.version
+        return self._acknowledged_policy_version
 
     def get_policy_version(self) -> str | int | None:
-        """Get the parent-side policy version.
+        """Get the policy version acknowledged by every worker.
 
         This method exists to support remote calls in Ray actors, since properties
         cannot be accessed directly through Ray's RPC mechanism.
 
         Returns:
-            The parent-side version number (int) or UUID (str), or ``None`` if
-            version tracking is disabled. For collected data, prefer the
-            per-frame ``"policy_version"`` tensor in returned batches.
+            The aggregate version number (int) or UUID (str), or ``None`` if
+            version tracking is disabled or workers may differ.
         """
         return self.policy_version
+
+    def worker_policy_versions(self) -> dict[int, str | int | None]:
+        """Query the policy version currently reported by each worker.
+
+        Unlike :attr:`policy_version`, this method performs worker RPCs and can
+        expose divergent versions after partial updates. It shares the worker
+        control channels with other coordinator commands and therefore should
+        not race with weight updates issued from another thread.
+
+        Returns:
+            A mapping from worker index to its local policy version. Values are
+            ``None`` when policy-version tracking is disabled.
+        """
+        versions = dict(enumerate(self.map_fn("get_policy_version")))
+        if getattr(self, "running", False):
+            # map_fn has consumed every worker reply, so the control pipes are
+            # ready for the command that resumes asynchronous collection.
+            msg = "continue_random" if self._should_use_random_frames() else "continue"
+            for idx, pipe in enumerate(self.pipes):
+                pipe.send((idx, msg))
+        return versions
 
     def getattr_policy(self, attr):
         """Get an attribute from the policy of the first worker.

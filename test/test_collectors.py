@@ -4930,10 +4930,22 @@ class TestPolicyVersion:
         try:
             collector.update_policy_weights_()
             collector.update_policy_weights_()
+            assert collector.policy_version == 2
+            assert collector.worker_policy_versions() == {0: 2, 1: 2}
+
+            scheme = collector._weight_sync_schemes["policy"]
+            with patch.object(scheme, "send", side_effect=RuntimeError("sync failed")):
+                with pytest.raises(RuntimeError, match="sync failed"):
+                    collector.update_policy_weights_()
+            assert collector.policy_version is None
+            assert collector.worker_policy_versions() == {0: 2, 1: 2}
+
+            collector.update_policy_weights_(worker_ids=[0])
+            assert collector.policy_version is None
+            assert collector.worker_policy_versions() == {0: 3, 1: 2}
             state_dict = collector.state_dict()
-            saved_versions = [
-                state_dict[f"worker{idx}"]["policy_version"] for idx in range(2)
-            ]
+            assert state_dict["policy_version"] is None
+            saved_versions = collector.worker_policy_versions()
         finally:
             collector.shutdown()
 
@@ -4948,12 +4960,27 @@ class TestPolicyVersion:
         )
         try:
             restored.load_state_dict(state_dict)
-            restored_state = restored.state_dict()
-            assert [
-                restored_state[f"worker{idx}"]["policy_version"] for idx in range(2)
-            ] == saved_versions
+            assert restored.policy_version is None
+            assert restored.worker_policy_versions() == saved_versions
         finally:
             restored.shutdown()
+
+    def test_async_weight_update_invalidates_aggregate_policy_version(self):
+        collector = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": SharedMemWeightSyncScheme(sync=False)},
+        )
+        try:
+            assert collector.policy_version == 0
+            collector.update_policy_weights_()
+            assert collector.policy_version is None
+        finally:
+            collector.shutdown()
 
     @pytest.mark.parametrize(
         "collector_cls",
@@ -4993,6 +5020,8 @@ class TestPolicyVersion:
             # All workers start at the same initial version (0 by default).
             v0_val = int(v0.flatten()[0].item())
             assert (v0 == v0_val).all()
+            assert collector.policy_version == v0_val
+            assert collector.worker_policy_versions() == {0: v0_val, 1: v0_val}
 
             # Iterations without weight updates must not bump the version.
             for _ in range(2):
@@ -5009,6 +5038,8 @@ class TestPolicyVersion:
             # Drain until we see a batch fully at the bumped version, with
             # a sane safety cap so we don't loop forever on a regression.
             target = v0_val + 1
+            assert collector.policy_version == target
+            assert collector.worker_policy_versions() == {0: target, 1: target}
             for _ in range(10):
                 batch = next(it)
                 if (batch["next", "policy_version"] == target).all():
