@@ -6123,9 +6123,7 @@ class TestCollectorStats:
         "write_kwargs",
         [
             pytest.param({"trajs_per_batch": 1}, id="legacy"),
-            pytest.param(
-                {"replay_write_mode": "trajectory"}, id="explicit-trajectory"
-            ),
+            pytest.param({"replay_write_mode": "trajectory"}, id="explicit-trajectory"),
         ],
     )
     def test_complete_trajectory_progress_and_checkpoint(self, write_kwargs):
@@ -6196,9 +6194,7 @@ class TestCollectorStats:
         "write_kwargs",
         [
             pytest.param({"trajs_per_batch": 1}, id="legacy"),
-            pytest.param(
-                {"replay_write_mode": "trajectory"}, id="explicit-trajectory"
-            ),
+            pytest.param({"replay_write_mode": "trajectory"}, id="explicit-trajectory"),
         ],
     )
     def test_multiprocess_trajectory_progress_is_parent_shared(self, write_kwargs):
