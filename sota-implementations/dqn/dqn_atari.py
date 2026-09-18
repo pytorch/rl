@@ -7,6 +7,7 @@
 DQN: Reproducing experimental results from Mnih et al. 2015 for the
 Deep Q-Learning Algorithm on Atari Environments.
 """
+
 from __future__ import annotations
 
 import functools
@@ -111,6 +112,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Create the test environment
     test_env = make_env(
@@ -169,9 +173,11 @@ def main(cfg: DictConfig):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
         init_random_frames=init_random_frames,
-        compile_policy={"mode": compile_mode, "fullgraph": True}
-        if compile_mode is not None
-        else False,
+        compile_policy=(
+            {"mode": compile_mode, "fullgraph": True}
+            if compile_mode is not None
+            else False
+        ),
         cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
@@ -189,7 +195,8 @@ def main(cfg: DictConfig):  # noqa: F821
         timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
             data = next(c_iter)
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         pbar.update(data.numel())
         data = data.reshape(-1)
         current_frames = data.numel() * frame_skip
@@ -204,16 +211,16 @@ def main(cfg: DictConfig):  # noqa: F821
             episode_reward_mean = episode_rewards.mean().item()
             episode_length = data["next", "step_count"][data["next", "done"]]
             episode_length_mean = episode_length.sum().item() / len(episode_length)
-            metrics_to_log.update(
+            training_metrics.update(
                 {
-                    "train/episode_reward": episode_reward_mean,
-                    "train/episode_length": episode_length_mean,
+                    "episode_reward": episode_reward_mean,
+                    "episode_length": episode_length_mean,
                 }
             )
 
         if collected_frames < init_random_frames:
-            if logger:
-                logger.log_metrics(metrics_to_log, step=collected_frames)
+            if logger and training_metrics:
+                training_logger.log_metrics(training_metrics, step=collected_frames)
             continue
 
         # optimization steps
@@ -225,18 +232,20 @@ def main(cfg: DictConfig):  # noqa: F821
             q_losses[j].copy_(q_loss)
 
         # Get and log q-values, loss, epsilon, sampling time and training time
-        metrics_to_log.update(
+        training_metrics.update(
             {
-                "train/q_values": data["chosen_action_value"].sum() / frames_per_batch,
-                "train/q_loss": q_losses.mean(),
-                "train/epsilon": greedy_module.eps,
+                "q_values": data["chosen_action_value"].sum() / frames_per_batch,
+                "q_loss": q_losses.mean(),
+                "epsilon": greedy_module.eps,
             }
         )
 
         # Get and log evaluation rewards and eval time
-        with torch.no_grad(), set_exploration_type(
-            ExplorationType.DETERMINISTIC
-        ), timeit("eval"):
+        with (
+            torch.no_grad(),
+            set_exploration_type(ExplorationType.DETERMINISTIC),
+            timeit("eval"),
+        ):
             prev_test_frame = ((i - 1) * frames_per_batch) // test_interval
             cur_test_frame = (i * frames_per_batch) // test_interval
             final = current_frames >= collector.total_frames
@@ -245,18 +254,23 @@ def main(cfg: DictConfig):  # noqa: F821
                 test_rewards = eval_model(
                     model, test_env, num_episodes=num_test_episodes
                 )
-                metrics_to_log.update(
+                evaluation_metrics.update(
                     {
-                        "eval/reward": test_rewards,
+                        "reward": test_rewards,
                     }
                 )
                 model.train()
 
         # Log all the information
         if logger:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            logger.log_metrics(metrics_to_log, step=collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                training_logger.log_metrics(training_metrics, step=collected_frames)
+            if evaluation_metrics:
+                evaluation_logger.log_metrics(evaluation_metrics, step=collected_frames)
+            if timing_metrics:
+                timing_logger.log_metrics(timing_metrics, step=collected_frames)
 
         # update weights of the inference policy
         collector.update_policy_weights_()

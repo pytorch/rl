@@ -10,6 +10,7 @@ It supports state environments like MuJoCo.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -37,7 +38,6 @@ from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     dump_video,
-    log_metrics,
     make_collector,
     make_environment,
     make_loss_module,
@@ -71,9 +71,11 @@ def main(cfg: DictConfig):
             logger_type=cfg.logger.backend,
             logger_name="sac_logging",
             experiment_name=exp_name,
-            state_dict=Checkpoint.read_component(resume_path, "logger", default=None)
-            if resume_path
-            else None,
+            state_dict=(
+                Checkpoint.read_component(resume_path, "logger", default=None)
+                if resume_path
+                else None
+            ),
             wandb_kwargs={
                 "mode": cfg.logger.mode,
                 "config": dict(cfg),
@@ -81,6 +83,9 @@ def main(cfg: DictConfig):
                 "group": cfg.logger.group_name,
             },
         )
+        training_logger = logger.with_prefix("training")
+        evaluation_logger = logger.with_prefix("evaluation")
+        timing_logger = logger.with_prefix("timing")
 
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
@@ -246,26 +251,29 @@ def main(cfg: DictConfig):
                 episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
                 # Logging
-                metrics_to_log = {}
+                training_metrics = {}
+                evaluation_metrics = {}
                 if len(episode_rewards) > 0:
                     episode_length = tensordict["next", "step_count"][episode_end]
-                    metrics_to_log["train/reward"] = episode_rewards
-                    metrics_to_log["train/episode_length"] = episode_length.sum() / len(
+                    training_metrics["reward"] = episode_rewards
+                    training_metrics["episode_length"] = episode_length.sum() / len(
                         episode_length
                     )
                 if collected_frames >= init_random_frames:
                     losses = losses.mean()
-                    metrics_to_log["train/q_loss"] = losses.get("loss_qvalue")
-                    metrics_to_log["train/actor_loss"] = losses.get("loss_actor")
-                    metrics_to_log["train/alpha_loss"] = losses.get("loss_alpha")
-                    metrics_to_log["train/alpha"] = loss_td["alpha"]
-                    metrics_to_log["train/entropy"] = loss_td["entropy"]
+                    training_metrics["q_loss"] = losses.get("loss_qvalue")
+                    training_metrics["actor_loss"] = losses.get("loss_actor")
+                    training_metrics["alpha_loss"] = losses.get("loss_alpha")
+                    training_metrics["alpha"] = loss_td["alpha"]
+                    training_metrics["entropy"] = loss_td["entropy"]
 
                 # Evaluation
                 if abs(collected_frames % eval_iter) < frames_per_batch:
-                    with set_exploration_type(
-                        ExplorationType.DETERMINISTIC
-                    ), torch.no_grad(), timeit("eval"):
+                    with (
+                        set_exploration_type(ExplorationType.DETERMINISTIC),
+                        torch.no_grad(),
+                        timeit("eval"),
+                    ):
                         eval_rollout = eval_env.rollout(
                             eval_rollout_steps,
                             model[0],
@@ -276,11 +284,20 @@ def main(cfg: DictConfig):
                         eval_reward = (
                             eval_rollout["next", "reward"].sum(-2).mean().item()
                         )
-                        metrics_to_log["eval/reward"] = eval_reward
+                        evaluation_metrics["reward"] = eval_reward
                 if logger is not None:
-                    metrics_to_log.update(timeit.todict(prefix="time"))
-                    metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-                    log_metrics(logger, metrics_to_log, collected_frames)
+                    if training_metrics:
+                        training_logger.log_metrics(training_metrics, collected_frames)
+                    if evaluation_metrics:
+                        evaluation_logger.log_metrics(
+                            evaluation_metrics, collected_frames
+                        )
+                    timing_metrics = timeit.todict()
+                    speed = pbar.format_dict["rate"]
+                    if speed is not None:
+                        timing_metrics["speed"] = speed
+                    if timing_metrics:
+                        timing_logger.log_metrics(timing_metrics, collected_frames)
 
                 run_state["collected_frames"] = collected_frames
                 checkpointer.save(collected_frames)

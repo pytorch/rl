@@ -11,6 +11,7 @@ It works across Gym and MuJoCo over a variety of tasks.
 The helper functions are coded in the utils.py associated with this script.
 
 """
+
 from __future__ import annotations
 
 import warnings
@@ -56,6 +57,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -197,23 +201,24 @@ def main(cfg: DictConfig):  # noqa: F821
             tensordict["next", "done"]
         ]
         # Logging
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][
                 tensordict["next", "done"]
             ]
-            metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+            training_metrics["reward"] = episode_rewards.mean().item()
+            training_metrics["episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/loss_actor"] = log_loss_td.get("loss_actor").mean()
-            metrics_to_log["train/loss_qvalue"] = log_loss_td.get("loss_qvalue").mean()
-            metrics_to_log["train/loss_alpha"] = log_loss_td.get("loss_alpha").mean()
-            metrics_to_log["train/loss_alpha_prime"] = log_loss_td.get(
+            training_metrics["loss_actor"] = log_loss_td.get("loss_actor").mean()
+            training_metrics["loss_qvalue"] = log_loss_td.get("loss_qvalue").mean()
+            training_metrics["loss_alpha"] = log_loss_td.get("loss_alpha").mean()
+            training_metrics["loss_alpha_prime"] = log_loss_td.get(
                 "loss_alpha_prime"
             ).mean()
-            metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
+            training_metrics["entropy"] = log_loss_td.get("entropy").mean()
 
         # Evaluation
         with timeit("eval"):
@@ -221,9 +226,10 @@ def main(cfg: DictConfig):  # noqa: F821
             cur_test_frame = (i * frames_per_batch) // evaluation_interval
             final = current_frames >= collector.total_frames
             if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
-                with set_exploration_type(
-                    ExplorationType.DETERMINISTIC
-                ), torch.no_grad():
+                with (
+                    set_exploration_type(ExplorationType.DETERMINISTIC),
+                    torch.no_grad(),
+                ):
                     eval_rollout = eval_env.rollout(
                         eval_rollout_steps,
                         model[0],
@@ -232,11 +238,17 @@ def main(cfg: DictConfig):  # noqa: F821
                     )
                     eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                     eval_env.apply(dump_video)
-                    metrics_to_log["eval/reward"] = eval_reward
+                    evaluation_metrics["reward"] = eval_reward
 
-        metrics_to_log.update(timeit.todict(prefix="time"))
-        metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-        log_metrics(logger, metrics_to_log, collected_frames)
+        if logger is not None:
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                log_metrics(training_logger, training_metrics, collected_frames)
+            if evaluation_metrics:
+                log_metrics(evaluation_logger, evaluation_metrics, collected_frames)
+            if timing_metrics:
+                log_metrics(timing_logger, timing_metrics, collected_frames)
 
     collector.shutdown()
     if not eval_env.is_closed:

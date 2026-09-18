@@ -9,6 +9,7 @@ This is a self-contained example of an offline GAIL training script.
 The helper functions for gail are coded in the gail_utils.py and helper functions for ppo in ppo_utils.
 
 """
+
 from __future__ import annotations
 
 import warnings
@@ -65,6 +66,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -257,7 +261,8 @@ def main(cfg: DictConfig):  # noqa: F821
         with timeit("collection"):
             data = next(collector_iter)
 
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
@@ -278,19 +283,18 @@ def main(cfg: DictConfig):  # noqa: F821
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
 
-            metrics_to_log.update(
+            training_metrics.update(
                 {
-                    "train/reward": episode_rewards.mean().item(),
-                    "train/episode_length": episode_length.sum().item()
-                    / len(episode_length),
+                    "reward": episode_rewards.mean().item(),
+                    "episode_length": episode_length.sum().item() / len(episode_length),
                 }
             )
 
-        metrics_to_log.update(
+        training_metrics.update(
             {
-                "train/discriminator_loss": d_loss["loss"],
-                "train/lr": alpha * cfg_optim_lr,
-                "train/clip_epsilon": (
+                "discriminator_loss": d_loss["loss"],
+                "lr": alpha * cfg_optim_lr,
+                "clip_epsilon": (
                     alpha * cfg_loss_clip_epsilon
                     if cfg_loss_anneal_clip_eps
                     else cfg_loss_clip_epsilon
@@ -299,9 +303,11 @@ def main(cfg: DictConfig):  # noqa: F821
         )
 
         # evaluation
-        with torch.no_grad(), set_exploration_type(
-            ExplorationType.DETERMINISTIC
-        ), timeit("eval"):
+        with (
+            torch.no_grad(),
+            set_exploration_type(ExplorationType.DETERMINISTIC),
+            timeit("eval"),
+        ):
             if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
                 i * frames_in_batch
             ) // cfg_logger_test_interval:
@@ -309,16 +315,21 @@ def main(cfg: DictConfig):  # noqa: F821
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
-                metrics_to_log.update(
+                evaluation_metrics.update(
                     {
-                        "eval/reward": test_rewards.mean(),
+                        "reward": test_rewards.mean(),
                     }
                 )
                 actor.train()
         if logger is not None:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            log_metrics(logger, metrics_to_log, i)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                log_metrics(training_logger, training_metrics, i)
+            if evaluation_metrics:
+                log_metrics(evaluation_logger, evaluation_metrics, i)
+            if timing_metrics:
+                log_metrics(timing_logger, timing_metrics, i)
 
     pbar.close()
 
