@@ -57,6 +57,7 @@ from torchrl.data.replay_buffers.writers import (
 )
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.envs.transforms import CatTensors
 from torchrl.modules import (
     ConvNet,
     DreamerV3DiscreteActor,
@@ -169,6 +170,7 @@ _CONFIG_PARITY_SIGNATURE_OVERRIDES = {
 
 _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
     {
+        "CatTensorsConfig",
         "CollectorConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
@@ -4753,6 +4755,25 @@ class TestTransformConfigs:
         cfg = InitTrackerConfig(init_key="is_test_init")
         assert cfg.init_key == "is_test_init"
         instantiate(cfg)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_cat_tensors_config(self):
+        transform = instantiate_config(
+            algorithm_configs.CatTensorsConfig(
+                in_keys=["position", "velocity"], out_key="observation"
+            )
+        )
+        assert isinstance(transform, CatTensors)
+
+        td = TensorDict(
+            {
+                "position": torch.ones(2, 2),
+                "velocity": torch.ones(2, 1),
+            },
+            batch_size=[2],
+        )
+        transformed = transform(td)
+        assert transformed["observation"].shape == (2, 3)
 
 
 if __name__ == "__main__":
