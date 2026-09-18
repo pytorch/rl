@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**08:25.861** total execution time for 30 files **from tutorials**:
+**08:25.857** total execution time for 30 files **from tutorials**:
 
 .. container::
 
@@ -84,7 +84,7 @@ Computation times
      - 00:04.296
      - 0.0
    * - :ref:`sphx_glr_tutorials_rb_tutorial.py` (``rb_tutorial.py``)
-     - 00:00.886
+     - 00:00.882
      - 0.0
    * - :ref:`sphx_glr_tutorials_collector_trajectory_assembly.py` (``collector_trajectory_assembly.py``)
      - 00:00.401

@@ -606,8 +606,8 @@ Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), the snapshot contains the
-coordinator counters plus `"worker_frames"`, the sum of the
-frame counters reported by the remote collectors. With
+coordinator counters plus `"worker_frames"` and sums of the
+progress counters reported by the remote collectors. With
 `"per_worker"`, each remote snapshot is namespaced as
 `"worker_<idx>/<metric>"` instead. `"both"` returns the
 union. `"workers"` and `"workers_alive"` are always

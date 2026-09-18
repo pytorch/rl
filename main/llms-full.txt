@@ -10759,13 +10759,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -11557,8 +11574,10 @@ Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens, so the call is
-safe from any thread. With `"per_worker"` or `"both"`,
+reported and no worker communication happens. Collector
+progress is summed from parent-owned shared counter rows, so
+the call remains non-blocking while workers collect. With
+`"per_worker"` or `"both"`,
 each worker is queried through the control pipes and its
 snapshot is namespaced as `"worker_<idx>/<metric>"`; since
 this shares the control channel with other coordinator
@@ -12064,13 +12083,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -13152,13 +13188,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -14521,8 +14574,10 @@ Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens, so the call is
-safe from any thread. With `"per_worker"` or `"both"`,
+reported and no worker communication happens. Collector
+progress is summed from parent-owned shared counter rows, so
+the call remains non-blocking while workers collect. With
+`"per_worker"` or `"both"`,
 each worker is queried through the control pipes and its
 snapshot is namespaced as `"worker_<idx>/<metric>"`; since
 this shares the control channel with other coordinator
@@ -15430,8 +15485,10 @@ Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens, so the call is
-safe from any thread. With `"per_worker"` or `"both"`,
+reported and no worker communication happens. Collector
+progress is summed from parent-owned shared counter rows, so
+the call remains non-blocking while workers collect. With
+`"per_worker"` or `"both"`,
 each worker is queried through the control pipes and its
 snapshot is namespaced as `"worker_<idx>/<metric>"`; since
 this shares the control channel with other coordinator
@@ -16556,8 +16613,10 @@ Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens, so the call is
-safe from any thread. With `"per_worker"` or `"both"`,
+reported and no worker communication happens. Collector
+progress is summed from parent-owned shared counter rows, so
+the call remains non-blocking while workers collect. With
+`"per_worker"` or `"both"`,
 each worker is queried through the control pipes and its
 snapshot is namespaced as `"worker_<idx>/<metric>"`; since
 this shares the control channel with other coordinator
@@ -17577,13 +17636,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -18193,13 +18269,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -19035,13 +19128,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -19923,8 +20033,8 @@ Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), the snapshot contains the
-coordinator counters plus `"worker_frames"`, the sum of the
-frame counters reported by the remote collectors. With
+coordinator counters plus `"worker_frames"` and sums of the
+progress counters reported by the remote collectors. With
 `"per_worker"`, each remote snapshot is namespaced as
 `"worker_<idx>/<metric>"` instead. `"both"` returns the
 union. `"workers"` and `"workers_alive"` are always
@@ -20919,13 +21029,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -21601,13 +21728,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.
@@ -34737,7 +34881,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fc13d3edb70>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4e0a58ccc0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -48477,7 +48621,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fc1403098a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f4e0d4b98a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -283306,7 +283450,7 @@ loss.set_keys(
 
 # Computation times
 
-**08:25.861** total execution time for 30 files **from all galleries**:
+**08:25.857** total execution time for 30 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -283327,7 +283471,7 @@ loss.set_keys(
 | [Introduction to TorchRL](tutorials/torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`reference/generated/tutorials/torchrl_demo.py`) | 00:05.458 | 0.0 |
 | [Pendulum: Writing your environment and transforms with TorchRL](tutorials/pendulum.html#sphx-glr-tutorials-pendulum-py) (`reference/generated/tutorials/pendulum.py`) | 00:04.764 | 0.0 |
 | [Task-specific policy in multi-task environments](tutorials/multi_task.html#sphx-glr-tutorials-multi-task-py) (`reference/generated/tutorials/multi_task.py`) | 00:04.296 | 0.0 |
-| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.886 | 0.0 |
+| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.882 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.401 | 0.0 |
 | [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.395 | 0.0 |
 | [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.320 | 0.0 |
@@ -298274,8 +298418,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmp9lgac7qb/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmp9lgac7qb/b/c.memmap
+the 'a' tensor is stored in /tmp/tmpb0hxh6q4/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmpb0hxh6q4/b/c.memmap
 samples: a= tensor([[4, 5, 6, 7],
  [4, 5, 6, 7],
  [4, 5, 6, 7],
@@ -299167,7 +299311,7 @@ gc.collect()
 episode are grouped tensor([4, 4, 2, 2, 2, 2, 2, 2], dtype=torch.int32)
 steps are successive tensor([0, 1, 0, 1, 0, 1, 0, 1])
 
-4907
+4575
 ```
 
 ### Sequence sampling and trajectory queries
@@ -299336,7 +299480,7 @@ trajectory queries, consuming samples, statistics, and generation-aware
 updates.
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.886 seconds)
+**Total running time of the script:** (0 minutes 0.882 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
@@ -300017,7 +300161,7 @@ separate from policy observations. For API details, see
 
 # Computation times
 
-**08:25.861** total execution time for 30 files **from tutorials**:
+**08:25.857** total execution time for 30 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -300038,7 +300182,7 @@ separate from policy observations. For API details, see
 | [Introduction to TorchRL](torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`torchrl_demo.py`) | 00:05.458 | 0.0 |
 | [Pendulum: Writing your environment and transforms with TorchRL](pendulum.html#sphx-glr-tutorials-pendulum-py) (`pendulum.py`) | 00:04.764 | 0.0 |
 | [Task-specific policy in multi-task environments](multi_task.html#sphx-glr-tutorials-multi-task-py) (`multi_task.py`) | 00:04.296 | 0.0 |
-| [Using Replay Buffers](rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`rb_tutorial.py`) | 00:00.886 | 0.0 |
+| [Using Replay Buffers](rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`rb_tutorial.py`) | 00:00.882 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`collector_trajectory_assembly.py`) | 00:00.401 | 0.0 |
 | [Vision-Language-Action (VLA) policies with TorchRL](vla.html#sphx-glr-tutorials-vla-py) (`vla.py`) | 00:00.395 | 0.0 |
 | [Memory-Efficient RL Training](memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`memory_efficient_rl.py`) | 00:00.320 | 0.0 |

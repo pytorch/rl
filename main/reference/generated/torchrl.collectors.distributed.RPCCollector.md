@@ -550,13 +550,30 @@ rates by an external monitor such as
 Entries are only present when the corresponding state exists on the
 collector:
 
-- `"frames"`: total number of frames collected so far;
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
 - `"batches"`: number of batches delivered so far;
 - `"total_frames"`: requested total frames (absent for endless collectors);
 - `"completed"`: whether the frame budget has been reached;
 - `"requested_frames_per_batch"`: the per-batch frame budget;
 - `"policy_version"`: current policy version, when the collector
 tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Multi-worker collectors extend this signature with a `workers`
 argument controlling aggregate versus per-worker views.

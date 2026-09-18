@@ -947,8 +947,10 @@ Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens, so the call is
-safe from any thread. With `"per_worker"` or `"both"`,
+reported and no worker communication happens. Collector
+progress is summed from parent-owned shared counter rows, so
+the call remains non-blocking while workers collect. With
+`"per_worker"` or `"both"`,
 each worker is queried through the control pipes and its
 snapshot is namespaced as `"worker_<idx>/<metric>"`; since
 this shares the control channel with other coordinator

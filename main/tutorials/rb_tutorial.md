@@ -242,8 +242,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmp9lgac7qb/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmp9lgac7qb/b/c.memmap
+the 'a' tensor is stored in /tmp/tmpb0hxh6q4/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmpb0hxh6q4/b/c.memmap
 samples: a= tensor([[4, 5, 6, 7],
  [4, 5, 6, 7],
  [4, 5, 6, 7],
@@ -1135,7 +1135,7 @@ gc.collect()
 episode are grouped tensor([4, 4, 2, 2, 2, 2, 2, 2], dtype=torch.int32)
 steps are successive tensor([0, 1, 0, 1, 0, 1, 0, 1])
 
-4907
+4575
 ```
 
 ### Sequence sampling and trajectory queries
@@ -1304,7 +1304,7 @@ trajectory queries, consuming samples, statistics, and generation-aware
 updates.
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.886 seconds)
+**Total running time of the script:** (0 minutes 0.882 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
