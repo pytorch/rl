@@ -128,6 +128,14 @@ network (if any) and use the provided value instead.
 
 Note
 
+Right-padding masks can be configured with `set_keys(valid=...)`.
+Invalid entries are isolated from the valid prefix, excluded from
+advantage normalization, and written as zero in both output tensors.
+Other trajectory boundaries continue to use the configured `done` and
+`terminated` keys.
+
+Note
+
 GAE can be used with value networks that rely on recurrent neural networks, provided that the
 init markers ("is_init") and terminated / truncated markers are properly set.
 With `shifted=True`, reset next-observations are inserted into a
@@ -138,6 +146,10 @@ compatible with `torch.vmap` and, as such, the `deactivate_vmap` option must be 
 cases. Similarly, if `shifted=False`, the `"is_init"` entry of the root tensordict will be copied
 onto the `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root
 and `"next"` data.
+
+default_keys
+
+alias of `_AcceptedKeys`
 
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*, ***, *params: list[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | None = None*, *target_params: list[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | None = None*, *time_dim: int | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/objectives/value/advantages.html#GAE.forward)
 
