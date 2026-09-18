@@ -698,7 +698,7 @@ collector = Collector(
 - **Trajectory assembly**: Collect complete trajectories with `trajs_per_batch` --
 padded whole-episode batches for on-policy training, or flat unpadded writes into a
 replay buffer for clean [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) sampling --
-see [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs)
+see [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs)
 - **Batching strategies**: Multiple ways to organize collected data
 - **Profiler-ready**: Set `TORCHRL_PROFILING=1` to emit named ranges on the
 collector, env, and policy hot paths -- see [Profiling collectors and envs](profiling.html#ref-profiling)
@@ -819,7 +819,7 @@ name a concrete implementation.
 - [Collectors and Replay Buffers](collectors_replay.html)
 
 - [Collectors and replay buffers interoperability](collectors_replay.html#collectors-and-replay-buffers-interoperability)
-- [Complete trajectory collection with `trajs_per_batch`](collectors_replay.html#complete-trajectory-collection-with-trajs-per-batch)
+- [Complete-trajectory replay writes](collectors_replay.html#complete-trajectory-replay-writes)
 - [Helper functions](collectors_replay.html#helper-functions)
 
 ---
@@ -1066,11 +1066,15 @@ see these warnings, they can be displayed by setting `torchrl.filter_warnings_su
 
 Tip
 
-All distributed collectors support `trajs_per_batch` combined with
-`replay_buffer`. When set, each remote worker assembles **complete
-trajectories** and writes them to the shared buffer as flat 1-D sequences,
-which is directly compatible with [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler).
-See [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for examples and best practices.
+[`RayCollector`](generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector) supports
+`replay_write_mode="trajectory"` with a Ray replay-buffer service.
+[`RPCCollector`](generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector) supports the same
+remote-collector contract when the replay buffer and
+`replay_write_mode="trajectory"` are passed through `collector_kwargs`.
+Each remote worker then assembles **complete trajectories** and writes them
+as flat 1-D sequences, which is directly compatible with
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler). See
+[Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for examples and best practices.
 
 | [`DistributedCollector`](generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector)(create_env_fn, policy, ...) | A distributed data collector with torch.distributed backend. |
 | --- | --- |
@@ -1617,14 +1621,13 @@ will work:
 Important
 
 The `ndim=2` and `ndim=3` examples above apply to **fixed-frame
-batches** (the default, without `trajs_per_batch`). When
-`trajs_per_batch` is set, each trajectory is written to the buffer as a
+batches** (the default `replay_write_mode="rollout"` behavior). With
+`replay_write_mode="trajectory"`, each trajectory is written as a
 **flat 1-D sequence** of variable length. A storage with `ndim >= 2`
 expects a fixed second dimension that variable-length trajectories cannot
-satisfy. Always use the default `ndim=1` when combining
-`trajs_per_batch` with a replay buffer.
+satisfy. Always use the default `ndim=1` for trajectory writes.
 
-## Complete trajectory collection with `trajs_per_batch`
+## Complete-trajectory replay writes
 
 When using `Collector(num_collectors=N)` with fixed-frame batches (the
 concrete result is [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) or
@@ -1635,15 +1638,18 @@ come from **different workers and different episodes** without an intervening
 so it may draw slices that straddle unrelated trajectories -- silently
 corrupting the training data.
 
-Setting `trajs_per_batch` on the collector solves this. Each worker
-assembles **complete trajectories** (episodes whose last step carries
+Setting `replay_write_mode="trajectory"` solves this. Each worker assembles
+**complete trajectories** (episodes whose last step carries
 `("next", "done") == True`) before writing them to the buffer as flat 1-D
 sequences -- no padding, no artificial boundaries. Every trajectory in the
 buffer is guaranteed to be a genuine episode segment, making it directly
 compatible with [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler).
 
-`trajs_per_batch` is not tied to replay buffers or multi-process
-collection: on any collector -- including the single-process
+For compatibility, leaving `replay_write_mode=None` while combining a replay
+buffer with `trajs_per_batch` retains the same complete-trajectory write
+behavior. New code should select the write mode explicitly. This leaves
+`trajs_per_batch` with one independent role: on any collector -- including the
+single-process
 [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) -- setting it (without a
 `replay_buffer`) switches the iterator from fixed-frame batches to batches
 of exactly that many **complete trajectories**, zero-padded along time with
@@ -1716,7 +1722,8 @@ collector = Collector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=500_000,
- trajs_per_batch=8, # each worker writes complete trajectories
+ replay_write_mode="trajectory",
+ trajs_per_write=8, # optional grouping per replay extend
  sync=True,
 )
 for _ in collector: # yields None (data goes straight to rb)
@@ -1738,7 +1745,7 @@ collector = Collector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
- trajs_per_batch=8,
+ replay_write_mode="trajectory",
  sync=False,
 )
 collector.start() # workers fill rb in background threads/processes
@@ -1754,8 +1761,7 @@ This pattern fully decouples data collection from training and is the
 recommended way to maximise inference throughput on multi-core machines or
 GPU-accelerated environments.
 
-**Direct collectors** also support `trajs_per_batch` with the same
-replay-buffer semantics:
+**Direct collectors** support the same replay-buffer write mode:
 
 ```
 collector = Collector(
@@ -1764,7 +1770,7 @@ collector = Collector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
- trajs_per_batch=8,
+ replay_write_mode="trajectory",
 )
 collector.start()
 # ...
@@ -1772,7 +1778,8 @@ collector.start()
 
 Warning
 
-Without `trajs_per_batch`, a multi-process collector writes fixed-frame
+Without `replay_write_mode="trajectory"`, a multi-process collector
+writes fixed-frame
 batches from each worker. If the buffer uses a
 [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler), the sampler will reconstruct episode
 boundaries from `done` signals, but worker batch boundaries are invisible
@@ -1784,13 +1791,15 @@ boundary with a `truncated` (and therefore `done`) signal. This
 prevents cross-episode slices but introduces artificial truncations that
 value estimators must handle correctly.
 
-`trajs_per_batch` is the recommended solution: it guarantees clean
-episode boundaries in the buffer without artificial truncations.
+`replay_write_mode="trajectory"` is the recommended solution: it
+guarantees clean episode boundaries in the buffer without artificial
+truncations.
 
 See also
 
-- [`BaseCollector`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full `trajs_per_batch`
-API, completeness guarantee, and batched-environment behaviour.
+- [`BaseCollector`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
+`replay_write_mode` API, completeness guarantee, and
+batched-environment behaviour.
 - [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) for configuring sub-sequence sampling
 from the buffer.
 - [Trajectory boundaries](data_layout.html#ref-traj-boundaries) for the contract the
@@ -1875,12 +1884,14 @@ The current default layout is `"padded"`, but it will change to
 `trajs_per_batch` batches emits a `FutureWarning`; pass the
 layout explicitly.
 
-**Replay buffer integration**: when a `replay_buffer` is also provided,
-complete trajectories are written to the buffer as **flat 1-D sequences** (no
-padding) instead of being yielded. This is the recommended pattern for
+**Replay buffer integration**: pass `replay_write_mode="trajectory"` with a
+`replay_buffer` to write complete trajectories as **flat 1-D sequences** (no
+padding). This is the recommended pattern for
 off-policy training with [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler), especially
 with multi-process collectors where fixed-frame batches can silently mix
-episodes. See [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for full details and examples.
+episodes. See [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for full details and examples.
+The legacy combination of `replay_buffer` and `trajs_per_batch` retains
+this behavior when `replay_write_mode` is omitted.
 
 Note
 
@@ -2119,7 +2130,8 @@ Tip
 
 For maximum throughput with trajectory-based training (e.g. recurrent
 policies, decision transformers), combine `start()` with
-`trajs_per_batch` and a [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler):
+`replay_write_mode="trajectory"` and a
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler):
 
 ```
 rb = ReplayBuffer(
@@ -2135,7 +2147,7 @@ collector = Collector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
- trajs_per_batch=8,
+ replay_write_mode="trajectory",
  sync=False,
 )
 collector.start()
@@ -2147,7 +2159,7 @@ collector.async_shutdown()
 
 Each worker writes only **complete trajectories** to the buffer, so the
 sampler never draws slices that cross episode boundaries. See
-[Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for a full discussion.
+[Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for a full discussion.
 
 Warning
 
@@ -3987,7 +3999,7 @@ Multi-process collectors warn when a
 [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) is used and neither
 `trajs_per_batch` nor `set_truncated` is set, because different
 workers' batches interleave in the shared buffer and adjacent frames can
-then belong to different episodes (see [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs)
+then belong to different episodes (see [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs)
 for the trade-offs and the recommended `trajs_per_batch` alternative).
 Single-process collectors do not need this: they write batches in
 temporal order, so a batch boundary is not a seam -- the next batch
@@ -4040,7 +4052,8 @@ truncated-only episode ends). Which API to reach for:
 | Fresh contiguous rollout, needing padded or nested per-trajectory views | [`split_trajectories()`](generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories) (padded output is discouraged unless explicitly needed -- see data-layout-split-trajectories) |
 | Physical replay-storage markers, needing boundary indices / lengths | [`find_start_stop_traj()`](generated/torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj) |
 | Sampling contiguous trajectory slices from a buffer | [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) (and variants) |
-| Collecting only complete trajectories in the first place | `trajs_per_batch` (see [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs)) |
+| Yielding only complete trajectory batches | `trajs_per_batch` (see [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs)) |
+| Writing only complete trajectories to replay | `replay_write_mode="trajectory"` (see [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs)) |
 
 ## The replay buffer `ndim` arg and why it doesn't multi-process well
 
@@ -4162,7 +4175,7 @@ becomes irrelevant: each row of the 1-D storage is a self-contained
 episode segment, and any slice sampled from it is correct by construction.
 
 This is what passing the buffer directly to the collector and setting
-`trajs_per_batch` does:
+`replay_write_mode="trajectory"` does:
 
 ```
 from torchrl.collectors import Collector
@@ -4180,7 +4193,8 @@ collector = Collector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
- trajs_per_batch=8, # each worker writes COMPLETE trajectories only
+ replay_write_mode="trajectory",
+ trajs_per_write=8, # optional grouping per replay extend
  sync=False,
 )
 collector.start()
@@ -4203,9 +4217,9 @@ uncontrolled in both modes -- it is the same condition that makes
 `ndim >= 2` shared storages unsafe (see
 data-layout-storage-ndim).
 
-What `trajs_per_batch` adds is a guarantee on the *contents* of each
-extend: with `trajs_per_batch=N`, every `rb.extend` call commits one
-or more **complete trajectories** (last step has
+Trajectory write mode adds a guarantee on the *contents* of each extend:
+every `rb.extend` call commits one or more **complete trajectories** (last
+step has
 `("next", "done") == True`). The buffer never sees a partial episode,
 so even when worker A's flush interleaves with worker B's, the resulting
 storage is just a concatenation of complete episodes. No intra-episode
@@ -4217,10 +4231,12 @@ If complete-trajectory writes are not an option (e.g. very long episodes,
 where waiting for `done` is impractical), `set_truncated=True`
 provides a lighter mitigation by inserting an artificial `truncated`
 at every batch boundary -- see
-[Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for the trade-offs.
+[Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for the trade-offs.
 
-See [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for the full `trajs_per_batch` API
-and the synchronous-iteration pattern.
+See [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for the full `replay_write_mode` API and
+the synchronous-iteration pattern. The legacy combination of
+`replay_buffer` and `trajs_per_batch` continues to select trajectory
+writes when `replay_write_mode` is left as `None`.
 
 ## SliceSampler: variable-length contiguous slices
 
@@ -11614,19 +11630,17 @@ flag.)
 
 **Replay buffer integration**
 
-When combined with a `replay_buffer`, each complete trajectory is
-written to the buffer as a **flat 1-D sequence** of valid timesteps
-(no padding, no accumulation to `trajs_per_batch`). The method
-yields `None` on every write -- matching the standard replay-buffer
-collection convention. This flat storage is directly compatible
-with `SliceSampler` using
-`end_key=("next", "done")`.
+For compatibility, combining this argument with a
+`replay_buffer` while leaving `replay_write_mode=None` selects
+complete-trajectory replay writes. New code should use
+`replay_write_mode="trajectory"` instead.
 
 Important
 
 When using a **multi-process** collector with a shared replay
 buffer and a `SliceSampler`, setting
-`trajs_per_batch` is strongly recommended. Without it,
+`replay_write_mode="trajectory"` is strongly recommended.
+Without it,
 different workers write batches independently and adjacent
 frames in the buffer can come from unrelated episodes without
 an intervening `done` signal, causing the sampler to draw
@@ -11645,17 +11659,19 @@ sequence. The buffer storage should use `ndim=1` -- `ndim=2`
 is incompatible because variable-length trajectories cannot fill a
 fixed second dimension.
 
-**Multi-process and distributed collectors**: `trajs_per_batch`
-combined with `replay_buffer` is supported for
+**Multi-process and distributed collectors**: trajectory replay
+writes are supported for
 [`MultiSyncCollector`](torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector),
 [`MultiAsyncCollector`](torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector),
 [`RayCollector`](torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector), and
-[`RPCCollector`](torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector).
+[`RPCCollector`](torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector) (through
+its remote `collector_kwargs`).
 Trajectory assembly is delegated to each worker's inner collector,
 which calls `_iter_by_trajectories()` independently and writes
-complete trajectories to the shared replay buffer. Both the
-iteration pattern (`for data in collector`) and the async
-`start()` pattern are supported.
+complete trajectories to the shared replay buffer. Local process
+and Ray collectors support both iteration (`for data in
+collector`) and asynchronous `start()`; RPC uses its remote
+collector iteration loop.
 
 ```
 rb = ReplayBuffer(
@@ -11668,20 +11684,35 @@ collector = MultiSyncCollector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
- trajs_per_batch=32,
+ replay_write_mode="trajectory",
 )
 collector.start() # workers fill rb with complete trajectories
 ```
 
 Defaults to `None` (fixed-frame batches).
-- **trajs_per_write** (*int**,**optional*) - When `trajs_per_batch` is used with
-a replay buffer, write this many completed trajectories to the
+- **trajs_per_write** (*int**,**optional*) - In trajectory replay-write mode,
+write this many completed trajectories to the
 buffer per `extend` call. Larger values reduce Python overhead
 for highly batched environments. For example, if 10 complete
 trajectories are queued for replay-buffer insertion,
 `trajs_per_write=2` makes 5 writes, while
 `trajs_per_write=10` or larger makes 1 write. Defaults to
 `None` (write all currently queued completed trajectories).
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) -
+
+Controls
+how a collector writes to `replay_buffer`. `"rollout"` keeps
+the fixed-frame rollout layout. `"trajectory"` retains
+in-flight episodes and writes only completed trajectories as flat
+1-D sequences. `trajs_per_write` optionally groups completed
+trajectories into each `extend` call. Defaults to `None`,
+which preserves the legacy behavior: `replay_buffer` combined
+with `trajs_per_batch` selects trajectory writes, and other
+replay-buffer configurations select rollout writes.
+
+Explicit replay write modes cannot be combined with
+`trajs_per_batch`. The latter controls the number of completed
+trajectories in batches yielded without a replay buffer.
 - **traj_format** (*str**,**optional*) - layout of the batches yielded when
 `trajs_per_batch` is set. `"padded"` stacks the
 trajectories into a `(trajs_per_batch, max_traj_len)` batch,
@@ -12170,7 +12201,7 @@ Raises:
 
 # Collector
 
-*class*torchrl.collectors.Collector(*create_env_fn: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | [EnvCreator](torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator) | [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, *policy: None | TensorDictModule | Callable[[TensorDictBase], TensorDictBase] = None*, ***, *policy_factory: Callable[[], Callable] | None = None*, *backend: Literal['direct', 'process', 'ray', 'rpc', 'distributed', 'submitit'] | None = None*, *backend_options: dict[str, Any] | None = None*, *num_collectors: int | None = None*, *sync: bool | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *device: DEVICE_TYPING | None = None*, *storing_device: DEVICE_TYPING | None = None*, *policy_device: DEVICE_TYPING | None = None*, *env_device: DEVICE_TYPING | None = None*, *create_env_kwargs: dict[str, Any] | None = None*, *max_frames_per_traj: int | None = None*, *init_random_frames: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[TensorDictBase], TensorDictBase] | None = None*, *split_trajs: bool | None = None*, *track_traj_ids: bool = True*, *exploration_type: ExplorationType = InteractionType.RANDOM*, *return_same_td: bool = False*, *reset_when_done: bool = True*, *interruptor=None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: bool | dict[str, Any] | None = None*, *cudagraph_policy: bool | dict[str, Any] | None = None*, *no_cuda_sync: bool = False*, *weight_updater: [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase) | Callable[[], [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)] | None = None*, *weight_sync_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *weight_recv_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *traj_format: Literal['padded', 'cat'] | None = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Callable[[], None] | None = None*, *post_collect_hook: Callable[[TensorDictBase], None] | None = None*, *compact_obs: bool = False*, ***kwargs*)[[source]](../../_modules/torchrl/collectors/_single.html#Collector)
+*class*torchrl.collectors.Collector(*create_env_fn: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | [EnvCreator](torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator) | [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, *policy: None | TensorDictModule | Callable[[TensorDictBase], TensorDictBase] = None*, ***, *policy_factory: Callable[[], Callable] | None = None*, *backend: Literal['direct', 'process', 'ray', 'rpc', 'distributed', 'submitit'] | None = None*, *backend_options: dict[str, Any] | None = None*, *num_collectors: int | None = None*, *sync: bool | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *device: DEVICE_TYPING | None = None*, *storing_device: DEVICE_TYPING | None = None*, *policy_device: DEVICE_TYPING | None = None*, *env_device: DEVICE_TYPING | None = None*, *create_env_kwargs: dict[str, Any] | None = None*, *max_frames_per_traj: int | None = None*, *init_random_frames: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[TensorDictBase], TensorDictBase] | None = None*, *split_trajs: bool | None = None*, *track_traj_ids: bool = True*, *exploration_type: ExplorationType = InteractionType.RANDOM*, *return_same_td: bool = False*, *reset_when_done: bool = True*, *interruptor=None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: bool | dict[str, Any] | None = None*, *cudagraph_policy: bool | dict[str, Any] | None = None*, *no_cuda_sync: bool = False*, *weight_updater: [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase) | Callable[[], [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)] | None = None*, *weight_sync_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *weight_recv_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *replay_write_mode: Literal['rollout', 'trajectory'] | None = None*, *traj_format: Literal['padded', 'cat'] | None = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Callable[[], None] | None = None*, *post_collect_hook: Callable[[TensorDictBase], None] | None = None*, *compact_obs: bool = False*, ***kwargs*)[[source]](../../_modules/torchrl/collectors/_single.html#Collector)
 
 Main construction entry point for TorchRL data collectors.
 
@@ -12327,19 +12358,20 @@ a `("collector", "mask")` entry marking the valid steps (see
 Episodes spanning internal collection steps are reassembled and
 in-flight episodes are held back, so every row is a whole,
 done-terminated trajectory (`frames_per_batch` then only sets
-the internal polling granularity). When combined with
-`replay_buffer`, complete trajectories are instead written to
-the buffer as flat, unpadded 1-D sequences (and the collector
-yields `None`) - the layout
-[`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) expects.
-See [Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs). The equivalent on
+the internal polling granularity).
+See [Complete-trajectory replay writes](../collectors_replay.html#collectors-replay-trajs). The equivalent on
 [`AsyncBatchedCollector`](torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector) is the
 `yield_completed_trajectories` flag.
 Defaults to `None` (fixed-frame batches).
-- **trajs_per_write** (*int**,**optional*) - together with `trajs_per_batch`
-and `replay_buffer`, the number of complete trajectories
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) - Selects
+fixed-frame rollout writes or flat complete-trajectory writes to
+`replay_buffer`. Defaults to `None`; for compatibility,
+combining `replay_buffer` with `trajs_per_batch` still selects
+trajectory writes.
+- **trajs_per_write** (*int**,**optional*) - with
+`replay_write_mode="trajectory"`, the number of complete trajectories
 written to the buffer per extend call. Defaults to `None`
-(write every trajectory as soon as it completes).
+(write all currently queued completed trajectories together).
 - **traj_format** (*str**,**optional*) - layout of the batches yielded under
 `trajs_per_batch`. `"padded"` stacks trajectories
 into `(trajs_per_batch, max_traj_len)` with zero padding and a
@@ -13833,31 +13865,23 @@ With a multi-process collector writing to a shared replay buffer,
 this marks the worker-batch seams that would otherwise be
 invisible to a [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler);
 see [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
-and [Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
+and [Complete-trajectory replay writes](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
 - **trajs_per_batch** (*int**,**optional*) -
 
-When set together with `replay_buffer`,
-trajectory assembly is delegated to each worker's inner
-[`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector). Each worker calls
-`_iter_by_trajectories()`
-independently and writes **complete trajectories** (episodes whose
-last step has `("next", "done") == True`) to the shared replay
-buffer as flat 1-D sequences -- no padding, no accumulation.
-
-When set *without* `replay_buffer`, the multi-collector
+When set without `replay_buffer`,
+the multi-collector
 assembles trajectories from the worker batches and yields
 zero-padded batches of shape `(trajs_per_batch, max_traj_len)`
 with a `("collector", "mask")` boolean field, or flat unpadded
 concatenations with `traj_format="cat"`.
 
-Both the iteration pattern (`for data in collector`) and the
-async `start()` pattern are supported.
-
 Defaults to `None` (fixed-frame batches).
-
-See [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
-description of the completeness guarantee and replay-buffer
-storage contract.
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) - Selects
+fixed-frame rollout writes or complete-trajectory writes to the
+shared replay buffer. In trajectory mode, assembly is delegated
+to each worker and only flat, completed trajectories are inserted.
+Defaults to `None`; the legacy combination of `replay_buffer`
+and `trajs_per_batch` still selects trajectory writes.
 - **traj_format** (*str**,**optional*) - layout of the batches yielded when
 `trajs_per_batch` is set without a `replay_buffer`:
 `"padded"` for zero-padded
@@ -14750,31 +14774,23 @@ With a multi-process collector writing to a shared replay buffer,
 this marks the worker-batch seams that would otherwise be
 invisible to a [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler);
 see [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
-and [Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
+and [Complete-trajectory replay writes](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
 - **trajs_per_batch** (*int**,**optional*) -
 
-When set together with `replay_buffer`,
-trajectory assembly is delegated to each worker's inner
-[`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector). Each worker calls
-`_iter_by_trajectories()`
-independently and writes **complete trajectories** (episodes whose
-last step has `("next", "done") == True`) to the shared replay
-buffer as flat 1-D sequences -- no padding, no accumulation.
-
-When set *without* `replay_buffer`, the multi-collector
+When set without `replay_buffer`,
+the multi-collector
 assembles trajectories from the worker batches and yields
 zero-padded batches of shape `(trajs_per_batch, max_traj_len)`
 with a `("collector", "mask")` boolean field, or flat unpadded
 concatenations with `traj_format="cat"`.
 
-Both the iteration pattern (`for data in collector`) and the
-async `start()` pattern are supported.
-
 Defaults to `None` (fixed-frame batches).
-
-See [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
-description of the completeness guarantee and replay-buffer
-storage contract.
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) - Selects
+fixed-frame rollout writes or complete-trajectory writes to the
+shared replay buffer. In trajectory mode, assembly is delegated
+to each worker and only flat, completed trajectories are inserted.
+Defaults to `None`; the legacy combination of `replay_buffer`
+and `trajs_per_batch` still selects trajectory writes.
 - **traj_format** (*str**,**optional*) - layout of the batches yielded when
 `trajs_per_batch` is set without a `replay_buffer`:
 `"padded"` for zero-padded
@@ -15884,31 +15900,23 @@ With a multi-process collector writing to a shared replay buffer,
 this marks the worker-batch seams that would otherwise be
 invisible to a [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler);
 see [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
-and [Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
+and [Complete-trajectory replay writes](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
 - **trajs_per_batch** (*int**,**optional*) -
 
-When set together with `replay_buffer`,
-trajectory assembly is delegated to each worker's inner
-[`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector). Each worker calls
-`_iter_by_trajectories()`
-independently and writes **complete trajectories** (episodes whose
-last step has `("next", "done") == True`) to the shared replay
-buffer as flat 1-D sequences -- no padding, no accumulation.
-
-When set *without* `replay_buffer`, the multi-collector
+When set without `replay_buffer`,
+the multi-collector
 assembles trajectories from the worker batches and yields
 zero-padded batches of shape `(trajs_per_batch, max_traj_len)`
 with a `("collector", "mask")` boolean field, or flat unpadded
 concatenations with `traj_format="cat"`.
 
-Both the iteration pattern (`for data in collector`) and the
-async `start()` pattern are supported.
-
 Defaults to `None` (fixed-frame batches).
-
-See [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
-description of the completeness guarantee and replay-buffer
-storage contract.
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) - Selects
+fixed-frame rollout writes or complete-trajectory writes to the
+shared replay buffer. In trajectory mode, assembly is delegated
+to each worker and only flat, completed trajectories are inserted.
+Defaults to `None`; the legacy combination of `replay_buffer`
+and `trajs_per_batch` still selects trajectory writes.
 - **traj_format** (*str**,**optional*) - layout of the batches yielded when
 `trajs_per_batch` is set without a `replay_buffer`:
 `"padded"` for zero-padded
@@ -18695,6 +18703,9 @@ buffer as flat 1-D sequences. Passed through to each worker's
 
 See [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
 description of the completeness guarantee and storage contract.
+New code can instead pass `replay_write_mode="trajectory"`
+through `collector_kwargs` to select the same replay-ingestion
+contract without coupling it to yielded trajectory batches.
 Defaults to `None`.
 
 async_shutdown(*timeout: float | None = None*, *close_env: bool = True*) → None
@@ -19306,7 +19317,7 @@ Parameters:
 
 # RayCollector
 
-*class*torchrl.collectors.distributed.RayCollector(*create_env_fn: ~collections.abc.Callable | ~torchrl.envs.common.EnvBase | list[~collections.abc.Callable] | list[~torchrl.envs.common.EnvBase], policy: ~collections.abc.Callable[[~tensordict.base.TensorDictBase], ~tensordict.base.TensorDictBase] | None = None, *, policy_factory: ~collections.abc.Callable[[], ~collections.abc.Callable] | list[~collections.abc.Callable[[], ~collections.abc.Callable]] | None = None, trust_policy: bool | None = None, frames_per_batch: int, total_frames: int = -1, device: ~torch.device | list[~torch.device] | None = None, storing_device: ~torch.device | list[~torch.device] | None = None, env_device: ~torch.device | list[~torch.device] | None = None, policy_device: ~torch.device | list[~torch.device] | None = None, max_frames_per_traj=-1, init_random_frames=-1, reset_at_each_iter=False, postproc=None, split_trajs=False, exploration_type=InteractionType.RANDOM, collector_class: ~collections.abc.Callable[[~tensordict._td.TensorDict], ~tensordict._td.TensorDict] = <class 'torchrl.collectors._single.Collector'>, collector_kwargs: dict[str, ~typing.Any] | list[dict] | None = None, num_workers_per_collector: int = 1, sync: bool = False, ray_init_config: dict[str, ~typing.Any] | None = None, remote_configs: dict[str, ~typing.Any] | list[dict[str, ~typing.Any]] | None = None, num_collectors: int | None = None, update_after_each_batch: bool = False, max_weight_update_interval: int = -1, replay_buffer: ~torchrl.data.replay_buffers.replay_buffers.ReplayBuffer | None = None, weight_updater: ~torchrl.collectors.weight_update.WeightUpdaterBase | ~collections.abc.Callable[[], ~torchrl.collectors.weight_update.WeightUpdaterBase] | None = None, weight_sync_schemes: dict[str, ~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme] | None = None, weight_recv_schemes: dict[str, ~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme] | None = None, use_env_creator: bool = False, no_cuda_sync: bool | None = None, trajs_per_batch: int | None = None, pre_collect_hook: ~collections.abc.Callable[[], None] | None = None, post_collect_hook: ~collections.abc.Callable[[~tensordict.base.TensorDictBase], None] | None = None*)[[source]](../../_modules/torchrl/collectors/distributed/ray.html#RayCollector)
+*class*torchrl.collectors.distributed.RayCollector(*create_env_fn: ~collections.abc.Callable | ~torchrl.envs.common.EnvBase | list[~collections.abc.Callable] | list[~torchrl.envs.common.EnvBase], policy: ~collections.abc.Callable[[~tensordict.base.TensorDictBase], ~tensordict.base.TensorDictBase] | None = None, *, policy_factory: ~collections.abc.Callable[[], ~collections.abc.Callable] | list[~collections.abc.Callable[[], ~collections.abc.Callable]] | None = None, trust_policy: bool | None = None, frames_per_batch: int, total_frames: int = -1, device: ~torch.device | list[~torch.device] | None = None, storing_device: ~torch.device | list[~torch.device] | None = None, env_device: ~torch.device | list[~torch.device] | None = None, policy_device: ~torch.device | list[~torch.device] | None = None, max_frames_per_traj=-1, init_random_frames=-1, reset_at_each_iter=False, postproc=None, split_trajs=False, exploration_type=InteractionType.RANDOM, collector_class: ~collections.abc.Callable[[~tensordict._td.TensorDict], ~tensordict._td.TensorDict] = <class 'torchrl.collectors._single.Collector'>, collector_kwargs: dict[str, ~typing.Any] | list[dict] | None = None, num_workers_per_collector: int = 1, sync: bool = False, ray_init_config: dict[str, ~typing.Any] | None = None, remote_configs: dict[str, ~typing.Any] | list[dict[str, ~typing.Any]] | None = None, num_collectors: int | None = None, update_after_each_batch: bool = False, max_weight_update_interval: int = -1, replay_buffer: ~torchrl.data.replay_buffers.replay_buffers.ReplayBuffer | None = None, weight_updater: ~torchrl.collectors.weight_update.WeightUpdaterBase | ~collections.abc.Callable[[], ~torchrl.collectors.weight_update.WeightUpdaterBase] | None = None, weight_sync_schemes: dict[str, ~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme] | None = None, weight_recv_schemes: dict[str, ~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme] | None = None, use_env_creator: bool = False, no_cuda_sync: bool | None = None, trajs_per_batch: int | None = None, trajs_per_write: int | None = None, replay_write_mode: ~typing.Literal['rollout', 'trajectory'] | None = None, pre_collect_hook: ~collections.abc.Callable[[], None] | None = None, post_collect_hook: ~collections.abc.Callable[[~tensordict.base.TensorDictBase], None] | None = None*)[[source]](../../_modules/torchrl/collectors/distributed/ray.html#RayCollector)
 
 Distributed data collector with [Ray](https://docs.ray.io/) backend.
 
@@ -19558,6 +19569,13 @@ buffer as flat 1-D sequences. Passed through to
 
 See [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
 description of the completeness guarantee and storage contract.
+Defaults to `None`.
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) - Selects
+fixed-frame rollout writes or flat complete-trajectory writes to
+the replay service. Passed through to every remote collector.
+Defaults to `None`.
+- **trajs_per_write** (*int**,**optional*) - Number of completed trajectories to
+group in each replay-buffer `extend` call in trajectory mode.
 Defaults to `None`.
 
 Examples
@@ -22006,7 +22024,7 @@ This function splits whatever the input contains: trajectories
 spanning several collector batches stay split across the corresponding
 calls. To collect batches made of complete trajectories only, pass
 `trajs_per_batch` to the collector instead (see
-[Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs)).
+[Complete-trajectory replay writes](../collectors_replay.html#collectors-replay-trajs)).
 
 See also
 
@@ -34719,7 +34737,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f76c81ea5c0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fc13d3edb70>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -48459,7 +48477,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f76cb1598a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fc1403098a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -270561,6 +270579,12 @@ Default: "terminated".
 Default: "reward".
 - **action_key** (*NestedKey**,**optional*) - Action key used by losses and logging. Default: "action".
 - **observation_key** (*NestedKey**,**optional*) - Observation key used for logging. Default: "observation".
+- **telemetry** (*"minimal"**or**"standard"**,**optional*) - Diagnostic telemetry level.
+`"minimal"` preserves the legacy logging set and performs no
+additional metric collection. `"standard"` also records frame,
+episode, terminal, reward, optimizer, throughput, collector and replay
+diagnostics under the `training/` logger namespace. Missing optional
+fields are omitted. Default: `"standard"`.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -271305,7 +271329,7 @@ See also
 
 # torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig
 
-*class*torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig(*create_env_fn: ~torchrl.trainers.algorithms.configs.common.ConfigBase = <factory>*, *policy: ~typing.Any = None*, *policy_factory: ~typing.Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = 0*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *split_trajs: bool = False*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *set_truncated: bool = False*, *use_buffers: bool = False*, *replay_buffer: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *extend_buffer: bool = False*, *trust_policy: bool = True*, *compile_policy: ~typing.Any = None*, *cudagraph_policy: ~typing.Any = None*, *no_cuda_sync: bool = False*, *weight_updater: ~typing.Any = None*, *weight_sync_schemes: ~typing.Any = None*, *track_policy_version: bool = False*, *_target_: str = 'torchrl.collectors.AsyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#AsyncCollectorConfig)
+*class*torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig(*create_env_fn: ~torchrl.trainers.algorithms.configs.common.ConfigBase = <factory>*, *policy: ~typing.Any = None*, *policy_factory: ~typing.Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = 0*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *split_trajs: bool = False*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *set_truncated: bool = False*, *use_buffers: bool = False*, *replay_buffer: ~torchrl.trainers.algorithms.configs.common.ConfigBase | None = None*, *extend_buffer: bool = False*, *replay_write_mode: str | None = None*, *trajs_per_write: int | None = None*, *trust_policy: bool = True*, *compile_policy: ~typing.Any = None*, *cudagraph_policy: ~typing.Any = None*, *no_cuda_sync: bool = False*, *weight_updater: ~typing.Any = None*, *weight_sync_schemes: ~typing.Any = None*, *track_policy_version: bool = False*, *_target_: str = 'torchrl.collectors.AsyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#AsyncCollectorConfig)
 
 Hydra configuration for [`AsyncCollector`](torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector).
 
@@ -271317,7 +271341,7 @@ Fields that AsyncCollector forwards to its inner `Collector` via `**kwargs`
 
 # torchrl.trainers.algorithms.configs.collectors.CollectorConfig
 
-*class*torchrl.trainers.algorithms.configs.collectors.CollectorConfig(*create_env_fn: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) = '???'*, *policy: Any = None*, *policy_factory: Any = None*, *backend: str | None = None*, *backend_options: dict[str, Any] | None = None*, *num_collectors: int | None = None*, *sync: bool | None = None*, *frames_per_batch: int | None = None*, *total_frames: int = -1*, *init_random_frames: int | None = None*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: Any = None*, *split_trajs: bool | None = None*, *track_traj_ids: bool = True*, *exploration_type: str = 'RANDOM'*, *return_same_td: bool = False*, *reset_when_done: bool = True*, *interruptor: Any = None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: Any = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: Any = None*, *cudagraph_policy: Any = None*, *no_cuda_sync: bool = False*, *weight_updater: Any = None*, *weight_sync_schemes: Any = None*, *weight_recv_schemes: Any = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *traj_format: str | None = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Any = None*, *post_collect_hook: Any = None*, *compact_obs: bool = False*, *_target_: str = 'torchrl.collectors.Collector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#CollectorConfig)
+*class*torchrl.trainers.algorithms.configs.collectors.CollectorConfig(*create_env_fn: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) = '???'*, *policy: Any = None*, *policy_factory: Any = None*, *backend: str | None = None*, *backend_options: dict[str, Any] | None = None*, *num_collectors: int | None = None*, *sync: bool | None = None*, *frames_per_batch: int | None = None*, *total_frames: int = -1*, *init_random_frames: int | None = None*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: Any = None*, *split_trajs: bool | None = None*, *track_traj_ids: bool = True*, *exploration_type: str = 'RANDOM'*, *return_same_td: bool = False*, *reset_when_done: bool = True*, *interruptor: Any = None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: Any = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: Any = None*, *cudagraph_policy: Any = None*, *no_cuda_sync: bool = False*, *weight_updater: Any = None*, *weight_sync_schemes: Any = None*, *weight_recv_schemes: Any = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *replay_write_mode: str | None = None*, *traj_format: str | None = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Any = None*, *post_collect_hook: Any = None*, *compact_obs: bool = False*, *_target_: str = 'torchrl.collectors.Collector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#CollectorConfig)
 
 Hydra configuration for [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector).
 
@@ -271327,7 +271351,7 @@ Every kwarg accepted by `Collector.__init__` is exposed as a field here.
 
 # torchrl.trainers.algorithms.configs.collectors.MultiAsyncCollectorConfig
 
-*class*torchrl.trainers.algorithms.configs.collectors.MultiAsyncCollectorConfig(*create_env_fn: Any = '???'*, *num_workers: int | None = None*, *policy: Any = None*, *policy_factory: Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = None*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *collector_class: Any = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *split_trajs: bool | None = None*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *cat_results: Any = None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: Any = None*, *cudagraph_policy: Any = None*, *no_cuda_sync: bool = False*, *weight_updater: Any = None*, *weight_sync_schemes: Any = None*, *weight_recv_schemes: Any = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *traj_format: str | None = None*, *init_fn: Any = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Any = None*, *post_collect_hook: Any = None*, *compact_obs: bool = False*, *_target_: str = 'torchrl.collectors.MultiAsyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#MultiAsyncCollectorConfig)
+*class*torchrl.trainers.algorithms.configs.collectors.MultiAsyncCollectorConfig(*create_env_fn: Any = '???'*, *num_workers: int | None = None*, *policy: Any = None*, *policy_factory: Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = None*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *collector_class: Any = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *split_trajs: bool | None = None*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *cat_results: Any = None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: Any = None*, *cudagraph_policy: Any = None*, *no_cuda_sync: bool = False*, *weight_updater: Any = None*, *weight_sync_schemes: Any = None*, *weight_recv_schemes: Any = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *replay_write_mode: str | None = None*, *traj_format: str | None = None*, *init_fn: Any = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Any = None*, *post_collect_hook: Any = None*, *compact_obs: bool = False*, *_target_: str = 'torchrl.collectors.MultiAsyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#MultiAsyncCollectorConfig)
 
 Hydra configuration for [`MultiAsyncCollector`](torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector).
 
@@ -271339,7 +271363,7 @@ same kwargs are exposed here.
 
 # torchrl.trainers.algorithms.configs.collectors.MultiSyncCollectorConfig
 
-*class*torchrl.trainers.algorithms.configs.collectors.MultiSyncCollectorConfig(*create_env_fn: Any = '???'*, *num_workers: int | None = None*, *policy: Any = None*, *policy_factory: Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = None*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *collector_class: Any = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *split_trajs: bool | None = None*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *cat_results: Any = None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: Any = None*, *cudagraph_policy: Any = None*, *no_cuda_sync: bool = False*, *weight_updater: Any = None*, *weight_sync_schemes: Any = None*, *weight_recv_schemes: Any = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *traj_format: str | None = None*, *init_fn: Any = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Any = None*, *post_collect_hook: Any = None*, *compact_obs: bool = False*, *_target_: str = 'torchrl.collectors.MultiSyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#MultiSyncCollectorConfig)
+*class*torchrl.trainers.algorithms.configs.collectors.MultiSyncCollectorConfig(*create_env_fn: Any = '???'*, *num_workers: int | None = None*, *policy: Any = None*, *policy_factory: Any = None*, *frames_per_batch: int | None = None*, *init_random_frames: int | None = None*, *total_frames: int = -1*, *device: str | None = None*, *storing_device: str | None = None*, *policy_device: str | None = None*, *env_device: str | None = None*, *create_env_kwargs: dict | None = None*, *collector_class: Any = None*, *max_frames_per_traj: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *split_trajs: bool | None = None*, *exploration_type: str = 'RANDOM'*, *reset_when_done: bool = True*, *update_at_each_batch: bool = False*, *preemptive_threshold: float | None = None*, *num_threads: int | None = None*, *num_sub_threads: int = 1*, *cat_results: Any = None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ConfigBase](torchrl.trainers.algorithms.configs.common.ConfigBase.html#torchrl.trainers.algorithms.configs.common.ConfigBase) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: Any = None*, *cudagraph_policy: Any = None*, *no_cuda_sync: bool = False*, *weight_updater: Any = None*, *weight_sync_schemes: Any = None*, *weight_recv_schemes: Any = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *replay_write_mode: str | None = None*, *traj_format: str | None = None*, *init_fn: Any = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Any = None*, *post_collect_hook: Any = None*, *compact_obs: bool = False*, *_target_: str = 'torchrl.collectors.MultiSyncCollector'*, *_partial_: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/collectors.html#MultiSyncCollectorConfig)
 
 Hydra configuration for [`MultiSyncCollector`](torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector).
 
@@ -272426,7 +272450,7 @@ An abstract class to configure target net updaters.
 
 # torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig
 
-*class*torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 1*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_a2c_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#A2CTrainerConfig)
+*class*torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 1*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *telemetry: str = 'standard'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_a2c_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#A2CTrainerConfig)
 
 Hydra configuration for [`A2CTrainer`](torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer).
 
@@ -272490,7 +272514,7 @@ field here, with SAC network-construction helper fields inherited from
 
 # torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig
 
-*class*torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 1*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#OnPolicyTrainerConfig)
+*class*torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 1*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *telemetry: str = 'standard'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#OnPolicyTrainerConfig)
 
 Base Hydra configuration for on-policy trainers.
 
@@ -272553,6 +272577,9 @@ buffer instead.
 - **episode_reward_key** - Episode reward key used for cumulative reward logging. Default: "reward".
 - **action_key** - Action key used by losses and logging. Default: "action".
 - **observation_key** - Observation key used for logging. Default: "observation".
+- **telemetry** - Diagnostic telemetry level. `"minimal"` preserves the
+legacy metric set and overhead; `"standard"` adds namespaced
+training diagnostics. Default: `"standard"`.
 - **hooks** - List of [`TrainerHookBase`](torchrl.trainers.TrainerHookBase.html#torchrl.trainers.TrainerHookBase) instances to
 register on the trainer after construction.
 
@@ -272560,7 +272587,7 @@ register on the trainer after construction.
 
 # torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig
 
-*class*torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 4*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#PPOTrainerConfig)
+*class*torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 4*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *telemetry: str = 'standard'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#PPOTrainerConfig)
 
 Hydra configuration for [`PPOTrainer`](torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer).
 
@@ -272572,7 +272599,7 @@ see [`OnPolicyTrainerConfig`](torchrl.trainers.algorithms.configs.trainers.OnPol
 
 # torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig
 
-*class*torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 1*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_reinforce_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#ReinforceTrainerConfig)
+*class*torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 1*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *target_net_updater: Any = None*, *weight_update_map: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *telemetry: str = 'standard'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_reinforce_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#ReinforceTrainerConfig)
 
 Hydra configuration for [`ReinforceTrainer`](torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer).
 
@@ -282691,6 +282718,22 @@ Core trainer classes and builder utilities.
 
 ## Algorithm-specific trainers
 
+### On-policy telemetry
+
+On-policy trainers expose `telemetry="standard"` by default. Standard mode
+adds diagnostics under the `training/` logger namespace for collected and
+batch frames, completed episodes, terminal rates, reward and complete-episode
+summaries, optimizer learning rate and gradient norm, collection and optimizer
+throughput, and cheap collector or replay-buffer statistics when those values
+are available. Optional metrics are omitted when the collected batch does not
+contain enough information to compute them; for example, complete-episode
+returns require trajectory identifiers and reset markers.
+
+Set `telemetry="minimal"` to retain the legacy metric set without querying
+collector or replay statistics or computing the additional reductions. Legacy
+metric names such as `r_training` and `done_percentage` are unchanged in
+both modes.
+
 | [`OnPolicyTrainer`](generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer)(*args, **kwargs) | Shared implementation for on-policy trainers (PPO, A2C, REINFORCE). |
 | --- | --- |
 | [`A2CTrainer`](generated/torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer)(*args, **kwargs) | A2C (Advantage Actor-Critic) trainer implementation. |
@@ -283263,7 +283306,7 @@ loss.set_keys(
 
 # Computation times
 
-**08:25.851** total execution time for 30 files **from all galleries**:
+**08:25.861** total execution time for 30 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -283284,12 +283327,12 @@ loss.set_keys(
 | [Introduction to TorchRL](tutorials/torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`reference/generated/tutorials/torchrl_demo.py`) | 00:05.458 | 0.0 |
 | [Pendulum: Writing your environment and transforms with TorchRL](tutorials/pendulum.html#sphx-glr-tutorials-pendulum-py) (`reference/generated/tutorials/pendulum.py`) | 00:04.764 | 0.0 |
 | [Task-specific policy in multi-task environments](tutorials/multi_task.html#sphx-glr-tutorials-multi-task-py) (`reference/generated/tutorials/multi_task.py`) | 00:04.296 | 0.0 |
-| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.882 | 0.0 |
+| [Using Replay Buffers](tutorials/rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`reference/generated/tutorials/rb_tutorial.py`) | 00:00.886 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](tutorials/collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`reference/generated/tutorials/collector_trajectory_assembly.py`) | 00:00.401 | 0.0 |
 | [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html#sphx-glr-tutorials-vla-py) (`reference/generated/tutorials/vla.py`) | 00:00.395 | 0.0 |
 | [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`reference/generated/tutorials/memory_efficient_rl.py`) | 00:00.320 | 0.0 |
 | [Recurrent training on sequence batches](tutorials/recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`reference/generated/tutorials/recurrent_sequence_training.py`) | 00:00.150 | 0.0 |
-| [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.083 | 0.0 |
+| [Get started with data collection and storage](tutorials/getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`reference/generated/tutorials/getting-started-3.py`) | 00:00.089 | 0.0 |
 | [Get started with logging](tutorials/getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`reference/generated/tutorials/getting-started-4.py`) | 00:00.073 | 0.0 |
 | [Get started with TorchRL's modules](tutorials/getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`reference/generated/tutorials/getting-started-1.py`) | 00:00.072 | 0.0 |
 | [Getting started with model optimization](tutorials/getting-started-2.html#sphx-glr-tutorials-getting-started-2-py) (`reference/generated/tutorials/getting-started-2.py`) | 00:00.064 | 0.0 |
@@ -290699,14 +290742,15 @@ simplicity. Try it out for yourself: build a buffer and indicate its
 batch-size in the constructor, then try to iterate over it. This is
 equivalent to calling `rb.sample()` within a loop!
 - For trajectory-based training (recurrent policies, decision transformers),
-see [Complete trajectory collection with trajs_per_batch](../reference/collectors_replay.html#collectors-replay-trajs) -- it shows how to use
-`trajs_per_batch` with a [`SliceSampler`](../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) to store
-and sample clean trajectory slices from the replay buffer, especially
-with multi-process collectors. The underlying contract -- how episode
-boundaries are recovered from the stored data -- is documented in
+see [Complete-trajectory replay writes](../reference/collectors_replay.html#collectors-replay-trajs) -- it shows how to use
+`replay_write_mode="trajectory"` with a
+[`SliceSampler`](../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) to store and sample clean
+trajectory slices from the replay buffer, especially with multi-process
+collectors. The underlying contract -- how episode boundaries are recovered
+from the stored data -- is documented in
 [Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries).
 
-**Total running time of the script:** (0 minutes 0.083 seconds)
+**Total running time of the script:** (0 minutes 0.089 seconds)
 
 [`Download Jupyter notebook: getting-started-3.ipynb`](../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb)
 
@@ -298128,7 +298172,7 @@ print(buffer_list.sample(3))
 ```
 
 ```
-['b', 'b', 'a']
+['a', 0, 0]
 ```
 
 Because it is the one with the lowest amount of assumption, the
@@ -298195,15 +298239,15 @@ print("samples", sample["a"], sample["b", "c"])
 ```
 
 ```
-samples tensor([[ 8, 9, 10, 11],
- [ 8, 9, 10, 11],
- [ 4, 5, 6, 7],
+samples tensor([[ 0, 1, 2, 3],
  [ 0, 1, 2, 3],
- [ 0, 1, 2, 3]]) tensor([[10, 11, 12, 13, 14],
- [10, 11, 12, 13, 14],
- [ 5, 6, 7, 8, 9],
+ [ 0, 1, 2, 3],
+ [ 4, 5, 6, 7],
+ [ 8, 9, 10, 11]]) tensor([[ 0, 1, 2, 3, 4],
  [ 0, 1, 2, 3, 4],
- [ 0, 1, 2, 3, 4]])
+ [ 0, 1, 2, 3, 4],
+ [ 5, 6, 7, 8, 9],
+ [10, 11, 12, 13, 14]])
 ```
 
 A [`LazyMemmapStorage`](../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage) is created in the same manner.
@@ -298230,18 +298274,18 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmpc70fz9ey/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmpc70fz9ey/b/c.memmap
-samples: a= tensor([[ 0, 1, 2, 3],
- [ 8, 9, 10, 11],
- [ 0, 1, 2, 3],
- [ 0, 1, 2, 3],
- [ 8, 9, 10, 11]])
-('b', 'c'): tensor([[ 0, 1, 2, 3, 4],
- [10, 11, 12, 13, 14],
- [ 0, 1, 2, 3, 4],
- [ 0, 1, 2, 3, 4],
- [10, 11, 12, 13, 14]])
+the 'a' tensor is stored in /tmp/tmp9lgac7qb/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmp9lgac7qb/b/c.memmap
+samples: a= tensor([[4, 5, 6, 7],
+ [4, 5, 6, 7],
+ [4, 5, 6, 7],
+ [4, 5, 6, 7],
+ [4, 5, 6, 7]])
+('b', 'c'): tensor([[5, 6, 7, 8, 9],
+ [5, 6, 7, 8, 9],
+ [5, 6, 7, 8, 9],
+ [5, 6, 7, 8, 9],
+ [5, 6, 7, 8, 9]])
 ```
 
 ## Integration with TensorDict
@@ -298300,7 +298344,7 @@ print(sample["index"])
 ```
 
 ```
-tensor([0, 2, 2, 0, 1, 1, 2, 0, 1, 1, 0, 0])
+tensor([0, 2, 2, 2, 1, 0, 0, 0, 1, 0, 1, 1])
 ```
 
 ### Integration with tensorclass
@@ -299120,10 +299164,10 @@ gc.collect()
 ```
 
 ```
-episode are grouped tensor([4, 4, 2, 2, 1, 1, 3, 3], dtype=torch.int32)
+episode are grouped tensor([4, 4, 2, 2, 2, 2, 2, 2], dtype=torch.int32)
 steps are successive tensor([0, 1, 0, 1, 0, 1, 0, 1])
 
-4303
+4907
 ```
 
 ### Sequence sampling and trajectory queries
@@ -299251,16 +299295,16 @@ contract: which markers (trajectory ids, `done`/`truncated`/
 episode boundaries, and why this multi-process case is the one
 configuration where the markers alone are not enough.
 
-The recommended solution is `trajs_per_batch`, which makes each worker
-write only **complete trajectories** to the buffer -- see
+The recommended solution is `replay_write_mode="trajectory"`, which makes
+each worker write only **complete trajectories** to the buffer -- see
 [the dedicated collector + replay buffer section](../reference/collectors_replay.html#collectors-replay-trajs)
 for full examples and discussion.
 
 Important
 
-When using `trajs_per_batch`, always use a **flat 1-D storage**
+When using trajectory replay writes, always use a **flat 1-D storage**
 (the default `ndim=1`). Although batched environments normally call
-for `ndim=2`, `trajs_per_batch` disassembles batches and writes
+for `ndim=2`, trajectory mode disassembles batches and writes
 each trajectory as a variable-length 1-D sequence. A storage with
 `ndim >= 2` expects a fixed second dimension that variable-length
 trajectories cannot fill.
@@ -299292,7 +299336,7 @@ trajectory queries, consuming samples, statistics, and generation-aware
 updates.
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.882 seconds)
+**Total running time of the script:** (0 minutes 0.886 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
@@ -299973,7 +300017,7 @@ separate from policy observations. For API details, see
 
 # Computation times
 
-**08:25.851** total execution time for 30 files **from tutorials**:
+**08:25.861** total execution time for 30 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
@@ -299994,12 +300038,12 @@ separate from policy observations. For API details, see
 | [Introduction to TorchRL](torchrl_demo.html#sphx-glr-tutorials-torchrl-demo-py) (`torchrl_demo.py`) | 00:05.458 | 0.0 |
 | [Pendulum: Writing your environment and transforms with TorchRL](pendulum.html#sphx-glr-tutorials-pendulum-py) (`pendulum.py`) | 00:04.764 | 0.0 |
 | [Task-specific policy in multi-task environments](multi_task.html#sphx-glr-tutorials-multi-task-py) (`multi_task.py`) | 00:04.296 | 0.0 |
-| [Using Replay Buffers](rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`rb_tutorial.py`) | 00:00.882 | 0.0 |
+| [Using Replay Buffers](rb_tutorial.html#sphx-glr-tutorials-rb-tutorial-py) (`rb_tutorial.py`) | 00:00.886 | 0.0 |
 | [Collectors Deep Dive: Trajectory Assembly](collector_trajectory_assembly.html#sphx-glr-tutorials-collector-trajectory-assembly-py) (`collector_trajectory_assembly.py`) | 00:00.401 | 0.0 |
 | [Vision-Language-Action (VLA) policies with TorchRL](vla.html#sphx-glr-tutorials-vla-py) (`vla.py`) | 00:00.395 | 0.0 |
 | [Memory-Efficient RL Training](memory_efficient_rl.html#sphx-glr-tutorials-memory-efficient-rl-py) (`memory_efficient_rl.py`) | 00:00.320 | 0.0 |
 | [Recurrent training on sequence batches](recurrent_sequence_training.html#sphx-glr-tutorials-recurrent-sequence-training-py) (`recurrent_sequence_training.py`) | 00:00.150 | 0.0 |
-| [Get started with data collection and storage](getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`getting-started-3.py`) | 00:00.083 | 0.0 |
+| [Get started with data collection and storage](getting-started-3.html#sphx-glr-tutorials-getting-started-3-py) (`getting-started-3.py`) | 00:00.089 | 0.0 |
 | [Get started with logging](getting-started-4.html#sphx-glr-tutorials-getting-started-4-py) (`getting-started-4.py`) | 00:00.073 | 0.0 |
 | [Get started with TorchRL's modules](getting-started-1.html#sphx-glr-tutorials-getting-started-1-py) (`getting-started-1.py`) | 00:00.072 | 0.0 |
 | [Getting started with model optimization](getting-started-2.html#sphx-glr-tutorials-getting-started-2-py) (`getting-started-2.py`) | 00:00.064 | 0.0 |

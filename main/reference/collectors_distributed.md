@@ -96,11 +96,15 @@ see these warnings, they can be displayed by setting `torchrl.filter_warnings_su
 
 Tip
 
-All distributed collectors support `trajs_per_batch` combined with
-`replay_buffer`. When set, each remote worker assembles **complete
-trajectories** and writes them to the shared buffer as flat 1-D sequences,
-which is directly compatible with [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler).
-See [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for examples and best practices.
+[`RayCollector`](generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector) supports
+`replay_write_mode="trajectory"` with a Ray replay-buffer service.
+[`RPCCollector`](generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector) supports the same
+remote-collector contract when the replay buffer and
+`replay_write_mode="trajectory"` are passed through `collector_kwargs`.
+Each remote worker then assembles **complete trajectories** and writes them
+as flat 1-D sequences, which is directly compatible with
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler). See
+[Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for examples and best practices.
 
 | [`DistributedCollector`](generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector)(create_env_fn, policy, ...) | A distributed data collector with torch.distributed backend. |
 | --- | --- |

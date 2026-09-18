@@ -63,12 +63,14 @@ The current default layout is `"padded"`, but it will change to
 `trajs_per_batch` batches emits a `FutureWarning`; pass the
 layout explicitly.
 
-**Replay buffer integration**: when a `replay_buffer` is also provided,
-complete trajectories are written to the buffer as **flat 1-D sequences** (no
-padding) instead of being yielded. This is the recommended pattern for
+**Replay buffer integration**: pass `replay_write_mode="trajectory"` with a
+`replay_buffer` to write complete trajectories as **flat 1-D sequences** (no
+padding). This is the recommended pattern for
 off-policy training with [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler), especially
 with multi-process collectors where fixed-frame batches can silently mix
-episodes. See [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for full details and examples.
+episodes. See [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for full details and examples.
+The legacy combination of `replay_buffer` and `trajs_per_batch` retains
+this behavior when `replay_write_mode` is omitted.
 
 Note
 
@@ -307,7 +309,8 @@ Tip
 
 For maximum throughput with trajectory-based training (e.g. recurrent
 policies, decision transformers), combine `start()` with
-`trajs_per_batch` and a [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler):
+`replay_write_mode="trajectory"` and a
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler):
 
 ```
 rb = ReplayBuffer(
@@ -323,7 +326,7 @@ collector = Collector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
- trajs_per_batch=8,
+ replay_write_mode="trajectory",
  sync=False,
 )
 collector.start()
@@ -335,7 +338,7 @@ collector.async_shutdown()
 
 Each worker writes only **complete trajectories** to the buffer, so the
 sampler never draws slices that cross episode boundaries. See
-[Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs) for a full discussion.
+[Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs) for a full discussion.
 
 Warning
 

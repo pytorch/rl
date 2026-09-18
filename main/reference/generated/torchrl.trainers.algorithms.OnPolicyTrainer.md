@@ -75,6 +75,12 @@ Default: "terminated".
 Default: "reward".
 - **action_key** (*NestedKey**,**optional*) - Action key used by losses and logging. Default: "action".
 - **observation_key** (*NestedKey**,**optional*) - Observation key used for logging. Default: "observation".
+- **telemetry** (*"minimal"**or**"standard"**,**optional*) - Diagnostic telemetry level.
+`"minimal"` preserves the legacy logging set and performs no
+additional metric collection. `"standard"` also records frame,
+episode, terminal, reward, optimizer, throughput, collector and replay
+diagnostics under the `training/` logger namespace. Missing optional
+fields are omitted. Default: `"standard"`.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 

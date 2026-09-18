@@ -218,6 +218,9 @@ buffer as flat 1-D sequences. Passed through to each worker's
 
 See [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
 description of the completeness guarantee and storage contract.
+New code can instead pass `replay_write_mode="trajectory"`
+through `collector_kwargs` to select the same replay-ingestion
+contract without coupling it to yielded trajectory batches.
 Defaults to `None`.
 
 async_shutdown(*timeout: float | None = None*, *close_env: bool = True*) → None

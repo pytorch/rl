@@ -316,14 +316,15 @@ simplicity. Try it out for yourself: build a buffer and indicate its
 batch-size in the constructor, then try to iterate over it. This is
 equivalent to calling `rb.sample()` within a loop!
 - For trajectory-based training (recurrent policies, decision transformers),
-see [Complete trajectory collection with trajs_per_batch](../reference/collectors_replay.html#collectors-replay-trajs) -- it shows how to use
-`trajs_per_batch` with a [`SliceSampler`](../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) to store
-and sample clean trajectory slices from the replay buffer, especially
-with multi-process collectors. The underlying contract -- how episode
-boundaries are recovered from the stored data -- is documented in
+see [Complete-trajectory replay writes](../reference/collectors_replay.html#collectors-replay-trajs) -- it shows how to use
+`replay_write_mode="trajectory"` with a
+[`SliceSampler`](../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) to store and sample clean
+trajectory slices from the replay buffer, especially with multi-process
+collectors. The underlying contract -- how episode boundaries are recovered
+from the stored data -- is documented in
 [Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries).
 
-**Total running time of the script:** (0 minutes 0.083 seconds)
+**Total running time of the script:** (0 minutes 0.089 seconds)
 
 [`Download Jupyter notebook: getting-started-3.ipynb`](../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb)
 

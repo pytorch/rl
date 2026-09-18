@@ -60,7 +60,7 @@ This function splits whatever the input contains: trajectories
 spanning several collector batches stay split across the corresponding
 calls. To collect batches made of complete trajectories only, pass
 `trajs_per_batch` to the collector instead (see
-[Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs)).
+[Complete-trajectory replay writes](../collectors_replay.html#collectors-replay-trajs)).
 
 See also
 

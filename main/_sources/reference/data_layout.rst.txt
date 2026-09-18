@@ -191,8 +191,10 @@ truncated-only episode ends). Which API to reach for:
      - :func:`~torchrl.data.find_start_stop_traj`
    * - Sampling contiguous trajectory slices from a buffer
      - :class:`~torchrl.data.replay_buffers.SliceSampler` (and variants)
-   * - Collecting only complete trajectories in the first place
+   * - Yielding only complete trajectory batches
      - ``trajs_per_batch`` (see :ref:`collectors_replay_trajs`)
+   * - Writing only complete trajectories to replay
+     - ``replay_write_mode="trajectory"`` (see :ref:`collectors_replay_trajs`)
 
 The replay buffer ``ndim`` arg and why it doesn't multi-process well
 --------------------------------------------------------------------
@@ -320,7 +322,7 @@ becomes irrelevant: each row of the 1-D storage is a self-contained
 episode segment, and any slice sampled from it is correct by construction.
 
 This is what passing the buffer directly to the collector and setting
-``trajs_per_batch`` does:
+``replay_write_mode="trajectory"`` does:
 
 .. code-block:: python
 
@@ -339,7 +341,8 @@ This is what passing the buffer directly to the collector and setting
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,
-        trajs_per_batch=8,    # each worker writes COMPLETE trajectories only
+        replay_write_mode="trajectory",
+        trajs_per_write=8,    # optional grouping per replay extend
         sync=False,
     )
     collector.start()
@@ -361,9 +364,9 @@ How the buffer is actually populated when ``replay_buffer=`` is passed:
   ``ndim >= 2`` shared storages unsafe (see
   :ref:`data-layout-storage-ndim`).
 
-What ``trajs_per_batch`` adds is a guarantee on the *contents* of each
-extend: with ``trajs_per_batch=N``, every ``rb.extend`` call commits one
-or more **complete trajectories** (last step has
+Trajectory write mode adds a guarantee on the *contents* of each extend:
+every ``rb.extend`` call commits one or more **complete trajectories** (last
+step has
 ``("next", "done") == True``). The buffer never sees a partial episode,
 so even when worker A's flush interleaves with worker B's, the resulting
 storage is just a concatenation of complete episodes. No intra-episode
@@ -377,8 +380,10 @@ provides a lighter mitigation by inserting an artificial ``truncated``
 at every batch boundary — see
 :ref:`collectors_replay_trajs` for the trade-offs.
 
-See :ref:`collectors_replay_trajs` for the full ``trajs_per_batch`` API
-and the synchronous-iteration pattern.
+See :ref:`collectors_replay_trajs` for the full ``replay_write_mode`` API and
+the synchronous-iteration pattern. The legacy combination of
+``replay_buffer`` and ``trajs_per_batch`` continues to select trajectory
+writes when ``replay_write_mode`` is left as ``None``.
 
 SliceSampler: variable-length contiguous slices
 -----------------------------------------------

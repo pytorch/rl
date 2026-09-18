@@ -11,6 +11,22 @@ Core trainer classes and builder utilities.
 
 ## Algorithm-specific trainers
 
+### On-policy telemetry
+
+On-policy trainers expose `telemetry="standard"` by default. Standard mode
+adds diagnostics under the `training/` logger namespace for collected and
+batch frames, completed episodes, terminal rates, reward and complete-episode
+summaries, optimizer learning rate and gradient norm, collection and optimizer
+throughput, and cheap collector or replay-buffer statistics when those values
+are available. Optional metrics are omitted when the collected batch does not
+contain enough information to compute them; for example, complete-episode
+returns require trajectory identifiers and reset markers.
+
+Set `telemetry="minimal"` to retain the legacy metric set without querying
+collector or replay statistics or computing the additional reductions. Legacy
+metric names such as `r_training` and `done_percentage` are unchanged in
+both modes.
+
 | [`OnPolicyTrainer`](generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer)(*args, **kwargs) | Shared implementation for on-policy trainers (PPO, A2C, REINFORCE). |
 | --- | --- |
 | [`A2CTrainer`](generated/torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer)(*args, **kwargs) | A2C (Advantage Actor-Critic) trainer implementation. |

@@ -289,31 +289,23 @@ With a multi-process collector writing to a shared replay buffer,
 this marks the worker-batch seams that would otherwise be
 invisible to a [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler);
 see [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
-and [Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
+and [Complete-trajectory replay writes](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
 - **trajs_per_batch** (*int**,**optional*) -
 
-When set together with `replay_buffer`,
-trajectory assembly is delegated to each worker's inner
-[`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector). Each worker calls
-`_iter_by_trajectories()`
-independently and writes **complete trajectories** (episodes whose
-last step has `("next", "done") == True`) to the shared replay
-buffer as flat 1-D sequences -- no padding, no accumulation.
-
-When set *without* `replay_buffer`, the multi-collector
+When set without `replay_buffer`,
+the multi-collector
 assembles trajectories from the worker batches and yields
 zero-padded batches of shape `(trajs_per_batch, max_traj_len)`
 with a `("collector", "mask")` boolean field, or flat unpadded
 concatenations with `traj_format="cat"`.
 
-Both the iteration pattern (`for data in collector`) and the
-async `start()` pattern are supported.
-
 Defaults to `None` (fixed-frame batches).
-
-See [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for the full
-description of the completeness guarantee and replay-buffer
-storage contract.
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) - Selects
+fixed-frame rollout writes or complete-trajectory writes to the
+shared replay buffer. In trajectory mode, assembly is delegated
+to each worker and only flat, completed trajectories are inserted.
+Defaults to `None`; the legacy combination of `replay_buffer`
+and `trajs_per_batch` still selects trajectory writes.
 - **traj_format** (*str**,**optional*) - layout of the batches yielded when
 `trajs_per_batch` is set without a `replay_buffer`:
 `"padded"` for zero-padded

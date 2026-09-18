@@ -26,19 +26,17 @@ flag.)
 
 **Replay buffer integration**
 
-When combined with a `replay_buffer`, each complete trajectory is
-written to the buffer as a **flat 1-D sequence** of valid timesteps
-(no padding, no accumulation to `trajs_per_batch`). The method
-yields `None` on every write -- matching the standard replay-buffer
-collection convention. This flat storage is directly compatible
-with `SliceSampler` using
-`end_key=("next", "done")`.
+For compatibility, combining this argument with a
+`replay_buffer` while leaving `replay_write_mode=None` selects
+complete-trajectory replay writes. New code should use
+`replay_write_mode="trajectory"` instead.
 
 Important
 
 When using a **multi-process** collector with a shared replay
 buffer and a `SliceSampler`, setting
-`trajs_per_batch` is strongly recommended. Without it,
+`replay_write_mode="trajectory"` is strongly recommended.
+Without it,
 different workers write batches independently and adjacent
 frames in the buffer can come from unrelated episodes without
 an intervening `done` signal, causing the sampler to draw
@@ -57,17 +55,19 @@ sequence. The buffer storage should use `ndim=1` -- `ndim=2`
 is incompatible because variable-length trajectories cannot fill a
 fixed second dimension.
 
-**Multi-process and distributed collectors**: `trajs_per_batch`
-combined with `replay_buffer` is supported for
+**Multi-process and distributed collectors**: trajectory replay
+writes are supported for
 [`MultiSyncCollector`](torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector),
 [`MultiAsyncCollector`](torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector),
 [`RayCollector`](torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector), and
-[`RPCCollector`](torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector).
+[`RPCCollector`](torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector) (through
+its remote `collector_kwargs`).
 Trajectory assembly is delegated to each worker's inner collector,
 which calls `_iter_by_trajectories()` independently and writes
-complete trajectories to the shared replay buffer. Both the
-iteration pattern (`for data in collector`) and the async
-`start()` pattern are supported.
+complete trajectories to the shared replay buffer. Local process
+and Ray collectors support both iteration (`for data in
+collector`) and asynchronous `start()`; RPC uses its remote
+collector iteration loop.
 
 ```
 rb = ReplayBuffer(
@@ -80,20 +80,35 @@ collector = MultiSyncCollector(
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
- trajs_per_batch=32,
+ replay_write_mode="trajectory",
 )
 collector.start() # workers fill rb with complete trajectories
 ```
 
 Defaults to `None` (fixed-frame batches).
-- **trajs_per_write** (*int**,**optional*) - When `trajs_per_batch` is used with
-a replay buffer, write this many completed trajectories to the
+- **trajs_per_write** (*int**,**optional*) - In trajectory replay-write mode,
+write this many completed trajectories to the
 buffer per `extend` call. Larger values reduce Python overhead
 for highly batched environments. For example, if 10 complete
 trajectories are queued for replay-buffer insertion,
 `trajs_per_write=2` makes 5 writes, while
 `trajs_per_write=10` or larger makes 1 write. Defaults to
 `None` (write all currently queued completed trajectories).
+- **replay_write_mode** (`"rollout"`, `"trajectory"`, optional) -
+
+Controls
+how a collector writes to `replay_buffer`. `"rollout"` keeps
+the fixed-frame rollout layout. `"trajectory"` retains
+in-flight episodes and writes only completed trajectories as flat
+1-D sequences. `trajs_per_write` optionally groups completed
+trajectories into each `extend` call. Defaults to `None`,
+which preserves the legacy behavior: `replay_buffer` combined
+with `trajs_per_batch` selects trajectory writes, and other
+replay-buffer configurations select rollout writes.
+
+Explicit replay write modes cannot be combined with
+`trajs_per_batch`. The latter controls the number of completed
+trajectories in batches yielded without a replay buffer.
 - **traj_format** (*str**,**optional*) - layout of the batches yielded when
 `trajs_per_batch` is set. `"padded"` stacks the
 trajectories into a `(trajs_per_batch, max_traj_len)` batch,

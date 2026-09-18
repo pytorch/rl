@@ -151,7 +151,7 @@ collector = Collector(
 - **Trajectory assembly**: Collect complete trajectories with `trajs_per_batch` --
 padded whole-episode batches for on-policy training, or flat unpadded writes into a
 replay buffer for clean [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) sampling --
-see [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs)
+see [Complete-trajectory replay writes](collectors_replay.html#collectors-replay-trajs)
 - **Batching strategies**: Multiple ways to organize collected data
 - **Profiler-ready**: Set `TORCHRL_PROFILING=1` to emit named ranges on the
 collector, env, and policy hot paths -- see [Profiling collectors and envs](profiling.html#ref-profiling)
@@ -272,5 +272,5 @@ name a concrete implementation.
 - [Collectors and Replay Buffers](collectors_replay.html)
 
 - [Collectors and replay buffers interoperability](collectors_replay.html#collectors-and-replay-buffers-interoperability)
-- [Complete trajectory collection with `trajs_per_batch`](collectors_replay.html#complete-trajectory-collection-with-trajs-per-batch)
+- [Complete-trajectory replay writes](collectors_replay.html#complete-trajectory-replay-writes)
 - [Helper functions](collectors_replay.html#helper-functions)
