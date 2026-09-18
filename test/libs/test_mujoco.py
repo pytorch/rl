@@ -1144,8 +1144,7 @@ class TestMujoco:
         assert (metrics["left_single_support_steps"] == 0.0).all()
         env.close()
 
-    def test_microduck_skill_metrics_exclude_padding(self):
-        ppo = self._load_example("ppo_mujoco")
+    def test_microduck_trajectory_metrics_exclude_padding(self):
         rollout = TensorDict(batch_size=(1, 6))
         rollout["collector", "mask"] = torch.tensor([[True] * 5 + [False]])
         rollout["command"] = torch.zeros(1, 6, 2)
@@ -1171,7 +1170,7 @@ class TestMujoco:
         rollout["next", "diagnostic_heading"] = torch.tensor(
             [[[3.0], [3.1], [-3.0831853], [-2.9831853], [-2.8831853], [0.0]]]
         )
-        metrics = ppo.microduck_metrics(rollout, jumping=True)
+        metrics = MicroDuckEnv.trajectory_metrics(rollout, jumping=True)
         assert metrics["airborne_fraction"] == pytest.approx(0.4)
         assert metrics["drift_speed"] == 0.0
         assert metrics["displacement_max"] == pytest.approx(math.sqrt(2) * 0.01)
@@ -1187,10 +1186,13 @@ class TestMujoco:
         rollout["next", "diagnostic_position_x"] = torch.tensor(
             [[[0.0], [1.0], [2.0], [3.0], [4.0], [99.0]]]
         )
-        metrics = ppo.microduck_metrics(rollout)
+        metrics = MicroDuckEnv.trajectory_metrics(rollout)
         assert metrics["ground_forward_speed"] == 1.0
         assert metrics["ground_lateral_speed"] == 0.0
-        assert ppo.microduck_metrics(rollout[..., :1])["ground_forward_speed"] == 0.0
+        assert (
+            MicroDuckEnv.trajectory_metrics(rollout[..., :1])["ground_forward_speed"]
+            == 0.0
+        )
 
     def test_microduck_example_gait_metrics_count_swing_phases(self):
         gait = self._load_example("heuristic_gait")
