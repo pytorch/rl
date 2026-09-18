@@ -630,6 +630,7 @@
 - [TensorDictRecorder](reference/generated/torchrl.record.TensorDictRecorder.md)
 - [VideoRecorder](reference/generated/torchrl.record.VideoRecorder.md)
 - [Logger](reference/generated/torchrl.record.loggers.Logger.md)
+- [PrefixLogger](reference/generated/torchrl.record.loggers.PrefixLogger.md)
 - [ProcessLogger](reference/generated/torchrl.record.loggers.ProcessLogger.md)
 - [RayLogger](reference/generated/torchrl.record.loggers.RayLogger.md)
 - [CSVLogger](reference/generated/torchrl.record.loggers.csv.CSVLogger.md)

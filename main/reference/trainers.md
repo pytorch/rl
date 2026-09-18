@@ -47,6 +47,7 @@ trainer.train()
 - [Loggers](trainers_loggers.html)
 
 - [Logger](generated/torchrl.record.loggers.Logger.html)
+- [PrefixLogger](generated/torchrl.record.loggers.PrefixLogger.html)
 - [ProcessLogger](generated/torchrl.record.loggers.ProcessLogger.html)
 - [RayLogger](generated/torchrl.record.loggers.RayLogger.html)
 - [CSVLogger](generated/torchrl.record.loggers.csv.CSVLogger.html)
