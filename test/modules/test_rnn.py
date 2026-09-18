@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import hashlib
 import importlib.util
 import sys
 import threading
@@ -63,6 +64,7 @@ from torchrl.modules.tensordict_module.rnn import (
     _canonical_contiguous,
     _canonical_stride,
 )
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkillPolicy, MicroDuckSkills
 from torchrl.modules.utils import (
     get_env_transforms_from_module,
     get_primers_from_module,
@@ -79,6 +81,55 @@ from torchrl.testing.mocking_classes import (
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _vmap = None
+
+
+def test_microduck_skills_checkpoint_reconstructs_frozen_policy(tmp_path):
+    policy = MicroDuckSkillPolicy(
+        hidden_size=8,
+        num_tasks=2,
+        observation_dim=56,
+        num_actions=14,
+    )
+    payload = {
+        "policy_kwargs": {"hidden_size": 8},
+        "config": {
+            "env": {
+                "tasks": [
+                    {"preset": "standing_task"},
+                    {"preset": "tracking_task", "speed": 0.2},
+                ],
+                "action_scale": 0.35,
+            }
+        },
+        "model_state_dict": policy.state_dict(),
+    }
+
+    checkpoint = tmp_path / "skills.ckpt"
+    torch.save(payload, checkpoint)
+    digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+
+    skills = MicroDuckSkills.from_checkpoint(checkpoint, sha256=digest)
+
+    assert list(skills.task_library.name) == ["standing", "tracking+0.20"]
+    assert skills.action_scale == 0.35
+    assert not skills.policy.training
+    assert not any(parameter.requires_grad for parameter in skills.policy.parameters())
+    td = TensorDict(
+        {
+            "observation": torch.randn(3, 56),
+            "task_id": torch.tensor([[0], [1], [0]]),
+            "recurrent_state": torch.zeros(3, 1, 8),
+            "is_init": torch.ones(3, 1, dtype=torch.bool),
+        },
+        batch_size=[3],
+    )
+    skills.policy(td)
+    assert td["action"].shape == (3, 14)
+    assert torch.isfinite(td["action"]).all()
+    assert td["next", "recurrent_state"].shape == (3, 1, 8)
+
+    with pytest.raises(ValueError, match="expected 0{64}"):
+        MicroDuckSkills.from_checkpoint(checkpoint, sha256="0" * 64)
 
 
 def _get_vmap():
