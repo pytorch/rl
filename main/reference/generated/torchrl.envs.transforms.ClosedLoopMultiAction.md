@@ -36,7 +36,6 @@ unstacked. The controller uses the latest observation on its next call.
 Use `from_env()` to install controller primers before this transform.
 The base environment must honor partial-step masks, as for MultiAction.
 Discount factors on the resulting environment count high-level decisions.
-See also `ClosedLoopMultiActionConfig`.
 
 Examples
 
@@ -56,6 +55,15 @@ Examples
 tensor([3], dtype=torch.int32)
 >>> env.close()
 ```
+
+See also
+
+[`LowLevelController`](torchrl.modules.LowLevelController.html#torchrl.modules.LowLevelController) provides independent
+recurrent state for each controlled instance;
+[`MicroDuckSkillEnv`](torchrl.envs.MicroDuckSkillEnv.html#torchrl.envs.MicroDuckSkillEnv) uses this transform to expose
+skill decisions as environment actions; and
+`ClosedLoopMultiActionConfig`
+exposes this class through Hydra configuration.
 
 *classmethod*from_env(*env: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)*, *controller: TensorDictModuleBase*, ***, *steps: int*, *init_key: str = 'is_init'*, ***kwargs: Any*) → [TransformedEnv](torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ClosedLoopMultiAction.from_env)
 

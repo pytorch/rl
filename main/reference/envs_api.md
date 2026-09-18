@@ -366,7 +366,9 @@ state into the parent batch. Boolean masks are not supported.
 | [`HumanoidEnv`](generated/torchrl.envs.HumanoidEnv.html#torchrl.envs.HumanoidEnv)(*args[, num_workers, parallel]) | Bipedal humanoid locomotion task (28 DoF, 21 actuators). |
 | [`MenagerieEnv`](generated/torchrl.envs.MenagerieEnv.html#torchrl.envs.MenagerieEnv)(robot, *args[, entry, ...]) | A MuJoCo Menagerie robot, loaded by name. |
 | [`MenagerieTask`](generated/torchrl.envs.MenagerieTask.html#torchrl.envs.MenagerieTask)([keyframe, site_names, ...]) | Task parameters of [`MenagerieEnv`](generated/torchrl.envs.MenagerieEnv.html#torchrl.envs.MenagerieEnv). |
+| [`MicroDuckSkillController`](generated/torchrl.envs.MicroDuckSkillController.html#torchrl.envs.MicroDuckSkillController)(*args, **kwargs) | Translate high-level MicroDuck skill decisions into joint targets. |
 | [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv)([microduck_root, root, download]) | Locomotion tasks for the MicroDuck biped: stand, walk, sidestep, jump. |
+| [`MicroDuckSkillEnv`](generated/torchrl.envs.MicroDuckSkillEnv.html#torchrl.envs.MicroDuckSkillEnv)(*args, **kwargs) | High-level environment whose actions select frozen MicroDuck skills. |
 | [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)(command_low, command_high, ...) | |
 | [`MicroDuckTaskSampler`](generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler)([weights, task_ids, ...]) | Write a [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) `task_id` per env at reset from a weighted mixture. |
 | [`SatelliteEnv`](generated/torchrl.envs.SatelliteEnv.html#torchrl.envs.SatelliteEnv)(*args[, num_workers, parallel]) | Attitude-control task with 4 or 6 CMGs. |

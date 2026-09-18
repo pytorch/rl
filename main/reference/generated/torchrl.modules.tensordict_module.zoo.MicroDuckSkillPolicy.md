@@ -52,7 +52,9 @@ See also
 
 [`MicroDuckSkills`](torchrl.modules.tensordict_module.zoo.MicroDuckSkills.html#torchrl.modules.tensordict_module.zoo.MicroDuckSkills) packages the policy with the task metadata
 needed for deployment; [`MicroDuckEnv`](torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) is the
-joint-level environment used to train it; and
+joint-level environment used to train it;
+[`MicroDuckSkillController`](torchrl.envs.MicroDuckSkillController.html#torchrl.envs.MicroDuckSkillController) adapts its inputs for
+high-level skill decisions; and
 [`GRUModule`](torchrl.modules.GRUModule.html#torchrl.modules.GRUModule) provides its recurrent core.
 
 *classmethod*from_config(*policy_kwargs: Mapping[str, Any]*, ***, *num_tasks: int*, *observation_dim: int*, *num_actions: int*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str = 'cpu'*) → MicroDuckSkillPolicy[[source]](../../_modules/torchrl/modules/tensordict_module/zoo/microduck_policy.html#MicroDuckSkillPolicy.from_config)

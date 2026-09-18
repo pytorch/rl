@@ -36,8 +36,7 @@ the group's next observation, such as "fallen". Defaults to None
 
 The module does not disable gradients or change the policy's training mode.
 [`ClosedLoopMultiAction`](torchrl.envs.transforms.ClosedLoopMultiAction.html#torchrl.envs.transforms.ClosedLoopMultiAction) controls inference
-when the controller is deployed in an environment. See also
-`LowLevelControllerConfig`.
+when the controller is deployed in an environment.
 
 Examples
 
@@ -57,6 +56,15 @@ Examples
 tensor([2], dtype=torch.int32)
 >>> env.close()
 ```
+
+See also
+
+[`ClosedLoopMultiAction`](torchrl.envs.transforms.ClosedLoopMultiAction.html#torchrl.envs.transforms.ClosedLoopMultiAction) repeatedly
+executes the controller against fresh observations;
+[`MicroDuckSkillController`](torchrl.envs.MicroDuckSkillController.html#torchrl.envs.MicroDuckSkillController) specializes the
+controller for a task-conditioned MicroDuck policy; and
+`LowLevelControllerConfig`
+exposes this class through Hydra configuration.
 
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/modules/tensordict_module/controllers.html#LowLevelController.forward)
 

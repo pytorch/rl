@@ -54,6 +54,13 @@ One fixed task per env, for instance to film four tasks side by side:
 tensor([1, 2, 0, 2])
 ```
 
+See also
+
+[`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) defines one row of the sampled library;
+[`MicroDuckEnv`](torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) consumes the selected task id; and
+[`MicroDuckSkillController`](torchrl.envs.MicroDuckSkillController.html#torchrl.envs.MicroDuckSkillController) uses the same ordered library to
+interpret high-level skill decisions.
+
 add_module(*name: str*, *module: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None*) → None
 
 Add a child module to the current module.

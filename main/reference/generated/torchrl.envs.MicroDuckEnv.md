@@ -11,8 +11,9 @@ velocity (3), the planar command `(vx, vy)` (2), joint-position error
 (14), joint velocity (14), the sine, cosine and ramp of the gait clock
 (3), and the previous action (14). The command and the index of the env's
 task in the library are also exposed under the `command` and `task_id`
-keys; task parameters are not in the observation, and an embedding of the
-id stands for them.
+keys; the boolean `fallen` observation reports physical failure for
+per-agent controller resets. Task parameters are not in the observation,
+and an embedding of the id stands for them.
 
 The env holds a library of [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) rows in `tasks`
 (`env.tasks.name` lists their labels).
@@ -192,6 +193,13 @@ torch.Size([1, 10, 1])
 >>> task = MicroDuckEnv.tracking_task(0.2, reward_weights={"heading": 1.0}, heading_std=0.5)
 >>> env = MicroDuckEnv(download=True, tasks=task)
 ```
+
+See also
+
+[`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) represents one locomotion objective;
+[`MicroDuckTaskSampler`](torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler) controls task selection at reset; and
+[`MicroDuckSkillEnv`](torchrl.envs.MicroDuckSkillEnv.html#torchrl.envs.MicroDuckSkillEnv) promotes compatible joint-level dynamics to
+a high-level environment whose actions select trained skills.
 
 Reference:
 

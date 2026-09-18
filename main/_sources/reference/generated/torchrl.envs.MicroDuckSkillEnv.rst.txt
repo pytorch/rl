@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+MicroDuckSkillEnv
+=================
+
+.. autoclass:: MicroDuckSkillEnv
+    :members:
+    :inherited-members:

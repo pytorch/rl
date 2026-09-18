@@ -227,6 +227,8 @@
 - [MenagerieEnv](reference/generated/torchrl.envs.MenagerieEnv.md)
 - [MenagerieTask](reference/generated/torchrl.envs.MenagerieTask.md)
 - [MicroDuckEnv](reference/generated/torchrl.envs.MicroDuckEnv.md)
+- [MicroDuckSkillController](reference/generated/torchrl.envs.MicroDuckSkillController.md)
+- [MicroDuckSkillEnv](reference/generated/torchrl.envs.MicroDuckSkillEnv.md)
 - [MicroDuckTask](reference/generated/torchrl.envs.MicroDuckTask.md)
 - [MicroDuckTaskSampler](reference/generated/torchrl.envs.MicroDuckTaskSampler.md)
 - [ModelBasedEnvBase](reference/generated/torchrl.envs.ModelBasedEnvBase.md)
