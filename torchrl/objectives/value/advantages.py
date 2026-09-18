@@ -1970,6 +1970,10 @@ class GAE(ValueEstimatorBase):
     Refer to "HIGH-DIMENSIONAL CONTINUOUS CONTROL USING GENERALIZED ADVANTAGE ESTIMATION"
     https://arxiv.org/pdf/1506.02438.pdf for more context.
 
+    For recurrent value networks, use the :meth:`for_recurrent` alternative
+    constructor. It selects correctness-first recurrent defaults and validates
+    the required reset markers and recurrent state inputs.
+
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
