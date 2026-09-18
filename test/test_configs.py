@@ -2335,14 +2335,16 @@ class TestLoggerConfigs:
         assert cfg.wandb_kwargs == {"entity": "unit-test"}
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_wandb_logger_config_instantiation(self, monkeypatch):
+    def test_wandb_logger_config_instantiation(self, monkeypatch, tmp_path):
         """Test WandbLoggerConfig instantiation."""
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.logging import WandbLoggerConfig
 
         init_kwargs = {}
+        log_dir = tmp_path / "wandb_logs" / "nested"
 
         def init(**kwargs):
+            assert log_dir.is_dir()
             init_kwargs.update(kwargs)
             return argparse.Namespace(config={})
 
@@ -2352,14 +2354,14 @@ class TestLoggerConfigs:
         cfg = WandbLoggerConfig(
             exp_name="test",
             project="torchrl",
-            log_dir="wandb_logs",
+            log_dir=str(log_dir),
             wandb_kwargs={"entity": "unit-test"},
         )
         logger = instantiate(cfg)
         assert isinstance(logger, WandbLogger)
         assert init_kwargs["name"] == "test"
         assert init_kwargs["project"] == "torchrl"
-        assert init_kwargs["dir"] == "wandb_logs"
+        assert init_kwargs["dir"] == str(log_dir)
         assert init_kwargs["entity"] == "unit-test"
 
     def test_trackio_logger_config(self):

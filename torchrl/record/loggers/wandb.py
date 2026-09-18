@@ -95,7 +95,7 @@ class WandbLogger(Logger):
         self,
         exp_name: str,
         offline: bool = False,
-        save_dir: str | None = None,
+        save_dir: str | os.PathLike[str] | None = None,
         id: str | None = None,
         project: str | None = None,
         base_url: str | None = None,
@@ -107,14 +107,19 @@ class WandbLogger(Logger):
         if not _has_wandb:
             raise ImportError("wandb could not be imported")
 
-        log_dir = kwargs.pop("log_dir", None)
+        log_dir: str | os.PathLike[str] | None = kwargs.pop("log_dir", None)
         self.offline = offline
-        if save_dir and log_dir:
+        save_dir = save_dir or None
+        log_dir = log_dir or None
+        if save_dir is not None and log_dir is not None:
             raise ValueError(
                 "log_dir and save_dir point to the same value in "
                 "WandbLogger. Both cannot be specified."
             )
-        save_dir = save_dir if save_dir and not log_dir else log_dir
+        save_dir = save_dir if save_dir is not None else log_dir
+        if save_dir is not None:
+            save_dir = os.path.expanduser(os.fspath(save_dir))
+            os.makedirs(save_dir, exist_ok=True)
         self.save_dir = save_dir
         self.id = id
         self.project = project
