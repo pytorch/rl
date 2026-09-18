@@ -125,7 +125,9 @@ class MicroDuckSkillPolicy(ProbabilisticActor):
     .. seealso::
         :class:`MicroDuckSkills` packages the policy with the task metadata
         needed for deployment; :class:`~torchrl.envs.MicroDuckEnv` is the
-        joint-level environment used to train it; and
+        joint-level environment used to train it;
+        :class:`~torchrl.envs.MicroDuckSkillController` adapts its inputs for
+        high-level skill decisions; and
         :class:`~torchrl.modules.GRUModule` provides its recurrent core.
     """
 
@@ -237,11 +239,23 @@ class MicroDuckSkills:
         >>> skill_policy = skills.policy  # doctest: +SKIP
         >>> task_library = skills.task_library  # doctest: +SKIP
 
+        Promote compatible joint-level dynamics to a high-level environment
+        without separating the policy from that metadata:
+
+        >>> from torchrl.envs import MicroDuckSkillEnv
+        >>> base_env = make_microduck_game_env(  # doctest: +SKIP
+        ...     action_scale=skills.action_scale
+        ... )
+        >>> env = MicroDuckSkillEnv.from_env(  # doctest: +SKIP
+        ...     base_env, skills, control_steps_per_decision=5
+        ... )
+
     .. seealso::
         :class:`MicroDuckSkillPolicy` is the neural policy stored here;
         :class:`~torchrl.envs.MicroDuckTask` describes one row of the ordered
-        task library; and :class:`~torchrl.envs.MicroDuckEnv` supplies the
-        joint-level training dynamics.
+        task library; :class:`~torchrl.envs.MicroDuckEnv` supplies the
+        joint-level training dynamics; and
+        :class:`~torchrl.envs.MicroDuckSkillEnv` deploys the complete artifact.
     """
 
     policy: TensorDictModuleBase
