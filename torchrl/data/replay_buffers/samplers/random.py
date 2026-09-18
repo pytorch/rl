@@ -557,7 +557,7 @@ class SamplerWithoutReplacement(Sampler):
         )
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        self.len_storage = state_dict["len_storage"]
+        self.len_storage = int(state_dict["len_storage"])
         # clone to decouple the sampler state from the caller's tensor
         _sample_list = state_dict["_sample_list"]
         self._sample_list = (
@@ -565,8 +565,10 @@ class SamplerWithoutReplacement(Sampler):
             if isinstance(_sample_list, torch.Tensor)
             else _sample_list
         )
-        self.drop_last = state_dict["drop_last"]
-        self._ran_out = state_dict["_ran_out"]
+        # TensorDict checkpoints encode scalars as memory-mapped tensors.
+        # Restore Python values so the next save is independent of that file.
+        self.drop_last = bool(state_dict["drop_last"])
+        self._ran_out = bool(state_dict["_ran_out"])
 
     def __repr__(self):
         if self._sample_list is not None:
