@@ -40,7 +40,7 @@ discovery and buffer lifecycle.
     :template: rl_template.rst
 
     ReplayBuffer
-    ReplayFlowControl
+    RateLimitedReplayBuffer
     OfflineToOnlineReplayBuffer
     ReplayBufferEnsemble
     PrioritizedReplayBuffer
@@ -88,64 +88,34 @@ producer-backpressure signal: after warm-up, writes continue to overwrite old
 slots even though physical utilization remains 100 percent.
 
 
-Replay-ratio and policy-lag control
------------------------------------
+Replay-ratio limiting
+---------------------
 
-:class:`~torchrl.data.ReplayFlowControl` provides learner-side pacing for a
-continuously overwritten replay buffer. Its sample budget is based on cumulative
-``write_count`` and ``samples_returned`` values, so it remains meaningful after
-the physical buffer reaches capacity. A value such as
-``samples_per_insert=2.0`` permits at most two sampled transitions per inserted
-transition. Concurrent callers reserve budget atomically through the replay
-buffer's shared readiness condition.
-
-The optional ``max_policy_lag`` gate is deliberately separate from replay
-sampling eligibility. The coordinator records the policy versions in each
-sampled TensorDict and reports whether the next weight publication is allowed;
-it does not reject or reweight individual replay entries. Use a sampler such as
-:class:`~torchrl.data.StalenessAwareSampler` when hard per-entry filtering is
-required. Before the first controlled sample, no publication beyond the
-``initial_policy_version`` is allowed. Thereafter, the candidate version is
-compared with the oldest version in the latest sampled batch, which ensures
-that every record in that batch is within ``max_policy_lag``.
+:class:`~torchrl.data.RateLimitedReplayBuffer` limits the cumulative number of
+samples relative to the number of inserted items. Because the budget uses
+cumulative counters rather than storage occupancy, it remains meaningful after
+a circular buffer reaches capacity. A value such as ``samples_per_insert=2.0``
+permits at most two sampled items per inserted item. Concurrent callers reserve
+budget atomically before sampling.
 
 .. code-block:: python
 
     import torch
-    from tensordict import TensorDict
-    from torchrl.data import (
-        LazyTensorStorage,
-        ReplayFlowControl,
-        TensorDictReplayBuffer,
-    )
+    from torchrl.data import LazyTensorStorage, RateLimitedReplayBuffer
 
-    replay = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(1024), batch_size=64
-    )
-    replay.extend(TensorDict(
-        {
-            "observation": torch.randn(64, 4),
-            ("next", "policy_version"): torch.zeros(64, dtype=torch.long),
-        },
-        batch_size=[64],
-    ))
-    control = ReplayFlowControl(
-        replay,
+    replay = RateLimitedReplayBuffer(
+        storage=LazyTensorStorage(1024),
+        batch_size=64,
         samples_per_insert=1.0,
-        max_policy_lag=2,
     )
-    batch = control.sample(timeout=5.0)
-    if control.can_publish(1):
-        control.record_policy_publication(1)
+    replay.extend(torch.randn(64, 4))
+    batch = replay.sample(wait=True, timeout=5.0)
 
-``control.stats()`` returns the current sample and publication decisions, the
-cumulative counts and measured sample-to-insert ratio, available sample budget,
-policy-lag summaries, and cumulative wait count and time. The controller state
-is checkpointable with ``state_dict()`` / ``load_state_dict()``. Checkpoint it
-together with the replay buffer so both sides of the cumulative ratio remain
-aligned: the controller checkpoint does not duplicate the buffer-owned
-``write_count`` or ``samples_returned`` counters. ``shutdown()`` releases
-blocked controller calls without taking ownership of replay-buffer shutdown.
+``replay.stats()`` reports the target and measured sample-to-insert ratios,
+available budget, outstanding reservations, and cumulative wait count in
+addition to the standard replay-buffer counters. The rate-limit state is
+included in ``state_dict()``. Prefetch is unsupported because it could reserve
+or consume sample budget before the caller requests a batch.
 
 
 Sample units

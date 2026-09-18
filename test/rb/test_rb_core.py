@@ -16,13 +16,12 @@ import pytest
 import torch
 import torchrl
 from _rb_common import OLD_TORCH, ReplayBufferRNG, TensorDictReplayBufferRNG
-from tensordict import assert_allclose_td, NonTensorData, TensorDict, TensorDictBase
-
+from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl._utils import rl_warnings
 from torchrl.data import (
     PrioritizedReplayBuffer,
+    RateLimitedReplayBuffer,
     ReplayBuffer,
-    ReplayFlowControl,
     Sequence,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -35,7 +34,6 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
 )
-
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -1930,18 +1928,21 @@ class TestReplayBufferReadiness:
         assert errors and "shut down" in errors[0]
 
 
-class TestReplayFlowControl:
+class TestRateLimitedReplayBuffer:
     def test_ratio_uses_cumulative_counts_after_circular_wrap(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(4),
+            batch_size=2,
+            samples_per_insert=0.5,
+        )
         rb.extend(torch.arange(8))
-        control = ReplayFlowControl(rb, samples_per_insert=0.5)
 
-        control.sample(timeout=1)
-        control.sample(timeout=1)
-        with pytest.raises(TimeoutError, match="did not permit sampling"):
-            control.sample(timeout=0)
+        rb.sample(wait=True, timeout=1)
+        rb.sample(wait=True, timeout=1)
+        with pytest.raises(TimeoutError, match="sample-ratio budget"):
+            rb.sample(wait=True, timeout=0)
 
-        stats = control.stats()
+        stats = rb.stats()
         assert stats["write_count"] == 8
         assert stats["samples_returned"] == 4
         assert stats["samples_per_insert"] == 0.5
@@ -1949,9 +1950,12 @@ class TestReplayFlowControl:
         assert rb.stats()["storage_size"] == 4
 
     def test_concurrent_samples_reserve_ratio_budget_atomically(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(4),
+            batch_size=2,
+            samples_per_insert=1.0,
+        )
         rb.extend(torch.arange(2))
-        control = ReplayFlowControl(rb, samples_per_insert=1.0)
         barrier = threading.Barrier(3)
         cancel_event = threading.Event()
         sampled = threading.Event()
@@ -1960,7 +1964,7 @@ class TestReplayFlowControl:
         def sample():
             barrier.wait()
             try:
-                results.append(control.sample(cancel_event=cancel_event))
+                results.append(rb.sample(wait=True, cancel_event=cancel_event))
                 sampled.set()
             except RuntimeError as error:
                 results.append(str(error))
@@ -1979,19 +1983,22 @@ class TestReplayFlowControl:
             sum("cancelled" in result for result in results if isinstance(result, str))
             == 1
         )
-        assert control.stats()["samples_returned"] == 2
+        assert rb.stats()["samples_returned"] == 2
 
     def test_timeout_cancellation_and_shutdown_release_waiters(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(4),
+            batch_size=2,
+            samples_per_insert=0.5,
+        )
         rb.extend(torch.arange(2))
-        control = ReplayFlowControl(rb, samples_per_insert=0.5)
-        with pytest.raises(TimeoutError, match="did not permit sampling"):
-            control.sample(timeout=0)
+        with pytest.raises(TimeoutError, match="sample-ratio budget"):
+            rb.sample(wait=True, timeout=0)
 
         cancel_event = threading.Event()
         cancel_event.set()
         with pytest.raises(RuntimeError, match="cancelled"):
-            control.sample(cancel_event=cancel_event)
+            rb.sample(wait=True, cancel_event=cancel_event)
 
         started = threading.Event()
         completed = threading.Event()
@@ -2000,7 +2007,7 @@ class TestReplayFlowControl:
         def sample():
             started.set()
             try:
-                control.sample()
+                rb.sample(wait=True)
             except RuntimeError as error:
                 errors.append(str(error))
             completed.set()
@@ -2008,99 +2015,41 @@ class TestReplayFlowControl:
         thread = threading.Thread(target=sample)
         thread.start()
         assert started.wait(timeout=1)
-        control.shutdown()
+        rb.shutdown()
         assert completed.wait(timeout=1)
         thread.join(timeout=1)
         assert errors and "shut down" in errors[0]
-        assert control.stats()["sample_wait_count"] == 2
+        assert rb.stats()["sample_wait_count"] == 2
 
-    def test_nested_policy_lag_and_checkpoint_roundtrip(self):
-        version_key = ("collector", "policy_version")
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(8), batch_size=2)
-        rb.extend(
-            TensorDict(
-                {
-                    "value": torch.arange(4),
-                    version_key: torch.full((4,), 4, dtype=torch.long),
-                },
-                batch_size=[4],
+    def test_prefetch_rejected_and_checkpoint_roundtrip(self):
+        with pytest.raises(ValueError, match="prefetching"):
+            RateLimitedReplayBuffer(
+                storage=LazyTensorStorage(8),
+                samples_per_insert=1.0,
+                prefetch=1,
+                batch_size=2,
             )
-        )
-        control = ReplayFlowControl(
-            rb,
+
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(8),
+            batch_size=2,
             samples_per_insert=1.0,
-            max_policy_lag=2,
-            policy_version_key=version_key,
-            initial_policy_version=5,
         )
+        rb.extend(torch.arange(4))
+        rb.sample()
+        state = rb.state_dict()
 
-        assert not control.can_publish(6)
-        with pytest.raises(RuntimeError, match="requires at least one"):
-            control.record_policy_publication(6)
-        control.sample(timeout=1)
-        assert control.can_publish(6)
-        control.record_policy_publication(6)
-        assert not control.can_publish(7)
-        with pytest.raises(RuntimeError, match="exceeds max_policy_lag"):
-            control.record_policy_publication(7)
-
-        state = control.state_dict()
-        state["sample_wait_count"] = 2**31 + 1
-        restored = ReplayFlowControl(rb, samples_per_insert=2.0)
+        restored = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(8),
+            batch_size=2,
+            samples_per_insert=2.0,
+        )
         restored.load_state_dict(state)
         stats = restored.stats()
         assert stats["target_samples_per_insert"] == 1.0
-        assert stats["published_policy_version"] == 6
-        assert stats["policy_publication_count"] == 1
-        assert stats["policy_lag_count"] == 2
-        assert stats["policy_lag_mean"] == 1.0
-        assert stats["policy_lag_min"] == stats["policy_lag_max"] == 1
-        assert stats["sample_wait_count"] == 2**31 + 1
-
-    def test_policy_lag_uses_oldest_version_in_latest_batch(self):
-        version_key = ("collector", "policy_version")
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(2), batch_size=2)
-        rb.extend(
-            TensorDict(
-                {
-                    "value": torch.arange(2),
-                    version_key: torch.tensor([3, 7]),
-                },
-                batch_size=[2],
-            )
-        )
-        control = ReplayFlowControl(
-            rb,
-            samples_per_insert=1.0,
-            max_policy_lag=1,
-            policy_version_key=version_key,
-            initial_policy_version=7,
-        )
-
-        control.sample(timeout=1)
-        assert not control.can_publish(8)
-
-    def test_policy_lag_rejects_uuid_versions_with_actionable_error(self):
-        version_key = ("collector", "policy_version")
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(2), batch_size=2)
-        rb.extend(
-            TensorDict(
-                {
-                    "value": torch.arange(2),
-                    version_key: NonTensorData("policy-uuid").expand(2),
-                },
-                batch_size=[2],
-            )
-        )
-        control = ReplayFlowControl(
-            rb,
-            samples_per_insert=1.0,
-            max_policy_lag=1,
-            policy_version_key=version_key,
-        )
-
-        with pytest.raises(TypeError, match="UUID"):
-            control.sample(timeout=1)
+        assert stats["write_count"] == 4
+        assert stats["samples_returned"] == 2
+        assert stats["sample_budget"] == 2
 
 
 class _RepeatTwiceUnit(SampleUnit):

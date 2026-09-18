@@ -12,6 +12,7 @@ from .deprecated import InPlaceSampler, stack_tensors
 from .ensemble import ReplayBufferEnsemble
 from .prioritized import PrioritizedReplayBuffer
 from .prioritized_tensordict import TensorDictPrioritizedReplayBuffer
+from .rate_limited import RateLimitedReplayBuffer
 from .remote import RemoteTensorDictReplayBuffer
 from .tensordict import TensorDictReplayBuffer
 
@@ -19,6 +20,7 @@ __all__ = [
     "ConditionalUpdateResult",
     "InPlaceSampler",
     "PrioritizedReplayBuffer",
+    "RateLimitedReplayBuffer",
     "RemoteTensorDictReplayBuffer",
     "ReplayBuffer",
     "ReplayBufferEnsemble",
@@ -33,6 +35,7 @@ for _export in (
     ConditionalUpdateResult,
     ReplayBuffer,
     PrioritizedReplayBuffer,
+    RateLimitedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,

@@ -9,15 +9,14 @@ import os
 import pytest
 import torch
 from tensordict import TensorDict
-
 from torchrl.data import (
     LazyMemmapStorage,
     LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
+    RateLimitedReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
-    ReplayFlowControl,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
@@ -351,12 +350,13 @@ def test_replay_buffer_ready_check(benchmark):
     assert benchmark(replay_buffer.wait_until_sampleable)
 
 
-def test_replay_flow_control_ready_check(benchmark):
-    replay_buffer = ReplayBuffer(storage=ListStorage(64), batch_size=32)
+def test_rate_limited_replay_ready_check(benchmark):
+    replay_buffer = RateLimitedReplayBuffer(
+        storage=ListStorage(64), batch_size=32, samples_per_insert=1.0
+    )
     replay_buffer.extend(torch.arange(64))
-    control = ReplayFlowControl(replay_buffer, samples_per_insert=1.0)
 
-    assert benchmark(control.can_sample)
+    assert benchmark(replay_buffer.can_sample)
 
 
 def sample_prioritized_sampler(sampler, storage, batch_size):

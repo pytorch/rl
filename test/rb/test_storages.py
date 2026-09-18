@@ -40,11 +40,10 @@ from tensordict import (
 )
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
-
 from torchrl.data import (
     CompressedListStorage,
+    RateLimitedReplayBuffer,
     ReplayBuffer,
-    ReplayFlowControl,
     Sequence,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -935,12 +934,12 @@ class TestSharedStorageInit:
         rb.sample()
         queue.put("done")
 
-    def flow_control_worker(self, control, started, completed, queue):
+    def rate_limited_worker(self, replay_buffer, started, completed, queue):
         try:
-            control.sample(timeout=0)
+            replay_buffer.sample(wait=True, timeout=0)
         except TimeoutError:
             started.set()
-        sample = control.sample(timeout=30)
+        sample = replay_buffer.sample(wait=True, timeout=30)
         queue.put(sample["x"].tolist())
         completed.set()
 
@@ -1059,18 +1058,22 @@ class TestSharedStorageInit:
         assert rb.stats()["sample_calls"] == 1
         assert rb.stats()["samples_returned"] == 2
 
-    def test_shared_replay_flow_control_unblocks_after_worker_write(self):
+    def test_shared_rate_limited_replay_unblocks_after_worker_write(self):
         storage = LazyTensorStorage(max_size=8, shared_init=True)
-        rb = TensorDictReplayBuffer(storage=storage, batch_size=2).share(True)
+        rb = RateLimitedReplayBuffer(
+            storage=storage,
+            batch_size=2,
+            samples_per_insert=1.0,
+            shared=True,
+        )
         rb.extend(TensorDict({"x": torch.tensor([-1])}, batch_size=(1,)))
         rb.empty()
-        control = ReplayFlowControl(rb, samples_per_insert=1.0)
         started = mp.Event()
         completed = mp.Event()
         queue = mp.Queue()
         process = mp.Process(
-            target=self.flow_control_worker,
-            args=(control, started, completed, queue),
+            target=self.rate_limited_worker,
+            args=(rb, started, completed, queue),
         )
         process.start()
         assert started.wait(timeout=30)
@@ -1083,7 +1086,7 @@ class TestSharedStorageInit:
         sample = queue.get(timeout=1)
         assert len(sample) == 2
         assert set(sample).issubset({0, 1})
-        stats = control.stats()
+        stats = rb.stats()
         assert stats["write_count"] == 2
         assert stats["samples_returned"] == 2
         assert stats["sample_wait_count"] >= 1
