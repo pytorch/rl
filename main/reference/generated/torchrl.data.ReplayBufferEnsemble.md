@@ -482,7 +482,7 @@ Note
 Hooks are currently not serialized when saving a replay buffer: they must
 be manually re-initialized every time the buffer is created.
 
-sample(*batch_size: int | None = None*, *return_info: bool = False*) → Any
+sample(*batch_size: int | None = None*, *return_info: bool = False*, ***, *wait: bool = False*, *timeout: float | None = None*, *cancel_event: Any | None = None*) → Any
 
 Samples a batch of data from the replay buffer.
 
@@ -495,6 +495,15 @@ is provided, this method will sample a batch-size as indicated
 by the sampler.
 - **return_info** (*bool*) - whether to return info. If True, the result
 is a tuple (data, info). If False, the result is the data.
+- **wait** (*bool**,**optional*) - if `True`, wait for enough replay items
+instead of failing immediately. Defaults to `False`. This is
+an advisory readiness check, not a reservation: another
+consuming sampler can claim the records before this call
+samples them.
+- **timeout** (*float**,**optional*) - maximum number of seconds to wait when
+`wait=True`. `None` waits indefinitely.
+- **cancel_event** (*optional*) - event-like object exposing `is_set()`.
+Setting it cancels a blocking sample.
 
 Returns:
 
@@ -676,6 +685,43 @@ Routes a conditional update to the member named by each handle.
 The patch moves to the members' common storage device once, before the
 records are grouped by member, so the per-member updates never copy
 across devices.
+
+wait_until_sampleable(*min_items: int | None = None*, *timeout: float | None = None*, *cancel_event: Any | None = None*) → bool
+
+Waits until the replay buffer can serve a sample batch.
+
+Parameters:
+
+- **min_items** (*int**,**optional*) - requested sample batch size. Defaults to
+the batch size configured on the replay buffer.
+- **timeout** (*float**,**optional*) - maximum number of seconds to wait.
+`None` waits indefinitely.
+- **cancel_event** (*optional*) - event-like object exposing `is_set()`.
+The wait returns `False` when the event is set.
+
+Returns:
+
+`True` when the requested batch can be sampled and `False`
+after a timeout or cancellation.
+
+Raises:
+
+**RuntimeError** - if no batch size is available or the replay buffer
+ is shut down while waiting.
+
+Examples
+
+```
+>>> import threading
+>>> import torch
+>>> from torchrl.data import ListStorage, ReplayBuffer
+>>> rb = ReplayBuffer(storage=ListStorage(4), batch_size=2)
+>>> writer = threading.Thread(target=rb.extend, args=(torch.arange(2),))
+>>> writer.start()
+>>> rb.wait_until_sampleable(timeout=1.0)
+True
+>>> writer.join()
+```
 
 write_all(*data: Any*, *end: int | None = None*) → None
 

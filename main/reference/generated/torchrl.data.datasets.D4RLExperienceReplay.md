@@ -596,7 +596,7 @@ Note
 Hooks are currently not serialized when saving a replay buffer: they must
 be manually re-initialized every time the buffer is created.
 
-sample(*batch_size: int | None = None*, *return_info: bool = False*, *include_info: bool | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+sample(*batch_size: int | None = None*, *return_info: bool = False*, *include_info: bool | None = None*, ***, *wait: bool = False*, *timeout: float | None = None*, *cancel_event: Any | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Samples a batch of data from the replay buffer.
 
@@ -610,6 +610,12 @@ by the sampler.
 - **return_info** (*bool*) - whether to return info. If True, the result
 is a tuple (data, info). If False, the result is the data.
 - **include_info** (*bool**,**optional*) - deprecated alias for `return_info`.
+- **wait** (*bool**,**optional*) - if `True`, wait for enough replay items
+instead of failing immediately. Defaults to `False`.
+- **timeout** (*float**,**optional*) - maximum number of seconds to wait when
+`wait=True`. `None` waits indefinitely.
+- **cancel_event** (*optional*) - event-like object exposing `is_set()`.
+Setting it cancels a blocking sample.
 
 Returns:
 
@@ -707,9 +713,13 @@ already advertises it).
 Returns:
 
 - `"size"`: current number of elements in the buffer (mirrors `len(buffer)`);
+- `"storage_size"`: current number of physical records in storage;
+- `"sampleable_size"`: current number of records available to the sampler;
 - `"write_count"`: total number of items written through `add` and
 `extend` (`0` for writers that do not track writes, such as
 [`ImmutableDatasetWriter`](torchrl.data.replay_buffers.ImmutableDatasetWriter.html#torchrl.data.replay_buffers.ImmutableDatasetWriter));
+- `"sample_calls"`: number of completed calls to `sample()`;
+- `"samples_returned"`: total number of records returned by `sample()`;
 - `"prefetch_queue_size"`: number of pending prefetched batches;
 - `"initialized"`: whether the buffer components are initialized;
 - `"capacity"`: maximum number of elements the storage can hold
@@ -955,6 +965,43 @@ deterministically:
 ... )
 >>> print(result.updated_count, result.version_rejected_count)
 0 4
+```
+
+wait_until_sampleable(*min_items: int | None = None*, *timeout: float | None = None*, *cancel_event: Any | None = None*) → bool
+
+Waits until the replay buffer can serve a sample batch.
+
+Parameters:
+
+- **min_items** (*int**,**optional*) - requested sample batch size. Defaults to
+the batch size configured on the replay buffer.
+- **timeout** (*float**,**optional*) - maximum number of seconds to wait.
+`None` waits indefinitely.
+- **cancel_event** (*optional*) - event-like object exposing `is_set()`.
+The wait returns `False` when the event is set.
+
+Returns:
+
+`True` when the requested batch can be sampled and `False`
+after a timeout or cancellation.
+
+Raises:
+
+**RuntimeError** - if no batch size is available or the replay buffer
+ is shut down while waiting.
+
+Examples
+
+```
+>>> import threading
+>>> import torch
+>>> from torchrl.data import ListStorage, ReplayBuffer
+>>> rb = ReplayBuffer(storage=ListStorage(4), batch_size=2)
+>>> writer = threading.Thread(target=rb.extend, args=(torch.arange(2),))
+>>> writer.start()
+>>> rb.wait_until_sampleable(timeout=1.0)
+True
+>>> writer.join()
 ```
 
 write_all(*data: Any*, *end: int | None = None*) → None

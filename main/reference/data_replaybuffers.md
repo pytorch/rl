@@ -41,6 +41,42 @@ buffer.shutdown()
 | [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer)(*args[, use_ray_service, ...]) | A Ray implementation of the Replay Buffer that can be extended and sampled remotely. |
 | [`RemoteTensorDictReplayBuffer`](generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer)(*args[, ...]) | A remote invocation friendly ReplayBuffer class. |
 
+## Asynchronous readiness and statistics
+
+Asynchronous learners can wait for a complete batch without polling buffer
+lengths. [`wait_until_sampleable()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.wait_until_sampleable) blocks until
+the configured sampler can serve the requested number of items and returns
+`False` on timeout or cancellation. Passing `wait=True` to
+[`sample()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.sample) provides the same readiness gate and
+raises `TimeoutError` when its timeout expires. Shutdown wakes blocked
+callers. Direct and shared-memory buffers support these waits. Ray actor clients,
+including the fixed-layout distributed transport, do not yet support a blocking
+readiness call because a synchronous actor wait could prevent producer calls
+from reaching the owner; both client types raise `NotImplementedError`
+instead of dispatching the wait.
+
+```
+import threading
+import torch
+from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+rb = ReplayBuffer(storage=LazyTensorStorage(1024), batch_size=64)
+producer = threading.Thread(target=rb.extend, args=(torch.arange(64),))
+producer.start()
+batch = rb.sample(wait=True, timeout=5.0)
+producer.join()
+```
+
+[`stats()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.stats) distinguishes physical
+`storage_size` from `sampleable_size`. These values differ for consuming
+samplers because sampled records can become unavailable while their physical
+slots remain allocated. The snapshot also exposes cumulative `write_count`,
+`sample_calls`, and `samples_returned` counters. Cumulative values can be
+converted into rates without scanning storage; the round-robin write counter
+uses 64-bit storage for long-running jobs. Circular-buffer capacity is not a
+producer-backpressure signal: after warm-up, writes continue to overwrite old
+slots even though physical utilization remains 100 percent.
+
 ## Sample units
 
 Replay sampling combines two orthogonal decisions: which anchors are selected

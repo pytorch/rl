@@ -366,6 +366,15 @@ is provided, this method will sample a batch-size as indicated
 by the sampler.
 - **return_info** (*bool*) - whether to return info. If True, the result
 is a tuple (data, info). If False, the result is the data.
+- **wait** (*bool**,**optional*) - if `True`, wait for enough replay items
+instead of failing immediately. Defaults to `False`. This is
+an advisory readiness check, not a reservation: another
+consuming sampler can claim the records before this call
+samples them.
+- **timeout** (*float**,**optional*) - maximum number of seconds to wait when
+`wait=True`. `None` waits indefinitely.
+- **cancel_event** (*optional*) - event-like object exposing `is_set()`.
+Setting it cancels a blocking sample.
 
 Returns:
 
@@ -544,6 +553,10 @@ Conditionally updates live records through a single actor round-trip.
 Validation, the generation and version comparisons and the patch write
 all run inside the replay-buffer actor under its own lock.
 See [`update_if_present()`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_if_present).
+
+wait_until_sampleable(*min_items: int | None = None*, *timeout: float | None = None*, *cancel_event: Any | None = None*) → bool[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.wait_until_sampleable)
+
+Raises because synchronous Ray actors cannot safely block for writes.
 
 write_all(*data: Any*, *end: int | None = None*) → None
 
