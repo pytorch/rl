@@ -3416,6 +3416,40 @@ class _MicroDuckMemoryPolicy(TensorDictModuleBase):
 
 
 class TestMicroDuckController:
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_skill_env_wraps_microduck_env(self, tmp_path):
+        tasks = [
+            MicroDuckEnv.standing_task(),
+            MicroDuckEnv.tracking_task(0.2),
+        ]
+        env = microduck_skill_env(
+            MicroDuckEnv(
+                TestMujoco._write_microduck_fixture(tmp_path),
+                backend="mujoco",
+                tasks=tasks,
+                num_envs=1,
+                reset_noise_scale=0.0,
+                seed=0,
+            ),
+            _MicroDuckMemoryPolicy(),
+            tasks,
+            steps=2,
+            group_key=None,
+        )
+        try:
+            check_env_specs(env)
+            td = env.reset().set("skill", torch.ones(1, dtype=torch.long))
+            transition = env.step(td)
+            assert torch.isfinite(transition["next", "reward"]).all()
+            assert transition["next", "observation"].shape[-1] == (
+                MicroDuckEnv.OBSERVATION_DIM + len(tasks)
+            )
+            torch.testing.assert_close(
+                transition["next", "controller", "memory"], torch.full((1, 1), 2.0)
+            )
+        finally:
+            env.close()
+
     @pytest.mark.parametrize("parameterized", [False, True])
     def test_skill_maps_task_command_and_gait(self, parameterized):
         tasks = [
