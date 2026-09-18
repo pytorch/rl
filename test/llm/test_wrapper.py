@@ -25,8 +25,14 @@ import torchrl.modules.llm as llm_mod
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
 from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader
 from torchrl import logger as torchrl_logger
-from torchrl.data import ListStorage, ReplayBuffer
+from torchrl.data import (
+    LazyTensorStorage,
+    ListStorage,
+    ReplayBuffer,
+    SamplerWithoutReplacement,
+)
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
@@ -4219,6 +4225,21 @@ class TestTRLInterop:
 
         unbounded = TorchRLBufferDataset(rb, batch_size=3, num_batches=None)
         assert len(list(islice(unbounded, 7))) == 7
+
+    def test_torchrl_buffer_dataset_workers_sample_per_worker(self):
+        """Each DataLoader worker samples ``num_batches`` batches from its own copy."""
+        rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        rb.extend(TensorDict({"input_ids": torch.arange(40).view(10, 4)}, [10]))
+        dataset = TorchRLBufferDataset(rb, batch_size=3, num_batches=2)
+        loader = DataLoader(dataset, batch_size=None, num_workers=2, timeout=120)
+        assert len(list(loader)) == 12
+
+    def test_torchrl_buffer_dataset_warns_shared_state_sampler(self):
+        """Samplers with cross-process state warn ahead of the v0.17 worker restriction."""
+        rb = ReplayBuffer(storage=ListStorage(100), sampler=SamplerWithoutReplacement())
+        rb.add(TensorDict({"input_ids": torch.arange(4)}, batch_size=[]))
+        with pytest.warns(FutureWarning, match="v0.17"):
+            TorchRLBufferDataset(rb, batch_size=1)
 
     def test_torchrl_buffer_dataset_unwraps_non_tensor_data(self):
         """String prompts are emitted as Python strings for trainer collators."""

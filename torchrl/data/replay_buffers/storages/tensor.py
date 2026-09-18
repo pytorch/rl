@@ -520,7 +520,7 @@ class TensorStorage(Storage):
             if is_tensor_collection(storage):
                 storage.apply(assert_is_sharable, filter_empty=True)
             else:
-                tree_map(storage, assert_is_sharable)
+                tree_map(assert_is_sharable, storage)
 
         return state
 

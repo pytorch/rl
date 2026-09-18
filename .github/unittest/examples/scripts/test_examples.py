@@ -186,6 +186,20 @@ RUNNABLE_EXAMPLES = (
         "examples/replay-buffers/checkpoint.py",
     ),
     ExampleSpec(
+        "replay-buffer-dataloader-bc",
+        "examples/replay-buffers/dataloader_behavior_cloning.py",
+        (
+            "--frames",
+            "2000",
+            "--updates",
+            "20",
+            "--num-workers",
+            "2",
+            "--eval-episodes",
+            "1",
+        ),
+    ),
+    ExampleSpec(
         "replay-buffer-filter-trajectories",
         "examples/replay-buffers/filter-imcomplete-trajs.py",
     ),

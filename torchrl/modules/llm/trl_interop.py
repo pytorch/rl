@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import warnings
 from collections.abc import Iterator
 from typing import Any, TYPE_CHECKING
 
@@ -36,7 +37,7 @@ from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data.replay_buffers import ReplayBuffer
+from torchrl.data.replay_buffers import ReplayBuffer, ReplayBufferDataset
 
 _has_datasets = importlib.util.find_spec("datasets") is not None
 
@@ -56,7 +57,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-class TorchRLBufferDataset(torch.utils.data.IterableDataset):
+class TorchRLBufferDataset(ReplayBufferDataset):
     """An :class:`torch.utils.data.IterableDataset` backed by a TorchRL :class:`~torchrl.data.ReplayBuffer`.
 
     The PyTorch dataset can be consumed directly by
@@ -71,9 +72,11 @@ class TorchRLBufferDataset(torch.utils.data.IterableDataset):
     step limit.
 
     .. note::
-        This class implements :class:`torch.utils.data.IterableDataset` (no
+        This class is a :class:`~torchrl.data.ReplayBufferDataset` (no
         ``__len__``), which is the safest choice for online / infinite replay
-        buffers.  If you need a finite dataset with a known length, iterate
+        buffers. Under :class:`torch.utils.data.DataLoader` workers each
+        worker's iterator samples ``num_batches`` batches from its own copy of
+        the buffer. If you need a finite dataset with a known length, iterate
         for a fixed number of steps yourself and collect the results.
 
     Args:
@@ -143,21 +146,33 @@ class TorchRLBufferDataset(torch.utils.data.IterableDataset):
             raise ValueError(
                 f"num_batches must be a positive integer or None, got {num_batches!r}."
             )
-        self._replay_buffer = replay_buffer
+        super().__init__(replay_buffer, num_batches=num_batches)
+        if replay_buffer.sampler.requires_shared_state:
+            warnings.warn(
+                f"{type(replay_buffer.sampler).__name__} keeps sampling state "
+                "that DataLoader workers cannot share. TorchRLBufferDataset "
+                "will raise when iterated in DataLoader workers from v0.17: "
+                "use num_workers=0 or a sampler without cross-process state.",
+                FutureWarning,
+            )
         self._batch_size = batch_size
         self._keys = keys
         self._device = torch.device(device) if device is not None else None
-        self._num_batches = num_batches
 
     # ------------------------------------------------------------------
     # IterableDataset protocol
     # ------------------------------------------------------------------
 
+    def _check_sampler(self, sampler) -> None:
+        """Shared-state samplers are still accepted in workers until v0.17, see the constructor warning."""
+
     def __iter__(self) -> Iterator[dict[str, Any]]:
         """Sample replay batches and yield individual, flattened samples."""
+        self._setup_worker()
+        num_batches = self.num_batches
         batch_index = 0
-        while self._num_batches is None or batch_index < self._num_batches:
-            batch: TensorDictBase = self._replay_buffer.sample(self._batch_size)
+        while num_batches is None or batch_index < num_batches:
+            batch: TensorDictBase = self.replay_buffer.sample(self._batch_size)
             batch_keys: list[NestedKey] = []
             for key in batch.keys(include_nested=True):
                 value = batch.get(key)
@@ -231,11 +246,11 @@ class TorchRLBufferDataset(torch.utils.data.IterableDataset):
         keys_repr = self._keys if self._keys is not None else "<all>"
         return (
             f"{self.__class__.__name__}("
-            f"replay_buffer={self._replay_buffer!r}, "
+            f"replay_buffer={self.replay_buffer!r}, "
             f"batch_size={self._batch_size}, "
             f"keys={keys_repr}, "
             f"device={self._device}, "
-            f"num_batches={self._num_batches})"
+            f"num_batches={self.num_batches})"
         )
 
 

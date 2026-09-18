@@ -54,6 +54,7 @@ except ImportError:
 
 from torchrl._comm.replay_service import _DistributedReplayService, _extend_reply
 from torchrl._utils import _RayServiceMetaClass, rl_warnings
+from torchrl.data.replay_buffers.dataloader import ReplayBufferDataset
 from torchrl.data.replay_buffers.query import _query_source, Trajectory
 from torchrl.data.replay_buffers.sample_units import SampleUnit
 from torchrl.data.replay_buffers.samplers import (
@@ -2789,16 +2790,66 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         ):
             yield self.sample()
 
+    def as_dataset(self, *, num_batches: int | None = None) -> ReplayBufferDataset:
+        """Returns a :class:`torch.utils.data.IterableDataset` streaming batches from this buffer.
+
+        See :class:`~torchrl.data.ReplayBufferDataset` for the DataLoader
+        worker semantics.
+
+        Keyword Args:
+            num_batches (int or None, optional): number of batches yielded by
+                one iterator, shared between DataLoader workers. ``None``
+                streams batches until the sampler runs out. Defaults to
+                ``None``.
+
+        Examples:
+            >>> import torch
+            >>> from torch.utils.data import DataLoader
+            >>> from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
+            >>> rb = ReplayBuffer(storage=LazyTensorStorage(100), batch_size=8)
+            >>> _ = rb.extend(torch.arange(100))
+            >>> loader = DataLoader(
+            ...     rb.as_dataset(num_batches=4),
+            ...     batch_size=None,
+            ...     num_workers=2,
+            ...     collate_fn=tensordict_collate,
+            ... )
+            >>> [batch.shape for batch in loader]
+            [torch.Size([8]), torch.Size([8]), torch.Size([8]), torch.Size([8])]
+        """
+        if self._batch_size is None:
+            raise RuntimeError(
+                "as_dataset requires the batch_size to be specified during "
+                "construction of the replay buffer."
+            )
+        return ReplayBufferDataset(self, num_batches=num_batches)
+
+    def _state_without_prefetch(self) -> dict[str, Any]:
+        with self._futures_lock:
+            prefetch = self._prefetch
+            self._prefetch = False
+            try:
+                state = self.__getstate__()
+            finally:
+                self._prefetch = prefetch
+        state["_prefetch"] = prefetch
+        return state
+
+    def _reset_worker_state(self) -> None:
+        self._replay_lock = threading.RLock()
+        self._futures_lock = threading.RLock()
+        self._prefetch = False
+        self._prefetch_queue.clear()
+
     @_maybe_delay_init
     def __getstate__(self) -> dict[str, Any]:
         with self._capture_prefetch_state() as prefetch_state:
             state = self.__dict__.copy()
             if getattr(self, "_rng", None) is not None:
-                rng_state = TensorDict(
-                    rng_state=self._rng.get_state().clone(),
-                    device=self._rng.device,
-                )
-                state["_rng"] = rng_state
+                state["_rng"] = {
+                    "rng_state": self._rng.get_state().numpy().tobytes(),
+                    "device": self._rng.device,
+                }
             _replay_lock = state.pop("_replay_lock", None)
             _futures_lock = state.pop("_futures_lock", None)
             if _replay_lock is not None:
@@ -2832,8 +2883,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         if "_rng" in state:
             rngstate = state["_rng"]
             if rngstate is not None:
-                rng = torch.Generator(device=rngstate.device)
-                rng.set_state(rngstate["rng_state"])
+                rng = torch.Generator(device=rngstate["device"])
+                rng.set_state(
+                    torch.frombuffer(
+                        bytearray(rngstate["rng_state"]), dtype=torch.uint8
+                    ).clone()
+                )
 
         if "_replay_lock_placeholder" in state:
             state.pop("_replay_lock_placeholder")
