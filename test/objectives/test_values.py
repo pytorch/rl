@@ -1051,6 +1051,69 @@ class TestValues:
                 group_key=("metadata", "missing"),
             )(td.clone())
 
+    @pytest.mark.parametrize("vectorized", [False, True])
+    def test_gae_valid_mask_isolates_and_normalizes(self, vectorized):
+        batch, time = 2, 5
+        valid = torch.tensor(
+            [[True, True, True, False, False], [True, True, False, False, False]]
+        )
+        td = TensorDict(
+            {
+                "state_value": torch.zeros(batch, time, 1),
+                "collector": {"valid": valid},
+                "next": {
+                    "state_value": torch.ones(batch, time, 1),
+                    "reward": torch.arange(batch * time, dtype=torch.float).reshape(
+                        batch, time, 1
+                    ),
+                    "done": torch.zeros(batch, time, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(batch, time, 1, dtype=torch.bool),
+                },
+            },
+            [batch, time],
+        )
+        gae = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=None,
+            vectorized=vectorized,
+            average_gae=True,
+        )
+        gae.set_keys(valid=("collector", "valid"))
+
+        output = gae(td.clone())
+        changed_padding = td.clone()
+        invalid = ~valid
+        changed_padding["state_value"][invalid] = torch.nan
+        changed_padding["next", "state_value"][invalid] = torch.nan
+        changed_padding["next", "reward"][invalid] = torch.nan
+        changed_output = gae(changed_padding)
+
+        torch.testing.assert_close(
+            output["advantage"][valid], changed_output["advantage"][valid]
+        )
+        torch.testing.assert_close(
+            output["value_target"][valid], changed_output["value_target"][valid]
+        )
+        assert not output["advantage"][invalid].any()
+        assert not output["value_target"][invalid].any()
+        torch.testing.assert_close(
+            output["value_target"], gae.value_estimate(td.clone())
+        )
+        torch.testing.assert_close(output["advantage"][valid].mean(), torch.zeros(()))
+
+        all_valid = td.clone()
+        all_valid["collector", "valid"].fill_(True)
+        masked = gae(all_valid.clone())
+        unmasked = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=None,
+            vectorized=vectorized,
+            average_gae=True,
+        )(all_valid.exclude(("collector", "valid")))
+        torch.testing.assert_close(masked["advantage"], unmasked["advantage"])
+
     @pytest.mark.parametrize(
         "estimator_cls,estimator_kwargs",
         [
