@@ -97,7 +97,6 @@ from .tensordict_module import (
     LSTM,
     LSTMCell,
     LSTMModule,
-    MicroDuckPolicy,
     MultiStepActorWrapper,
     OrnsteinUhlenbeckProcessModule,
     OrnsteinUhlenbeckProcessWrapper,
@@ -154,7 +153,6 @@ from .vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase  # usort:skip
 
 __all__ = [
     "LowLevelController",
-    "MicroDuckPolicy",
     "Actor",
     "DiffusionActor",
     "DreamerV3DiscreteActor",

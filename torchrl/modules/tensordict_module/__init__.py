@@ -41,7 +41,6 @@ from torchrl.modules.tensordict_module.exploration import (
     OrnsteinUhlenbeckProcessWrapper,
     RandomPolicy,
 )
-from torchrl.modules.tensordict_module.microduck_policy import MicroDuckPolicy
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
@@ -68,7 +67,6 @@ from torchrl.modules.tensordict_module.world_models import WorldModel, WorldMode
 
 __all__ = [
     "LowLevelController",
-    "MicroDuckPolicy",
     "Actor",
     "ActorCriticOperator",
     "ActorCriticWrapper",

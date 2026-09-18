@@ -48,7 +48,6 @@ from torchrl.modules import (
     LSTM,
     LSTMCell,
     LSTMModule,
-    MicroDuckPolicy,
     MLP,
     ProbabilisticActor,
     set_recurrent_matmul_precision,
@@ -63,6 +62,10 @@ from torchrl.modules.tensordict_module._rnn_triton import (
 from torchrl.modules.tensordict_module.rnn import (
     _canonical_contiguous,
     _canonical_stride,
+)
+from torchrl.modules.tensordict_module.zoo import (
+    MicroDuckSkillPolicy,
+    MicroDuckSkills,
 )
 from torchrl.modules.utils import (
     get_env_transforms_from_module,
@@ -82,8 +85,8 @@ _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _vmap = None
 
 
-def test_microduck_policy_checkpoint_reconstructs_frozen_actor():
-    policy = MicroDuckPolicy(
+def test_microduck_skills_checkpoint_reconstructs_frozen_policy():
+    policy = MicroDuckSkillPolicy(
         hidden_size=8,
         num_tasks=2,
         observation_dim=56,
@@ -100,15 +103,17 @@ def test_microduck_policy_checkpoint_reconstructs_frozen_actor():
                 "action_scale": 0.35,
             }
         },
-        "model_state_dict": policy.actor.state_dict(),
+        "model_state_dict": policy.state_dict(),
     }
 
-    actor, tasks, action_scale = MicroDuckPolicy.from_checkpoint(payload)
+    skills = MicroDuckSkills.from_checkpoint(payload)
 
-    assert list(tasks.name) == ["standing", "tracking+0.20"]
-    assert action_scale == 0.35
-    assert not actor.training
-    assert not any(parameter.requires_grad for parameter in actor.parameters())
+    assert list(skills.task_library.name) == ["standing", "tracking+0.20"]
+    assert skills.action_scale == 0.35
+    assert not skills.policy.training
+    assert not any(
+        parameter.requires_grad for parameter in skills.policy.parameters()
+    )
     td = TensorDict(
         {
             "observation": torch.randn(3, 56),
@@ -118,7 +123,7 @@ def test_microduck_policy_checkpoint_reconstructs_frozen_actor():
         },
         batch_size=[3],
     )
-    actor(td)
+    skills.policy(td)
     assert td["action"].shape == (3, 14)
     assert torch.isfinite(td["action"]).all()
     assert td["next", "recurrent_state"].shape == (3, 1, 8)
