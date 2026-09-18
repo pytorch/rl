@@ -1889,6 +1889,21 @@ class TestOptimizationStepper:
         assert stepper.calls == 1
         assert loss_module.forward_calls == 0
 
+    def test_per_call_optimization_overrides_do_not_change_configuration(self):
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        trainer.num_epochs = 2
+        td = TensorDict({"x": torch.randn(3)}, [])
+
+        trainer.optim_steps(td, optim_steps_per_batch=3, num_epochs=1)
+
+        assert stepper.calls == 3
+        assert trainer.optim_steps_per_batch == 1
+        assert trainer.num_epochs == 2
+
     def test_stepper_checkpoint_roundtrip(self, tmp_path):
         """Stepper state survives save/load via Trainer checkpointing."""
         os.environ["CKPT_BACKEND"] = "torch"

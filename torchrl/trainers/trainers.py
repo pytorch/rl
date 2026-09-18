@@ -98,6 +98,8 @@ LOGGER_METHODS = {
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
 
+_OPTIM_STEPS_UNSET = object()
+
 
 @implement_for("torch", "2.3")
 def _make_grad_scaler(device_type: str, enabled: bool) -> GradScaler:
@@ -2013,14 +2015,30 @@ class Trainer:
             torchrl_logger.info("shutting down collector")
         self.collector.shutdown()
 
-    def optim_steps(self, batch: TensorDictBase) -> None:
+    def optim_steps(
+        self,
+        batch: TensorDictBase,
+        *,
+        optim_steps_per_batch: int | None | object = _OPTIM_STEPS_UNSET,
+        num_epochs: int | object = _OPTIM_STEPS_UNSET,
+    ) -> None:
+        """Run the configured optimization loop for one collected batch.
+
+        Keyword overrides are applied only to this call and do not change the
+        trainer configuration. They are useful for algorithms that need a
+        one-time optimization schedule while retaining the standard Trainer
+        hooks and logging behavior.
+        """
         average_losses = None
 
         self._pre_optim_hook()
-        optim_steps_per_batch = self.optim_steps_per_batch
+        if optim_steps_per_batch is _OPTIM_STEPS_UNSET:
+            optim_steps_per_batch = self.optim_steps_per_batch
+        if num_epochs is _OPTIM_STEPS_UNSET:
+            num_epochs = self.num_epochs
         j = -1
 
-        for _ in range(self.num_epochs):
+        for _ in range(num_epochs):
             # LOGGING POINT 3: Pre-epoch logging (e.g., epoch-specific metrics)
             self._pre_epoch_log_hook(batch)
             # Regular pre-epoch operations (e.g., epoch setup)
