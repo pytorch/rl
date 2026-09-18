@@ -3381,8 +3381,8 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`RandomSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.RandomSamplerConfig.html#torchrl.trainers.algorithms.configs.data.RandomSamplerConfig)([_target_]) | Configuration for random sampling from replay buffer. |
 | [`SamplerWithoutReplacementConfig`](generated/torchrl.trainers.algorithms.configs.data.SamplerWithoutReplacementConfig.html#torchrl.trainers.algorithms.configs.data.SamplerWithoutReplacementConfig)([_target_, ...]) | Configuration for sampling without replacement. |
 | [`PrioritizedSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig.html#torchrl.trainers.algorithms.configs.data.PrioritizedSamplerConfig)([_target_, ...]) | Configuration for prioritized sampling from replay buffer. |
-| [`SliceSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerConfig)([_target_, num_slices, ...]) | Configuration for slice sampling from replay buffer. |
-| [`SliceSamplerWithoutReplacementConfig`](generated/torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig)([...]) | Configuration for slice sampling without replacement. |
+| [`SliceSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.SliceSamplerConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerConfig)([_target_, num_slices, ...]) | Hydra configuration for `SliceSampler`. |
+| [`SliceSamplerWithoutReplacementConfig`](generated/torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig.html#torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig)([...]) | Hydra configuration for `SliceSamplerWithoutReplacement`. |
 | [`StreamingSliceSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig.html#torchrl.trainers.algorithms.configs.data.StreamingSliceSamplerConfig)([_target_, ...]) | Hydra configuration for `StreamingSliceSampler`. |
 | [`ListStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.ListStorageConfig.html#torchrl.trainers.algorithms.configs.data.ListStorageConfig)([_partial_, _target_, ...]) | Hydra configuration for [`ListStorage`](generated/torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage). |
 | [`TensorStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.TensorStorageConfig.html#torchrl.trainers.algorithms.configs.data.TensorStorageConfig)([_partial_, _target_, ...]) | Configuration for tensor-based storage in replay buffer. |
@@ -4225,18 +4225,19 @@ and the synchronous-iteration pattern.
 ## SliceSampler: variable-length contiguous slices
 
 [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) consumes a flat 1-D
-buffer and emits **a flat 1-D batch of concatenated slices**. It does not
-reshape to `[num_slices, slice_len]`; it concatenates slices end-to-end
-along the only batch dim and writes `is_init=True` at the first step of
-each slice (OR-ed with any pre-existing `is_init` from
-[`InitTracker`](generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker)).
+buffer and can emit either the historical flat batch of concatenated slices
+or an explicit `[num_slices, time]` batch. The flat layout remains the
+default. Set `output_layout="batch_time"` when the downstream policy or
+value estimator should receive the temporal structure directly.
 
 Defaults that match the recommended layout:
 
-- `strict_length=False` -- short trajectories are kept and produce
-shorter slices; the resulting batch can be smaller than
-`num_slices * slice_len`. *This is a feature, not a defect.*
-- `pad_output=False` (default) -- no padding, no `mask` key.
+- `strict_length=False` -- short trajectories are kept. Flat output can be
+smaller than `num_slices * slice_len` and emits a once-per-sampler
+warning when this happens. Structured output pads each row to the requested
+time length and emits `("collector", "mask")`.
+- `pad_output=False` (default) -- flat output is not padded. Structured
+non-strict output pads independently of this legacy option.
 - `traj_key` not specified -- the sampler probes the storage on the
 first sample call and prefers `("collector", "traj_ids")` over
 `"episode"`, falling back to reconstructing trajectory boundaries
@@ -4253,23 +4254,40 @@ manually-reshaped `[num_slices, slice_len]` call would produce.
 from torchrl.data.replay_buffers import SliceSampler
 from torchrl.modules import set_recurrent_mode
 
-sampler = SliceSampler(num_slices=4, slice_len=32, strict_length=False)
+sampler = SliceSampler(
+ num_slices=4,
+ strict_length=False,
+ output_layout="batch_time",
+)
 rb = TensorDictReplayBuffer(storage=LazyTensorStorage(100_000),
  sampler=sampler, batch_size=128)
 # ... extend rb from a collector ...
-sample = rb.sample() # shape [<= 128]
+sample = rb.sample() # shape [4, 32], names [None, "time"]
 with set_recurrent_mode("recurrent"):
- out = recurrent_policy(sample) # consumes the flat sample directly
+ out = recurrent_policy(sample)
 ```
 
-`pad_output=True` is available as an escape hatch for code that
+Structured output preserves the environment's `done`, `terminated` and
+`truncated` values. It marks the final real transition in every sampled row
+under `("collector", "slice_end")` instead. To stop GAE recursion at the
+sampled-slice boundary while preserving bootstrap semantics, OR that marker
+into the configured `done` field and leave `terminated` unchanged. The
+padding mask separately excludes duplicated rows:
+
+```
+sample["next", "done"] = (
+ sample["next", "done"] | sample["collector", "slice_end"]
+)
+advantage.set_keys(valid=("collector", "mask"))
+```
+
+For legacy flat consumers, `pad_output=True` is available as an escape hatch for code that
 genuinely cannot accept a ragged batch (a custom op that requires a fixed
 time dimension before a manual reshape, for instance). It pads short
 slices by *duplicating their last real timestep* and emits a 1-D bool
 `("collector", "mask")` of length `B * T` flagging real vs padded
 positions. **This is discouraged for new code.** All TorchRL-provided
-primitives consume the unpadded layout natively, so padding is pure
-overhead and adds a key the caller has to remember to honour everywhere.
+primitives consume the unpadded flat layout or the structured layout natively.
 
 ## Auto-discoverability for recurrent policies
 
@@ -34701,7 +34719,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f0e070b13a0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f5e0be45a30>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -48441,7 +48459,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0e09fdd8a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f5e12da18a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -54415,6 +54433,21 @@ genuinely cannot accept a ragged batch (e.g. a custom op that
 requires a fixed time dimension before a manual reshape).
 Combining `pad_output=True` with `strict_length=True` raises
 `ValueError`. Defaults to `False`.
+- **output_layout** (*"flat"**or**"batch_time"**,**optional*) - controls the batch
+layout returned by the replay buffer. `"flat"` preserves the
+historical concatenated layout. `"batch_time"` returns
+`[num_slices, time]`; short non-strict slices are padded by
+repeating their last real transition and accompanied by
+`("collector", "mask")`. The time name is assigned before replay
+transforms run; a transform that changes the batch layout is
+responsible for updating batch names. Defaults to `"flat"`.
+- **slice_end_key** (*NestedKey**,**optional*) - key populated at the final real
+transition of every row when `output_layout="batch_time"`.
+Unlike environment terminal fields, this marker only represents
+the sampled slice boundary. Defaults to
+`("collector", "slice_end")`.
+- **time_dim_name** (*str**or**None**,**optional*) - name assigned to the time batch
+dimension of structured TensorDict samples. Defaults to `"time"`.
 - **compile** (*bool**or**dict**of**kwargs**,**optional*) - if `True`, the bottleneck of
 the `sample()` method will be compiled with [`compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
 Keyword arguments can also be passed to torch.compile with this arg.
@@ -54636,6 +54669,8 @@ check that each batch only has one episode: tensor([[19],
  [ 8]])
 ```
 
+See also `SliceSamplerConfig`.
+
 See also
 
 Trajectory boundaries are recovered at sampling time with
@@ -54734,6 +54769,12 @@ than required will be filtered out.
 Be mindful that this can result in effective batch_size shorter
 than the one asked for! Trajectories can be split using
 `split_trajectories()`. Defaults to `True`.
+- **output_layout** (*"flat"**or**"batch_time"**,**optional*) - output layout
+forwarded to [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler). Defaults to `"flat"`.
+- **slice_end_key** (*NestedKey**,**optional*) - structured-output boundary key.
+Defaults to `("collector", "slice_end")`.
+- **time_dim_name** (*str**or**None**,**optional*) - structured-output time dimension
+name. Defaults to `"time"`.
 - **shuffle** (*bool**,**optional*) - if `False`, the order of the trajectories
 is not shuffled. Defaults to `True`.
 - **compile** (*bool**or**dict**of**kwargs**,**optional*) - if `True`, the bottleneck of
@@ -268224,6 +268265,74 @@ To register the hook at another location than the default, use
 
 ---
 
+# EvaluatorHook
+
+*class*torchrl.trainers.EvaluatorHook(*evaluator: [Evaluator](torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator)*, ***, *every_frames: int*, *policy: str | Callable[[[Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)], [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] = 'loss_module.actor_network'*, *run_at_start: bool = False*, *run_at_end: bool = True*, *wait_at_end: bool = True*, *wait_at_end_timeout: float | None = 60.0*)[[source]](../../_modules/torchrl/trainers/trainers.html#EvaluatorHook)
+
+Schedule asynchronous evaluation from a [`Trainer`](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer).
+
+The hook snapshots the training policy when an evaluation is triggered, polls
+completed results after each collected batch, and logs them under the
+`evaluation/` namespace. If several evaluation intervals elapse while an
+evaluation is running, they are coalesced into one evaluation with the latest
+policy weights when the evaluator becomes available.
+
+Parameters:
+
+**evaluator** ([*Evaluator*](torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator)) - Evaluator service used to run rollouts.
+
+Keyword Arguments:
+
+- **every_frames** (*int*) - Number of collected frames between evaluations.
+- **policy** (*str**or**Callable**,**optional*) - Dot-separated path resolved from the
+trainer, or a callable receiving the trainer and returning an
+[`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) or [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase).
+Defaults to `"loss_module.actor_network"`.
+- **run_at_start** (*bool**,**optional*) - Whether to evaluate the initial policy.
+Defaults to `False`.
+- **run_at_end** (*bool**,**optional*) - Whether to request a final evaluation with
+the latest policy weights. A final evaluation is skipped when the
+latest completed evaluation already used the same frame count.
+Defaults to `True`.
+- **wait_at_end** (*bool**,**optional*) - Whether shutdown waits for pending and final
+evaluations so their metrics are logged. When `False`, outstanding
+work is handed to `Evaluator.shutdown()` and may be cancelled by
+the evaluator backend. Defaults to `True`.
+- **wait_at_end_timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*or**None**,**optional*) - Maximum seconds to wait for
+a pending evaluation during shutdown. `None` waits without a time
+limit. Defaults to `60.0`.
+
+Examples
+
+```
+>>> from torchrl.collectors import Evaluator
+>>> from torchrl.trainers import EvaluatorHook
+>>> evaluator = Evaluator(make_eval_env, eval_policy, max_steps=1_000) 
+>>> EvaluatorHook(evaluator, every_frames=10_000).register(trainer)
+```
+
+Note
+
+Checkpoints contain only the next due frame and the last completed
+evaluation frame. In-flight evaluator work is intentionally not
+serialized and is discarded when resuming from a checkpoint.
+
+register(*trainer: [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)*, *name: str = 'evaluator_hook'*) → None[[source]](../../_modules/torchrl/trainers/trainers.html#EvaluatorHook.register)
+
+Registers the hook in the trainer at a default location.
+
+Parameters:
+
+- **trainer** ([*Trainer*](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)) - the trainer where the hook must be registered.
+- **name** (*str*) - the name of the hook.
+
+Note
+
+To register the hook at another location than the default, use
+`register_op()`.
+
+---
+
 # LRSchedulerHook
 
 *class*torchrl.trainers.LRSchedulerHook(*scheduler: [LRScheduler](https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LRScheduler.html#torch.optim.lr_scheduler.LRScheduler)*, *interval: Literal['batch', 'optim'] = 'batch'*)[[source]](../../_modules/torchrl/trainers/trainers.html#LRSchedulerHook)
@@ -271276,17 +271385,17 @@ Configuration for sampling without replacement.
 
 # torchrl.trainers.algorithms.configs.data.SliceSamplerConfig
 
-*class*torchrl.trainers.algorithms.configs.data.SliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSampler'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *step_key: Any = 'step_count'*, *fragmented: bool = False*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerConfig)
+*class*torchrl.trainers.algorithms.configs.data.SliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSampler'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *step_key: Any = 'step_count'*, *fragmented: bool = False*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *pad_output: bool = False*, *output_layout: str = 'flat'*, *slice_end_key: Any = ('collector', 'slice_end')*, *time_dim_name: str | None = 'time'*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerConfig)
 
-Configuration for slice sampling from replay buffer.
+Hydra configuration for `SliceSampler`.
 
 ---
 
 # torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig
 
-*class*torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSamplerWithoutReplacement'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerWithoutReplacementConfig)
+*class*torchrl.trainers.algorithms.configs.data.SliceSamplerWithoutReplacementConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSamplerWithoutReplacement'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *output_layout: str = 'flat'*, *slice_end_key: Any = ('collector', 'slice_end')*, *time_dim_name: str | None = 'time'*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerWithoutReplacementConfig)
 
-Configuration for slice sampling without replacement.
+Hydra configuration for `SliceSamplerWithoutReplacement`.
 
 ---
 
@@ -282466,6 +282575,7 @@ trainer.train()
 - [ClearCudaCache](generated/torchrl.trainers.ClearCudaCache.html)
 - [CountFramesLog](generated/torchrl.trainers.CountFramesLog.html)
 - [EarlyStopping](generated/torchrl.trainers.EarlyStopping.html)
+- [EvaluatorHook](generated/torchrl.trainers.EvaluatorHook.html)
 - [LogScalar](generated/torchrl.trainers.LogScalar.html)
 - [LRSchedulerHook](generated/torchrl.trainers.LRSchedulerHook.html)
 - [OptimizerHook](generated/torchrl.trainers.OptimizerHook.html)
@@ -282551,6 +282661,7 @@ Hooks for customizing the training loop at various points.
 | [`ClearCudaCache`](generated/torchrl.trainers.ClearCudaCache.html#torchrl.trainers.ClearCudaCache)(interval) | Clears cuda cache at a given interval. |
 | [`CountFramesLog`](generated/torchrl.trainers.CountFramesLog.html#torchrl.trainers.CountFramesLog)(*args, **kwargs) | A frame counter hook. |
 | [`EarlyStopping`](generated/torchrl.trainers.EarlyStopping.html#torchrl.trainers.EarlyStopping)(*[, monitor, mode, min_delta, ...]) | Early stopping hook for [`Trainer`](generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer). |
+| [`EvaluatorHook`](generated/torchrl.trainers.EvaluatorHook.html#torchrl.trainers.EvaluatorHook)(evaluator, *, every_frames[, ...]) | Schedule asynchronous evaluation from a [`Trainer`](generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer). |
 | [`LogScalar`](generated/torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar)([key, logname, log_pbar, ...]) | Generic scalar logger hook for any tensor values in the batch. |
 | [`LRSchedulerHook`](generated/torchrl.trainers.LRSchedulerHook.html#torchrl.trainers.LRSchedulerHook)(scheduler[, interval]) | A hook that steps a learning-rate scheduler during training. |
 | [`OptimizerHook`](generated/torchrl.trainers.OptimizerHook.html#torchrl.trainers.OptimizerHook)(optimizer[, loss_components]) | Add an optimizer for one or more loss components. |

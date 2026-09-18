@@ -697,6 +697,7 @@
 - [ClearCudaCache](reference/generated/torchrl.trainers.ClearCudaCache.md)
 - [CountFramesLog](reference/generated/torchrl.trainers.CountFramesLog.md)
 - [EarlyStopping](reference/generated/torchrl.trainers.EarlyStopping.md)
+- [EvaluatorHook](reference/generated/torchrl.trainers.EvaluatorHook.md)
 - [LRSchedulerHook](reference/generated/torchrl.trainers.LRSchedulerHook.md)
 - [LogScalar](reference/generated/torchrl.trainers.LogScalar.md)
 - [LogValidationReward](reference/generated/torchrl.trainers.LogValidationReward.md)

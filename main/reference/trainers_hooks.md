@@ -7,6 +7,7 @@ Hooks for customizing the training loop at various points.
 | [`ClearCudaCache`](generated/torchrl.trainers.ClearCudaCache.html#torchrl.trainers.ClearCudaCache)(interval) | Clears cuda cache at a given interval. |
 | [`CountFramesLog`](generated/torchrl.trainers.CountFramesLog.html#torchrl.trainers.CountFramesLog)(*args, **kwargs) | A frame counter hook. |
 | [`EarlyStopping`](generated/torchrl.trainers.EarlyStopping.html#torchrl.trainers.EarlyStopping)(*[, monitor, mode, min_delta, ...]) | Early stopping hook for [`Trainer`](generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer). |
+| [`EvaluatorHook`](generated/torchrl.trainers.EvaluatorHook.html#torchrl.trainers.EvaluatorHook)(evaluator, *, every_frames[, ...]) | Schedule asynchronous evaluation from a [`Trainer`](generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer). |
 | [`LogScalar`](generated/torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar)([key, logname, log_pbar, ...]) | Generic scalar logger hook for any tensor values in the batch. |
 | [`LRSchedulerHook`](generated/torchrl.trainers.LRSchedulerHook.html#torchrl.trainers.LRSchedulerHook)(scheduler[, interval]) | A hook that steps a learning-rate scheduler during training. |
 | [`OptimizerHook`](generated/torchrl.trainers.OptimizerHook.html#torchrl.trainers.OptimizerHook)(optimizer[, loss_components]) | Add an optimizer for one or more loss components. |

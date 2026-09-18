@@ -138,6 +138,21 @@ genuinely cannot accept a ragged batch (e.g. a custom op that
 requires a fixed time dimension before a manual reshape).
 Combining `pad_output=True` with `strict_length=True` raises
 `ValueError`. Defaults to `False`.
+- **output_layout** (*"flat"**or**"batch_time"**,**optional*) - controls the batch
+layout returned by the replay buffer. `"flat"` preserves the
+historical concatenated layout. `"batch_time"` returns
+`[num_slices, time]`; short non-strict slices are padded by
+repeating their last real transition and accompanied by
+`("collector", "mask")`. The time name is assigned before replay
+transforms run; a transform that changes the batch layout is
+responsible for updating batch names. Defaults to `"flat"`.
+- **slice_end_key** (*NestedKey**,**optional*) - key populated at the final real
+transition of every row when `output_layout="batch_time"`.
+Unlike environment terminal fields, this marker only represents
+the sampled slice boundary. Defaults to
+`("collector", "slice_end")`.
+- **time_dim_name** (*str**or**None**,**optional*) - name assigned to the time batch
+dimension of structured TensorDict samples. Defaults to `"time"`.
 - **compile** (*bool**or**dict**of**kwargs**,**optional*) - if `True`, the bottleneck of
 the `sample()` method will be compiled with [`compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
 Keyword arguments can also be passed to torch.compile with this arg.
@@ -358,6 +373,8 @@ check that each batch only has one episode: tensor([[19],
  [22],
  [ 8]])
 ```
+
+See also `SliceSamplerConfig`.
 
 See also
 

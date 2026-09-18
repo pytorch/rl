@@ -82,6 +82,12 @@ than required will be filtered out.
 Be mindful that this can result in effective batch_size shorter
 than the one asked for! Trajectories can be split using
 `split_trajectories()`. Defaults to `True`.
+- **output_layout** (*"flat"**or**"batch_time"**,**optional*) - output layout
+forwarded to [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler). Defaults to `"flat"`.
+- **slice_end_key** (*NestedKey**,**optional*) - structured-output boundary key.
+Defaults to `("collector", "slice_end")`.
+- **time_dim_name** (*str**or**None**,**optional*) - structured-output time dimension
+name. Defaults to `"time"`.
 - **shuffle** (*bool**,**optional*) - if `False`, the order of the trajectories
 is not shuffled. Defaults to `True`.
 - **compile** (*bool**or**dict**of**kwargs**,**optional*) - if `True`, the bottleneck of
