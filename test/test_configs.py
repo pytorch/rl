@@ -55,7 +55,7 @@ from torchrl.data.replay_buffers.writers import (
     TensorDictRoundRobinWriter,
     WriterEnsemble,
 )
-from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
+from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.transforms import CatTensors
 from torchrl.modules import (
@@ -77,6 +77,7 @@ from torchrl.record.loggers import (
 )
 from torchrl.record.loggers.trackio import TrackioLogger
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.trainers import Trainer
 from torchrl.trainers.trainers import CountFramesLog
 
@@ -172,6 +173,7 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
     {
         "CatTensorsConfig",
         "CollectorConfig",
+        "InitTrackerConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
     }
@@ -4748,13 +4750,17 @@ class TestWeightUpdaterConfigs:
 )
 class TestTransformConfigs:
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_init_tracker_config(self):
-        from hydra.utils import instantiate
-        from torchrl.trainers.algorithms.configs.transforms import InitTrackerConfig
-
-        cfg = InitTrackerConfig(init_key="is_test_init")
-        assert cfg.init_key == "is_test_init"
-        instantiate(cfg)
+    @pytest.mark.parametrize(
+        "kwargs, init_key",
+        [({}, "is_init"), ({"init_key": "is_test_init"}, "is_test_init")],
+    )
+    def test_init_tracker_config(self, kwargs, init_key):
+        transform = instantiate_config(algorithm_configs.InitTrackerConfig(**kwargs))
+        env = TransformedEnv(ContinuousActionVecMockEnv(), transform)
+        rollout = env.rollout(3)
+        env.close()
+        assert rollout[0][init_key].all()
+        assert not rollout["next", init_key].any()
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_cat_tensors_config(self):
