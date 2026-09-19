@@ -7,10 +7,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase
 from torch import nn
 
-from torchrl.modules.planners.common import MPCPlannerBase
+from torchrl.modules.planners.common import (
+    _mask_post_done_reward,
+    _planning_done_keys,
+    MPCPlannerBase,
+)
 
 if TYPE_CHECKING:
     from torchrl.envs.common import EnvBase
@@ -28,6 +32,9 @@ class MPPIPlanner(MPCPlannerBase):
 
     This module will perform a MPPI planning step when given a TensorDict
     containing initial states.
+    Imagined rollouts always run for the full planning horizon. Rewards after
+    the first environment ``done`` (termination or truncation) are zeroed
+    before the advantage is computed.
 
     A call to the module returns the actions that empirically maximised the
     returns given a planning horizon
@@ -42,10 +49,10 @@ class MPPIPlanner(MPCPlannerBase):
             Gaussian distributions.
         top_k (int): The number of top candidates to use to
             update the mean and standard deviation of the Gaussian distribution.
-        reward_key (str, optional): The key in the TensorDict to use to
-            retrieve the reward. Defaults to "reward".
-        action_key (str, optional): The key in the TensorDict to use to store
-            the action. Defaults to "action"
+        reward_key (NestedKey, optional): The key in the TensorDict to use to
+            retrieve the reward. Defaults to ``("next", "reward")``.
+        action_key (NestedKey, optional): The key in the TensorDict to use to store
+            the action. Defaults to ``"action"``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -141,8 +148,8 @@ class MPPIPlanner(MPCPlannerBase):
         optim_steps: int,
         num_candidates: int,
         top_k: int,
-        reward_key: str = ("next", "reward"),
-        action_key: str = "action",
+        reward_key: NestedKey = ("next", "reward"),
+        action_key: NestedKey = "action",
     ):
         super().__init__(env=env, action_key=action_key)
         self.advantage_module = advantage_module
@@ -216,11 +223,21 @@ class MPPIPlanner(MPCPlannerBase):
             actions = self.env.action_spec.project(actions)
             optim_tensordict = container.get("tensordict").clone()
             policy = _PrecomputedActionsSequentialSetter(actions)
+            # Full horizon for every candidate; post-done rewards are masked below.
             optim_tensordict = self.env.rollout(
                 max_steps=self.planning_horizon,
                 policy=policy,
                 auto_reset=False,
                 tensordict=optim_tensordict,
+                break_when_any_done=False,
+            )
+            optim_tensordict.set(
+                self.reward_key,
+                _mask_post_done_reward(
+                    optim_tensordict,
+                    reward_key=self.reward_key,
+                    done_key=_planning_done_keys(self.env),
+                ),
             )
             # compute advantage
             self.advantage_module(optim_tensordict)

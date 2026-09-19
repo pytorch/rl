@@ -40,6 +40,7 @@ discovery and buffer lifecycle.
     :template: rl_template.rst
 
     ReplayBuffer
+    RateLimitedReplayBuffer
     OfflineToOnlineReplayBuffer
     ReplayBufferEnsemble
     PrioritizedReplayBuffer
@@ -47,6 +48,74 @@ discovery and buffer lifecycle.
     TensorDictPrioritizedReplayBuffer
     RayReplayBuffer
     RemoteTensorDictReplayBuffer
+
+
+Asynchronous readiness and statistics
+-------------------------------------
+
+Asynchronous learners can wait for a complete batch without polling buffer
+lengths. :meth:`~torchrl.data.ReplayBuffer.wait_until_sampleable` blocks until
+the configured sampler can serve the requested number of items and returns
+``False`` on timeout or cancellation. Passing ``wait=True`` to
+:meth:`~torchrl.data.ReplayBuffer.sample` provides the same readiness gate and
+raises ``TimeoutError`` when its timeout expires. Shutdown wakes blocked
+callers. Direct and shared-memory buffers support these waits. Ray actor clients,
+including the fixed-layout distributed transport, do not yet support a blocking
+readiness call because a synchronous actor wait could prevent producer calls
+from reaching the owner; both client types raise :class:`NotImplementedError`
+instead of dispatching the wait.
+
+.. code-block:: python
+
+    import threading
+    import torch
+    from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+    rb = ReplayBuffer(storage=LazyTensorStorage(1024), batch_size=64)
+    producer = threading.Thread(target=rb.extend, args=(torch.arange(64),))
+    producer.start()
+    batch = rb.sample(wait=True, timeout=5.0)
+    producer.join()
+
+:meth:`~torchrl.data.ReplayBuffer.stats` distinguishes physical
+``storage_size`` from ``sampleable_size``. These values differ for consuming
+samplers because sampled records can become unavailable while their physical
+slots remain allocated. The snapshot also exposes cumulative ``write_count``,
+``sample_calls``, and ``samples_returned`` counters. Cumulative values can be
+converted into rates without scanning storage; the round-robin write counter
+uses 64-bit storage for long-running jobs. Circular-buffer capacity is not a
+producer-backpressure signal: after warm-up, writes continue to overwrite old
+slots even though physical utilization remains 100 percent.
+
+
+Replay-ratio limiting
+---------------------
+
+:class:`~torchrl.data.RateLimitedReplayBuffer` limits the cumulative number of
+samples relative to the number of inserted items. Because the budget uses
+cumulative counters rather than storage occupancy, it remains meaningful after
+a circular buffer reaches capacity. A value such as ``samples_per_insert=2.0``
+permits at most two sampled items per inserted item. Concurrent callers reserve
+budget atomically before sampling.
+
+.. code-block:: python
+
+    import torch
+    from torchrl.data import LazyTensorStorage, RateLimitedReplayBuffer
+
+    replay = RateLimitedReplayBuffer(
+        storage=LazyTensorStorage(1024),
+        batch_size=64,
+        samples_per_insert=1.0,
+    )
+    replay.extend(torch.randn(64, 4))
+    batch = replay.sample(wait=True, timeout=5.0)
+
+``replay.stats()`` reports the target and measured sample-to-insert ratios,
+available budget, outstanding reservations, and cumulative wait count in
+addition to the standard replay-buffer counters. The rate-limit state is
+included in ``state_dict()``. Prefetch is unsupported because it could reserve
+or consume sample budget before the caller requests a batch.
 
 
 Sample units

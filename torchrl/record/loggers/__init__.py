@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .common import Logger
+from .common import Logger, PrefixLogger
 
 from .csv import CSVLogger
 from .mlflow import MLFlowLogger
@@ -17,6 +17,7 @@ from .wandb import WandbLogger
 
 __all__ = [
     "Logger",
+    "PrefixLogger",
     "LoggerMonitor",
     "Every",
     "ProcessLogger",

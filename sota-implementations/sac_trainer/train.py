@@ -4,12 +4,14 @@
 
 import hydra
 from torchrl.trainers.algorithms.configs import *  # noqa: F401, F403
+from torchrl.trainers.algorithms.configs import instantiate_trainer
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg):
-    trainer = hydra.utils.instantiate(cfg.trainer)
-    trainer.train()
+    trainer = instantiate_trainer(cfg)
+    with trainer.stop_on_signal():
+        trainer.train()
 
 
 if __name__ == "__main__":

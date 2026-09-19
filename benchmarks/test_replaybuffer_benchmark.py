@@ -9,12 +9,12 @@ import os
 import pytest
 import torch
 from tensordict import TensorDict
-
 from torchrl.data import (
     LazyMemmapStorage,
     LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
+    RateLimitedReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
     TensorDictPrioritizedReplayBuffer,
@@ -225,8 +225,9 @@ def test_slice_sampler_boundary_query_benchmark(
         pytest.param("shuffled", id="fragmented-shuffled"),
     ],
 )
+@pytest.mark.parametrize("output_layout", ["flat", "batch_time"])
 @pytest.mark.parametrize("size", [1_000, 100_000])
-def test_slice_sampler_sample(benchmark, size, layout, cache_state):
+def test_slice_sampler_sample(benchmark, size, layout, cache_state, output_layout):
     device = _replay_boundary_device()
     num_trajectories = 8
     trajectory_length = size // num_trajectories
@@ -261,6 +262,7 @@ def test_slice_sampler_sample(benchmark, size, layout, cache_state):
                 step_key="step",
                 cache_values=True,
                 fragmented=fragmented,
+                output_layout=output_layout,
             ),
             batch_size=256,
             generator=torch.Generator(device=device).manual_seed(0),
@@ -339,6 +341,22 @@ def test_replay_buffer_direct_client_identity(benchmark):
     replay_buffer = ReplayBuffer(storage=ListStorage(1))
     client = benchmark(replay_buffer.client)
     assert client is replay_buffer
+
+
+def test_replay_buffer_ready_check(benchmark):
+    replay_buffer = ReplayBuffer(storage=ListStorage(64), batch_size=32)
+    replay_buffer.extend(torch.arange(64))
+
+    assert benchmark(replay_buffer.wait_until_sampleable)
+
+
+def test_rate_limited_replay_ready_check(benchmark):
+    replay_buffer = RateLimitedReplayBuffer(
+        storage=ListStorage(64), batch_size=32, samples_per_insert=1.0
+    )
+    replay_buffer.extend(torch.arange(64))
+
+    assert benchmark(replay_buffer.can_sample)
 
 
 def sample_prioritized_sampler(sampler, storage, batch_size):
@@ -567,6 +585,21 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
     )()
     torch.manual_seed(0)
     benchmark(sample, rb)
+
+
+@pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
+@pytest.mark.parametrize("size", [10_000, 100_000])
+def test_rb_checkpoint_dump(benchmark, tmp_path, storage, size):
+    # Cost of one scheduled replay-buffer checkpoint; informs the default
+    # trainer save cadence when the buffer is included.
+    (rb,), _ = create_rb(
+        rb=TensorDictReplayBuffer,
+        storage=storage,
+        sampler=None,
+        populated=True,
+        size=size,
+    )()
+    benchmark(rb.dumps, tmp_path / "checkpoint")
 
 
 @pytest.mark.parametrize("size", [1_000, 100_000])

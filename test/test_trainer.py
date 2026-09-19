@@ -5,14 +5,18 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import inspect
 import os
+import signal
+import sys
 import tempfile
 import warnings
 from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
+from operator import attrgetter
 from os import path, walk
 from time import sleep
 
@@ -41,8 +45,9 @@ from torchrl.data import (
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import TanhNormal
 from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
+from torchrl.record.loggers.common import PrefixLogger
 from torchrl.testing import PONG_VERSIONED
-from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers import EvaluatorHook, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
@@ -294,6 +299,212 @@ def test_unified_trainer_checkpoint_rotation(tmp_path):
     restored.load_from_file(rotation.latest())
     assert restored.collected_frames == 30
     assert restored._optim_count == 15
+
+
+class _RNGConsumingModule:
+    """Trainer module whose restore draws a random number."""
+
+    def state_dict(self):
+        return {}
+
+    def load_state_dict(self, state_dict):
+        torch.rand(())
+
+
+class _PausableCollector(MockingIterableCollector):
+    def __init__(self):
+        super().__init__(batches=[])
+        self.pause_calls = 0
+        self.paused = False
+
+    @contextlib.contextmanager
+    def pause(self):
+        self.pause_calls += 1
+        self.paused = True
+        try:
+            yield
+        finally:
+            self.paused = False
+
+
+class _UnpausableCollector(MockingIterableCollector):
+    def __init__(self):
+        super().__init__(batches=[])
+
+    @contextlib.contextmanager
+    def pause(self):
+        # Mirrors BaseCollector.pause, which raises without yielding.
+        raise NotImplementedError("pause() is not implemented.")
+
+
+class _PauseProbe:
+    def __init__(self, collector):
+        self.collector = collector
+        self.paused_at_save = []
+
+    def state_dict(self):
+        self.paused_at_save.append(self.collector.paused)
+        return {}
+
+    def load_state_dict(self, state_dict):
+        pass
+
+
+def _loop_trainer(collector, path=None, **kwargs):
+    return Trainer(
+        collector=collector,
+        total_frames=100,
+        frame_skip=1,
+        optim_steps_per_batch=1,
+        loss_module=MockingLossModule(),
+        optimizer=None,
+        progress_bar=False,
+        save_trainer_file=path,
+        checkpoint=Checkpoint() if path is not None else None,
+        **kwargs,
+    )
+
+
+class TestTrainerResume:
+    def test_rng_last(self, tmp_path):
+        path = tmp_path / "trainer-checkpoint"
+        trainer = mocking_trainer(file=path, checkpoint=Checkpoint(), with_policy=True)
+        # Sorts after "rng": a single load pass would consume random numbers
+        # after the RNG state had been restored.
+        trainer.register_module("zz_consumer", _RNGConsumingModule())
+        assert "rng" in trainer.checkpoint.components
+        torch.manual_seed(0)
+        trainer.save_trainer(force_save=True)
+        expected = torch.rand(3)
+
+        torch.manual_seed(1)
+        restored = mocking_trainer(checkpoint=Checkpoint(), with_policy=True)
+        restored.register_module("zz_consumer", _RNGConsumingModule())
+        restored.load_from_file(path)
+        assert restored.collector.called_update_policy_weights_
+        torch.testing.assert_close(torch.rand(3), expected)
+
+    def test_no_rng(self, tmp_path):
+        # Checkpoints written before "rng" was registered load under
+        # strict="error" and leave the process RNG untouched.
+        path = tmp_path / "trainer-checkpoint"
+        trainer = mocking_trainer(checkpoint=Checkpoint())
+        trainer.collected_frames = 5
+        trainer.checkpoint.save(
+            path, components=set(trainer.checkpoint.components) - {"rng"}
+        )
+        torch.manual_seed(3)
+        expected = torch.rand(2)
+        torch.manual_seed(3)
+        restored = mocking_trainer(checkpoint=Checkpoint(strict="error"))
+        restored.load_from_file(path)
+        assert restored.collected_frames == 5
+        torch.testing.assert_close(torch.rand(2), expected)
+
+    def test_rotation_dir(self, tmp_path):
+        directory = tmp_path / "checkpoints"
+        rotation = CheckpointRotation(directory, keep_last=2)
+        trainer = mocking_trainer(checkpoint=Checkpoint(), checkpoint_rotation=rotation)
+        for frames in (10, 20):
+            trainer.collected_frames = frames
+            trainer.save_trainer(force_save=True)
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored.load_from_file(directory)
+        assert restored.collected_frames == 20
+
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        with pytest.raises(FileNotFoundError, match="No checkpoint"):
+            mocking_trainer(checkpoint=Checkpoint()).load_from_file(empty)
+
+    def test_async_pause(self, tmp_path):
+        collector = _PausableCollector()
+        trainer = _loop_trainer(
+            collector, tmp_path / "checkpoint", async_collection=True
+        )
+        probe = _PauseProbe(collector)
+        trainer.checkpoint.register("probe", probe)
+        trainer.collected_frames = 5
+        trainer._save_trainer_at_boundary()
+        assert collector.pause_calls == 0
+        trainer._save_trainer_at_boundary(force_save=True)
+        assert collector.pause_calls == 1
+        assert probe.paused_at_save == [True]
+        assert not collector.paused
+        assert Checkpoint.is_checkpoint(tmp_path / "checkpoint")
+
+        trainer.async_collection = False
+        trainer._save_trainer_at_boundary(force_save=True)
+        assert collector.pause_calls == 1
+
+        trainer = _loop_trainer(
+            _UnpausableCollector(), tmp_path / "unpausable", async_collection=True
+        )
+        trainer._save_trainer_at_boundary(force_save=True)
+        assert Checkpoint.is_checkpoint(tmp_path / "unpausable")
+        assert "collector.pause" in trainer._checkpoint_skip_warnings
+
+    def test_shutdown_on_error(self):
+        batch = TensorDict({("next", "reward"): torch.tensor([1.0])}, [1])
+        collector = MockingIterableCollector(batches=[batch])
+        trainer = _loop_trainer(collector)
+
+        def fail(batch):
+            raise RuntimeError("hook failure")
+
+        trainer.register_op("batch_process", fail)
+        with pytest.raises(RuntimeError, match="hook failure"):
+            trainer.train()
+        assert collector.shutdown_calls == 1
+
+
+def _reward_batches(count):
+    return [
+        TensorDict({("next", "reward"): torch.tensor([1.0])}, [1]) for _ in range(count)
+    ]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal delivery")
+class TestStopOnSignal:
+    def test_saves_and_stops(self, tmp_path):
+        collector = MockingIterableCollector(batches=_reward_batches(5))
+        trainer = _loop_trainer(collector, tmp_path / "checkpoint")
+
+        def interrupt(batch):
+            # Delivered while the second batch is processed: the loop finishes
+            # that batch, saves and stops instead of running the remaining three.
+            if trainer.collected_frames == 1:
+                signal.raise_signal(signal.SIGINT)
+
+        trainer.register_op("batch_process", interrupt)
+        previous = signal.getsignal(signal.SIGINT)
+        with trainer.stop_on_signal() as stop:
+            trainer.train()
+        assert signal.getsignal(signal.SIGINT) is previous
+        assert stop.requested
+        assert trainer._stop_reason == "received SIGINT"
+        assert trainer.collected_frames == 2
+        assert collector.shutdown_calls == 1
+
+        restored = _loop_trainer(
+            MockingIterableCollector(batches=[]), tmp_path / "checkpoint"
+        )
+        restored.load_from_file(tmp_path / "checkpoint")
+        assert restored.collected_frames == 2
+
+    def test_second_signal(self):
+        collector = MockingIterableCollector(batches=_reward_batches(5))
+        trainer = _loop_trainer(collector)
+
+        def interrupt(batch):
+            signal.raise_signal(signal.SIGINT)
+            signal.raise_signal(signal.SIGINT)
+
+        trainer.register_op("batch_process", interrupt)
+        with pytest.raises(KeyboardInterrupt), trainer.stop_on_signal():
+            trainer.train()
+        assert collector.shutdown_calls == 1
 
 
 def test_checkpoint_rotation_is_a_save_destination(tmp_path):
@@ -1048,19 +1259,21 @@ class TestOptimizer:
 class TestLogReward:
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
-    def test_log_reward(self, logname, pbar):
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.int64])
+    def test_log_reward(self, logname, pbar, dtype):
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
         log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
-        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.arange(3, dtype=dtype)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
         else:
             assert logname not in trainer._pbar_str
         assert trainer._log_dict[logname][-1] == 1
+        assert trainer._log_dict[f"{logname}_std"][-1] == 1
 
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
@@ -1222,7 +1435,8 @@ def test_masking():
 
 
 class TestSubSampler:
-    def test_subsampler(self):
+    @pytest.mark.parametrize("batch_shape", [(2,), (2, 1), (1, 2, 1)])
+    def test_subsampler(self, batch_shape):
         torch.manual_seed(0)
         trainer = mocking_trainer()
 
@@ -1243,9 +1457,13 @@ class TestSubSampler:
             [2, 10],
         )
 
+        td = td.reshape(*batch_shape, 10)
         td_out = trainer._process_optim_batch_hook(td)
         assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
         assert (td_out.get(key1) == td_out.get(key2)).all()
+        # Every sampled window advances in time within a single trajectory.
+        assert (td_out[key1].diff(dim=-1) == 1).all()
+        assert (td_out[key1] // 10 == td_out[key1][..., :1] // 10).all()
 
     def test_subsampler_state_dict(self):
         trainer = mocking_trainer()
@@ -1679,6 +1897,21 @@ class TestOptimizationStepper:
         trainer.optim_steps(td)
         assert stepper.calls == 1
         assert loss_module.forward_calls == 0
+
+    def test_per_call_optimization_overrides_do_not_change_configuration(self):
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        trainer.num_epochs = 2
+        td = TensorDict({"x": torch.randn(3)}, [])
+
+        trainer.optim_steps(td, optim_steps_per_batch=3, num_epochs=1)
+
+        assert stepper.calls == 3
+        assert trainer.optim_steps_per_batch == 1
+        assert trainer.num_epochs == 2
 
     def test_stepper_checkpoint_roundtrip(self, tmp_path):
         """Stepper state survives save/load via Trainer checkpointing."""
@@ -2248,6 +2481,169 @@ class TestSetupShutdownHooks:
         assert collector.shutdown_calls == 1
 
 
+class _HookEvaluator:
+    def __init__(self, *, auto_complete=False, wait_error=None, shutdown_error=None):
+        self.auto_complete = auto_complete
+        self.wait_error = wait_error
+        self.shutdown_error = shutdown_error
+        self.pending = False
+        self.triggers = []
+        self.results = []
+        self.shutdown_calls = 0
+        self.wait_timeout = None
+
+    def trigger_eval(self, weights, step):
+        self.triggers.append((step, weights.clone()))
+        self.pending = True
+        if self.auto_complete:
+            self.complete()
+        return True
+
+    def complete(self):
+        step = self.triggers[-1][0]
+        self.pending = False
+        self.results.append({"eval/reward": float(step), "eval/step": step})
+
+    def poll(self):
+        if self.results:
+            return self.results.pop(0)
+        return None
+
+    def wait(self, timeout=None):
+        self.wait_timeout = timeout
+        if self.wait_error is not None:
+            raise self.wait_error
+        if self.pending:
+            self.complete()
+        return self.poll()
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+        if self.shutdown_error is not None:
+            raise self.shutdown_error
+
+
+class _HookLogger:
+    def __init__(self):
+        self.metrics = []
+        self.videos = []
+
+    def log_metrics(self, metrics, step):
+        self.metrics.append((step, dict(metrics)))
+
+    def log_video(self, name, video, step):
+        self.videos.append((name, video, step))
+
+
+class TestEvaluatorHook:
+    def test_cadence_coalescing_logging_and_no_duplicate_final(self):
+        evaluator = _HookEvaluator(auto_complete=True)
+        logger = _HookLogger()
+        trainer = mocking_trainer(optimizer=None, logger=logger, with_policy=True)
+        hook = EvaluatorHook(
+            evaluator, every_frames=10, run_at_start=True, run_at_end=True
+        )
+        hook.register(trainer)
+
+        trainer._setup_hook()
+        for frames in (5, 10, 35):
+            trainer.collected_frames = frames
+            trainer._post_steps_hook()
+        trainer._shutdown_hook()
+
+        assert [step for step, _ in evaluator.triggers] == [0, 10, 35]
+        assert hook._next_due_frame == 40
+        assert [step for step, _ in logger.metrics] == [0, 10, 35]
+        assert all(
+            set(metrics) == {"evaluation/reward", "evaluation/step"}
+            for _, metrics in logger.metrics
+        )
+        assert evaluator.shutdown_calls == 1
+
+    def test_busy_intervals_coalesce_to_latest_policy(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+        trainer.collected_frames = 25
+        trainer._post_steps_hook()
+        assert [step for step, _ in evaluator.triggers] == [10]
+        assert hook._next_due_frame == 10
+
+        evaluator.complete()
+        trainer.collected_frames = 30
+        trainer._post_steps_hook()
+        assert [step for step, _ in evaluator.triggers] == [10, 30]
+        assert hook._next_due_frame == 20
+
+    def test_final_evaluation_uses_latest_callable_policy(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(
+            evaluator,
+            every_frames=10,
+            policy=attrgetter("loss_module.actor_network"),
+        )
+        hook.register(trainer)
+
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+        with torch.no_grad():
+            trainer.loss_module.actor_network.weight.fill_(3)
+        trainer.collected_frames = 15
+        trainer._shutdown_hook()
+
+        assert [step for step, _ in evaluator.triggers] == [10, 15]
+        torch.testing.assert_close(
+            evaluator.triggers[-1][1]["weight"],
+            torch.full_like(evaluator.triggers[-1][1]["weight"], 3),
+        )
+
+    def test_resume_keeps_only_completed_schedule_state(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+
+        state = hook.state_dict()
+        assert state == {"next_due_frame": 10, "last_completed_frame": None}
+        evaluator.complete()
+        trainer.collected_frames = 15
+        trainer._post_steps_hook()
+        assert hook.state_dict() == {
+            "next_due_frame": 20,
+            "last_completed_frame": 10,
+        }
+
+        restored_evaluator = _HookEvaluator(auto_complete=True)
+        restored_trainer = mocking_trainer(optimizer=None, with_policy=True)
+        restored = EvaluatorHook(restored_evaluator, every_frames=10)
+        restored.register(restored_trainer)
+        restored.load_state_dict(state)
+        restored_trainer.collected_frames = 15
+        restored_trainer._setup_hook()
+
+        assert [step for step, _ in restored_evaluator.triggers] == [15]
+
+    def test_shutdown_cleans_up_when_wait_fails(self):
+        evaluator = _HookEvaluator(wait_error=RuntimeError("evaluation failed"))
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+
+        with pytest.raises(RuntimeError, match="evaluation failed"):
+            trainer._shutdown_hook()
+        assert evaluator.wait_timeout == 60.0
+        assert evaluator.shutdown_calls == 1
+
+
 class TestEarlyStopping:
     @pytest.mark.parametrize(
         "monitor,values,hook_kwargs,expected_stops,expected_reason",
@@ -2371,6 +2767,187 @@ class _RecordingLogger:
         if isinstance(value, torch.Tensor):
             value = value.item()
         self.records.setdefault(name, []).append((step, value))
+
+    def log_metrics(self, metrics, step=None, **kwargs):
+        for name, value in metrics.items():
+            self.log_scalar(name, value, step)
+        return metrics
+
+    def with_prefix(self, prefix):
+        return PrefixLogger(self, prefix)
+
+
+class TestOnPolicyTelemetry:
+    @staticmethod
+    def _make_trainer(
+        *, telemetry="standard", collector=None, log_rewards=True, replay_buffer=None
+    ):
+        torch.manual_seed(0)
+        actor = ProbabilisticTensorDictSequential(
+            TensorDictModule(
+                nn.Sequential(nn.Linear(3, 8), NormalParamExtractor()),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            ),
+        )
+        critic = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["observation"], out_keys=["state_value"]
+        )
+        loss_module = ClipPPOLoss(actor, critic, entropy_bonus=False)
+        logger = _RecordingLogger()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            trainer = PPOTrainer(
+                collector=collector or MockingCollector(),
+                total_frames=8,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss_module,
+                optimizer=torch.optim.SGD(loss_module.parameters(), lr=0.1),
+                logger=logger,
+                replay_buffer=replay_buffer,
+                num_epochs=1,
+                add_gae=False,
+                progress_bar=False,
+                log_interval=0,
+                log_rewards=log_rewards,
+                log_actions=False,
+                done_key=("agents", "done"),
+                terminated_key=("agents", "terminated"),
+                reward_key=("agents", "reward"),
+                episode_reward_key=("agents", "reward"),
+                telemetry=telemetry,
+            )
+        return trainer, loss_module, logger
+
+    @staticmethod
+    def _batch(loss_module):
+        done = torch.zeros(8, 1, dtype=torch.bool)
+        done[[3, 7]] = True
+        terminated = torch.zeros_like(done)
+        terminated[3] = True
+        truncated = torch.zeros_like(done)
+        truncated[7] = True
+        is_init = torch.zeros_like(done)
+        is_init[[0, 4]] = True
+        return TensorDict(
+            {
+                "observation": torch.randn(8, 3),
+                "action": torch.rand(8, 4) * 1.8 - 0.9,
+                loss_module.tensor_keys.sample_log_prob: torch.randn(8),
+                "advantage": torch.randn(8, 1),
+                "value_target": torch.randn(8, 1),
+                "is_init": is_init,
+                ("collector", "traj_ids"): torch.zeros(8, dtype=torch.long),
+                ("next", "agents", "reward"): torch.arange(1.0, 9.0).view(8, 1),
+                ("next", "agents", "done"): done,
+                ("next", "agents", "terminated"): terminated,
+                ("next", "agents", "truncated"): truncated,
+            },
+            [8],
+        )
+
+    def test_standard_telemetry_for_finite_ppo_update_with_nested_keys(self):
+        trainer, loss_module, logger = self._make_trainer()
+        trainer.optimizer.add_param_group(
+            {"params": [nn.Parameter(torch.zeros(()))], "lr": 0.2}
+        )
+        batch = self._batch(loss_module)
+
+        trainer._setup_hook()
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+        trainer.optim_steps(batch)
+
+        expected = {
+            "training/frames/collected",
+            "training/frames/batch",
+            "training/episodes/completed",
+            "training/terminals/done_rate",
+            "training/terminals/terminated_rate",
+            "training/terminals/truncated_rate",
+            "training/rewards/min",
+            "training/rewards/mean",
+            "training/rewards/std",
+            "training/rewards/max",
+            "training/episodes/return/mean",
+            "training/episodes/length/mean",
+            "training/optimizer/learning_rate",
+            "training/optimizer/learning_rate/group_0",
+            "training/optimizer/learning_rate/group_1",
+            "training/optimizer/gradient_norm",
+            "training/throughput/collection_frames_per_second",
+            "training/throughput/optimizer_updates_per_second",
+        }
+        assert expected <= logger.records.keys()
+        assert "done_percentage" in logger.records
+        assert "r_training" in logger.records
+        for name in expected:
+            assert torch.isfinite(torch.as_tensor(logger.records[name][-1][1]))
+        assert logger.records["training/episodes/completed"][-1][1] == 2
+        assert logger.records["training/episodes/return/mean"][-1][1] == 18.0
+        assert logger.records["training/episodes/length/mean"][-1][1] == 4.0
+        assert logger.records["training/optimizer/learning_rate"][-1][1] == 0.1
+        assert logger.records["training/optimizer/learning_rate/group_1"][-1][1] == 0.2
+
+    def test_minimal_avoids_standard_collection_work(self):
+        class FailingStatsCollector(MockingCollector):
+            def stats(self):
+                raise AssertionError("minimal telemetry must not query stats")
+
+        trainer, loss_module, logger = self._make_trainer(
+            telemetry="minimal",
+            collector=FailingStatsCollector(),
+            log_rewards=False,
+        )
+        batch = self._batch(loss_module).exclude(
+            ("collector", "traj_ids"),
+            ("next", "agents", "reward"),
+            ("next", "agents", "terminated"),
+            ("next", "agents", "truncated"),
+        )
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+
+        assert logger.records.keys() == {"done_percentage"}
+        assert not hasattr(trainer, "_standard_telemetry")
+        assert not any(key.startswith("training/") for key in trainer._log_dict)
+
+    def test_standard_logs_runtime_stats_and_omits_unavailable_batch_metrics(self):
+        class StatsCollector(MockingCollector):
+            def stats(self):
+                return {"frames": 4}
+
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(16),
+            sampler=SamplerWithoutReplacement(),
+        )
+        replay_buffer.extend(TensorDict({"value": torch.ones(4, 1)}, [4]))
+        trainer, loss_module, logger = self._make_trainer(
+            collector=StatsCollector(),
+            log_rewards=False,
+            replay_buffer=replay_buffer,
+        )
+        batch = self._batch(loss_module).exclude(
+            ("collector", "traj_ids"),
+            ("next", "agents", "reward"),
+            ("next", "agents", "terminated"),
+            ("next", "agents", "truncated"),
+        )
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+
+        assert "training/collector/frames" in logger.records
+        assert logger.records["training/replay/size"][-1][1] == 4
+        assert logger.records["training/replay/capacity"][-1][1] == 16
+        assert not any("rewards/" in key for key in logger.records)
+        assert not any("episodes/return" in key for key in logger.records)
 
 
 class _CountingWeightSender:

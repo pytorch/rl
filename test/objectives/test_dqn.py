@@ -853,6 +853,26 @@ class TestDQN(LossModuleTestBase):
         manual_weighted_loss = (loss_elements * weights2).sum() / weights2.sum()
         assert torch.allclose(loss_out2["loss"], manual_weighted_loss, rtol=1e-4)
 
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
+    def test_load_lazy_estimator(self, action_spec_type):
+        # A loss saved after its value estimator was created must restore into
+        # a fresh loss whose estimator has not been built yet (trainer resume).
+        torch.manual_seed(0)
+        actor = self._create_mock_actor(action_spec_type=action_spec_type)
+        loss_fn = DQNLoss(actor, action_space=action_spec_type)
+        loss_fn.make_value_estimator(gamma=0.9)
+        state = loss_fn.state_dict()
+        assert "_value_estimator.gamma" in state
+
+        fresh = DQNLoss(
+            self._create_mock_actor(action_spec_type=action_spec_type),
+            action_space=action_spec_type,
+        )
+        assert fresh._value_estimator is None
+        fresh.load_state_dict(state)
+        assert fresh.value_estimator.gamma.item() == pytest.approx(0.9)
+        assert set(fresh.state_dict()) == set(state)
+
 
 class TestQMixer(LossModuleTestBase):
     seed = 0

@@ -17,6 +17,70 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "dqn_trainer_resume": """python sota-implementations/dqn_trainer/train.py \
+  collector.total_frames=2000 \
+  collector.frames_per_batch=1000 \
+  collector.init_random_frames=1000 \
+  trainer.optim_steps_per_batch=2 \
+  trainer.progress_bar=false \
+  hydra.run.dir=outputs/sota_dqn_trainer \
+&& python sota-implementations/dqn_trainer/train.py \
+  resume=outputs/sota_dqn_trainer/checkpoints \
+  collector.total_frames=3000 \
+  trainer.progress_bar=false \
+  hydra.run.dir=outputs/sota_dqn_trainer_resumed
+""",
+    "sac_resume": """python sota-implementations/sac/sac.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  logger.backend= \
+  checkpoint.interval=16 \
+  hydra.run.dir=outputs/sota_sac \
+&& python sota-implementations/sac/sac.py \
+  resume=outputs/sota_sac/checkpoints \
+  collector.total_frames=80 \
+  hydra.run.dir=outputs/sota_sac_resumed
+""",
+    "td3_resume": """python sota-implementations/td3/td3.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.num_workers=4 \
+  collector.env_per_collector=2 \
+  logger.mode=offline \
+  env.name=Pendulum-v1 \
+  logger.backend= \
+  checkpoint.interval=16 \
+  hydra.run.dir=outputs/sota_td3 \
+&& python sota-implementations/td3/td3.py \
+  resume=outputs/sota_td3/checkpoints \
+  collector.total_frames=80 \
+  hydra.run.dir=outputs/sota_td3_resumed
+""",
+    "ddpg_resume": """python sota-implementations/ddpg/ddpg.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  logger.backend= \
+  checkpoint.interval=16 \
+  hydra.run.dir=outputs/sota_ddpg \
+&& python sota-implementations/ddpg/ddpg.py \
+  resume=outputs/sota_ddpg/checkpoints \
+  collector.total_frames=80 \
+  hydra.run.dir=outputs/sota_ddpg_resumed
+""",
     "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
   collector.groups_per_iter=2 \
   collector.group_size=2 \
@@ -26,6 +90,19 @@ commands = {
   logger.eval_iter=2 \
   logger.eval_episodes=4 \
   checkpoint.save_iter=2
+""",
+    "reward_model_training": """python sota-implementations/reward_model_training/reward_model.py \
+  model.name= \
+  data.dataset_name= \
+  data.synthetic_size=32 \
+  data.batch_size=8 \
+  data.max_length=32 \
+  optim.max_iters=3 \
+  logger.eval_iter=2 \
+  logger.eval_iters=1 \
+  logger.log_interval=1 \
+  logger.backend= \
+  export.save_iter=2
 """,
     "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
   optim.gradient_steps=55 \
@@ -51,12 +128,17 @@ commands = {
 """,
     "ppo_mujoco": """python sota-implementations/ppo/ppo_mujoco.py \
   env.env_name=HalfCheetah-v4 \
+  env.max_episode_steps=20 \
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=2 \
-  logger.backend= \
-  logger.test_interval=10
+  optim.device=cpu \
+  logger.backend=csv \
+  logger.video=False \
+  logger.test_interval=10 \
+  logger.num_test_episodes=1 \
+  hydra.run.dir=$SOTA_LOG_DIR/ppo_mujoco
 """,
     "rnd_mujoco": """python sota-implementations/rnd/rnd_mujoco.py \
   env.env_name=HalfCheetah-v4 \
@@ -145,15 +227,19 @@ commands = {
   logger.backend=
 """,
     "sac": """python sota-implementations/sac/sac.py \
+  env.max_episode_steps=20 \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
   collector.frames_per_batch=16 \
-  collector.env_per_collector=2 \
+  collector.env_per_collector=1 \
   optim.batch_size=10 \
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
-  logger.backend=
+  logger.backend=csv \
+  logger.video=False \
+  logger.eval_iter=16 \
+  hydra.run.dir=$SOTA_LOG_DIR/sac
 """,
     "tqc": """python sota-implementations/tqc/tqc.py \
   collector.total_frames=48 \
@@ -451,4 +537,25 @@ def test_commands(algo, monkeypatch, tmp_path):
     if dataset_id is not None:
         monkeypatch.setenv("HOME", str(tmp_path))
         _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
+    if algo in {"ppo_mujoco", "sac"}:
+        monkeypatch.setenv("SOTA_LOG_DIR", str(tmp_path))
     run_command(commands[algo])
+    if algo in {"ppo_mujoco", "sac"}:
+        scalar_roots = list(tmp_path.rglob("scalars"))
+        assert len(scalar_roots) == 1
+        scalar_names = {
+            path.relative_to(scalar_roots[0]).as_posix()
+            for path in scalar_roots[0].rglob("*.csv")
+        }
+        expected_training_metric = (
+            "training/loss_objective.csv"
+            if algo == "ppo_mujoco"
+            else "training/q_loss.csv"
+        )
+        assert expected_training_metric in scalar_names
+        assert "evaluation/reward.csv" in scalar_names
+        assert scalar_names
+        assert all(
+            name.startswith(("training/", "evaluation/", "timing/"))
+            for name in scalar_names
+        )

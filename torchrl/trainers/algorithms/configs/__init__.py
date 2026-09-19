@@ -20,6 +20,10 @@ except ImportError as e:
         "Please install them with: pip install 'torchrl[utils]' or pip install hydra-core omegaconf"
     ) from e
 
+from torchrl.trainers.algorithms.configs.checkpoint import (
+    CheckpointConfig,
+    CheckpointRotationConfig,
+)
 from torchrl.trainers.algorithms.configs.collectors import (
     # New canonical config names
     AsyncCollectorConfig,
@@ -52,6 +56,7 @@ from torchrl.trainers.algorithms.configs.data import (
     TensorStorageConfig,
     TransitionConfig,
 )
+from torchrl.trainers.algorithms.configs.entrypoint import instantiate_trainer
 from torchrl.trainers.algorithms.configs.envs import (
     BatchedEnvConfig,
     EnvConfig,
@@ -106,6 +111,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     DreamerV3ImageEncoderConfig,
     DreamerV3MLPConfig,
     DreamerV3SeededPolicyConfig,
+    LowLevelControllerConfig,
     MLPConfig,
     ModelConfig,
     QMixerNetworkConfig,
@@ -162,12 +168,14 @@ from torchrl.trainers.algorithms.configs.transforms import (
     CatTensorsConfig,
     CenterCropConfig,
     ClipTransformConfig,
+    ClosedLoopMultiActionConfig,
     ComposeConfig,
     ConditionalPolicySwitchConfig,
     ConditionalSkipConfig,
     CropConfig,
     DeviceCastTransformConfig,
     DiscreteActionProjectionConfig,
+    DoneTransformConfig,
     DoubleToFloatConfig,
     DTypeCastTransformConfig,
     EndOfLifeTransformConfig,
@@ -319,6 +327,7 @@ __all__ = [
     "DreamerV3SeededPolicyConfig",
     "RSSMStateEstimatorV3Config",
     "MLPConfig",
+    "LowLevelControllerConfig",
     "ModelConfig",
     "TanhModuleConfig",
     "TanhNormalModelConfig",
@@ -346,6 +355,7 @@ __all__ = [
     "CropConfig",
     "DeviceCastTransformConfig",
     "DiscreteActionProjectionConfig",
+    "DoneTransformConfig",
     "DoubleToFloatConfig",
     "DTypeCastTransformConfig",
     "EndOfLifeTransformConfig",
@@ -361,6 +371,7 @@ __all__ = [
     "LastActionConfig",
     "LineariseRewardsConfig",
     "ModuleTransformConfig",
+    "ClosedLoopMultiActionConfig",
     "MultiActionConfig",
     "MultiStepTransformConfig",
     "NoopResetEnvConfig",
@@ -468,6 +479,10 @@ __all__ = [
     "TensorboardLoggerConfig",
     "TrackioLoggerConfig",
     "WandbLoggerConfig",
+    # Checkpointing
+    "CheckpointConfig",
+    "CheckpointRotationConfig",
+    "instantiate_trainer",
     # Weight Updaters
     "WeightUpdaterConfig",
     "VanillaWeightUpdaterConfig",
@@ -589,6 +604,7 @@ def _register_configs():
     cs.store(group="transform", name="noop_reset", node=NoopResetEnvConfig)
     cs.store(group="transform", name="step_counter", node=StepCounterConfig)
     cs.store(group="transform", name="expand_as", node=ExpandAsConfig)
+    cs.store(group="transform", name="done", node=DoneTransformConfig)
     cs.store(group="transform", name="compose", node=ComposeConfig)
     cs.store(group="transform", name="double_to_float", node=DoubleToFloatConfig)
     cs.store(group="transform", name="to_tensor_image", node=ToTensorImageConfig)
@@ -649,6 +665,12 @@ def _register_configs():
     cs.store(group="transform", name="module", node=ModuleTransformConfig)
     cs.store(group="transform", name="conditional_skip", node=ConditionalSkipConfig)
     cs.store(group="transform", name="multi_action", node=MultiActionConfig)
+    cs.store(
+        group="transform",
+        name="closed_loop_multi_action",
+        node=ClosedLoopMultiActionConfig,
+    )
+    cs.store(group="model", name="low_level_controller", node=LowLevelControllerConfig)
     cs.store(group="transform", name="timer", node=TimerConfig)
     cs.store(
         group="transform",
@@ -818,6 +840,13 @@ def _register_configs():
     cs.store(group="logger", name="tensorboard", node=TensorboardLoggerConfig)
     cs.store(group="logger", name="trackio", node=TrackioLoggerConfig)
     cs.store(group="logger", name="csv", node=CSVLoggerConfig)
+
+    # =============================================================================
+    # Checkpoint Configurations
+    # =============================================================================
+
+    cs.store(group="checkpoint", name="base", node=CheckpointConfig)
+    cs.store(group="checkpoint_rotation", name="base", node=CheckpointRotationConfig)
     cs.store(group="logger", name="base", node=LoggerConfig)
 
     # =============================================================================

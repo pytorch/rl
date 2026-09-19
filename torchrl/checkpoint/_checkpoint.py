@@ -11,11 +11,13 @@ import math
 import os
 import random
 import shutil
+import signal
 import tempfile
+import threading
 import uuid
 import zipfile
 from collections import OrderedDict
-from collections.abc import Callable, Collection, Mapping, MutableMapping
+from collections.abc import Callable, Collection, Mapping, MutableMapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -39,6 +41,7 @@ CheckpointMetricMode = Literal["min", "max"]
 CheckpointBest = tuple[str, CheckpointMetricMode]
 
 _MANIFEST_NAME = "manifest.json"
+_NO_DEFAULT = object()
 _FORMAT_NAME = "torchrl.checkpoint"
 _FORMAT_VERSION = 1
 
@@ -691,6 +694,103 @@ class GlobalRNGState:
             mps.set_rng_state(state_dict["torch_mps"].cpu())
 
 
+class StopOnSignal:
+    """Turn termination signals into a stop request checked at loop boundaries.
+
+    The first handled signal records a request so a training loop can finish
+    the current batch, save a checkpoint and exit cleanly. A second signal
+    raises :class:`KeyboardInterrupt` so a loop that cannot reach a boundary
+    can still be interrupted. Handlers are installed when the context is
+    entered and the previous handlers are restored on exit. Python only
+    accepts signal handlers in the main thread, so entering the context from
+    another thread leaves the handlers untouched and logs a warning.
+
+    Args:
+        signals (Collection[int], optional): signal numbers to handle.
+            Defaults to ``SIGINT`` and ``SIGTERM``.
+        on_request (Callable[[str], None], optional): callback invoked with the
+            signal name when the first signal arrives.
+
+    Examples:
+        >>> from torchrl.checkpoint import StopOnSignal
+        >>> with StopOnSignal() as stop:
+        ...     for _ in range(3):
+        ...         if stop.requested:
+        ...             break
+        >>> stop.requested
+        False
+    """
+
+    def __init__(
+        self,
+        signals: Collection[int] = (signal.SIGINT, signal.SIGTERM),
+        *,
+        on_request: Callable[[str], None] | None = None,
+    ) -> None:
+        self.signals = tuple(signals)
+        self.on_request = on_request
+        self.signal_name: str | None = None
+        self._previous_handlers: dict[int, Any] = {}
+
+    @property
+    def requested(self) -> bool:
+        """Whether a handled signal has been received."""
+        return self.signal_name is not None
+
+    def __call__(self, signal_number: int, frame: Any) -> None:
+        name = signal.Signals(signal_number).name
+        if self.signal_name is not None:
+            raise KeyboardInterrupt(f"Received {name} twice; interrupting.")
+        self.signal_name = name
+        if self.on_request is not None:
+            self.on_request(name)
+
+    def __enter__(self) -> StopOnSignal:
+        if threading.current_thread() is not threading.main_thread():
+            torchrl_logger.warning(
+                "StopOnSignal only installs handlers in the main thread; signals "
+                "will not request a stop."
+            )
+            return self
+        for signal_number in self.signals:
+            self._previous_handlers[signal_number] = signal.signal(signal_number, self)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        for signal_number, handler in self._previous_handlers.items():
+            signal.signal(signal_number, signal.SIG_DFL if handler is None else handler)
+        self._previous_handlers.clear()
+
+
+class _StateDictCapture:
+    """Receive a restored state dict without owning a live component."""
+
+    def __init__(self) -> None:
+        self.state: Any = None
+
+    def load_state_dict(self, state: Any) -> None:
+        self.state = state
+
+
+def _clone_tensors_(value: Any) -> Any:
+    """Replace tensors with clones, in place for mutable containers."""
+    if isinstance(value, torch.Tensor):
+        return value.clone()
+    if isinstance(value, MutableMapping):
+        for key, item in value.items():
+            value[key] = _clone_tensors_(item)
+        return value
+    if isinstance(value, list):
+        value[:] = [_clone_tensors_(item) for item in value]
+        return value
+    if isinstance(value, tuple):
+        items = [_clone_tensors_(item) for item in value]
+        if hasattr(value, "_fields"):
+            return type(value)(*items)
+        return type(value)(items)
+    return value
+
+
 @dataclass
 class _Component:
     value: Any
@@ -996,17 +1096,9 @@ class Checkpoint:
                 result.incompatible[name] = str(error)
                 continue
             record = manifest_components[name]
-            if record["adapter"] != adapter.adapter_id:
-                result.incompatible[name] = (
-                    f"manifest adapter is {record['adapter']!r}, target adapter is "
-                    f"{adapter.adapter_id!r}"
-                )
-                continue
-            if record["adapter_version"] != adapter.format_version:
-                result.incompatible[name] = (
-                    f"manifest adapter version is {record['adapter_version']}, target "
-                    f"adapter version is {adapter.format_version}"
-                )
+            mismatch = self._record_mismatch(record, adapter)
+            if mismatch is not None:
+                result.incompatible[name] = mismatch
                 continue
             adapters[name] = adapter
         self._handle_load_issues(result, load_strict)
@@ -1052,6 +1144,77 @@ class Checkpoint:
         except (CheckpointError, OSError, TypeError, ValueError):
             return False
         return True
+
+    @classmethod
+    def read_component(
+        cls,
+        path: str | Path,
+        name: str,
+        *,
+        map_location: Any = None,
+        default: Any = _NO_DEFAULT,
+    ) -> Any:
+        """Return one component's stored payload without a live object.
+
+        State-dict components return the decoded state dict and JSON
+        components return the stored value, so a checkpoint can be inspected
+        before the objects it belongs to exist, for example to read the saved
+        logger state or configuration. Tensors are copied out of the
+        checkpoint. Components stored through ``dump``/``load`` or a custom
+        adapter require a live object and are rejected.
+
+        Args:
+            path: Directory or archive checkpoint.
+            name: Manifest component name.
+            map_location: Device mapping used while reading tensor payloads.
+            default: Value returned instead of raising when the component is
+                absent.
+
+        Returns:
+            The state dict or JSON value stored for ``name``.
+
+        Raises:
+            KeyError: If the checkpoint has no component named ``name`` and no
+                ``default`` is given.
+            CheckpointError: If the component cannot be read without an object.
+        """
+        source = cls._local_path(path)
+        manifest = cls.manifest(source)
+        components: Mapping[str, Any] = manifest["components"]
+        if name not in components:
+            if default is not _NO_DEFAULT:
+                return default
+            raise KeyError(
+                f"Checkpoint {source} has no component {name!r}; available "
+                f"components: {sorted(components)}."
+            )
+        record = components[name]
+        adapters: dict[str, CheckpointAdapter] = {
+            StateDictCheckpointAdapter.adapter_id: StateDictCheckpointAdapter(),
+            JSONCheckpointAdapter.adapter_id: JSONCheckpointAdapter(),
+        }
+        adapter = adapters.get(record["adapter"])
+        if adapter is None:
+            raise CheckpointError(
+                f"Component {name!r} uses adapter {record['adapter']!r}, which "
+                "requires a live object to restore into."
+            )
+        mismatch = cls._record_mismatch(record, adapter)
+        if mismatch is not None:
+            raise CheckpointError(f"Component {name!r}: {mismatch}.")
+        capture = _StateDictCapture()
+        with cls._materialize(source, manifest, {name: record}) as root:
+            value = adapter.load(
+                capture,
+                root / record["path"].replace("\\", "/"),
+                map_location=map_location,
+                tensor_load_kwargs={},
+                args=(),
+                kwargs={},
+            )
+            if record["adapter"] == StateDictCheckpointAdapter.adapter_id:
+                value = capture.state
+            return _clone_tensors_(value)
 
     @classmethod
     def register_migration(
@@ -1217,6 +1380,22 @@ class Checkpoint:
             yield temporary
         finally:
             cls._remove_path(temporary)
+
+    @staticmethod
+    def _record_mismatch(
+        record: Mapping[str, Any], adapter: CheckpointAdapter
+    ) -> str | None:
+        if record["adapter"] != adapter.adapter_id:
+            return (
+                f"manifest adapter is {record['adapter']!r}, target adapter is "
+                f"{adapter.adapter_id!r}"
+            )
+        if record["adapter_version"] != adapter.format_version:
+            return (
+                f"manifest adapter version is {record['adapter_version']}, target "
+                f"adapter version is {adapter.format_version}"
+            )
+        return None
 
     @staticmethod
     def _handle_load_issues(
@@ -1386,13 +1565,18 @@ class CheckpointRotation:
         if "/" in prefix or "\\" in prefix:
             raise ValueError("prefix cannot contain path separators.")
         if keep_best is not None:
-            if not isinstance(keep_best, tuple) or len(keep_best) != 2:
-                raise TypeError("keep_best must be a (metadata_key, mode) tuple.")
+            if (
+                isinstance(keep_best, str)
+                or not isinstance(keep_best, Sequence)
+                or len(keep_best) != 2
+            ):
+                raise TypeError("keep_best must be a (metadata_key, mode) pair.")
             key, mode = keep_best
             if not isinstance(key, str) or not key:
                 raise ValueError("The keep_best metadata key must be non-empty.")
             if mode not in ("min", "max"):
                 raise ValueError("The keep_best mode must be 'min' or 'max'.")
+            keep_best = (key, mode)
         self.directory = Checkpoint._local_path(directory)
         self.keep_last = keep_last
         self.keep_best = keep_best
@@ -1610,3 +1794,152 @@ class CheckpointRotation:
             raise TypeError("step must be an integer.")
         if step < 0:
             raise ValueError("step must be non-negative.")
+
+
+def resolve_checkpoint_path(path: str | Path, *, prefix: str = "checkpoint") -> Path:
+    """Return the checkpoint at ``path`` or the newest checkpoint of a rotation directory.
+
+    Args:
+        path: A checkpoint directory or archive, or a directory managed by
+            :class:`CheckpointRotation`.
+        prefix: Filename prefix of the rotated checkpoints. Defaults to
+            ``"checkpoint"``.
+
+    Returns:
+        The resolved checkpoint path.
+
+    Raises:
+        FileNotFoundError: If ``path`` is neither a checkpoint nor a directory
+            containing rotated checkpoints.
+
+    Examples:
+        >>> import tempfile
+        >>> from torchrl.checkpoint import Checkpoint, CheckpointRotation
+        >>> from torchrl.checkpoint import resolve_checkpoint_path
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     rotation = CheckpointRotation(tmpdir, keep_last=1)
+        ...     path = rotation.save(Checkpoint(value={"step": 1}), step=1)
+        ...     resolve_checkpoint_path(tmpdir) == path
+        True
+    """
+    candidate = Path(path).expanduser()
+    if Checkpoint.is_checkpoint(candidate):
+        return candidate
+    if candidate.is_dir():
+        latest = CheckpointRotation(candidate, keep_last=1, prefix=prefix).latest()
+        if latest is not None:
+            return latest
+    raise FileNotFoundError(f"No checkpoint was found at {candidate}.")
+
+
+class RunCheckpointer:
+    """Save a training script's :class:`Checkpoint` at loop boundaries and restore it on resume.
+
+    ``save(step)`` writes a rotated checkpoint to ``directory`` every
+    ``interval`` steps and ``save(step, force=True)`` writes a final one when
+    the loop ends. ``restore()`` loads every component but ``config`` and
+    ``rng``, then ``rng`` last, so random numbers drawn while the script built
+    its objects do not change the restored RNG state.
+
+    Args:
+        checkpoint (Checkpoint): the run's components.
+        directory (str or Path or None): rotation directory for scheduled
+            saves. ``None`` disables saving. When resuming, checkpoints keep
+            accumulating next to the resumed checkpoint instead.
+        interval (int): steps between scheduled saves.
+        keep_last (int, optional): checkpoints retained by the rotation.
+            Defaults to ``2``.
+        exclude (Collection[str], optional): components left out of every save,
+            for example ``("replay_buffer",)``. Defaults to none.
+        optional (Collection[str], optional): components restored only when the
+            checkpoint holds them. Defaults to ``("logger", "replay_buffer")``.
+        resume_path (str or Path, optional): checkpoint or rotation directory to
+            restore from, see :func:`resolve_checkpoint_path`.
+
+    Examples:
+        >>> import tempfile
+        >>> import torch
+        >>> from torchrl.checkpoint import Checkpoint, RunCheckpointer
+        >>> checkpoint = Checkpoint(policy=torch.nn.Linear(2, 1), run_state={"step": 0})
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     run = RunCheckpointer(checkpoint, directory=tmpdir, interval=10)
+        ...     run.save(5) is None, run.save(10) is not None
+        (True, True)
+    """
+
+    def __init__(
+        self,
+        checkpoint: Checkpoint,
+        *,
+        directory: str | Path | None,
+        interval: int,
+        keep_last: int = 2,
+        exclude: Collection[str] = (),
+        optional: Collection[str] = ("logger", "replay_buffer"),
+        resume_path: str | Path | None = None,
+    ) -> None:
+        self.checkpoint = checkpoint
+        self.interval = interval
+        self.exclude = frozenset(exclude)
+        self.optional = frozenset(optional)
+        self.resume_path = (
+            None if resume_path is None else resolve_checkpoint_path(resume_path)
+        )
+        if directory and self.resume_path is not None:
+            directory = self.resume_path.parent
+        self.rotation = (
+            CheckpointRotation(directory, keep_last=keep_last) if directory else None
+        )
+        self._last_step = 0
+
+    def restore(self, *, map_location: Any = None) -> bool:
+        """Restore the run from ``resume_path``; return whether anything was restored."""
+        if self.resume_path is None:
+            return False
+        manifest = Checkpoint.manifest(self.resume_path)
+        saved = set(manifest["components"])
+        components = {
+            name
+            for name in self.checkpoint.components
+            if name not in ("config", "rng")
+            and (name not in self.optional or name in saved)
+        }
+        self.checkpoint.load(
+            self.resume_path, components=components, map_location=map_location
+        )
+        if "rng" in self.checkpoint.components and "rng" in saved:
+            self.checkpoint.load(self.resume_path, components={"rng"})
+        self._last_step = int(manifest["metadata"].get("step", 0))
+        torchrl_logger.info(
+            "Resumed from %s at step %s.", self.resume_path, self._last_step
+        )
+        return True
+
+    def save(self, step: int, *, force: bool = False) -> Path | None:
+        """Save when ``interval`` steps have passed since the last save.
+
+        Args:
+            step (int): the current step, used as the rotation step.
+            force (bool, optional): save regardless of the interval, unless a
+                checkpoint was already written for this exact step. Use it
+                when the loop ends. Defaults to ``False``.
+
+        Returns:
+            The written checkpoint path, or ``None`` when nothing was saved.
+        """
+        if self.rotation is None:
+            return None
+        if force:
+            if step == self._last_step:
+                return None
+        elif step - self._last_step < self.interval:
+            return None
+        path = self.rotation.save(
+            self.checkpoint,
+            step=step,
+            components=set(self.checkpoint.components) - self.exclude,
+            metadata={"step": step},
+        )
+        self._last_step = step
+        torchrl_logger.info("Saved checkpoint to %s", path)
+        return path

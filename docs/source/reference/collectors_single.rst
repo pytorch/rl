@@ -72,12 +72,14 @@ lengths vary widely or frames are large — the padded layout materializes
     ``trajs_per_batch`` batches emits a :class:`FutureWarning`; pass the
     layout explicitly.
 
-**Replay buffer integration**: when a ``replay_buffer`` is also provided,
-complete trajectories are written to the buffer as **flat 1-D sequences** (no
-padding) instead of being yielded.  This is the recommended pattern for
+**Replay buffer integration**: pass ``replay_write_mode="trajectory"`` with a
+``replay_buffer`` to write complete trajectories as **flat 1-D sequences** (no
+padding). This is the recommended pattern for
 off-policy training with :class:`~torchrl.data.replay_buffers.SliceSampler`, especially
 with multi-process collectors where fixed-frame batches can silently mix
 episodes.  See :ref:`collectors_replay_trajs` for full details and examples.
+The legacy combination of ``replay_buffer`` and ``trajs_per_batch`` retains
+this behavior when ``replay_write_mode`` is omitted.
 
 .. note::
     The deprecated collector aliases were removed in v0.13. Construct new
@@ -323,7 +325,8 @@ Data collectors that have been started with `start()` should be shut down using
 
     For maximum throughput with trajectory-based training (e.g. recurrent
     policies, decision transformers), combine ``start()`` with
-    ``trajs_per_batch`` and a :class:`~torchrl.data.replay_buffers.SliceSampler`:
+    ``replay_write_mode="trajectory"`` and a
+    :class:`~torchrl.data.replay_buffers.SliceSampler`:
 
     .. code-block:: python
 
@@ -340,7 +343,7 @@ Data collectors that have been started with `start()` should be shut down using
             replay_buffer=rb,
             frames_per_batch=200,
             total_frames=-1,
-            trajs_per_batch=8,
+            replay_write_mode="trajectory",
             sync=False,
         )
         collector.start()

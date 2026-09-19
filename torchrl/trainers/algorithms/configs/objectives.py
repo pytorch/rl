@@ -413,14 +413,20 @@ class HardUpdateConfig(TargetNetUpdaterConfig):
 
 def _make_gae(*args, **kwargs) -> GAE:
     group_key = _normalize_hydra_key(kwargs.pop("group_key", None))
-    return GAE(*args, group_key=group_key, **kwargs)
+    valid_key = _normalize_hydra_key(kwargs.pop("valid_key", None))
+    gae = GAE(*args, group_key=group_key, **kwargs)
+    if valid_key is not None:
+        gae.set_keys(valid=valid_key)
+    return gae
 
 
 @dataclass
 class GAEConfig(LossConfig):
     """Hydra configuration for :class:`~torchrl.objectives.value.GAE`.
 
-    Every kwarg accepted by ``GAE.__init__`` is exposed as a field here.
+    Every kwarg accepted by ``GAE.__init__`` is exposed as a field here. The
+    ``valid_key`` field is applied through
+    :meth:`~torchrl.objectives.value.GAE.set_keys` by the factory.
     """
 
     gamma: float | None = None
@@ -444,6 +450,7 @@ class GAEConfig(LossConfig):
     value_chunk_dim: int = 0
     shifted_budget: int = 1
     group_key: Any = None
+    valid_key: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_gae"
     _partial_: bool = False
 

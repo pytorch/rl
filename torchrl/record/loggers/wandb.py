@@ -95,7 +95,7 @@ class WandbLogger(Logger):
         self,
         exp_name: str,
         offline: bool = False,
-        save_dir: str | None = None,
+        save_dir: str | os.PathLike[str] | None = None,
         id: str | None = None,
         project: str | None = None,
         base_url: str | None = None,
@@ -107,14 +107,19 @@ class WandbLogger(Logger):
         if not _has_wandb:
             raise ImportError("wandb could not be imported")
 
-        log_dir = kwargs.pop("log_dir", None)
+        log_dir: str | os.PathLike[str] | None = kwargs.pop("log_dir", None)
         self.offline = offline
-        if save_dir and log_dir:
+        save_dir = save_dir or None
+        log_dir = log_dir or None
+        if save_dir is not None and log_dir is not None:
             raise ValueError(
                 "log_dir and save_dir point to the same value in "
                 "WandbLogger. Both cannot be specified."
             )
-        save_dir = save_dir if save_dir and not log_dir else log_dir
+        save_dir = save_dir if save_dir is not None else log_dir
+        if save_dir is not None:
+            save_dir = os.path.expanduser(os.fspath(save_dir))
+            os.makedirs(save_dir, exist_ok=True)
         self.save_dir = save_dir
         self.id = id
         self.project = project
@@ -153,8 +158,17 @@ class WandbLogger(Logger):
         }
 
     def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
-        if "id" in state_dict:
-            self.id = state_dict["id"]
+        saved_id = state_dict.get("id")
+        live_id = getattr(self.experiment, "id", self.id)
+        if saved_id and live_id and saved_id != live_id:
+            raise RuntimeError(
+                f"This WandbLogger logs to run {live_id!r} but the checkpoint was "
+                f"written by run {saved_id!r}. Construct the logger for the saved "
+                "run before loading, e.g. WandbLogger(..., id=saved_id, "
+                "resume='must') or get_logger(..., state_dict=saved_state)."
+            )
+        if saved_id:
+            self.id = saved_id
         self._step_registry.clear()
         self._step_registry.update(state_dict.get("step_registry", {}))
         self._defined_step_metrics = set(state_dict.get("defined_step_metrics", ()))

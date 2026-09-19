@@ -21,11 +21,12 @@ import pytest
 import torch
 
 import torchrl.record.loggers.wandb as wandb_logger_module
-from tensordict import MemoryMappedTensor
+from tensordict import MemoryMappedTensor, TensorDict
 from torchrl._comm import MailboxPeerClosedError
 from torchrl.checkpoint import Checkpoint
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl.record.loggers import PrefixLogger
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
@@ -96,9 +97,110 @@ class _SlowRestartProcessTestLogger(_ProcessTestLogger):
         super().__init__(log_dir)
 
 
+class _PrefixTestLogger(Logger):
+    def __init__(self, log_dir):
+        self.calls = []
+        self.counter = 0
+        super().__init__(exp_name="prefix-test", log_dir=log_dir)
+
+    def _create_experiment(self):
+        return object()
+
+    def log_scalar(self, name, value, step=None, **kwargs):
+        self.calls.append(("scalar", name, value, step, kwargs))
+
+    def log_video(self, name, video, step=None, **kwargs):
+        self.calls.append(("video", name, video, step, kwargs))
+
+    def log_hparams(self, cfg):
+        self.calls.append(("hparams", cfg))
+
+    def log_histogram(self, name, data, **kwargs):
+        self.calls.append(("histogram", name, data, kwargs))
+
+    def log_str(self, name, value, step=None, **kwargs):
+        self.calls.append(("str", name, value, step, kwargs))
+
+    def _checkpoint_state(self):
+        return {"counter": self.counter}
+
+    def _load_checkpoint_state(self, state_dict):
+        self.counter = state_dict["counter"]
+
+    def __repr__(self):
+        return "PrefixTestLogger()"
+
+
 def _log_process_scalars(client, name, count):
     for step in range(count):
         client.log_scalar(name, step, step=step)
+
+
+def test_prefix_logger_composes_namespaces_and_delegates_state(tmp_path):
+    logger = _PrefixTestLogger(tmp_path)
+    training = logger.with_prefix("/training/")
+    policy = training.with_prefix("/policy/")
+
+    assert isinstance(policy, PrefixLogger)
+    assert isinstance(policy, Logger)
+    assert policy.prefix == "training/policy"
+    assert repr(policy) == (
+        "PrefixLogger(prefix='training/policy', logger=PrefixTestLogger())"
+    )
+    assert logger.with_prefix("") is logger
+    assert policy.with_prefix("") is policy
+    assert policy.client() is policy
+    assert policy.experiment is logger.experiment
+    with pytest.raises(TypeError, match="prefix must be a string"):
+        logger.with_prefix(1)
+    with pytest.raises(ValueError, match="at least one character"):
+        logger.with_prefix("///")
+    with mock.patch.object(logger, "client", return_value=None):
+        assert policy.client() is None
+
+    policy.log_scalar("/loss", 1.0, step=3, source="learner")
+    policy.log_video("rollout", torch.zeros(1), step=4, fps=8)
+    policy.log_histogram("weights", [1, 2], step=5)
+    policy.log_str("status", "ready", step=6)
+    policy.log_hparams({"lr": 0.001})
+    result = policy.log_metrics(
+        TensorDict(
+            {
+                "reward": torch.tensor(2.0),
+                "nested": {"value": torch.tensor(3.0)},
+            },
+            batch_size=[],
+        ),
+        step=7,
+    )
+
+    assert result == {
+        "training/policy/reward": 2.0,
+        "training/policy/nested/value": 3.0,
+    }
+    assert logger.calls[:5] == [
+        ("scalar", "training/policy/loss", 1.0, 3, {"source": "learner"}),
+        (
+            "video",
+            "training/policy/rollout",
+            mock.ANY,
+            4,
+            {"fps": 8},
+        ),
+        ("histogram", "training/policy/weights", [1, 2], {"step": 5}),
+        ("str", "training/policy/status", "ready", 6, {}),
+        ("hparams", {"lr": 0.001}),
+    ]
+    assert logger.calls[5:] == [
+        ("scalar", "training/policy/reward", 2.0, 7, {}),
+        ("scalar", "training/policy/nested/value", 3.0, 7, {}),
+    ]
+
+    logger.counter = 11
+    state = policy.state_dict()
+    restored = _PrefixTestLogger(tmp_path / "restored")
+    restored.with_prefix("training").load_state_dict(state)
+    assert restored.counter == 11
 
 
 @pytest.fixture
@@ -218,6 +320,42 @@ class TestCSVLogger:
         )
         assert restored.experiment.scalars["reward"] == [(0, 2.0)]
         assert restored.experiment.videos_counter["evaluation"] == 3
+
+    def test_text_and_video_steps_are_counted_separately(self, tmp_path):
+        logger = CSVLogger(log_dir=tmp_path, exp_name="counters")
+        video = torch.zeros(1, 2, 3, 4, 4, dtype=torch.uint8)
+        logger.log_video("demo", video)
+        logger.log_video("demo", video)
+        logger.experiment.add_text("demo", "note")
+        logger.log_hparams({"lr": 0.1})
+        exp_dir = tmp_path / "counters"
+        assert sorted(os.listdir(exp_dir / "videos")) == ["demo_0.pt", "demo_1.pt"]
+        assert sorted(os.listdir(exp_dir / "texts")) == ["demo0.txt", "hparams0.txt"]
+
+        # a resumed logger keeps numbering the texts after the saved ones
+        resumed = CSVLogger(log_dir=tmp_path, exp_name="counters")
+        resumed.load_state_dict(logger.state_dict())
+        resumed.log_hparams({"lr": 0.2})
+        assert (exp_dir / "texts" / "hparams0.txt").read_text() == "lr: 0.1"
+        assert (exp_dir / "texts" / "hparams1.txt").read_text() == "lr: 0.2"
+
+    def test_resume_checkpoint_saved_without_text_counter(self, tmp_path):
+        logger = get_logger("csv", str(tmp_path), "legacy")
+        logger.log_hparams({"lr": 0.1})
+        state = logger.state_dict()
+        logger.close()
+        # checkpoints saved before texts had their own counter kept the text
+        # steps in videos_counter
+        state["local"]["videos_counter"] = state["local"]["text_counter"]
+        state["local"]["text_counter"] = {}
+        resumed = get_logger(
+            "csv", str(tmp_path / "unused"), "unused", state_dict=state
+        )
+        resumed.log_hparams({"lr": 0.2})
+        resumed.close()
+        texts = tmp_path / "legacy" / "texts"
+        assert (texts / "hparams0.txt").read_text() == "lr: 0.1"
+        assert (texts / "hparams1.txt").read_text() == "lr: 0.2"
 
     def test_factory_resume_appends_same_run(self, tmp_path):
         logger = get_logger("csv", str(tmp_path), "saved")
@@ -388,6 +526,52 @@ def wandb_tmp_logger(tmp_path):
     del logger
 
 
+@pytest.mark.parametrize("directory_arg", ["save_dir", "log_dir"])
+def test_wandb_creates_save_directory_before_init(monkeypatch, tmp_path, directory_arg):
+    empty_directory_arg = "log_dir" if directory_arg == "save_dir" else "save_dir"
+    if directory_arg == "save_dir":
+        requested_dir = tmp_path / "save" / "nested"
+        expected_dir = requested_dir
+        expected_dir.mkdir(parents=True)
+    else:
+        home_env = "USERPROFILE" if os.name == "nt" else "HOME"
+        monkeypatch.setenv(home_env, str(tmp_path))
+        requested_dir = pathlib.Path("~/log/nested")
+        expected_dir = tmp_path / "log" / "nested"
+
+    init_kwargs = {}
+
+    def init(**kwargs):
+        assert expected_dir.is_dir()
+        init_kwargs.update(kwargs)
+        return argparse.Namespace(config={})
+
+    monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+    monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+
+    logger = WandbLogger(
+        exp_name="test",
+        log_env_packages=False,
+        **{directory_arg: requested_dir, empty_directory_arg: ""},
+    )
+
+    assert init_kwargs["dir"] == str(expected_dir)
+    assert logger.log_dir == str(expected_dir)
+
+
+def test_wandb_rejects_file_save_directory_before_init(monkeypatch, tmp_path):
+    save_dir = tmp_path / "not-a-directory"
+    save_dir.write_text("file")
+    init = mock.Mock()
+    monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+    monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+
+    with pytest.raises(FileExistsError):
+        WandbLogger(exp_name="test", save_dir=save_dir, log_env_packages=False)
+
+    init.assert_not_called()
+
+
 @pytest.mark.parametrize("source", ["logger", "dreamer_v3"])
 def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     calls = []
@@ -460,8 +644,68 @@ def test_wandb_base_url_used_for_login_and_init(monkeypatch, source):
     assert calls == [("login", base_url), ("init", base_url)] * 2
 
 
+class TestWandbIdentity:
+    def test_rejects_other_run(self, monkeypatch):
+        run_ids = iter(["run-a", "run-b", "run-a"])
+
+        def init(**kwargs):
+            return argparse.Namespace(
+                config={}, define_metric=mock.Mock(), id=next(run_ids), log=mock.Mock()
+            )
+
+        monkeypatch.setitem(sys.modules, "wandb", argparse.Namespace(init=init))
+        monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+
+        source = WandbLogger(exp_name="test", log_env_packages=False)
+        source.log_scalar("reward", 1.0)
+        state = source.state_dict()
+        assert state["local"]["id"] == "run-a"
+
+        # A logger attached to another run must not silently rebind its id while
+        # its metrics keep flowing to the new run.
+        other = WandbLogger(exp_name="test", log_env_packages=False)
+        with pytest.raises(RuntimeError, match="run 'run-b'.*run 'run-a'"):
+            other.load_state_dict(state)
+
+        same = WandbLogger(
+            exp_name="test", id="run-a", resume="must", log_env_packages=False
+        )
+        same.load_state_dict(state)
+        assert same._step_registry == source._step_registry
+
+
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
 class TestWandbLogger:
+    def test_prefixed_views_use_independent_step_metrics(
+        self, wandb_tmp_logger, monkeypatch
+    ):
+        logged = []
+        defined = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "define_metric",
+            lambda name, step_metric=None: defined.append((name, step_metric)),
+        )
+
+        wandb_tmp_logger.with_prefix("training").log_scalar("loss", 1.0, step=7)
+        wandb_tmp_logger.with_prefix("evaluation").log_metrics({"reward": 2.0}, step=3)
+
+        assert logged == [
+            ({"training/loss": 1.0, "training/step": 7}, {"commit": True}),
+            ({"evaluation/reward": 2.0, "evaluation/step": 3}, {}),
+        ]
+        assert defined == [
+            ("training/step", None),
+            ("training/loss", "training/step"),
+            ("evaluation/step", None),
+            ("evaluation/reward", "evaluation/step"),
+        ]
+
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     def test_log_scalar(self, steps, wandb_tmp_logger, monkeypatch):
         torch.manual_seed(0)
@@ -1088,7 +1332,13 @@ class TestProcessLogger:
             assert not hasattr(client, "client")
 
             parent_client = logger.client()
-            worker_client = logger.client()
+            worker_client = logger.client().with_prefix("workers")
+            prefixed_client = logger.with_prefix("training").client()
+            assert not isinstance(prefixed_client, Logger)
+            assert not hasattr(prefixed_client, "start")
+            assert not hasattr(prefixed_client, "shutdown")
+            assert not hasattr(prefixed_client, "client")
+            prefixed_client.log_scalar("loss", 0.5, step=2)
             ctx = mp.get_context("spawn")
             worker = ctx.Process(
                 target=_log_process_scalars,
@@ -1103,7 +1353,8 @@ class TestProcessLogger:
             construction_lines = (tmp_path / "constructed").read_text().splitlines()
             assert construction_lines == ["1"]
             event_lines = (tmp_path / "events").read_text().splitlines()
-            for name in ("parent", "worker"):
+            assert "training/loss:0.5:2" in event_lines
+            for name in ("parent", "workers/worker"):
                 assert [line for line in event_lines if line.startswith(name)] == [
                     f"{name}:{step}:{step}" for step in range(5)
                 ]

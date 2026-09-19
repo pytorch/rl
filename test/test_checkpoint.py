@@ -5,9 +5,13 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import random
+import signal
+import sys
+import threading
 import zipfile
 from datetime import datetime, timezone
 from unittest.mock import Mock
@@ -25,9 +29,15 @@ from torchrl.checkpoint import (
     CheckpointOptions,
     CheckpointRotation,
     GlobalRNGState,
+    resolve_checkpoint_path,
+    resume_config,
+    RunCheckpointer,
     StateDictCheckpointAdapter,
+    StopOnSignal,
 )
 from torchrl.data import CompressedListStorage, ReplayBuffer
+
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class DumpObject:
@@ -802,6 +812,162 @@ def test_cuda_map_location_and_rng(tmp_path):
 def test_reject_remote_path():
     with pytest.raises(ValueError, match="Only local"):
         Checkpoint(value={}).save("s3://bucket/checkpoint")
+
+
+class TestResolveCheckpointPath:
+    def test_rotation_dir(self, tmp_path):
+        rotation = CheckpointRotation(tmp_path, keep_last=2, prefix="ckpt")
+        first = rotation.save(Checkpoint(value={"step": 1}), step=1)
+        latest = rotation.save(Checkpoint(value={"step": 2}), step=2)
+        assert resolve_checkpoint_path(first) == first
+        assert resolve_checkpoint_path(tmp_path, prefix="ckpt") == latest
+        with pytest.raises(FileNotFoundError, match="No checkpoint"):
+            resolve_checkpoint_path(tmp_path)
+
+
+class TestReadComponent:
+    @pytest.mark.parametrize("format", ["directory", "archive"])
+    def test_roundtrip(self, tmp_path, format):
+        policy = torch.nn.Linear(2, 1)
+        path = tmp_path / "checkpoint"
+        checkpoint = Checkpoint(
+            format=format, policy=policy, config={"lr": 0.1}, rng=GlobalRNGState()
+        )
+        checkpoint.register(
+            "dump",
+            DumpObject(),
+            options=CheckpointOptions(
+                save_args=("label",), save_kwargs={"enabled": True}
+            ),
+        )
+        checkpoint.save(path)
+
+        state = Checkpoint.read_component(path, "policy")
+        torch.testing.assert_close(state["weight"], policy.weight.detach())
+        assert not isinstance(state["weight"], MemoryMappedTensor)
+        assert Checkpoint.read_component(path, "config") == {"lr": 0.1}
+        rng = Checkpoint.read_component(path, "rng")
+        assert isinstance(rng["numpy"], tuple)
+        torch.testing.assert_close(rng["torch_cpu"], torch.random.get_rng_state())
+        with pytest.raises(KeyError, match="no component 'missing'"):
+            Checkpoint.read_component(path, "missing")
+        assert Checkpoint.read_component(path, "missing", default=None) is None
+        with pytest.raises(CheckpointError, match="requires a live object"):
+            Checkpoint.read_component(path, "dump")
+
+
+class TestStopOnSignal:
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal delivery")
+    def test_request_then_interrupt(self):
+        previous = signal.getsignal(signal.SIGINT)
+        requests = []
+        with StopOnSignal((signal.SIGINT,), on_request=requests.append) as stop:
+            assert not stop.requested
+            signal.raise_signal(signal.SIGINT)
+            assert stop.requested
+            assert stop.signal_name == "SIGINT"
+            assert requests == ["SIGINT"]
+            with pytest.raises(KeyboardInterrupt):
+                signal.raise_signal(signal.SIGINT)
+        assert signal.getsignal(signal.SIGINT) is previous
+
+    def test_non_main_thread(self):
+        previous = signal.getsignal(signal.SIGINT)
+        result = {}
+
+        def run():
+            with StopOnSignal() as stop:
+                result["requested"] = stop.requested
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        thread.join()
+        assert result == {"requested": False}
+        assert signal.getsignal(signal.SIGINT) is previous
+
+
+@pytest.mark.skipif(not _has_omegaconf, reason="omegaconf required")
+class TestResumeConfig:
+    def test_overrides(self, tmp_path):
+        from omegaconf import OmegaConf
+
+        saved = {
+            "budget": 100,
+            "logger": {"backend": "csv"},
+            "trainer": {"total_frames": "${budget}"},
+        }
+        path = Checkpoint(config=saved).save(tmp_path / "checkpoint")
+        current = OmegaConf.create({"budget": 5, "logger": {"backend": "wandb"}})
+
+        cfg = resume_config(
+            current,
+            path,
+            overrides=["budget=200", "logger@logger=wandb", "~logger.backend", "+x=1"],
+        )
+        # Saved values win over the current file, value overrides win over
+        # saved values and flow through saved interpolations; group overrides
+        # and deletions are dropped.
+        assert cfg.logger.backend == "csv"
+        assert cfg.budget == 200
+        assert cfg.trainer.total_frames == 200
+        assert cfg.x == 1
+
+        bare = Checkpoint(value={"step": 1}).save(tmp_path / "bare")
+        assert resume_config(current, bare, overrides=["budget=200"]) is current
+
+
+class TestRunCheckpointer:
+    def test_schedule_and_restore(self, tmp_path):
+        torch.manual_seed(0)
+        policy = torch.nn.Linear(2, 1)
+        state = {"step": 0}
+        run = RunCheckpointer(
+            Checkpoint(
+                policy=policy, run_state=state, rng=GlobalRNGState(), config={"lr": 1}
+            ),
+            directory=tmp_path / "ckpt",
+            interval=10,
+        )
+        assert run.save(5) is None
+        state["step"] = 10
+        assert run.save(10) is not None
+        # Nothing new since the scheduled save: the final save is skipped.
+        assert run.save(10, force=True) is None
+        state["step"] = 15
+        final = run.save(15, force=True)
+        assert Checkpoint.manifest(final)["metadata"] == {"step": 15}
+        expected = torch.rand(2)
+
+        torch.manual_seed(1)
+        restored_policy = torch.nn.Linear(2, 1)
+        restored_state = {"step": 0}
+        restored = RunCheckpointer(
+            Checkpoint(
+                policy=restored_policy,
+                run_state=restored_state,
+                rng=GlobalRNGState(),
+                config={"lr": 2},
+                logger=torch.nn.Linear(1, 1),
+            ),
+            directory=tmp_path / "elsewhere",
+            interval=10,
+            resume_path=tmp_path / "ckpt",
+        )
+        assert restored.restore(map_location="cpu")
+        assert restored_state == {"step": 15}
+        assert restored.checkpoint.components["config"] == {"lr": 2}
+        torch.testing.assert_close(restored_policy.weight, policy.weight)
+        # RNG restored last; saving continues next to the resumed checkpoint.
+        torch.testing.assert_close(torch.rand(2), expected)
+        assert restored.rotation.directory == (tmp_path / "ckpt").resolve()
+        assert restored.save(20) is None
+        assert restored.save(25) is not None
+
+        disabled = RunCheckpointer(
+            Checkpoint(policy=policy), directory=None, interval=1
+        )
+        assert not disabled.restore()
+        assert disabled.save(1, force=True) is None
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from torchrl.envs.transforms._action import (
     ActionMask,
     ActionScaling,
     ActionTokenizerTransform,
+    ClosedLoopMultiAction,
     DiscreteActionProjection,
     FlattenAction,
     LastAction,
@@ -36,7 +37,7 @@ from torchrl.envs.transforms._base import (  # noqa: F401  # noqa: F401  # noqa:
     Transform,
     TransformedEnv,
 )
-from torchrl.envs.transforms._clip import ClipTransform, ExpandAs
+from torchrl.envs.transforms._clip import ClipTransform, DoneTransform, ExpandAs
 from torchrl.envs.transforms._device import (
     DeviceCastTransform,
     DoubleToFloat,
@@ -135,6 +136,7 @@ __all__ = [
     "DecodeVideoTransform",
     "DeviceCastTransform",
     "DiscreteActionProjection",
+    "DoneTransform",
     "DoubleToFloat",
     "ExcludeTransform",
     "ExpandAs",
@@ -151,6 +153,7 @@ __all__ = [
     "MacroPrimitive",
     "MacroPrimitiveTransform",
     "MultiAction",
+    "ClosedLoopMultiAction",
     "NextObservationDelta",
     "NoopResetEnv",
     "ObservationNorm",

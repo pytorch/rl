@@ -272,6 +272,7 @@ Available Transforms
     DecodeVideoTransform
     DeviceCastTransform
     DiscreteActionProjection
+    DoneTransform
     DoubleToFloat
     EndOfLifeTransform
     ExcludeTransform
@@ -299,9 +300,11 @@ Available Transforms
     MeanActionSelector
     ModuleTransform
     MultiAction
+    ClosedLoopMultiAction
     NextObservationDelta
     NextStateReconstructor
     PolicyAgeFilter
+    PolicyVersion
     NoopResetEnv
     ObservationNorm
     ObservationTransform

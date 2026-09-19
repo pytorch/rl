@@ -58,6 +58,7 @@ Documentation Sections
    modules_models
    modules_distributions
    modules_inference_server
+   modules_zoo
    modules_utils
    recurrent_state_lifecycle
 

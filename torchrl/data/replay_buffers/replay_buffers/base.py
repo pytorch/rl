@@ -12,19 +12,21 @@ import multiprocessing
 import pickle
 import textwrap
 import threading
+import time
 import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import deepcopy
+from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any
 
 import torch
 
 try:
-    from torch.compiler import is_compiling
+    from torch.compiler import disable as compile_disable, is_compiling
 except ImportError:
-    from torch._dynamo import is_compiling
+    from torch._dynamo import disable as compile_disable, is_compiling
 
 from typing import Literal, TYPE_CHECKING, TypeVar
 
@@ -435,6 +437,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._delayed_init = delayed_init
         self._initialized = False
         self._service_shutdown = False
+        self._sample_call_count_value = 0
+        self._sampled_item_count_value = 0
 
         # Store init parameters for potential delayed initialization
         self._init_storage = storage
@@ -701,6 +705,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             if self._service_shutdown:
                 return
             self._service_shutdown = True
+        self._notify_replay_state_change()
 
         error = None
         try:
@@ -900,14 +905,55 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             )
 
     def share(self, shared: bool = True) -> Self:
+        sample_calls = self._counter_value(self._sample_call_count_value)
+        sampled_items = self._counter_value(self._sampled_item_count_value)
         self.shared = shared
         if self.shared:
             self._write_lock = multiprocessing.Lock()
+            self._readiness_condition = multiprocessing.Condition()
+            self._sample_call_count_value = multiprocessing.Value("q", sample_calls)
+            self._sampled_item_count_value = multiprocessing.Value("q", sampled_items)
             if getattr(self, "_initialized", False):
                 self._share_replay_buffer_transform()
         else:
             self._write_lock = contextlib.nullcontext()
+            self._readiness_condition = threading.Condition()
+            self._sample_call_count_value = sample_calls
+            self._sampled_item_count_value = sampled_items
         return self
+
+    @compile_disable()
+    def _notify_replay_state_change(self) -> None:
+        condition = self._readiness_condition
+        with condition:
+            condition.notify_all()
+
+    @staticmethod
+    def _counter_value(counter) -> int:
+        if not hasattr(counter, "get_lock"):
+            return int(counter)
+        lock = counter.get_lock()
+        with lock:
+            return int(counter.value)
+
+    @compile_disable()
+    def _increment_counter(self, name: str, increment: int) -> None:
+        counter = getattr(self, name)
+        if not hasattr(counter, "get_lock"):
+            with self._readiness_condition:
+                setattr(self, name, getattr(self, name) + increment)
+            return
+        with counter.get_lock():
+            counter.value += increment
+
+    def _set_counter(self, name: str, value: int) -> None:
+        counter = getattr(self, name)
+        if not hasattr(counter, "get_lock"):
+            with self._readiness_condition:
+                setattr(self, name, value)
+            return
+        with counter.get_lock():
+            counter.value = value
 
     @_maybe_delay_init
     def set_rng(self, generator) -> None:
@@ -977,6 +1023,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self._storage = storage
         self._validate_consuming_sampler()
         self._get_collate_fn(collate_fn)
+        self._notify_replay_state_change()
 
         return prev_storage
 
@@ -998,6 +1045,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         elif isinstance(prev_sampler, ConsumingSampler):
             self._consume_after_n_samples = None
         self._validate_consuming_sampler()
+        self._notify_replay_state_change()
         return prev_sampler
 
     @_maybe_delay_init
@@ -1041,9 +1089,13 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             A dictionary with the following entries:
 
             - ``"size"``: current number of elements in the buffer (mirrors ``len(buffer)``);
+            - ``"storage_size"``: current number of physical records in storage;
+            - ``"sampleable_size"``: current number of records available to the sampler;
             - ``"write_count"``: total number of items written through ``add`` and
               ``extend`` (``0`` for writers that do not track writes, such as
               :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter`);
+            - ``"sample_calls"``: number of completed calls to :meth:`sample`;
+            - ``"samples_returned"``: total number of records returned by :meth:`sample`;
             - ``"prefetch_queue_size"``: number of pending prefetched batches;
             - ``"initialized"``: whether the buffer components are initialized;
             - ``"capacity"``: maximum number of elements the storage can hold
@@ -1065,7 +1117,11 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         if not self.initialized:
             stats = {
                 "size": 0,
+                "storage_size": 0,
+                "sampleable_size": 0,
                 "write_count": 0,
+                "sample_calls": self._counter_value(self._sample_call_count_value),
+                "samples_returned": self._counter_value(self._sampled_item_count_value),
                 "prefetch_queue_size": 0,
                 "initialized": False,
             }
@@ -1078,19 +1134,24 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 stats["utilization"] = 0.0
             return stats
         with self._replay_lock:
-            size = len(self)
+            sampleable_size = len(self)
+            storage_size = len(self._storage)
             capacity = getattr(self._storage, "max_size", None)
             write_count = getattr(self._writer, "_write_count", 0)
             prefetch_queue_size = len(self._prefetch_queue)
         stats = {
-            "size": int(size),
+            "size": int(sampleable_size),
+            "storage_size": int(storage_size),
+            "sampleable_size": int(sampleable_size),
             "write_count": int(write_count),
+            "sample_calls": self._counter_value(self._sample_call_count_value),
+            "samples_returned": self._counter_value(self._sampled_item_count_value),
             "prefetch_queue_size": int(prefetch_queue_size),
             "initialized": True,
         }
         if capacity is not None:
             stats["capacity"] = int(capacity)
-            stats["utilization"] = float(size) / capacity if capacity else 0.0
+            stats["utilization"] = float(storage_size) / capacity if capacity else 0.0
         return stats
 
     @_maybe_delay_init
@@ -1108,7 +1169,86 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "batch_size not specified. Configure it on the replay buffer "
                 "or pass it to can_sample()."
             )
-        return self._sampler.can_sample(self._storage, batch_size)
+        with self._replay_lock:
+            return self._sampler.can_sample(self._storage, batch_size)
+
+    @_maybe_delay_init
+    def wait_until_sampleable(
+        self,
+        min_items: int | None = None,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> bool:
+        """Waits until the replay buffer can serve a sample batch.
+
+        Args:
+            min_items (int, optional): requested sample batch size. Defaults to
+                the batch size configured on the replay buffer.
+            timeout (float, optional): maximum number of seconds to wait.
+                ``None`` waits indefinitely.
+            cancel_event (optional): event-like object exposing ``is_set()``.
+                The wait returns ``False`` when the event is set.
+
+        Returns:
+            ``True`` when the requested batch can be sampled and ``False``
+            after a timeout or cancellation.
+
+        Raises:
+            RuntimeError: if no batch size is available or the replay buffer
+                is shut down while waiting.
+
+        Examples:
+            >>> import threading
+            >>> import torch
+            >>> from torchrl.data import ListStorage, ReplayBuffer
+            >>> rb = ReplayBuffer(storage=ListStorage(4), batch_size=2)
+            >>> writer = threading.Thread(target=rb.extend, args=(torch.arange(2),))
+            >>> writer.start()
+            >>> rb.wait_until_sampleable(timeout=1.0)
+            True
+            >>> writer.join()
+        """
+        if min_items is None:
+            min_items = self._batch_size
+        if min_items is None:
+            raise RuntimeError(
+                "min_items not specified. Configure batch_size on the replay buffer "
+                "or pass min_items to wait_until_sampleable()."
+            )
+        if isinstance(min_items, bool) or not isinstance(min_items, INT_CLASSES):
+            raise TypeError("min_items must be a positive integer.")
+        if min_items < 1:
+            raise ValueError("min_items must be a positive integer.")
+        min_items = int(min_items)
+        if timeout is not None:
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+                raise TypeError("timeout must be a non-negative number or None.")
+            if timeout < 0:
+                raise ValueError("timeout must be non-negative.")
+            deadline = time.monotonic() + timeout
+        else:
+            deadline = None
+
+        condition = self._readiness_condition
+        with condition:
+            while True:
+                if self._service_shutdown:
+                    raise RuntimeError(
+                        "A shut down replay buffer cannot become sampleable."
+                    )
+                if cancel_event is not None and cancel_event.is_set():
+                    return False
+                with self._replay_lock:
+                    if self._sampler.can_sample(self._storage, min_items):
+                        return True
+                wait_time = None
+                if deadline is not None:
+                    wait_time = deadline - time.monotonic()
+                    if wait_time <= 0:
+                        return False
+                if cancel_event is not None:
+                    wait_time = 0.1 if wait_time is None else min(wait_time, 0.1)
+                condition.wait(wait_time)
 
     def _conditional_update_device(self) -> torch.device | None:
         """Returns the device conditional patches are written to, when known."""
@@ -1903,6 +2043,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "_transforms": self._transform.state_dict(),
                 "_batch_size": self._batch_size,
                 "_consume_after_n_samples": self._consume_after_n_samples,
+                "_sample_calls": self._counter_value(self._sample_call_count_value),
+                "_sampled_items": self._counter_value(self._sampled_item_count_value),
                 "_rng": (self._rng.get_state().clone(), str(self._rng.device))
                 if self._rng is not None
                 else None,
@@ -1925,6 +2067,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 self._consume_after_n_samples = state_dict.get(
                     "_consume_after_n_samples"
                 )
+                self._set_counter(
+                    "_sample_call_count_value", state_dict.get("_sample_calls", 0)
+                )
+                self._set_counter(
+                    "_sampled_item_count_value", state_dict.get("_sampled_items", 0)
+                )
                 rng = state_dict.get("_rng")
                 if rng is not None:
                     state, device = rng
@@ -1932,6 +2080,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                     rng.set_state(state)
                     self.set_rng(generator=rng)
                 self._restore_prefetch_queue_locked(prefetch_state)
+        self._notify_replay_state_change()
 
     @_maybe_delay_init
     def dumps(self, path):
@@ -1996,6 +2145,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                     {
                         "batch_size": self._batch_size,
                         "consume_after_n_samples": self._consume_after_n_samples,
+                        "sample_calls": self._counter_value(
+                            self._sample_call_count_value
+                        ),
+                        "sampled_items": self._counter_value(
+                            self._sampled_item_count_value
+                        ),
                     },
                     file,
                 )
@@ -2035,6 +2190,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                     metadata = json.load(file)
                 self._batch_size = metadata["batch_size"]
                 self._consume_after_n_samples = metadata.get("consume_after_n_samples")
+                self._set_counter(
+                    "_sample_call_count_value", metadata.get("sample_calls", 0)
+                )
+                self._set_counter(
+                    "_sampled_item_count_value", metadata.get("sampled_items", 0)
+                )
                 # This method owns the freshly unpickled queue, so moving its
                 # results into completed futures avoids a redundant deep copy.
                 self._restore_prefetch_queue_locked(prefetch_state, clone_queue=False)
@@ -2163,9 +2324,13 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 if consumed_index.numel():
                     index = self._writer.write_at(int(consumed_index.item()), data)
                     self._sampler.add(index)
-                    return index
-            index = self._writer.add(data)
-            self._sampler.add(index)
+                else:
+                    index = self._writer.add(data)
+                    self._sampler.add(index)
+            else:
+                index = self._writer.add(data)
+                self._sampler.add(index)
+        self._notify_replay_state_change()
         return index
 
     def _extend(self, data: Sequence, *, update_priority: bool = True) -> torch.Tensor:
@@ -2190,9 +2355,13 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                         index = consumed_index
                     index = self._writer.write_at(index, data)
                     self._sampler.extend(index)
-                    return index
-            index = self._writer.extend(data)
-            self._sampler.extend(index)
+                else:
+                    index = self._writer.extend(data)
+                    self._sampler.extend(index)
+            else:
+                index = self._writer.extend(data)
+                self._sampler.extend(index)
+        self._notify_replay_state_change()
         return index
 
     @_maybe_delay_init
@@ -2265,6 +2434,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
+        data = self._sampler._set_sample_names(data)
         if self._transform is not None and len(self._transform):
             is_td = is_tensor_collection(data)
             with data.unlock_() if is_td else contextlib.nullcontext(), _set_dispatch_td_nn_modules(
@@ -2281,12 +2451,22 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         Args:
             empty_write_count (bool, optional): Whether to empty the write_count attribute. Defaults to `True`.
         """
-        self._writer._empty(empty_write_count=empty_write_count)
-        self._sampler._empty()
-        self._storage._empty()
+        with self._replay_lock, self._write_lock:
+            self._writer._empty(empty_write_count=empty_write_count)
+            self._sampler._empty()
+            self._storage._empty()
+        self._notify_replay_state_change()
 
     @_maybe_delay_init
-    def sample(self, batch_size: int | None = None, return_info: bool = False) -> Any:
+    def sample(
+        self,
+        batch_size: int | None = None,
+        return_info: bool = False,
+        *,
+        wait: bool = False,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> Any:
         """Samples a batch of data from the replay buffer.
 
         Uses Sampler to sample indices, and retrieves them from Storage.
@@ -2297,6 +2477,15 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 by the sampler.
             return_info (bool): whether to return info. If True, the result
                 is a tuple (data, info). If False, the result is the data.
+            wait (bool, optional): if ``True``, wait for enough replay items
+                instead of failing immediately. Defaults to ``False``. This is
+                an advisory readiness check, not a reservation: another
+                consuming sampler can claim the records before this call
+                samples them.
+            timeout (float, optional): maximum number of seconds to wait when
+                ``wait=True``. ``None`` waits indefinitely.
+            cancel_event (optional): event-like object exposing ``is_set()``.
+                Setting it cancels a blocking sample.
 
         Returns:
             A batch of data selected in the replay buffer.
@@ -2327,6 +2516,19 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "Refer to the ReplayBuffer documentation "
                 "for a proper usage of the batch-size arguments."
             )
+        should_wait = wait
+        if self._prefetch:
+            with self._futures_lock:
+                should_wait = wait and not self._prefetch_queue
+        if should_wait and not self.wait_until_sampleable(
+            batch_size, timeout=timeout, cancel_event=cancel_event
+        ):
+            if cancel_event is not None and cancel_event.is_set():
+                raise RuntimeError("Replay-buffer sampling was cancelled.")
+            raise TimeoutError(
+                f"Replay buffer did not become sampleable for a batch of "
+                f"{batch_size} items within {timeout} seconds."
+            )
         if not self._prefetch:
             with self._futures_lock:
                 dependency = self._sample_dependency
@@ -2356,6 +2558,22 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                             operation,
                         )
                     self._prefetch_queue.append(fut)
+
+        index = result[1]["index"]
+        if isinstance(index, tuple):
+            sampled_items = torch.as_tensor(index[0]).numel()
+        else:
+            index = torch.as_tensor(index)
+            if (
+                self._storage.ndim > 1
+                and index.ndim > 1
+                and index.shape[-1] == self._storage.ndim
+            ):
+                sampled_items = index[..., 0].numel()
+            else:
+                sampled_items = index.numel()
+        self._increment_counter("_sample_call_count_value", 1)
+        self._increment_counter("_sampled_item_count_value", sampled_items)
 
         if return_info:
             out, info = result
@@ -2587,6 +2805,16 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 state["_replay_lock_placeholder"] = None
             if _futures_lock is not None:
                 state["_futures_lock_placeholder"] = None
+            if get_spawning_popen() is None:
+                sample_calls = self._counter_value(self._sample_call_count_value)
+                sampled_items = self._counter_value(self._sampled_item_count_value)
+                state.pop("_sample_call_count_value", None)
+                state.pop("_sampled_item_count_value", None)
+                state["_sample_calls_context"] = sample_calls
+                state["_sampled_items_context"] = sampled_items
+            if get_spawning_popen() is None or not self.shared:
+                state.pop("_readiness_condition", None)
+                state["_readiness_condition_placeholder"] = None
             _prefetch_queue = state.pop("_prefetch_queue", None)
             _prefetch_executor = state.pop("_prefetch_executor", None)
             state.pop("_update_executor", None)
@@ -2615,6 +2843,27 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             state.pop("_futures_lock_placeholder")
             _futures_lock = threading.RLock()
             state["_futures_lock"] = _futures_lock
+        sample_calls = state.pop("_sample_calls_context", None)
+        sampled_items = state.pop("_sampled_items_context", None)
+        if sample_calls is not None:
+            state["_sample_call_count_value"] = (
+                multiprocessing.Value("q", sample_calls)
+                if state.get("shared", False)
+                else sample_calls
+            )
+        if sampled_items is not None:
+            state["_sampled_item_count_value"] = (
+                multiprocessing.Value("q", sampled_items)
+                if state.get("shared", False)
+                else sampled_items
+            )
+        if "_readiness_condition_placeholder" in state:
+            state.pop("_readiness_condition_placeholder")
+            state["_readiness_condition"] = (
+                multiprocessing.Condition()
+                if state.get("shared", False)
+                else threading.Condition()
+            )
         # Recreate prefetch objects after unpickling if they were present
         if "_prefetch_queue_placeholder" in state:
             state.pop("_prefetch_queue_placeholder")
@@ -2630,6 +2879,20 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         state.setdefault("_pending_update_futures", collections.deque())
         state.setdefault("_sample_dependency", None)
         state.setdefault("_update_executor", None)
+        if "_sample_call_count_value" not in state:
+            state["_sample_call_count_value"] = (
+                multiprocessing.Value("q", 0) if state.get("shared", False) else 0
+            )
+        if "_sampled_item_count_value" not in state:
+            state["_sampled_item_count_value"] = (
+                multiprocessing.Value("q", 0) if state.get("shared", False) else 0
+            )
+        if "_readiness_condition" not in state:
+            state["_readiness_condition"] = (
+                multiprocessing.Condition()
+                if state.get("shared", False)
+                else threading.Condition()
+            )
         self.__dict__.update(state)
         if rngstate is not None:
             self.set_rng(rng)
@@ -2637,6 +2900,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             # __setstate__ owns prefetch_state after popping it from the pickle
             # payload, so queue entries can be transferred without cloning.
             self._restore_prefetch_queue_locked(prefetch_state, clone_queue=False)
+        self._notify_replay_state_change()
 
     @property
     @_maybe_delay_init

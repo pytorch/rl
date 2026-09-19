@@ -576,6 +576,128 @@ class TestValues:
             a1 = r1["advantage"]
             torch.testing.assert_close(a0, a1)
 
+    @staticmethod
+    def _build_recurrent_gae_case(module, batched, shifted=False):
+        torch.manual_seed(0)
+        time, obs_dim, hidden = 5, 3, 4
+        batch_size = [2, time] if batched else [time]
+        state_shape = [*batch_size, 1, hidden]
+        if module == "gru":
+            recurrent_module = GRUModule(
+                input_size=obs_dim,
+                hidden_size=hidden,
+                in_keys=["observation", ("recurrent", "h")],
+                out_keys=["features", ("next", "recurrent", "h")],
+            )
+            state_names = ["h"]
+        else:
+            recurrent_module = LSTMModule(
+                input_size=obs_dim,
+                hidden_size=hidden,
+                in_keys=[
+                    "observation",
+                    ("recurrent", "h"),
+                    ("recurrent", "c"),
+                ],
+                out_keys=[
+                    "features",
+                    ("next", "recurrent", "h"),
+                    ("next", "recurrent", "c"),
+                ],
+            )
+            state_names = ["h", "c"]
+        value_network = Seq(
+            recurrent_module,
+            Mod(nn.Linear(hidden, 1), ["features"], ["state_value"]),
+        )
+        is_init = torch.zeros(*batch_size, 1, dtype=torch.bool)
+        is_init[..., 0, 0] = True
+        valid = torch.ones(batch_size, dtype=torch.bool)
+        valid[..., -1] = False
+        if batched:
+            groups = torch.arange(batch_size[0]).unsqueeze(-1).expand(batch_size)
+        else:
+            groups = torch.zeros(batch_size, dtype=torch.long)
+        state = {name: torch.zeros(state_shape) for name in state_names}
+        next_state = {name: torch.zeros(state_shape) for name in state_names}
+        tensordict = TensorDict(
+            {
+                "observation": torch.randn(*batch_size, obs_dim),
+                "is_init": is_init,
+                "recurrent": state,
+                "collector": {"mask": valid},
+                "metadata": {"task_id": groups},
+                "next": {
+                    "observation": torch.randn(*batch_size, obs_dim),
+                    "is_init": torch.zeros_like(is_init),
+                    "recurrent": next_state,
+                    "reward": torch.randn(*batch_size, 1),
+                    "done": torch.zeros(*batch_size, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch_size, 1, dtype=torch.bool),
+                },
+            },
+            batch_size,
+        )
+        tensordict.refine_names(*([None] if batched else []), "time")
+        estimator = GAE.for_recurrent(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=value_network,
+            shifted=shifted,
+            group_key=("metadata", "task_id"),
+            valid=("collector", "mask"),
+        )
+        return estimator, tensordict, valid, groups
+
+    @pytest.mark.parametrize(
+        "module,batched,shifted",
+        [
+            ("gru", False, False),
+            ("lstm", False, False),
+            ("gru", True, False),
+            ("lstm", True, False),
+            ("gru", True, True),
+        ],
+    )
+    def test_gae_for_recurrent(self, module, batched, shifted):
+        estimator, tensordict, valid, groups = self._build_recurrent_gae_case(
+            module, batched, shifted
+        )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            output = estimator(tensordict)
+
+        assert estimator.shifted is shifted
+        assert estimator.deactivate_vmap
+        assert estimator.average_gae
+        assert estimator.time_dim is None
+        assert estimator.tensor_keys.valid == ("collector", "mask")
+        advantage = output["advantage"].squeeze(-1)
+        assert torch.isfinite(advantage).all()
+        assert not advantage[~valid].any()
+        for group in groups.unique():
+            mask = valid & (groups == group)
+            torch.testing.assert_close(advantage[mask].mean(), torch.zeros(()))
+
+    @pytest.mark.parametrize("missing_key", ["is_init", ("recurrent", "h")])
+    def test_gae_for_recurrent_missing_input(self, missing_key):
+        estimator, tensordict, _, _ = self._build_recurrent_gae_case(
+            "gru", batched=True
+        )
+        tensordict.del_(missing_key)
+
+        with pytest.raises(KeyError, match="missing keys"):
+            estimator(tensordict)
+
+    def test_gae_for_recurrent_requires_time_last(self):
+        estimator, tensordict, _, _ = self._build_recurrent_gae_case(
+            "gru", batched=True
+        )
+        tensordict = tensordict.transpose(0, 1)
+
+        with pytest.raises(RuntimeError, match="time to be the last batch dimension"):
+            estimator(tensordict)
+
     def _build_shifted_test_td(self, *, with_internal_done: bool):
         """Build a rollout-shaped tensordict for shifted-mode tests."""
         B, T, obs_dim = 4, 8, 6
@@ -1050,6 +1172,69 @@ class TestValues:
                 average_gae=True,
                 group_key=("metadata", "missing"),
             )(td.clone())
+
+    @pytest.mark.parametrize("vectorized", [False, True])
+    def test_gae_valid_mask_isolates_and_normalizes(self, vectorized):
+        batch, time = 2, 5
+        valid = torch.tensor(
+            [[True, True, True, False, False], [True, True, False, False, False]]
+        )
+        td = TensorDict(
+            {
+                "state_value": torch.zeros(batch, time, 1),
+                "collector": {"valid": valid},
+                "next": {
+                    "state_value": torch.ones(batch, time, 1),
+                    "reward": torch.arange(batch * time, dtype=torch.float).reshape(
+                        batch, time, 1
+                    ),
+                    "done": torch.zeros(batch, time, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(batch, time, 1, dtype=torch.bool),
+                },
+            },
+            [batch, time],
+        )
+        gae = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=None,
+            vectorized=vectorized,
+            average_gae=True,
+        )
+        gae.set_keys(valid=("collector", "valid"))
+
+        output = gae(td.clone())
+        changed_padding = td.clone()
+        invalid = ~valid
+        changed_padding["state_value"][invalid] = torch.nan
+        changed_padding["next", "state_value"][invalid] = torch.nan
+        changed_padding["next", "reward"][invalid] = torch.nan
+        changed_output = gae(changed_padding)
+
+        torch.testing.assert_close(
+            output["advantage"][valid], changed_output["advantage"][valid]
+        )
+        torch.testing.assert_close(
+            output["value_target"][valid], changed_output["value_target"][valid]
+        )
+        assert not output["advantage"][invalid].any()
+        assert not output["value_target"][invalid].any()
+        torch.testing.assert_close(
+            output["value_target"], gae.value_estimate(td.clone())
+        )
+        torch.testing.assert_close(output["advantage"][valid].mean(), torch.zeros(()))
+
+        all_valid = td.clone()
+        all_valid["collector", "valid"].fill_(True)
+        masked = gae(all_valid.clone())
+        unmasked = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=None,
+            vectorized=vectorized,
+            average_gae=True,
+        )(all_valid.exclude(("collector", "valid")))
+        torch.testing.assert_close(masked["advantage"], unmasked["advantage"])
 
     @pytest.mark.parametrize(
         "estimator_cls,estimator_kwargs",

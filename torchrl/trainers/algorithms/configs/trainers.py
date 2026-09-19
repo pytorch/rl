@@ -31,9 +31,11 @@ from torchrl.trainers.algorithms.td3 import TD3Trainer
 
 if TYPE_CHECKING:
     _LearnerBackend = Literal["local", "ray"]
+    _Telemetry = Literal["minimal", "standard"]
 else:
     # OmegaConf structured configs do not support Literal on all supported versions.
     _LearnerBackend = str
+    _Telemetry = str
 
 
 @dataclass
@@ -453,6 +455,9 @@ class OnPolicyTrainerConfig(TrainerConfig):
         episode_reward_key: Episode reward key used for cumulative reward logging. Default: "reward".
         action_key: Action key used by losses and logging. Default: "action".
         observation_key: Observation key used for logging. Default: "observation".
+        telemetry: Diagnostic telemetry level. ``"minimal"`` preserves the
+            legacy metric set and overhead; ``"standard"`` adds namespaced
+            training diagnostics. Default: ``"standard"``.
         hooks: List of :class:`~torchrl.trainers.TrainerHookBase` instances to
             register on the trainer after construction.
     """
@@ -499,6 +504,7 @@ class OnPolicyTrainerConfig(TrainerConfig):
     episode_reward_key: Any = "reward"
     action_key: Any = "action"
     observation_key: Any = "observation"
+    telemetry: _Telemetry = "standard"
     hooks: list[Any] | None = None
     checkpoint: Any = None
     checkpoint_rotation: Any = None
@@ -590,6 +596,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
     log_rewards = kwargs.pop("log_rewards", True)
     log_actions = kwargs.pop("log_actions", True)
     log_observations = kwargs.pop("log_observations", False)
+    telemetry = kwargs.pop("telemetry", "standard")
     done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
     terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
     reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
@@ -706,6 +713,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
         episode_reward_key=episode_reward_key,
         action_key=action_key,
         observation_key=observation_key,
+        telemetry=telemetry,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer
@@ -1545,13 +1553,6 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
         elif replay_buffer is not None:
             collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
-    env = collector.env
-    action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
-    if hasattr(action_spec, "get"):
-        nested_action_spec = action_spec.get("action", default=None)
-        if nested_action_spec is not None:
-            action_spec = nested_action_spec
-
     if not callable(loss_module):
         # TD3Loss currently requires real action bounds from the environment. Therefore, we
         # require it to be a partial for now.
@@ -1561,11 +1562,23 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
             "trainer inject actor_network, qvalue_network, and action_spec."
         )
     else:
-        loss_module = loss_module(
-            action_spec=action_spec,
-            actor_network=actor_network,
-            qvalue_network=qvalue_network,
+        loss_kwargs = {
+            "actor_network": actor_network,
+            "qvalue_network": qvalue_network,
+        }
+        partial_kwargs = getattr(loss_module, "keywords", None) or {}
+        has_action_domain = any(
+            partial_kwargs.get(key) is not None for key in ("action_spec", "bounds")
         )
+        if not has_action_domain and hasattr(collector, "env"):
+            env = collector.env
+            action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
+            if hasattr(action_spec, "get"):
+                nested_action_spec = action_spec.get("action", default=None)
+                if nested_action_spec is not None:
+                    action_spec = nested_action_spec
+            loss_kwargs["action_spec"] = action_spec
+        loss_module = loss_module(**loss_kwargs)
 
     if value_estimator_gamma is not None:
         loss_module.make_value_estimator(gamma=value_estimator_gamma)

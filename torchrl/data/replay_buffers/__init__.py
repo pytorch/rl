@@ -26,6 +26,7 @@ from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     ConditionalUpdateResult,
     PrioritizedReplayBuffer,
+    RateLimitedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
@@ -95,6 +96,7 @@ __all__ = [
     "StorageEnsembleCheckpointer",
     "TensorStorageCheckpointer",
     "RayReplayBuffer",
+    "RateLimitedReplayBuffer",
     "PrioritizedReplayBuffer",
     "RemoteTensorDictReplayBuffer",
     "ConditionalUpdateResult",

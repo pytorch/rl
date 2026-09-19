@@ -224,14 +224,14 @@ class TensorDictMaxValueWriter(Writer):
     def _write_count(self):
         _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
-            _write_count = self._write_count_value = mp.Value("i", 0)
+            _write_count = self._write_count_value = mp.Value("q", 0)
         return _write_count.value
 
     @_write_count.setter
     def _write_count(self, value):
         _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
-            _write_count = self._write_count_value = mp.Value("i", 0)
+            _write_count = self._write_count_value = mp.Value("q", 0)
         _write_count.value = value
 
     def add(self, data: Any) -> int | torch.Tensor:
@@ -316,7 +316,7 @@ class TensorDictMaxValueWriter(Writer):
     def __setstate__(self, state):
         write_count = state.pop("write_count__context", None)
         if write_count is not None:
-            state["_write_count_value"] = mp.Value("i", write_count)
+            state["_write_count_value"] = mp.Value("q", write_count)
         self.__dict__.update(state)
 
     def dumps(self, path):
@@ -356,11 +356,15 @@ class TensorDictMaxValueWriter(Writer):
             self._rank_key = metadata["rank_key"]
             shape = torch.Size(metadata["shape"])
             dtype = metadata["dtype"]
-        self._current_top_values = MemoryMappedTensor.from_filename(
+        top_values = MemoryMappedTensor.from_filename(
             filename=path / "current_top_values.memmap",
             dtype=_STRDTYPE2DTYPE[dtype],
             shape=shape,
         ).tolist()
+        # The heap holds (rank, storage index) tuples, but the tensor round trip
+        # returns [rank, index] lists with a float index. heapq cannot compare
+        # those lists with the tuples pushed by later writes.
+        self._current_top_values = [(rank, int(index)) for rank, index in top_values]
 
     def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError

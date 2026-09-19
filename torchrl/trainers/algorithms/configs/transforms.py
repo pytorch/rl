@@ -8,7 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from torchrl.envs.transforms import ExpandAs, LastAction, RewardSum
+from omegaconf import MISSING
+
+from torchrl.envs.transforms import DoneTransform, ExpandAs, LastAction, RewardSum
+from torchrl.envs.utils import ExplorationType
 
 from torchrl.trainers.algorithms.configs.common import (
     _normalize_hydra_key,
@@ -460,7 +463,7 @@ class CatTensorsConfig(TransformConfig):
 
     dim: int = -1
     in_keys: list[str] | None = None
-    out_keys: list[str] | None = None
+    out_key: Any = "observation_vector"
     _target_: str = "torchrl.envs.transforms.transforms.CatTensors"
 
     def __post_init__(self) -> None:
@@ -762,18 +765,38 @@ class ConditionalSkipConfig(TransformConfig):
 
 @dataclass
 class MultiActionConfig(TransformConfig):
-    """Configuration for MultiAction transform."""
+    """Hydra configuration for :class:`~torchrl.envs.transforms.MultiAction`."""
 
     dim: int = 1
     stack_rewards: bool = True
     stack_observations: bool = False
     action_key: Any | None = None
     chunk_key: Any | None = None
+    reward_aggregation: str | None = None
     _target_: str = "torchrl.envs.transforms.transforms.MultiAction"
 
     def __post_init__(self) -> None:
         """Post-initialization hook for MultiAction configuration."""
         super().__post_init__()
+
+
+@dataclass
+class ClosedLoopMultiActionConfig(TransformConfig):
+    """Hydra configuration for :class:`~torchrl.envs.transforms.ClosedLoopMultiAction`.
+
+    Install controller primers first, or override the target with
+    ClosedLoopMultiAction.from_env and supply the environment to instantiate.
+    """
+
+    controller: Any = MISSING
+    steps: int = MISSING
+    decision_spec: Any = None
+    reward_aggregation: str = "sum"
+    exploration_type: ExplorationType = ExplorationType.DETERMINISTIC
+    no_grad: bool = True
+    dim: int = 1
+    stack_observations: bool = False
+    _target_: str = "torchrl.envs.transforms.ClosedLoopMultiAction"
 
 
 @dataclass
@@ -1032,6 +1055,22 @@ def _make_last_action_transform(*args, **kwargs) -> LastAction:
     )
 
 
+@dataclass
+class DoneTransformConfig(TransformConfig):
+    """Hydra configuration for :class:`~torchrl.envs.transforms.DoneTransform`."""
+
+    in_keys: list[str] | None = None
+    out_keys: list[str] | None = None
+    reward_key: Any = None
+    done_keys: list[str] | None = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.transforms._make_done_transform"
+    )
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
 def _make_reward_sum_transform(*args, **kwargs) -> RewardSum:
     in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", None))
     out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", None))
@@ -1044,3 +1083,18 @@ def _make_expand_as_transform(*args, **kwargs) -> ExpandAs:
     in_key = _normalize_hydra_key(kwargs.pop("in_key", None))
     out_key = _normalize_hydra_key(kwargs.pop("out_key", None))
     return ExpandAs(ref_key=ref_key, in_key=in_key, out_key=out_key)
+
+
+def _make_done_transform(*args, **kwargs) -> DoneTransform:
+    in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", None))
+    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", None))
+    done_keys = _normalize_hydra_keys(kwargs.pop("done_keys", None))
+    reward_key = kwargs.pop("reward_key", None)
+    if reward_key is not None:
+        reward_key = _normalize_hydra_key(reward_key)
+    return DoneTransform(
+        in_keys=in_keys,
+        out_keys=out_keys,
+        reward_key=reward_key,
+        done_keys=done_keys,
+    )

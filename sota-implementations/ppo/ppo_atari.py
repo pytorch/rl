@@ -7,6 +7,7 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the Atari Environments.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -20,10 +21,8 @@ def main(cfg: DictConfig):  # noqa: F821
 
     import torch.optim
     import tqdm
-
     from tensordict import TensorDict
     from tensordict.nn import CudaGraphModule
-
     from torchrl._utils import timeit
     from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -138,6 +137,9 @@ def main(cfg: DictConfig):  # noqa: F821
         logger_video = cfg.logger.video
     else:
         logger_video = False
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Create test environment
     test_env = make_parallel_env(
@@ -217,7 +219,8 @@ def main(cfg: DictConfig):  # noqa: F821
         with timeit("collecting"):
             data = next(collector_iter)
 
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(frames_in_batch)
@@ -226,11 +229,10 @@ def main(cfg: DictConfig):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "terminated"]]
-            metrics_to_log.update(
+            training_metrics.update(
                 {
-                    "train/reward": episode_rewards.mean().item(),
-                    "train/episode_length": episode_length.sum().item()
-                    / len(episode_length),
+                    "reward": episode_rewards.mean().item(),
+                    "episode_length": episode_length.sum().item() / len(episode_length),
                 }
             )
 
@@ -263,18 +265,20 @@ def main(cfg: DictConfig):  # noqa: F821
         # Get training losses and times
         losses_mean = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses_mean.items():
-            metrics_to_log.update({f"train/{key}": value.item()})
-        metrics_to_log.update(
+            training_metrics.update({key: value.item()})
+        training_metrics.update(
             {
-                "train/lr": loss["alpha"] * cfg_optim_lr,
-                "train/clip_epsilon": loss["alpha"] * cfg_loss_clip_epsilon,
+                "lr": loss["alpha"] * cfg_optim_lr,
+                "clip_epsilon": loss["alpha"] * cfg_loss_clip_epsilon,
             }
         )
 
         # Get test rewards
-        with torch.no_grad(), set_exploration_type(
-            ExplorationType.DETERMINISTIC
-        ), timeit("eval"):
+        with (
+            torch.no_grad(),
+            set_exploration_type(ExplorationType.DETERMINISTIC),
+            timeit("eval"),
+        ):
             if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
                 i * frames_in_batch * frame_skip
             ) // test_interval:
@@ -282,16 +286,21 @@ def main(cfg: DictConfig):  # noqa: F821
                 test_rewards = eval_model(
                     actor, test_env, num_episodes=cfg_logger_num_test_episodes
                 )
-                metrics_to_log.update(
+                evaluation_metrics.update(
                     {
-                        "eval/reward": test_rewards.mean(),
+                        "reward": test_rewards.mean(),
                     }
                 )
                 actor.train()
         if logger:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            logger.log_metrics(metrics_to_log, collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                training_logger.log_metrics(training_metrics, collected_frames)
+            if evaluation_metrics:
+                evaluation_logger.log_metrics(evaluation_metrics, collected_frames)
+            if timing_metrics:
+                timing_logger.log_metrics(timing_metrics, collected_frames)
 
         collector.update_policy_weights_()
 

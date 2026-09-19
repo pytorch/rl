@@ -21,7 +21,6 @@ def main(cfg: DictConfig):  # noqa: F821
     import tqdm
     from tensordict import from_module
     from tensordict.nn import CudaGraphModule
-
     from torchrl._utils import get_available_device, timeit
     from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -105,6 +104,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Create test environment
     test_env = make_parallel_env(
@@ -200,7 +202,8 @@ def main(cfg: DictConfig):  # noqa: F821
         with timeit("collecting"):
             data = next(c_iter)
 
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
@@ -209,11 +212,10 @@ def main(cfg: DictConfig):  # noqa: F821
         episode_rewards = data["next", "episode_reward"][data["next", "terminated"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "terminated"]]
-            metrics_to_log.update(
+            training_metrics.update(
                 {
-                    "train/reward": episode_rewards.mean().item(),
-                    "train/episode_length": episode_length.sum().item()
-                    / len(episode_length),
+                    "reward": episode_rewards.mean().item(),
+                    "episode_length": episode_length.sum().item() / len(episode_length),
                 }
             )
 
@@ -253,33 +255,40 @@ def main(cfg: DictConfig):  # noqa: F821
         losses = torch.stack(losses).float().mean()
 
         for key, value in losses.items():
-            metrics_to_log.update({f"train/{key}": value.item()})
-        metrics_to_log.update(
+            training_metrics.update({key: value.item()})
+        training_metrics.update(
             {
-                "train/lr": lr * alpha,
+                "lr": lr * alpha,
             }
         )
 
         # Get test rewards
-        with torch.no_grad(), set_exploration_type(
-            ExplorationType.DETERMINISTIC
-        ), timeit("eval"):
+        with (
+            torch.no_grad(),
+            set_exploration_type(ExplorationType.DETERMINISTIC),
+            timeit("eval"),
+        ):
             if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
                 i * frames_in_batch * frame_skip
             ) // test_interval:
                 test_rewards = eval_model(
                     actor_eval, test_env, num_episodes=cfg.logger.num_test_episodes
                 )
-                metrics_to_log.update(
+                evaluation_metrics.update(
                     {
-                        "test/reward": test_rewards.mean(),
+                        "reward": test_rewards.mean(),
                     }
                 )
 
         if logger:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            logger.log_metrics(metrics_to_log, collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                training_logger.log_metrics(training_metrics, collected_frames)
+            if evaluation_metrics:
+                evaluation_logger.log_metrics(evaluation_metrics, collected_frames)
+            if timing_metrics:
+                timing_logger.log_metrics(timing_metrics, collected_frames)
 
     collector.shutdown()
     if not test_env.is_closed:

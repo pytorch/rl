@@ -18,7 +18,7 @@ import traceback
 import warnings
 from contextlib import nullcontext
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
@@ -96,6 +96,7 @@ from torchrl.envs import (
     Transform,
 )
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
+from torchrl.envs.llm.transforms import PolicyVersion
 from torchrl.envs.transforms import Compose, TransformedEnv, VecNorm
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
@@ -162,6 +163,11 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+
+
+class _BlockingShutdownCollector(Collector):
+    def shutdown(self, timeout=None, close_env=True, raise_on_error=True):
+        time.sleep(60)
 
 
 @pytest.mark.parametrize(
@@ -1073,6 +1079,71 @@ class TestCollectorGeneric:
                 assert batch.numel() == 20
             finally:
                 collector.shutdown()
+
+    def test_multiprocess_shutdown_is_bounded_and_idempotent(self):
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            collector_class=_BlockingShutdownCollector,
+            frames_per_batch=20,
+            total_frames=-1,
+            cat_results="stack",
+        )
+        procs = list(collector.procs)
+        try:
+            start = time.monotonic()
+            collector.shutdown(timeout=0.5)
+            elapsed = time.monotonic() - start
+            collector.shutdown(timeout=0.5)
+
+            assert elapsed < 1.0
+            assert all(not proc.is_alive() for proc in procs)
+        finally:
+            for proc in procs:
+                if not proc._closed and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+
+    def test_multiprocess_shutdown_tolerates_dead_worker(self):
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            frames_per_batch=20,
+            total_frames=-1,
+            cat_results="stack",
+        )
+        procs = list(collector.procs)
+        procs[0].terminate()
+        procs[0].join(timeout=5)
+        try:
+            collector.shutdown(timeout=2)
+            collector.shutdown(timeout=2)
+            assert all(not proc.is_alive() for proc in procs)
+        finally:
+            for proc in procs:
+                if not proc._closed and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+
+    def test_worker_disconnect_runs_collector_cleanup(self):
+        inner_collector = Mock()
+
+        def disconnect(*args, _inner_collector_ref, **kwargs):
+            _inner_collector_ref.append(inner_collector)
+            raise EOFError
+
+        with patch(
+            "torchrl.collectors._runner._main_async_collector_impl",
+            side_effect=disconnect,
+        ):
+            torchrl.collectors._runner._main_async_collector()
+
+        inner_collector.shutdown.assert_called_once_with()
+
+        with patch(
+            "torchrl.collectors._runner._main_async_collector_impl",
+            side_effect=ConnectionError("unexpected worker failure"),
+        ):
+            with pytest.raises(ConnectionError, match="unexpected worker failure"):
+                torchrl.collectors._runner._main_async_collector()
 
     def test_collector_without_traj_ids(self):
         env = CountingEnv(max_steps=3)
@@ -4929,10 +5000,22 @@ class TestPolicyVersion:
         try:
             collector.update_policy_weights_()
             collector.update_policy_weights_()
+            assert collector.policy_version == 2
+            assert collector.worker_policy_versions() == {0: 2, 1: 2}
+
+            scheme = collector._weight_sync_schemes["policy"]
+            with patch.object(scheme, "send", side_effect=RuntimeError("sync failed")):
+                with pytest.raises(RuntimeError, match="sync failed"):
+                    collector.update_policy_weights_()
+            assert collector.policy_version is None
+            assert collector.worker_policy_versions() == {0: 2, 1: 2}
+
+            collector.update_policy_weights_(worker_ids=[0])
+            assert collector.policy_version is None
+            assert collector.worker_policy_versions() == {0: 3, 1: 2}
             state_dict = collector.state_dict()
-            saved_versions = [
-                state_dict[f"worker{idx}"]["policy_version"] for idx in range(2)
-            ]
+            assert state_dict["policy_version"] is None
+            saved_versions = collector.worker_policy_versions()
         finally:
             collector.shutdown()
 
@@ -4947,12 +5030,27 @@ class TestPolicyVersion:
         )
         try:
             restored.load_state_dict(state_dict)
-            restored_state = restored.state_dict()
-            assert [
-                restored_state[f"worker{idx}"]["policy_version"] for idx in range(2)
-            ] == saved_versions
+            assert restored.policy_version is None
+            assert restored.worker_policy_versions() == saved_versions
         finally:
             restored.shutdown()
+
+    def test_async_weight_update_invalidates_aggregate_policy_version(self):
+        collector = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": SharedMemWeightSyncScheme(sync=False)},
+        )
+        try:
+            assert collector.policy_version == 0
+            collector.update_policy_weights_()
+            assert collector.policy_version is None
+        finally:
+            collector.shutdown()
 
     @pytest.mark.parametrize(
         "collector_cls",
@@ -4992,6 +5090,8 @@ class TestPolicyVersion:
             # All workers start at the same initial version (0 by default).
             v0_val = int(v0.flatten()[0].item())
             assert (v0 == v0_val).all()
+            assert collector.policy_version == v0_val
+            assert collector.worker_policy_versions() == {0: v0_val, 1: v0_val}
 
             # Iterations without weight updates must not bump the version.
             for _ in range(2):
@@ -5008,6 +5108,8 @@ class TestPolicyVersion:
             # Drain until we see a batch fully at the bumped version, with
             # a sane safety cap so we don't loop forever on a regression.
             target = v0_val + 1
+            assert collector.policy_version == target
+            assert collector.worker_policy_versions() == {0: target, 1: target}
             for _ in range(10):
                 batch = next(it)
                 if (batch["next", "policy_version"] == target).all():
@@ -5028,6 +5130,82 @@ class TestPolicyVersion:
             )
         finally:
             collector.shutdown()
+
+    @pytest.mark.parametrize("track_policy_version", [False, True])
+    def test_multi_async_replay_buffer_preserves_policy_version(
+        self, track_policy_version
+    ):
+        """Worker annotations are part of the shared replay-buffer schema."""
+        env_fn = functools.partial(CountingEnv, max_steps=4)
+        env = env_fn()
+        policy = RandomPolicy(env.action_spec)
+        env.close()
+        replay_buffer = ReplayBuffer(
+            storage=LazyTensorStorage(64), batch_size=4, shared=True
+        )
+        collector = MultiAsyncCollector(
+            [env_fn],
+            policy,
+            replay_buffer=replay_buffer,
+            frames_per_batch=8,
+            total_frames=16,
+            trajs_per_batch=1,
+            track_policy_version=track_policy_version,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+
+        stored = replay_buffer.storage[: len(replay_buffer)]
+        if track_policy_version:
+            assert ("next", "policy_version") in stored.keys(True, True)
+            assert stored["next", "policy_version"].dtype == torch.int64
+        else:
+            assert ("next", "policy_version") not in stored.keys(True, True)
+
+    def test_multi_collector_rejects_incompatible_policy_version_schema(self):
+        env = self._Env()
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(16))
+        replay_buffer.extend(env.fake_tensordict().unsqueeze(0))
+        env.close()
+
+        with pytest.raises(RuntimeError, match="initialized without the required"):
+            MultiAsyncCollector(
+                [self._Env],
+                self._make_policy(),
+                replay_buffer=replay_buffer,
+                frames_per_batch=4,
+                total_frames=4,
+                track_policy_version=True,
+            )
+
+    def test_multi_collector_accepts_preinitialized_shared_uuid_version_schema(self):
+        tracker = PolicyVersion(version_type="uuid")
+        env = self._Env()
+        fake_td = env.fake_tensordict()
+        fake_td.set("next", tracker._step(fake_td, fake_td.get("next")))
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(16), shared=True)
+        replay_buffer.extend(fake_td.unsqueeze(0))
+        env.close()
+
+        collector = MultiAsyncCollector(
+            [self._Env],
+            self._make_policy(),
+            replay_buffer=replay_buffer,
+            frames_per_batch=4,
+            total_frames=4,
+            track_policy_version=tracker,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+
+        assert len(replay_buffer) > 1
+        assert all(
+            replay_buffer.storage[: len(replay_buffer)]["next", "policy_version"]
+        )
 
 
 class TestAggregateReset:
@@ -5941,6 +6119,154 @@ class TestCollectorStats:
         finally:
             collector.shutdown()
 
+    @pytest.mark.parametrize(
+        "write_kwargs",
+        [
+            pytest.param({"trajs_per_batch": 1}, id="legacy"),
+            pytest.param({"replay_write_mode": "trajectory"}, id="explicit-trajectory"),
+        ],
+    )
+    def test_complete_trajectory_progress_and_checkpoint(self, write_kwargs):
+        env = TransformedEnv(CountingEnv(max_steps=2), StepCounter(2))
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(32))
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=1,
+            total_frames=8,
+            replay_buffer=replay_buffer,
+            **write_kwargs,
+        )
+        try:
+            collector_iter = iter(collector)
+            assert next(collector_iter) is None
+            stats = collector.stats()
+            assert stats["stepped_frames"] == 1
+            assert stats["trajectory_pending_frames"] == 1
+            assert stats["trajectory_completed_frames"] == 0
+            assert stats["replay_written_frames"] == 0
+            assert stats["completed_trajectories"] == 0
+
+            assert next(collector_iter) is None
+            stats = collector.stats()
+            assert stats["stepped_frames"] == 2
+            assert stats["trajectory_pending_frames"] == 0
+            assert stats["trajectory_completed_frames"] == 2
+            assert stats["replay_written_frames"] == 2
+            assert stats["completed_trajectories"] == 1
+
+            assert next(collector_iter) is None
+            checkpoint = collector.state_dict()
+            assert collector.stats()["trajectory_pending_frames"] == 1
+            collector.reset()
+            stats = collector.stats()
+            assert stats["trajectory_pending_frames"] == 0
+            assert stats["stepped_frames"] == 3
+            assert stats["trajectory_completed_frames"] == 2
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        resumed_env = TransformedEnv(CountingEnv(max_steps=2), StepCounter(2))
+        resumed = Collector(
+            resumed_env,
+            RandomPolicy(resumed_env.action_spec),
+            frames_per_batch=1,
+            total_frames=8,
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(32)),
+            **write_kwargs,
+        )
+        try:
+            resumed.load_state_dict(checkpoint, strict=False)
+            stats = resumed.stats()
+            assert stats["stepped_frames"] == 3
+            assert stats["trajectory_completed_frames"] == 2
+            assert stats["replay_written_frames"] == 2
+            assert stats["completed_trajectories"] == 1
+            # Collector checkpoints do not serialize environment or partial
+            # trajectory payloads, so resume starts with no in-flight frames.
+            assert stats["trajectory_pending_frames"] == 0
+        finally:
+            resumed.shutdown()
+            resumed_env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize(
+        "write_kwargs",
+        [
+            pytest.param({"trajs_per_batch": 1}, id="legacy"),
+            pytest.param({"replay_write_mode": "trajectory"}, id="explicit-trajectory"),
+        ],
+    )
+    def test_multiprocess_trajectory_progress_is_parent_shared(self, write_kwargs):
+        max_steps = 1_000_000
+
+        def make_env():
+            return TransformedEnv(
+                CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+            )
+
+        probe = make_env()
+        try:
+            policy = CountingEnvCountPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        collector = MultiAsyncCollector(
+            [make_env, make_env],
+            policy,
+            frames_per_batch=1,
+            total_frames=-1,
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(64), shared=True),
+            **write_kwargs,
+        )
+        try:
+            collector.start()
+            deadline = time.time() + 30
+            while collector.stats()["stepped_frames"] < 2 and time.time() < deadline:
+                time.sleep(0.01)
+
+            with collector.pause():
+                both = collector.stats(workers="both")
+                worker_stepped = sum(
+                    both[f"worker_{idx}/stepped_frames"] for idx in range(2)
+                )
+                assert both["stepped_frames"] == worker_stepped
+                assert both["trajectory_pending_frames"] == both["stepped_frames"]
+                assert both["trajectory_completed_frames"] == 0
+                assert both["replay_written_frames"] == 0
+
+                with patch.object(
+                    collector,
+                    "map_fn",
+                    side_effect=AssertionError("aggregate stats used worker RPC"),
+                ):
+                    aggregate = collector.stats()
+                assert aggregate["stepped_frames"] == worker_stepped
+            checkpoint = collector.state_dict()
+        finally:
+            collector.shutdown()
+
+        assert collector.stats()["trajectory_pending_frames"] == 0
+
+        resumed = MultiAsyncCollector(
+            [make_env, make_env],
+            policy,
+            frames_per_batch=1,
+            total_frames=-1,
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(64), shared=True),
+            **write_kwargs,
+        )
+        try:
+            resumed.load_state_dict(checkpoint)
+            stats = resumed.stats()
+            expected_stepped = sum(
+                int(checkpoint[f"worker{idx}"]["collector_progress"]["stepped_frames"])
+                for idx in range(2)
+            )
+            assert stats["stepped_frames"] == expected_stepped
+            assert stats["trajectory_pending_frames"] == 0
+        finally:
+            resumed.shutdown()
+
     @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
     def test_multiprocess_collector_stats(self, collector_cls):
         collector = collector_cls(
@@ -6005,6 +6331,7 @@ class TestCollectorRB:
             env,
             RandomPolicy(env.action_spec),
             replay_buffer=rb,
+            replay_write_mode="rollout",
             total_frames=256,
             frames_per_batch=16,
         )
@@ -7509,6 +7836,57 @@ class TestTrajsPerBatch:
         finally:
             env.close(raise_if_closed=False)
 
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"replay_write_mode": "trajectory"}, "requires a replay_buffer"),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "invalid",
+                },
+                "must be 'rollout', 'trajectory', or None",
+            ),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "trajectory",
+                    "trajs_per_batch": 2,
+                },
+                "cannot be combined with trajs_per_batch",
+            ),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "rollout",
+                    "trajs_per_write": 2,
+                },
+                "trajs_per_write is only supported",
+            ),
+            (
+                {
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(16)),
+                    "replay_write_mode": "trajectory",
+                    "trajs_per_write": 0,
+                },
+                "trajs_per_write must be a positive integer",
+            ),
+        ],
+    )
+    def test_replay_write_mode_validation(self, kwargs, match):
+        env = CountingEnv(max_steps=4)
+        try:
+            with pytest.raises(ValueError, match=match):
+                Collector(
+                    env,
+                    RandomPolicy(env.action_spec),
+                    frames_per_batch=8,
+                    total_frames=16,
+                    **kwargs,
+                )
+        finally:
+            env.close(raise_if_closed=False)
+
     def test_ingest_single_batch_complete(self):
         """_traj_ingest routes completed trajectories into complete_trajs."""
         batch = self._make_batch(
@@ -7930,7 +8308,14 @@ class TestTrajsPerBatchReplayBuffer:
     # Single-process collector tests
     # ------------------------------------------------------------------
 
-    def test_trajs_per_batch_replay_buffer_sync(self):
+    @pytest.mark.parametrize(
+        "write_kwargs",
+        [
+            pytest.param({"trajs_per_batch": 2}, id="legacy"),
+            pytest.param({"replay_write_mode": "trajectory"}, id="explicit-trajectory"),
+        ],
+    )
+    def test_trajs_per_batch_replay_buffer_sync(self, write_kwargs):
         """Replay buffer receives complete trajectories as flat timesteps."""
         max_steps = 4
         num_trajs = 2
@@ -7943,7 +8328,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 3,
             total_frames=max_steps * 12,
-            trajs_per_batch=num_trajs,
+            **write_kwargs,
         )
         try:
             list(collector)  # exhaust the collector
@@ -8048,7 +8433,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 3,
             total_frames=max_steps * 12,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             trajs_per_write=2,
         )
         try:
@@ -8057,7 +8442,7 @@ class TestTrajsPerBatchReplayBuffer:
             collector.shutdown()
             env.close(raise_if_closed=False)
 
-        assert any(size >= 2 * max_steps for size in extend_sizes)
+        assert any(size >= num_trajs * max_steps for size in extend_sizes)
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_write_defaults_to_all_queued_replay_buffer_extends(self):
@@ -8205,7 +8590,6 @@ class TestTrajsPerBatchReplayBuffer:
         is complete.
         """
         max_steps = 4
-        num_trajs = 2
         env_fn, policy = self._make_env_and_policy(max_steps)
         rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
         collector = MultiSyncCollector(
@@ -8214,7 +8598,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 4,
             total_frames=max_steps * 24,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:
@@ -8400,7 +8784,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 4,
             total_frames=max_steps * 16,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:
@@ -8495,7 +8879,7 @@ class TestTrajsPerBatchReplayBuffer:
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_batch_multi_async_collector_rb(self):
-        """MultiAsyncCollector + trajs_per_batch + replay buffer.
+        """MultiAsyncCollector + trajectory writes + replay buffer.
 
         Same guarantees as sync: buffer populated, trajectories complete.
         """
@@ -8509,7 +8893,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=max_steps * 4,
             total_frames=max_steps * 24,
-            trajs_per_batch=num_trajs,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:
@@ -8533,7 +8917,7 @@ class TestTrajsPerBatchReplayBuffer:
             replay_buffer=rb,
             frames_per_batch=1,
             total_frames=1,
-            trajs_per_batch=1,
+            replay_write_mode="trajectory",
             cat_results="stack",
         )
         try:

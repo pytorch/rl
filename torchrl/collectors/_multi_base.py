@@ -5,6 +5,7 @@ import abc
 
 import contextlib
 import sys
+import time
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
@@ -13,7 +14,7 @@ from typing import Any, Literal
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import CudaGraphModule, TensorDictModule
+from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp, nn
 from torchrl import logger as torchrl_logger
@@ -35,15 +36,17 @@ from torchrl.collectors._constants import (
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import (
+    _CollectorProgress,
     _make_meta_policy_cm,
     _TrajectoryPool,
+    _validate_replay_write_mode,
     _validate_traj_format,
 )
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs import EnvBase, EnvCreator
-from torchrl.envs.llm.transforms import PolicyVersion
+from torchrl.envs.transforms import PolicyVersion
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
@@ -266,28 +269,20 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             invisible to a :class:`~torchrl.data.replay_buffers.SliceSampler`;
             see :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
             and :ref:`collectors_replay_trajs` for the trade-offs.
-        trajs_per_batch (int, optional): When set together with ``replay_buffer``,
-            trajectory assembly is delegated to each worker's inner
-            :class:`~torchrl.collectors.Collector`.  Each worker calls
-            :meth:`~torchrl.collectors.BaseCollector._iter_by_trajectories`
-            independently and writes **complete trajectories** (episodes whose
-            last step has ``("next", "done") == True``) to the shared replay
-            buffer as flat 1-D sequences — no padding, no accumulation.
-
-            When set *without* ``replay_buffer``, the multi-collector
+        trajs_per_batch (int, optional): When set without ``replay_buffer``,
+            the multi-collector
             assembles trajectories from the worker batches and yields
             zero-padded batches of shape ``(trajs_per_batch, max_traj_len)``
             with a ``("collector", "mask")`` boolean field, or flat unpadded
             concatenations with ``traj_format="cat"``.
 
-            Both the iteration pattern (``for data in collector``) and the
-            async ``start()`` pattern are supported.
-
             Defaults to ``None`` (fixed-frame batches).
-
-            See :class:`~torchrl.collectors.BaseCollector` for the full
-            description of the completeness guarantee and replay-buffer
-            storage contract.
+        replay_write_mode (``"rollout"``, ``"trajectory"``, optional): Selects
+            fixed-frame rollout writes or complete-trajectory writes to the
+            shared replay buffer. In trajectory mode, assembly is delegated
+            to each worker and only flat, completed trajectories are inserted.
+            Defaults to ``None``; the legacy combination of ``replay_buffer``
+            and ``trajs_per_batch`` still selects trajectory writes.
         traj_format (str, optional): layout of the batches yielded when
             ``trajs_per_batch`` is set without a ``replay_buffer``:
             ``"padded"`` for zero-padded
@@ -347,7 +342,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             Received weights are automatically propagated to sub-collectors if matching model_ids exist.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            A :class:`~torchrl.envs.transforms.PolicyVersion` transform is
             installed on each worker's environment, tagging every collected frame with the
             current version under the ``"policy_version"`` key. Each worker's transform is
             bumped after the new weights have actually been applied in that worker, so
@@ -362,11 +357,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             For multi-process collectors, the ``"policy_version"`` entries in the
             collected tensordict are produced by worker-local transforms and are the
             source of truth for data provenance. The parent collector's
-            :attr:`policy_version` property exposes only the parent-side tracker state
-            and should not be used as a label for a returned batch.
+            :attr:`policy_version` property is only available while all workers are
+            known to have acknowledged the same sequence of weight updates. Use
+            :meth:`worker_policy_versions` for an explicit per-worker snapshot.
 
             The recommended path is ``track_policy_version=True``: let the collector own
-            the transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            the transform. Passing a :class:`~torchrl.envs.transforms.PolicyVersion`
             instance directly is reserved for advanced use cases that wire up a
             ``PolicyVersion`` **without** going through a collector. With multi-process
             collectors that pre-built tracker lives in the *parent* and is not propagated
@@ -467,6 +463,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        replay_write_mode: Literal["rollout", "trajectory"] | None = None,
         traj_format: Literal["padded", "cat"] | None = None,
         init_fn: Callable[[], None] | None = None,
         auto_register_policy_transforms: bool | None = None,
@@ -475,9 +472,21 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         compact_obs: bool = False,
     ):
         self.closed = True
+        self._shutdown_complete = False
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.replay_write_mode = _validate_replay_write_mode(
+            replay_write_mode,
+            has_replay_buffer=replay_buffer is not None,
+            trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
+        )
+        # Preserve the raw selector for workers. In the legacy
+        # replay_buffer + trajs_per_batch form it must stay None so that the
+        # worker can resolve that combination without seeing two selectors.
+        self._worker_replay_write_mode = replay_write_mode
+        self._trajectory_writes_in_workers = self.replay_write_mode == "trajectory"
         self.traj_format = _validate_traj_format(
             traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
         )
@@ -564,6 +573,10 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.policy = policy
         self.policy_factory = policy_factory
 
+        # Policy-version tracking must be configured before replay-buffer
+        # initialization so the shared storage reserves worker-produced fields.
+        self._setup_multi_policy_version_tracking(track_policy_version)
+
         self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up weight receivers if provided
@@ -573,9 +586,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self._setup_multi_policy_and_weights(
             self.policy, self.policy_factory, weight_updater, weight_sync_schemes
         )
-
-        # Set up policy version tracking
-        self._setup_multi_policy_version_tracking(track_policy_version)
 
         # # Set up fallback policy for weight extraction
         # self._setup_fallback_policy(policy, policy_factory, weight_sync_schemes)
@@ -686,7 +696,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             and hasattr(replay_buffer, "shared")
             and not replay_buffer.shared
         ):
-            torchrl_logger.warning("Replay buffer is not shared. Sharing it.")
+            torchrl_logger.info("Replay buffer is not shared. Sharing it.")
             replay_buffer.share()
 
     def _setup_policy_factory(
@@ -839,6 +849,97 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "PolicyVersion is not available. Please install the LLM dependencies or set track_policy_version=False."
                 )
             self.policy_version_tracker = None
+        self._acknowledged_policy_version = (
+            self.policy_version_tracker.version
+            if self.policy_version_tracker is not None
+            else None
+        )
+
+    def update_policy_weights_(
+        self,
+        policy_or_weights: (
+            TensorDictBase | TensorDictModuleBase | nn.Module | dict | None
+        ) = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
+    ) -> None:
+        """Update worker policy weights and track an acknowledged version.
+
+        The aggregate :attr:`policy_version` is advanced only when every worker
+        synchronously acknowledges the update. Partial or asynchronous updates
+        invalidate the aggregate because a single version can no longer describe
+        every worker.
+        """
+        acknowledged_version = self._acknowledged_policy_version
+        if self.policy_version_tracker is not None:
+            # If synchronization fails after some workers have applied the update,
+            # retaining the previous aggregate would be misleading.
+            self._acknowledged_policy_version = None
+
+        super().update_policy_weights_(
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
+        )
+
+        if self.policy_version_tracker is None or acknowledged_version is None:
+            return
+
+        if worker_ids is None:
+            all_workers_targeted = True
+        elif isinstance(worker_ids, int):
+            all_workers_targeted = self.num_workers == 1 and worker_ids == 0
+        elif isinstance(worker_ids, torch.device):
+            all_workers_targeted = False
+        elif all(isinstance(worker_id, int) for worker_id in worker_ids):
+            all_workers_targeted = len(worker_ids) == self.num_workers and set(
+                worker_ids
+            ) == set(range(self.num_workers))
+        else:
+            all_workers_targeted = False
+
+        weights = kwargs.get("weights", policy_or_weights)
+        per_worker_weights = (
+            isinstance(weights, dict)
+            and bool(weights)
+            and all(isinstance(worker_id, int) for worker_id in weights)
+        )
+        if per_worker_weights:
+            all_workers_targeted = all_workers_targeted and set(weights) == set(
+                range(self.num_workers)
+            )
+
+        weights_dict = kwargs.get("weights_dict")
+        if weights_dict is not None:
+            model_ids = list(weights_dict)
+            for model_weights in weights_dict.values():
+                if (
+                    isinstance(model_weights, dict)
+                    and model_weights
+                    and all(isinstance(worker_id, int) for worker_id in model_weights)
+                ):
+                    all_workers_targeted = all_workers_targeted and set(
+                        model_weights
+                    ) == set(range(self.num_workers))
+        else:
+            model_ids = [kwargs.get("model_id") or "policy"]
+
+        if not model_ids:
+            self._acknowledged_policy_version = acknowledged_version
+            return
+
+        schemes = self._weight_sync_schemes
+        synchronously_acknowledged = bool(schemes) and all(
+            model_id in schemes and getattr(schemes[model_id], "sync", True)
+            for model_id in model_ids
+        )
+        if all_workers_targeted and synchronously_acknowledged:
+            # BaseCollector synchronizes each model separately, and the worker
+            # cascade increments its local tracker once per synced model.
+            # Rebuild the aggregate with that same per-model count only after
+            # every worker has acknowledged the full synchronous update.
+            self.policy_version_tracker.version = acknowledged_version
+            for _ in model_ids:
+                self.increment_version()
 
     # TODO: Remove this
     def _setup_fallback_policy(
@@ -968,7 +1069,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         if self.replay_buffer is None:
             return
 
-        # Warn when a SliceSampler is used without trajs_per_batch: workers
+        # Warn when a SliceSampler is used without trajectory writes: workers
         # write batches independently so adjacent frames in the buffer can
         # come from different episodes without an intervening done signal.
         # This hazard is specific to multi-process collectors: a single
@@ -980,35 +1081,39 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         from torchrl.data.replay_buffers.samplers import SliceSampler
 
         if (
-            getattr(self, "trajs_per_batch", None) is None
+            self.replay_write_mode != "trajectory"
             and isinstance(getattr(self.replay_buffer, "_sampler", None), SliceSampler)
             and not self.set_truncated
         ):
             warnings.warn(
                 "A SliceSampler is used with a multi-process collector but "
-                "trajs_per_batch is not set and set_truncated is False. "
+                "replay_write_mode='trajectory' is not set and "
+                "set_truncated is False. "
                 "Adjacent frames in the replay buffer may come from different "
                 "workers and different episodes, causing SliceSampler to "
                 "sample slices that cross trajectory boundaries. "
-                "Consider setting trajs_per_batch to write only complete "
-                "trajectories, or set_truncated=True to mark batch "
+                "Consider setting replay_write_mode='trajectory' to write "
+                "only complete trajectories, or set_truncated=True to mark batch "
                 "boundaries (note: this introduces artificial truncations).",
                 category=UserWarning,
                 stacklevel=2,
             )
 
-        if getattr(self, "trajs_per_batch", None) is not None:
+        if self.replay_write_mode == "trajectory":
             # Trajectory assembly will happen at the worker level: each worker's
             # inner Collector uses _iter_by_trajectories() to assemble complete
             # trajectories and write them to the shared replay buffer.
             # Null out trajs_per_batch on the multi-collector so that __iter__
             # routes to self.iterator() directly (not _iter_by_trajectories,
             # which would spin forever on the None yields from the RB path).
-            self._worker_trajs_per_batch = self.trajs_per_batch
-            self.trajs_per_batch = None
+            if self.trajs_per_batch is not None:
+                self._worker_trajs_per_batch = self.trajs_per_batch
+                self.trajs_per_batch = None
         is_init = hasattr(self.replay_buffer, "_storage") and getattr(
             self.replay_buffer._storage, "initialized", True
         )
+        if is_init:
+            self._validate_policy_version_replay_schema()
         if not is_init:
             storage = self.replay_buffer._storage
             if self._should_init_replay_buffer_from_worker(storage):
@@ -1030,9 +1135,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 fake_td = self.create_env_fn[0](
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
-            fake_td = self._add_policy_outputs_to_fake_td(fake_td)
-            if getattr(self, "_worker_trajs_per_batch", None) is not None:
-                # With trajs_per_batch, workers write flat 1-D timesteps to
+            fake_td = self._add_collector_outputs_to_fake_td(fake_td)
+            if self.replay_write_mode == "trajectory":
+                # In trajectory mode, workers write flat 1-D timesteps to
                 # the buffer.  Initialise the storage as 1-D so that the
                 # shapes match when real trajectories are written.
                 fake_td = fake_td.reshape(-1)[:1]
@@ -1083,18 +1188,49 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         storage._init_event = mp.Event()
         storage._make_init_directory()
 
-    def _add_policy_outputs_to_fake_td(self, fake_td):
+    def _validate_policy_version_replay_schema(self):
+        if self.policy_version_tracker is None:
+            return
+        storage = getattr(self.replay_buffer._storage, "_storage", None)
+        if not isinstance(storage, TensorDictBase):
+            return
+        key = ("next", "policy_version")
+        if key not in storage.keys(True, True):
+            raise RuntimeError(
+                "The replay-buffer storage was initialized without the required "
+                "('next', 'policy_version') field. Use an uninitialized lazy "
+                "storage or include a field matching the configured policy-version "
+                "type at that key before enabling track_policy_version."
+            )
+        value = storage.get(key)
+        version_type = getattr(self.policy_version_tracker, "version_type", int)
+        if version_type in (int, "int"):
+            if not isinstance(value, torch.Tensor) or value.dtype != torch.int64:
+                dtype = getattr(value, "dtype", type(value).__name__)
+                raise RuntimeError(
+                    "The replay-buffer field ('next', 'policy_version') must have "
+                    f"dtype torch.int64 for integer policy versions, got {dtype}."
+                )
+        elif version_type in (str, "uuid") and isinstance(value, torch.Tensor):
+            raise RuntimeError(
+                "The replay-buffer field ('next', 'policy_version') must contain "
+                "non-tensor values for UUID policy versions."
+            )
+
+    def _add_collector_outputs_to_fake_td(self, fake_td):
         policy = getattr(self, "policy", None)
         out_keys = getattr(policy, "out_keys", None)
-        if not out_keys:
-            return fake_td
-        with torch.no_grad():
-            policy_output = policy(fake_td.copy())
-        policy_output_keys = policy_output.keys(True, True)
-        for key in out_keys:
-            if key in fake_td.keys(True, True) or key not in policy_output_keys:
-                continue
-            fake_td.set(key, policy_output.get(key))
+        if out_keys:
+            with torch.no_grad():
+                policy_output = policy(fake_td.copy())
+            policy_output_keys = policy_output.keys(True, True)
+            for key in out_keys:
+                if key in fake_td.keys(True, True) or key not in policy_output_keys:
+                    continue
+                fake_td.set(key, policy_output.get(key))
+        if self.policy_version_tracker is not None:
+            next_td = self.policy_version_tracker._step(fake_td, fake_td.get("next"))
+            fake_td.set("next", next_td)
         return fake_td
 
     def fake_tensordict(self) -> TensorDictBase:
@@ -1264,8 +1400,16 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             if strategy is not None:
                 mp.set_sharing_strategy(strategy)
         queue_out = ctx.Queue(self._queue_len)  # sends data from proc to main
+        self.queue_out = queue_out
         self.procs = []
         self._traj_pool = _TrajectoryPool(ctx=ctx, lock=True)
+        # Workers and coordinator each get a single-writer row. The extra
+        # coordinator row accounts for trajectory assembly performed by this
+        # process when no replay buffer is attached.
+        self._collector_progress = _CollectorProgress(self.num_workers + 1, ctx=ctx)
+        self._collector_progress_worker_idx = self.num_workers
+        self._collector_progress_aggregate = True
+        self._collector_progress_pending_on_ingest = True
 
         # Create all pipes upfront (needed for weight sync scheme initialization)
         # Store as list of (parent, child) tuples for use in worker creation
@@ -1397,12 +1541,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "init_random_frames": self.init_random_frames,
                     "trajs_per_batch": self._worker_trajs_per_batch,
                     "trajs_per_write": self.trajs_per_write,
+                    "replay_write_mode": self._worker_replay_write_mode,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
                     "track_policy_version": self.policy_version_tracker is not None,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                     "compact_obs": self.compact_obs,
+                    "collector_progress": self._collector_progress,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
@@ -1870,47 +2016,94 @@ also that the state dict is synchronised across processes if needed."""
     def _shutdown_main(self, timeout: float | None = None) -> None:
         if timeout is None:
             timeout = 10
+        if timeout < 0:
+            raise ValueError(f"timeout must be non-negative, got {timeout}.")
+        if getattr(self, "_shutdown_complete", False):
+            return
+
+        # Claim shutdown before touching any IPC resource. This makes repeated
+        # calls no-ops even when the first call finds an already-dead worker or
+        # a pipe that the worker has closed.
+        self.closed = True
+        started_at = time.monotonic()
+        # Reserve part of the caller's single deadline for forced cleanup:
+        # terminate after 80%, then retain the final 5% for a kill fallback.
+        graceful_timeout = timeout * 0.8
+        terminate_timeout = timeout * 0.95
+        procs = getattr(self, "procs", ())
+        pipes = getattr(self, "pipes", ())
         try:
-            if self.closed:
-                return
-            _check_for_faulty_process(self.procs)
-            all_closed = [False] * self.num_workers
-            rep = 0
-            for idx in range(self.num_workers):
-                if all_closed[idx]:
+            for proc, pipe in zip(procs, pipes):
+                if proc._closed or not proc.is_alive():
                     continue
-                if not self.procs[idx].is_alive():
-                    continue
-                self.pipes[idx].send((None, "close"))
+                try:
+                    pipe.send((None, "close"))
+                except (EOFError, OSError, ValueError):
+                    # The worker may already have observed the parent closing
+                    # its end of the channel. It will be joined below.
+                    pass
 
-            while not all(all_closed) and rep < 1000:
-                rep += 1
-                for idx in range(self.num_workers):
-                    if all_closed[idx]:
-                        continue
-                    if not self.procs[idx].is_alive():
-                        all_closed[idx] = True
-                        continue
-                    try:
-                        if self.pipes[idx].poll(timeout / 1000 / self.num_workers):
-                            msg = self.pipes[idx].recv()
-                            if msg != "closed":
-                                raise RuntimeError(f"got {msg} but expected 'close'")
-                            all_closed[idx] = True
-                        else:
-                            continue
-                    except BrokenPipeError:
-                        all_closed[idx] = True
-                        continue
-            self.closed = True
+            # Workers acknowledge "close" on their control pipes, but process
+            # exit is the shutdown contract; draining those replies would spend
+            # the same bounded deadline without improving teardown guarantees.
 
-            self.queue_out.close()
-            for pipe in self.pipes:
-                pipe.close()
-            for proc in self.procs:
-                proc.join(1.0)
+            pending = {
+                idx
+                for idx, proc in enumerate(procs)
+                if not proc._closed and proc.is_alive()
+            }
+            while pending and time.monotonic() - started_at < graceful_timeout:
+                for idx in tuple(pending):
+                    proc = procs[idx]
+                    if proc._closed or not proc.is_alive():
+                        pending.remove(idx)
+                        continue
+                    remaining = graceful_timeout - (time.monotonic() - started_at)
+                    if remaining <= 0:
+                        break
+                    proc.join(timeout=min(0.05, remaining))
+                    if proc._closed or not proc.is_alive():
+                        pending.remove(idx)
+
+            stragglers = [
+                proc for proc in procs if not proc._closed and proc.is_alive()
+            ]
+            for proc in stragglers:
+                try:
+                    proc.terminate()
+                except (OSError, ValueError):
+                    pass
+            for proc in stragglers:
+                remaining = terminate_timeout - (time.monotonic() - started_at)
+                proc.join(timeout=max(remaining, 0.0))
+
+            stragglers = [
+                proc for proc in procs if not proc._closed and proc.is_alive()
+            ]
+            for proc in stragglers:
+                try:
+                    proc.kill()
+                except (AttributeError, OSError, ValueError):
+                    # ``kill`` is unavailable on older Python versions. The
+                    # earlier terminate request still bounds the parent call.
+                    pass
+            for proc in stragglers:
+                remaining = timeout - (time.monotonic() - started_at)
+                proc.join(timeout=max(remaining, 0.0))
         finally:
             import torchrl
+
+            queue_out = getattr(self, "queue_out", None)
+            if queue_out is not None:
+                try:
+                    queue_out.close()
+                except (OSError, ValueError):
+                    pass
+            for pipe in pipes:
+                try:
+                    pipe.close()
+                except (OSError, ValueError):
+                    pass
 
             num_threads = min(
                 torchrl._THREAD_POOL_INIT,
@@ -1918,10 +2111,10 @@ also that the state dict is synchronised across processes if needed."""
                 + self._total_workers_from_env(self.create_env_fn),
             )
             torch.set_num_threads(num_threads)
-
-            for proc in self.procs:
-                if proc.is_alive():
-                    proc.terminate()
+            progress = getattr(self, "_collector_progress", None)
+            if progress is not None:
+                progress.clear_pending()
+            self._shutdown_complete = True
 
     def async_shutdown(self, timeout: float | None = None):
         return self.shutdown(timeout=timeout)
@@ -2004,7 +2197,13 @@ also that the state dict is synchronised across processes if needed."""
             if traj_pool_state is None and worker_traj_pool_state is not None:
                 traj_pool_state = worker_traj_pool_state
             state_dict[f"worker{idx}"] = _state_dict
-        state_dict.update({"frames": self._frames, "iter": self._iter})
+        state_dict.update(
+            {
+                "frames": self._frames,
+                "iter": self._iter,
+                "collector_progress_coordinator": self._progress_state_dict(),
+            }
+        )
         if traj_pool_state is not None:
             state_dict["traj_pool"] = traj_pool_state
         if self.policy_version_tracker is not None:
@@ -2031,9 +2230,12 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
-        policy_version = state_dict.get("policy_version")
-        if policy_version is not None and self.policy_version_tracker is not None:
-            self.policy_version_tracker.version = policy_version
+        self._load_progress_state_dict(state_dict.get("collector_progress_coordinator"))
+        if "policy_version" in state_dict and self.policy_version_tracker is not None:
+            policy_version = state_dict["policy_version"]
+            self._acknowledged_policy_version = policy_version
+            if policy_version is not None:
+                self.policy_version_tracker.version = policy_version
 
     def increment_version(self):
         """Increment the policy version."""
@@ -2043,33 +2245,54 @@ also that the state dict is synchronised across processes if needed."""
                     "Policy version tracker is not a PolicyVersion instance. Please pass a PolicyVersion instance to the collector."
                 )
             self.policy_version_tracker.increment_version()
+            self._acknowledged_policy_version = self.policy_version_tracker.version
 
     @property
     def policy_version(self) -> str | int | None:
-        """The parent-side policy version.
+        """The policy version acknowledged by every worker.
 
         For multi-process collectors, worker-local
-        :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+        :class:`~torchrl.envs.transforms.PolicyVersion`
         transforms write the per-frame ``"policy_version"`` values in returned
-        batches. Those tensor entries are the source of truth for collected
-        data; this property is only the parent-side tracker state.
+        batches and remain the source of truth for collected data. This property
+        returns ``None`` after a partial-worker or asynchronous update because
+        no single scalar is then known to describe every worker. Worker-local
+        versions can be queried explicitly with :meth:`worker_policy_versions`.
         """
-        if not hasattr(self.policy_version_tracker, "version"):
-            return None
-        return self.policy_version_tracker.version
+        return self._acknowledged_policy_version
 
     def get_policy_version(self) -> str | int | None:
-        """Get the parent-side policy version.
+        """Get the policy version acknowledged by every worker.
 
         This method exists to support remote calls in Ray actors, since properties
         cannot be accessed directly through Ray's RPC mechanism.
 
         Returns:
-            The parent-side version number (int) or UUID (str), or ``None`` if
-            version tracking is disabled. For collected data, prefer the
-            per-frame ``"policy_version"`` tensor in returned batches.
+            The aggregate version number (int) or UUID (str), or ``None`` if
+            version tracking is disabled or workers may differ.
         """
         return self.policy_version
+
+    def worker_policy_versions(self) -> dict[int, str | int | None]:
+        """Query the policy version currently reported by each worker.
+
+        Unlike :attr:`policy_version`, this method performs worker RPCs and can
+        expose divergent versions after partial updates. It shares the worker
+        control channels with other coordinator commands and therefore should
+        not race with weight updates issued from another thread.
+
+        Returns:
+            A mapping from worker index to its local policy version. Values are
+            ``None`` when policy-version tracking is disabled.
+        """
+        versions = dict(enumerate(self.map_fn("get_policy_version")))
+        if getattr(self, "running", False):
+            # map_fn has consumed every worker reply, so the control pipes are
+            # ready for the command that resumes asynchronous collection.
+            msg = "continue_random" if self._should_use_random_frames() else "continue"
+            for idx, pipe in enumerate(self.pipes):
+                pipe.send((idx, msg))
+        return versions
 
     def getattr_policy(self, attr):
         """Get an attribute from the policy of the first worker.

@@ -13,7 +13,7 @@ import warnings
 from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from enum import Enum
-from typing import Any, TypeVar
+from typing import Any, TYPE_CHECKING, TypeVar
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
@@ -32,6 +32,9 @@ except ImportError as err:
         raise err_ft from err
 from torchrl._utils import implement_for
 from torchrl.envs.utils import step_mdp
+
+if TYPE_CHECKING:
+    from torchrl.objectives.common import LossModule
 
 try:
     from torch.compiler import is_dynamo_compiling
@@ -367,16 +370,22 @@ def distance_loss(
 
 
 class TargetNetUpdater:
-    """An abstract class for target network update in Double DQN/DDPG.
+    """Base class for updating target parameters owned by a loss module.
+
+    The updater discovers ``target_*_params`` children on the loss module and
+    matches each one with its corresponding source ``*_params`` child. Losses
+    can therefore use this updater for delayed actors, values, or any other
+    explicitly separated target parameters.
 
     Args:
-        loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+        loss_module (LossModule): loss module whose target parameters should be
+            updated.
 
     """
 
     def __init__(
         self,
-        loss_module: LossModule,  # noqa: F821
+        loss_module: LossModule,
     ):
         from torchrl.objectives.common import LossModule
 
@@ -470,8 +479,9 @@ class TargetNetUpdater:
             raise RuntimeError(
                 f"The target and source data are identical for all params. "
                 "Have you created proper target parameters? "
-                "If the loss has a ``delay_value`` kwarg, make sure to set it "
-                "to True if it is not done by default. "
+                "If the loss supports delayed parameters, make sure to enable "
+                "the corresponding argument (for example, ``delay_value=True`` "
+                "or ``delay_actor=True``). "
                 f"If no target parameter is needed, do not use a target updater such as {type(self)}."
             )
 
@@ -534,14 +544,15 @@ class TargetNetUpdater:
 
 
 class SoftUpdate(TargetNetUpdater):
-    r"""A soft-update class for target network update in Double DQN/DDPG.
+    r"""Soft-update target parameters toward their source parameters.
 
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
 
     One and only one decay factor (tau or eps) must be specified.
 
     Args:
-        loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+        loss_module (LossModule): loss module whose target parameters should be
+            updated.
         eps (scalar): epsilon in the update equation:
             .. math::
 
@@ -549,17 +560,22 @@ class SoftUpdate(TargetNetUpdater):
 
             Exclusive with ``tau``.
         tau (scalar): Polyak tau. It is equal to ``1-eps``, and exclusive with it.
+
+    Examples:
+        PPO-EWMA uses a delayed actor as its proximal policy and updates it
+        after each optimizer step:
+
+        >>> from torchrl.objectives import ClipPPOLoss, SoftUpdate
+        >>> loss_module = ClipPPOLoss(  # doctest: +SKIP
+        ...     actor, critic, delay_actor=True
+        ... )
+        >>> updater = SoftUpdate(loss_module, eps=0.889)  # doctest: +SKIP
+        >>> updater.step()  # doctest: +SKIP
     """
 
     def __init__(
         self,
-        loss_module: (
-            DQNLoss  # noqa: F821
-            | DDPGLoss  # noqa: F821
-            | SACLoss  # noqa: F821
-            | REDQLoss  # noqa: F821
-            | TD3Loss  # noqa: F821  # noqa: F821
-        ),
+        loss_module: LossModule,
         *,
         eps: float | None = None,
         tau: float | None = None,
@@ -593,13 +609,14 @@ class SoftUpdate(TargetNetUpdater):
 
 
 class HardUpdate(TargetNetUpdater):
-    """A hard-update class for target network update in Double DQN/DDPG (by contrast with soft updates).
+    """Periodically copy source parameters into their target parameters.
 
     This was proposed in the original Double DQN paper: "Deep Reinforcement Learning with Double Q-learning",
     https://arxiv.org/abs/1509.06461.
 
     Args:
-        loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+        loss_module (LossModule): loss module whose target parameters should be
+            updated.
 
     Keyword Args:
         value_network_update_interval (scalar): how often the target network should be updated.
@@ -608,7 +625,7 @@ class HardUpdate(TargetNetUpdater):
 
     def __init__(
         self,
-        loss_module: DQNLoss | DDPGLoss | SACLoss | TD3Loss,  # noqa: F821
+        loss_module: LossModule,
         *,
         value_network_update_interval: float = 1000,
     ):

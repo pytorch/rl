@@ -86,6 +86,14 @@ registered with a component are the baseline; operation-level keyword arguments
 override matching entries and explicitly supplied positional arguments replace
 the baseline tuple.
 
+Reading a component without its object
+--------------------------------------
+
+:meth:`Checkpoint.read_component` returns the stored payload of one state-dict
+or JSON component, so a checkpoint can be inspected before the objects it
+belongs to exist. Tensors are copied out of the checkpoint. Components stored
+through ``dump`` and ``load`` require a live object and are rejected.
+
 Checkpoint rotation
 -------------------
 
@@ -117,6 +125,16 @@ Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
 checkpoints. The Trainer uses ``collected_frames`` as the checkpoint step and
 adds ``collected_frames`` and ``optim_steps`` to the manifest metadata.
 
+The Trainer registers the process-global RNG state under ``rng`` and restores
+it after every other component. ``Trainer.load_from_file`` accepts a checkpoint
+path or a rotation directory, in which case the newest retained checkpoint is
+restored. Scheduled saves in asynchronous collection mode pause the collector
+while the checkpoint is written.
+
+A :class:`~torchrl.record.loggers.WandbLogger` refuses to load state written by
+a different W&B run; construct it for the saved run, for example through
+``get_logger(..., state_dict=...)``, before loading the trainer.
+
 .. code-block:: python
 
     trainer = SACTrainer(
@@ -135,6 +153,58 @@ adds ``collected_frames`` and ``optim_steps`` to the manifest metadata.
 The metadata callback runs immediately before each save. Metrics used by
 ``keep_best`` should describe the checkpoint being saved rather than an older
 evaluation.
+
+Stopping at a safe boundary
+---------------------------
+
+:class:`StopOnSignal` turns ``SIGINT`` and ``SIGTERM`` into a stop request that
+a training loop checks between batches, so the current batch completes and a
+final checkpoint is written before the process exits. A second signal raises
+``KeyboardInterrupt`` for loops that cannot reach a boundary. Previous handlers
+are restored when the context exits. ``Trainer.stop_on_signal`` wraps the same
+helper and calls ``Trainer.request_stop``:
+
+.. code-block:: python
+
+    with trainer.stop_on_signal():
+        trainer.train()
+
+Standalone scripts use the helper directly:
+
+.. code-block:: python
+
+    with StopOnSignal() as stop:
+        for batch in collector:
+            ...
+            if stop.requested:
+                break
+        rotation.save(checkpoint, step=step)
+
+Resuming recipes
+----------------
+
+The ``sota-implementations/*_trainer`` recipes and the standalone ``sac``,
+``td3`` and ``ddpg`` recipes save rotated checkpoints under ``checkpoints/`` in
+their Hydra run directory and stop cleanly on ``SIGINT`` or ``SIGTERM``. A run
+continues from its checkpoint directory with a single override; the saved
+configuration is the base and further overrides apply on top of it:
+
+.. code-block:: bash
+
+    python sota-implementations/sac_trainer/train.py resume=outputs/<date>/<time>/checkpoints
+    python sota-implementations/sac/sac.py resume=outputs/<date>/<time>/checkpoints collector.total_frames=2_000_000
+
+Three helpers implement this flow. :func:`resolve_checkpoint_path` maps a
+rotation directory to its newest checkpoint. :func:`resume_config` reads the
+saved ``config`` component with :meth:`Checkpoint.read_component` and applies
+the current command-line overrides on top of it. The saved ``logger`` component,
+passed to ``get_logger(..., state_dict=...)``, reopens a W&B run with
+``resume="must"`` or keeps a CSV or TensorBoard logger appending to the saved
+directory. Trainer recipes get all of this from
+:func:`~torchrl.trainers.algorithms.configs.instantiate_trainer`; :class:`RunCheckpointer` gives standalone scripts the same behavior: it
+restores every component but ``config`` and ``rng``, then ``rng`` last, saves
+every ``interval`` steps through a :class:`CheckpointRotation` under
+:class:`StopOnSignal`, and keeps saving next to the resumed checkpoint.
 
 Compatibility
 -------------
@@ -179,5 +249,14 @@ API
     DumpLoadCheckpointAdapter
     GlobalRNGState
     JSONCheckpointAdapter
+    RunCheckpointer
     StateDictCheckpointAdapter
     StateDictFormat
+    StopOnSignal
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    resolve_checkpoint_path
+    resume_config

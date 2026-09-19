@@ -61,7 +61,20 @@ class _DistributedReplayClient:
         response = self._extend_client(data, timeout=timeout)
         return response.get("result", None)
 
-    def sample(self, batch_size: int | None = None, *, timeout: float | None = None):
+    def sample(
+        self,
+        batch_size: int | None = None,
+        *,
+        wait: bool = False,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ):
+        del cancel_event
+        if wait:
+            raise NotImplementedError(
+                "Blocking replay sampling is not supported by the distributed "
+                "replay transport."
+            )
         if batch_size is None:
             batch_size = self.batch_size
         if batch_size is None:
@@ -76,6 +89,19 @@ class _DistributedReplayClient:
             batch_size=[],
         )
         return self._sample_client(request, timeout=timeout)
+
+    def wait_until_sampleable(
+        self,
+        min_items: int | None = None,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
+    ) -> bool:
+        """Raises because distributed transport clients cannot block for writes."""
+        del min_items, timeout, cancel_event
+        raise NotImplementedError(
+            "wait_until_sampleable is not supported by the distributed replay "
+            "transport."
+        )
 
     def update_tensordict_priority(
         self, data: TensorDictBase, *, timeout: float | None = None
@@ -123,7 +149,11 @@ class _DistributedReplayService:
         control_response = TensorDict(
             {
                 "size": torch.zeros((), dtype=torch.int64),
+                "storage_size": torch.zeros((), dtype=torch.int64),
+                "sampleable_size": torch.zeros((), dtype=torch.int64),
                 "write_count": torch.zeros((), dtype=torch.int64),
+                "sample_calls": torch.zeros((), dtype=torch.int64),
+                "samples_returned": torch.zeros((), dtype=torch.int64),
             },
             batch_size=[],
         )
@@ -254,13 +284,44 @@ class _DistributedReplayService:
 
     def _control(self, messages: list[Message]) -> list[TensorDictBase]:
         with self._lock:
-            size = len(self.replay_buffer)
-            write_count = int(getattr(self.replay_buffer, "write_count", size))
+            get_stats = getattr(self.replay_buffer, "stats", None)
+            if get_stats is None:
+                size = len(self.replay_buffer)
+                stats = {
+                    "size": size,
+                    "storage_size": size,
+                    "sampleable_size": size,
+                    "write_count": int(
+                        getattr(self.replay_buffer, "write_count", size)
+                    ),
+                    "sample_calls": 0,
+                    "samples_returned": 0,
+                }
+            else:
+                stats = get_stats()
+                size = int(stats["size"])
+                stats = {
+                    "storage_size": size,
+                    "sampleable_size": size,
+                    "write_count": int(
+                        getattr(self.replay_buffer, "write_count", size)
+                    ),
+                    "sample_calls": 0,
+                    "samples_returned": 0,
+                    **stats,
+                }
         return [
             TensorDict(
                 {
-                    "size": torch.tensor(size, dtype=torch.int64),
-                    "write_count": torch.tensor(write_count, dtype=torch.int64),
+                    key: torch.tensor(int(stats[key]), dtype=torch.int64)
+                    for key in (
+                        "size",
+                        "storage_size",
+                        "sampleable_size",
+                        "write_count",
+                        "sample_calls",
+                        "samples_returned",
+                    )
                 },
                 batch_size=[],
             )

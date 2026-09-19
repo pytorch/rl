@@ -6,16 +6,18 @@
 from __future__ import annotations
 
 import abc
+import contextlib
 import itertools
 import json
 import math
 import pathlib
+import signal
 import sys
 import time
 import warnings
 import weakref
 from collections import defaultdict, OrderedDict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Literal
@@ -38,8 +40,14 @@ from torchrl._utils import (
     VERBOSE,
 )
 
-from torchrl.checkpoint import Checkpoint, CheckpointRotation
-from torchrl.collectors import BaseCollector
+from torchrl.checkpoint import (
+    Checkpoint,
+    CheckpointRotation,
+    GlobalRNGState,
+    resolve_checkpoint_path,
+    StopOnSignal,
+)
+from torchrl.collectors import BaseCollector, Evaluator
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
@@ -89,6 +97,8 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+_OPTIM_STEPS_UNSET = object()
 
 
 @implement_for("torch", "2.3")
@@ -600,7 +610,9 @@ class Trainer:
             Default is None (no saving)
         checkpoint (Checkpoint, optional): unified checkpoint object used for
             scheduled saves and restores. The trainer registers any missing
-            standard components on this object. When omitted, the legacy
+            standard components on this object, including the process-global
+            RNG state under ``"rng"``, which :meth:`load_from_file` restores
+            after every other component. When omitted, the legacy
             ``CKPT_BACKEND`` path is retained during the compatibility window.
         checkpoint_rotation (CheckpointRotation, optional): retention policy used
             for scheduled unified checkpoints. Requires ``checkpoint`` and cannot
@@ -955,6 +967,7 @@ class Trainer:
             register("exploration", getattr(self, "exploration_module", None))
             for name, module in self._modules.items():
                 register(f"trainer_module.{name}", module)
+            register("rng", GlobalRNGState())
             register("learner_execution", self._execution_checkpoint_state)
             return checkpoint
 
@@ -985,6 +998,7 @@ class Trainer:
             if name in ("optimizer", "replay_buffer") and name in checkpoint:
                 continue
             register(f"trainer_module.{name}", module)
+        register("rng", GlobalRNGState())
         return checkpoint
 
     def _wrap_hook_with_timing(
@@ -1087,6 +1101,33 @@ class Trainer:
         self._stop_training = True
         self._stop_reason = reason
 
+    @contextlib.contextmanager
+    def stop_on_signal(
+        self, signals: Collection[int] = (signal.SIGINT, signal.SIGTERM)
+    ):
+        """Stop training cleanly when the process receives a termination signal.
+
+        Wrap :meth:`train` in this context. The first signal calls
+        :meth:`request_stop`, so the loop finishes the current batch, writes a
+        final checkpoint when a save destination is configured, shuts the
+        collector down and returns. A second signal raises
+        :class:`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+        Args:
+            signals (Collection[int], optional): signal numbers to handle.
+                Defaults to ``SIGINT`` and ``SIGTERM``.
+
+        Examples:
+            >>> with trainer.stop_on_signal():  # doctest: +SKIP
+            ...     trainer.train()
+
+        """
+        with StopOnSignal(
+            signals,
+            on_request=lambda name: self.request_stop(f"received {name}"),
+        ) as stop:
+            yield stop
+
     def _save_trainer(self) -> None:
         if self.checkpoint is not None:
             checkpoint = self._sync_checkpoint_components()
@@ -1175,14 +1216,59 @@ class Trainer:
         )
         return metadata
 
+    def _save_interval_elapsed(self) -> bool:
+        return (self.collected_frames - self._last_save) > self.save_trainer_interval
+
+    def _save_due(self, force_save: bool = False) -> bool:
+        """Whether a destination is configured and a save is due now."""
+        return self._has_checkpoint_destination() and (
+            force_save or self._save_interval_elapsed()
+        )
+
     def save_trainer(self, force_save: bool = False) -> None:
-        _save = force_save
-        if self._has_checkpoint_destination():
-            if (self.collected_frames - self._last_save) > self.save_trainer_interval:
-                self._last_save = self.collected_frames
-                _save = True
-        if _save and self._has_checkpoint_destination():
-            self._save_trainer()
+        if not self._has_checkpoint_destination():
+            return
+        if self._save_interval_elapsed():
+            self._last_save = self.collected_frames
+        elif not force_save:
+            return
+        self._save_trainer()
+
+    def _save_trainer_at_boundary(self, *, force_save: bool = False) -> None:
+        """Save at a training-loop boundary, pausing free-running collection."""
+        if self._save_due(force_save):
+            with self._collection_paused():
+                self.save_trainer(force_save=force_save)
+
+    @contextlib.contextmanager
+    def _collection_paused(self):
+        """Pause an asynchronous collector while a checkpoint is written."""
+        pause = (
+            getattr(self.collector, "pause", None) if self.async_collection else None
+        )
+        with contextlib.ExitStack() as stack:
+            if pause is not None:
+                try:
+                    stack.enter_context(pause())
+                except NotImplementedError:
+                    if "collector.pause" not in self._checkpoint_skip_warnings:
+                        torchrl_logger.warning(
+                            "%s does not implement pause(); asynchronous checkpoints "
+                            "are written while collection continues.",
+                            type(self.collector).__name__,
+                        )
+                        self._checkpoint_skip_warnings.add("collector.pause")
+            yield
+
+    def _resolve_checkpoint_path(self, file: str | pathlib.Path) -> str | pathlib.Path:
+        """Map a rotation directory to its newest checkpoint; pass other inputs through."""
+        if not isinstance(file, (str, pathlib.PurePath)):
+            return file
+        path = pathlib.Path(file).expanduser()
+        if not path.is_dir() or (path / "state.json").exists():
+            # A file, an archive, or a legacy memmap trainer directory.
+            return file
+        return resolve_checkpoint_path(path)
 
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
         """Loads a file and its state-dict in the trainer.
@@ -1219,7 +1305,12 @@ class Trainer:
             trainer synchronizes the collector once so local policy copies and
             remote workers observe the restored learner weights.
 
+        .. note::
+            ``file`` may also be a :class:`~torchrl.checkpoint.CheckpointRotation`
+            directory, in which case its newest checkpoint is restored.
+
         """
+        file = self._resolve_checkpoint_path(file)
         if Checkpoint.is_checkpoint(file):
             checkpoint = self.checkpoint
             if checkpoint is None:
@@ -1229,10 +1320,19 @@ class Trainer:
             for key, value in _torch_load_defaults().items():
                 kwargs.setdefault(key, value)
             checkpoint = self._sync_checkpoint_components(checkpoint)
+            load_kwargs = {
+                "map_location": map_location,
+                "tensor_load_kwargs": kwargs,
+                "strict": strict,
+            }
+            registered = set(checkpoint.components)
+            load_rng = (
+                "rng" in registered and "rng" in Checkpoint.manifest(file)["components"]
+            )
+            registered.discard("rng")
             if self.learner_backend == "ray":
                 # Service owners must be restored before learner actors create
                 # rank-aware clients. The learner state is deliberately last.
-                registered = set(checkpoint.components)
                 ordered = [
                     name
                     for name in ("replay_buffer", "collector")
@@ -1249,22 +1349,11 @@ class Trainer:
                     ordered.append("learner_execution")
                 loaded = set()
                 for name in ordered:
-                    result = checkpoint.load(
-                        file,
-                        components=[name],
-                        map_location=map_location,
-                        tensor_load_kwargs=kwargs,
-                        strict=strict,
-                    )
+                    result = checkpoint.load(file, components=[name], **load_kwargs)
                     loaded.update(result.loaded)
             else:
-                result = checkpoint.load(
-                    file,
-                    map_location=map_location,
-                    tensor_load_kwargs=kwargs,
-                    strict=strict,
-                )
-                loaded = result.loaded
+                result = checkpoint.load(file, components=registered, **load_kwargs)
+                loaded = set(result.loaded)
             if "learner_execution" in loaded:
                 self._publish_execution_weights(force=True)
             elif "policy" in loaded:
@@ -1277,6 +1366,9 @@ class Trainer:
                     self.collector.update_policy_weights_()
                 else:
                     self.collector.update_policy_weights_(policy)
+            if load_rng:
+                result = checkpoint.load(file, components=["rng"], **load_kwargs)
+                loaded.update(result.loaded)
         elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
@@ -1665,71 +1757,79 @@ class Trainer:
         if self.learner_backend == "ray":
             return self._train_with_execution_backend()
         if self.progress_bar:
-            self._pbar = tqdm(total=self.total_frames)
+            self._pbar = tqdm(total=self.total_frames, initial=self.collected_frames)
             self._pbar_str = {}
 
-        if self.async_collection:
-            self.collector.start()
-            while self.collector.getattr_rb("write_count") == 0:
-                time.sleep(0.1)
+        setup_complete = False
+        try:
+            if self.async_collection:
+                self.collector.start()
+                while self.collector.getattr_rb("write_count") == 0:
+                    time.sleep(0.1)
 
-            # Create async iterator that monitors write_count progress
-            iterator = self._async_iterator()
-        else:
-            iterator = self.collector
-
-        self._setup_hook()
-
-        for batch in iterator:
-            if not self.async_collection and batch is not None:
-                batch = self._process_batch_hook(batch)
-                current_frames = (
-                    batch.get(("collector", "mask"), torch.tensor(batch.numel()))
-                    .sum()
-                    .item()
-                    * self.frame_skip
-                )
-                self.collected_frames += current_frames
+                # Create async iterator that monitors write_count progress
+                iterator = self._async_iterator()
             else:
-                # Batch is None: either async collection, or a synchronous
-                # collector that writes directly to the replay buffer (e.g.
-                # LLM collectors created with a replay_buffer). Frames are
-                # tracked via the buffer write count in both cases.
-                batch = None
-                cf = self.collected_frames
-                if self.replay_buffer is not None:
-                    self.collected_frames = self._replay_write_count()
+                iterator = self.collector
+
+            self._setup_hook()
+            setup_complete = True
+
+            for batch in iterator:
+                if not self.async_collection and batch is not None:
+                    batch = self._process_batch_hook(batch)
+                    current_frames = (
+                        batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                        .sum()
+                        .item()
+                        * self.frame_skip
+                    )
+                    self.collected_frames += current_frames
                 else:
-                    self.collected_frames = self.collector.getattr_rb("write_count")
-                current_frames = self.collected_frames - cf
+                    # Batch is None: either async collection, or a synchronous
+                    # collector that writes directly to the replay buffer (e.g.
+                    # LLM collectors created with a replay_buffer). Frames are
+                    # tracked via the buffer write count in both cases.
+                    batch = None
+                    cf = self.collected_frames
+                    if self.replay_buffer is not None:
+                        self.collected_frames = self._replay_write_count()
+                    else:
+                        self.collected_frames = self.collector.getattr_rb("write_count")
+                    current_frames = self.collected_frames - cf
 
-            # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
-            self._pre_steps_log_hook(batch)
+                # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
+                self._pre_steps_log_hook(batch)
 
-            if self.collected_frames >= self.collector.init_random_frames:
-                self.optim_steps(batch)
-            self._post_steps_hook()
+                if self.collected_frames >= self.collector.init_random_frames:
+                    self.optim_steps(batch)
+                self._post_steps_hook()
 
-            # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
-            self._post_steps_log_hook(batch)
+                # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
+                self._post_steps_log_hook(batch)
 
-            if self._stop_training:
-                if self._stop_reason and VERBOSE:
-                    torchrl_logger.info(f"Trainer stopping early: {self._stop_reason}")
-                self.save_trainer(force_save=True)
-                break
+                if self._stop_training:
+                    if self._stop_reason and VERBOSE:
+                        torchrl_logger.info(
+                            f"Trainer stopping early: {self._stop_reason}"
+                        )
+                    self._save_trainer_at_boundary(force_save=True)
+                    break
 
-            if self.progress_bar:
-                self._pbar.update(current_frames)
-                self._pbar_description()
+                if self.progress_bar:
+                    self._pbar.update(current_frames)
+                    self._pbar_description()
 
-            if self.collected_frames >= self.total_frames:
-                self.save_trainer(force_save=True)
-                break
-            self.save_trainer()
-
-        self._shutdown_hook()
-        self.collector.shutdown()
+                if self.collected_frames >= self.total_frames:
+                    self._save_trainer_at_boundary(force_save=True)
+                    break
+                self._save_trainer_at_boundary()
+        finally:
+            try:
+                if setup_complete:
+                    self._shutdown_hook()
+            finally:
+                self.collector.shutdown()
 
     def _train_with_execution_backend(self) -> None:
         """Run collection while the private backend owns optimization state."""
@@ -1822,12 +1922,7 @@ class Trainer:
     def _save_execution_checkpoint(
         self, *, force_save: bool = False, resume_collection: bool = True
     ) -> None:
-        if not self._has_checkpoint_destination():
-            return
-        if (
-            not force_save
-            and (self.collected_frames - self._last_save) <= self.save_trainer_interval
-        ):
+        if not self._save_due(force_save):
             return
         if self.async_collection:
             pause = getattr(self.collector, "pause", None)
@@ -1920,14 +2015,30 @@ class Trainer:
             torchrl_logger.info("shutting down collector")
         self.collector.shutdown()
 
-    def optim_steps(self, batch: TensorDictBase) -> None:
+    def optim_steps(
+        self,
+        batch: TensorDictBase,
+        *,
+        optim_steps_per_batch: int | None | object = _OPTIM_STEPS_UNSET,
+        num_epochs: int | object = _OPTIM_STEPS_UNSET,
+    ) -> None:
+        """Run the configured optimization loop for one collected batch.
+
+        Keyword overrides are applied only to this call and do not change the
+        trainer configuration. They are useful for algorithms that need a
+        one-time optimization schedule while retaining the standard Trainer
+        hooks and logging behavior.
+        """
         average_losses = None
 
         self._pre_optim_hook()
-        optim_steps_per_batch = self.optim_steps_per_batch
+        if optim_steps_per_batch is _OPTIM_STEPS_UNSET:
+            optim_steps_per_batch = self.optim_steps_per_batch
+        if num_epochs is _OPTIM_STEPS_UNSET:
+            num_epochs = self.num_epochs
         j = -1
 
-        for _ in range(self.num_epochs):
+        for _ in range(num_epochs):
             # LOGGING POINT 3: Pre-epoch logging (e.g., epoch-specific metrics)
             self._pre_epoch_log_hook(batch)
             # Regular pre-epoch operations (e.g., epoch setup)
@@ -2523,7 +2634,7 @@ class LogScalar(TrainerHookBase):
 
         # Add standard deviation if requested
         if self.include_std and tensor.numel() > 1:
-            std_value = tensor.std().item()
+            std_value = tensor.float().std().item()
             result[f"{self.logname}_std"] = std_value
 
         return result
@@ -2716,14 +2827,15 @@ class BatchSubSampler(TrainerHookBase):
 
         If the batch has one dimension, a random subsample of length
         self.bach_size will be returned. If the batch has two or more
-        dimensions, it is assumed that the first dimension represents the
-        batch, and the second the time. If so, the resulting subsample will
-        contain consecutive samples across time.
+        dimensions, the last batch dimension represents time. All leading
+        batch dimensions represent independent trajectories. The resulting
+        subsample contains consecutive samples across time.
 
         """
         if batch.ndimension() == 1:
             return batch[torch.randperm(batch.shape[0])[: self.batch_size]]
 
+        batch = batch.reshape(-1, batch.shape[-1])
         sub_traj_len = self.sub_traj_len if self.sub_traj_len > 0 else batch.shape[1]
         if ("collector", "mask") in batch.keys(True):
             # if a valid mask is present, it's important to sample only
@@ -2958,6 +3070,205 @@ def _resolve_module(trainer: Trainer, path: str):
     for attr in path.split("."):
         obj = getattr(obj, attr)
     return obj
+
+
+class EvaluatorHook(TrainerHookBase):
+    """Schedule asynchronous evaluation from a :class:`~torchrl.trainers.Trainer`.
+
+    The hook snapshots the training policy when an evaluation is triggered, polls
+    completed results after each collected batch, and logs them under the
+    ``evaluation/`` namespace. If several evaluation intervals elapse while an
+    evaluation is running, they are coalesced into one evaluation with the latest
+    policy weights when the evaluator becomes available.
+
+    Args:
+        evaluator (Evaluator): Evaluator service used to run rollouts.
+
+    Keyword Args:
+        every_frames (int): Number of collected frames between evaluations.
+        policy (str or Callable, optional): Dot-separated path resolved from the
+            trainer, or a callable receiving the trainer and returning an
+            :class:`~torch.nn.Module` or :class:`~tensordict.TensorDictBase`.
+            Defaults to ``"loss_module.actor_network"``.
+        run_at_start (bool, optional): Whether to evaluate the initial policy.
+            Defaults to ``False``.
+        run_at_end (bool, optional): Whether to request a final evaluation with
+            the latest policy weights. A final evaluation is skipped when the
+            latest completed evaluation already used the same frame count.
+            Defaults to ``True``.
+        wait_at_end (bool, optional): Whether shutdown waits for pending and final
+            evaluations so their metrics are logged. When ``False``, outstanding
+            work is handed to :meth:`Evaluator.shutdown` and may be cancelled by
+            the evaluator backend. Defaults to ``True``.
+        wait_at_end_timeout (float or None, optional): Maximum seconds to wait for
+            a pending evaluation during shutdown. ``None`` waits without a time
+            limit. Defaults to ``60.0``.
+
+    Examples:
+        >>> from torchrl.collectors import Evaluator
+        >>> from torchrl.trainers import EvaluatorHook
+        >>> evaluator = Evaluator(make_eval_env, eval_policy, max_steps=1_000)  # doctest: +SKIP
+        >>> EvaluatorHook(evaluator, every_frames=10_000).register(trainer)  # doctest: +SKIP
+
+    .. note::
+        Checkpoints contain only the next due frame and the last completed
+        evaluation frame. In-flight evaluator work is intentionally not
+        serialized and is discarded when resuming from a checkpoint.
+    """
+
+    def __init__(
+        self,
+        evaluator: Evaluator,
+        *,
+        every_frames: int,
+        policy: str
+        | Callable[[Trainer], nn.Module | TensorDictBase] = (
+            "loss_module.actor_network"
+        ),
+        run_at_start: bool = False,
+        run_at_end: bool = True,
+        wait_at_end: bool = True,
+        wait_at_end_timeout: float | None = 60.0,
+    ):
+        if isinstance(every_frames, bool) or not isinstance(every_frames, int):
+            raise TypeError("every_frames must be an integer.")
+        if every_frames <= 0:
+            raise ValueError("every_frames must be positive.")
+        if not isinstance(policy, str) and not callable(policy):
+            raise TypeError("policy must be a string path or a callable.")
+        self.evaluator = evaluator
+        self.every_frames = every_frames
+        self.policy = policy
+        self.run_at_start = run_at_start
+        self.run_at_end = run_at_end
+        self.wait_at_end = wait_at_end
+        self.wait_at_end_timeout = wait_at_end_timeout
+        self._next_due_frame = 0 if run_at_start else every_frames
+        self._last_completed_frame: int | None = None
+        self._last_triggered_frame: int | None = None
+        self._trainer: Trainer | None = None
+
+    def _policy_weights(self) -> TensorDictBase:
+        source = self.policy
+        if isinstance(source, str):
+            source = _resolve_module(self._trainer, source)
+        elif not isinstance(source, nn.Module):
+            source = source(self._trainer)
+        if isinstance(source, nn.Module):
+            return Evaluator.extract_weights(source)
+        if isinstance(source, TensorDictBase):
+            return source.detach().clone().cpu()
+        raise TypeError(
+            "EvaluatorHook policy must resolve to an nn.Module or TensorDictBase, "
+            f"got {type(source).__name__}."
+        )
+
+    def _trigger(self, step: int) -> bool:
+        accepted = self.evaluator.trigger_eval(self._policy_weights(), step=step)
+        if accepted:
+            self._last_triggered_frame = step
+        return accepted
+
+    @staticmethod
+    def _evaluation_name(name: str) -> str:
+        _, separator, suffix = name.partition("/")
+        return f"evaluation/{suffix if separator else name}"
+
+    def _log_result(self, result: Mapping[str, Any]) -> None:
+        if not result:
+            return
+        normalized = {
+            self._evaluation_name(name): value for name, value in result.items()
+        }
+        step_value = normalized.get("evaluation/step", self._last_triggered_frame)
+        if isinstance(step_value, torch.Tensor):
+            step_value = step_value.item()
+        if step_value is None:
+            step_value = self._trainer.collected_frames
+        step = int(step_value)
+        self._last_completed_frame = step
+        if step >= self._next_due_frame:
+            intervals = (step - self._next_due_frame) // self.every_frames + 1
+            self._next_due_frame += intervals * self.every_frames
+
+        scalar_metrics = {}
+        for name, value in normalized.items():
+            if name.endswith("/video"):
+                if self._trainer.logger is not None:
+                    self._trainer.logger.log_video(name, value, step=step)
+                continue
+            self._trainer._log_dict[name].append(value)
+            self._trainer._last_log[name] = step
+            scalar_metrics[name] = value
+        if scalar_metrics and self._trainer.logger is not None:
+            self._trainer.logger.log_metrics(scalar_metrics, step=step)
+
+    def _poll(self) -> None:
+        while True:
+            result = self.evaluator.poll()
+            if result is None:
+                return
+            self._log_result(result)
+
+    def _schedule(self) -> None:
+        self._poll()
+        frames = int(self._trainer.collected_frames)
+        if frames < self._next_due_frame or self.evaluator.pending:
+            return
+        self._trigger(frames)
+
+    def _setup(self) -> None:
+        try:
+            self._schedule()
+        except BaseException:
+            self.evaluator.shutdown()
+            raise
+
+    def _drain(self) -> None:
+        self._poll()
+        while self.evaluator.pending:
+            result = self.evaluator.wait(timeout=self.wait_at_end_timeout)
+            if result is not None:
+                self._log_result(result)
+            elif self.evaluator.pending:
+                raise RuntimeError(
+                    "Evaluator.wait() returned without completing pending work."
+                )
+        self._poll()
+
+    def _shutdown(self) -> None:
+        try:
+            self._poll()
+            if self.wait_at_end:
+                self._drain()
+            frames = int(self._trainer.collected_frames)
+            if self.run_at_end and self._last_completed_frame != frames:
+                if not self.evaluator.pending and self._trigger(frames):
+                    if self.wait_at_end:
+                        self._drain()
+        finally:
+            self.evaluator.shutdown()
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "next_due_frame": self._next_due_frame,
+            "last_completed_frame": self._last_completed_frame,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self._next_due_frame = int(state_dict["next_due_frame"])
+        last_completed_frame = state_dict.get("last_completed_frame")
+        self._last_completed_frame = (
+            None if last_completed_frame is None else int(last_completed_frame)
+        )
+        self._last_triggered_frame = None
+
+    def register(self, trainer: Trainer, name: str = "evaluator_hook") -> None:
+        self._trainer = trainer
+        trainer.register_module(name, self)
+        trainer.register_op("setup", self._setup)
+        trainer.register_op("post_steps", self._schedule)
+        trainer.register_op("shutdown", self._shutdown)
 
 
 class UpdateWeights(TrainerHookBase):

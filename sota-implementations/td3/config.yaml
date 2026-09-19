@@ -58,6 +58,15 @@ compile:
   compile_mode:
   cudagraphs: False
 
+# checkpointing: rotated checkpoints under the Hydra run directory. Pass
+# resume=<checkpoint or rotation directory> to continue a run.
+resume: null
+checkpoint:
+  dir: checkpoints  # null disables saving
+  interval: 100_000  # frames between scheduled saves; the run also saves when it stops
+  keep_last: 2
+  include_replay_buffer: True
+
 hydra:
   job:
     chdir: true

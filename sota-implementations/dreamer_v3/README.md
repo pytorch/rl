@@ -339,10 +339,12 @@ Consequently resumed trajectories are not promised to match an uninterrupted run
 collection refills native replay before training continues, without accumulating
 a catch-up update burst. Counters and logger identity still continue.
 
-SIGINT and SIGTERM request a stop after the current collection/update batch.
-The final checkpoint is written before replay, environments and loggers close.
-Abrupt process termination cannot take a final snapshot; resume from the latest
-completed checkpoint instead.
+SIGINT and SIGTERM request a stop after the current collection/update batch
+(`torchrl.checkpoint.StopOnSignal`). The final checkpoint is written before
+replay, environments and loggers close. A second signal raises
+`KeyboardInterrupt` and exits without a final checkpoint. Abrupt process
+termination cannot take a final snapshot; resume from the latest completed
+checkpoint instead.
 
 
 Checkpoint ownership is provided by core components: `DreamerV3Loss` stores

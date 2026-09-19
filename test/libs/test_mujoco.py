@@ -20,17 +20,23 @@ import pytest
 import torch
 
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModuleBase
+from torchrl.data import Binary, Composite, Unbounded
 from torchrl.envs import (
     AntEnv,
     Compose,
     CubeBowlEnv,
+    EnvBase,
     ExplorationType,
     HopperEnv,
     HumanoidEnv,
     InitTracker,
     MacroPrimitive,
     MacroPrimitiveTransform,
+    MenagerieEnv,
+    MenagerieTask,
     MicroDuckEnv,
+    MicroDuckSkillEnv,
     MicroDuckTaskSampler,
     MujocoEnv,
     ParallelEnv,
@@ -38,6 +44,7 @@ from torchrl.envs import (
     SatelliteEnv,
     SerialEnv,
     set_exploration_type,
+    TensorDictPrimer,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
@@ -57,11 +64,16 @@ from torchrl.envs.custom.mujoco._math import (
     quat_mul,
     random_unit_quat,
 )
+from torchrl.envs.custom.mujoco.menagerie import (
+    _has_mujoco_menagerie,
+    MENAGERIE_ENV_VAR,
+)
 from torchrl.envs.custom.mujoco.microduck import (
     _body_frame_linear_velocity,
     _low_cost_collision_scene,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules.tensordict_module.zoo import MicroDuckSkills
 from torchrl.render import load_checkpoint
 
 if _has_mujoco:
@@ -156,6 +168,8 @@ class TestMujoco:
             '  <worldbody><geom type="plane" size="1 1 0.1" contype="1" conaffinity="1"/>',
             '    <body name="torso" pos="0 0 0.12"><freejoint name="root"/>',
             '      <geom type="sphere" size="0.02" mass="0.1"/>',
+            '      <site name="head_imu" pos="0 0 0.02" quat="0.707107 0 -0.707107 0"/>',
+            '      <site name="mouth_tip" pos="0.0266783 0 -0.00332564"/>',
         ]
         for side, y in (("left", 0.03), ("right", -0.03)):
             lines.extend(
@@ -221,6 +235,7 @@ class TestMujoco:
         assert env.tasks.shape == (3,)
         reset = env.reset()
         assert reset["observation"].shape == (num_envs, MicroDuckEnv.OBSERVATION_DIM)
+        assert not reset["fallen"].any()
         torch.testing.assert_close(
             reset["observation"][..., :3],
             torch.tensor([[0.0, 0.0, -1.0]]).expand(num_envs, -1),
@@ -318,6 +333,8 @@ class TestMujoco:
         fallen["qpos"][..., 2] = 0.01
         fallen["qpos"][..., 3:7] = torch.tensor([0.0, 1.0, 0.0, 0.0])
         assert env._compute_done(state, fallen).all()
+        fallen_observation = env.reset(fallen, set_state=True)
+        assert fallen_observation["fallen"].all()
         torch.testing.assert_close(
             env._reward_components(fallen, action)["diagnostic_reward_termination"],
             torch.full((num_envs, 1), -MicroDuckEnv.FALL_PENALTY),
@@ -689,6 +706,7 @@ class TestMujoco:
                 MicroDuckEnv.sidestep_task(-0.15),
                 MicroDuckEnv.jump_task(),
                 MicroDuckEnv.standing_task(),
+                MicroDuckEnv.jump_task(speed=0.3),
             ],
             seed=0,
         )
@@ -801,6 +819,23 @@ class TestMujoco:
             components["diagnostic_reward_drift"],
             torch.full((1, 1), MicroDuckEnv.DRIFT_WEIGHT * 0.5 * 0.02),
         )
+        # A tilted trunk must not turn horizontal travel into a launch, or
+        # make a purely vertical hop pay a horizontal drift penalty.
+        tilted = drifting.clone()
+        tilted["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 6), 0.0, math.sin(math.pi / 6), 0.0]
+        )
+        tilted["qvel"].zero_()
+        tilted["qvel"][..., 0] = 0.15
+        env._contacts.fill_(True)
+        torch.testing.assert_close(term(tilted, "drift"), term(drifting, "drift"))
+        assert (term(tilted, "launch") == 0).all()
+        assert (rhythm(tilted) == 0).all()
+        tilted["qvel"][..., 0] = 0.0
+        tilted["qvel"][..., 2] = on_beat["qvel"][..., 2]
+        assert (term(tilted, "drift") == 0).all()
+        torch.testing.assert_close(rhythm(tilted), rhythm(on_beat))
+        torch.testing.assert_close(term(tilted, "launch"), term(on_beat, "launch"))
         # Under the standing row the same motion earns no jump reward and pays
         # the vertical-velocity cost.
         env.reset(TensorDict({"task_id": torch.tensor([[3]])}, batch_size=(1,)))
@@ -810,6 +845,15 @@ class TestMujoco:
         assert (
             env._reward_components(drifting, action)["diagnostic_reward_drift"] == 0
         ).all()
+        # Forward hopping retains airborne rewards, but tracks its command
+        # without paying the penalty intended for a stationary hop.
+        td = env.reset(TensorDict({"task_id": torch.tensor([[4]])}, batch_size=(1,)))
+        torch.testing.assert_close(td["command"], torch.tensor([[0.3, 0.0]]))
+        moving = env.get_state().clone()
+        moving["qvel"][..., 0] = 0.3
+        assert (term(moving, "tracking") > term(env.get_state(), "tracking")).all()
+        assert (term(moving, "drift") == 0).all()
+        assert (term(risen, "jump") > 0).all()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
@@ -889,6 +933,86 @@ class TestMujoco:
         assert torch.equal(first_sample, second_sample)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_microduck_head_level_and_turn_terms(self, tmp_path, backend):
+        scene = self._write_microduck_fixture(tmp_path)
+        env = MicroDuckEnv(
+            scene,
+            backend=backend,
+            tasks=[
+                MicroDuckEnv.standing_task(),
+                MicroDuckEnv.turning_task(1.0),
+                MicroDuckEnv.turning_task(-1.0),
+            ],
+            seed=0,
+            diagnostics=True,
+        )
+        action = torch.zeros_like(env.action_spec.rand())
+        env.reset(TensorDict({"task_id": torch.tensor([[0]])}, batch_size=(1,)))
+        level = env.get_state()
+        # The calibrated frame faces +x, despite a downward IMU-to-beak line
+        # matching the real robot's 41-degree offset.
+        nose_down = level.clone()
+        nose_down["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 8), 0.0, math.sin(math.pi / 8), 0.0]
+        )
+        head_level = "diagnostic_reward_head_level"
+        env.reset(
+            TensorDict(qpos=level["qpos"], qvel=level["qvel"], batch_size=[1]),
+            set_state=True,
+        )
+        torch.testing.assert_close(env.head_pitch(), torch.zeros(1), atol=1e-4, rtol=0)
+        paid_level = env._reward_components(level, action)[head_level]
+        turned = level.clone()
+        turned["qpos"][..., 3:7] = torch.tensor(
+            [math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4)]
+        )
+        env.reset(turned, set_state=True)
+        # Looking forward is relative to the body, not a fixed world heading.
+        torch.testing.assert_close(
+            env._reward_components(turned, action)[head_level], paid_level
+        )
+        env.reset(
+            TensorDict(qpos=nose_down["qpos"], qvel=nose_down["qvel"], batch_size=[1]),
+            set_state=True,
+        )
+        torch.testing.assert_close(
+            env.head_pitch(), torch.full((1,), -math.pi / 4), atol=1e-3, rtol=0
+        )
+        assert (
+            env._reward_components(nose_down, action)[head_level] < paid_level
+        ).all()
+        # Every preset keeps the head level by default.
+        assert (
+            MicroDuckEnv.standing_task().reward_weights[
+                list(MicroDuckEnv.REWARD_TERMS).index("head_level")
+            ]
+            == 1.0
+        )
+
+        # The turning task tracks its yaw rate in place of the yaw_rate cost.
+        turn = "diagnostic_reward_turn"
+        left = MicroDuckEnv.turning_task(1.0)
+        assert left.params["turn_rate"] == 1.0
+        assert (
+            left.reward_weights[list(MicroDuckEnv.REWARD_TERMS).index("yaw_rate")]
+            == 0.0
+        )
+        env.reset(TensorDict({"task_id": torch.tensor([[1]])}, batch_size=(1,)))
+        spinning_left, spinning_right = level.clone(), level.clone()
+        spinning_left["qvel"][..., 5] = 1.0
+        spinning_right["qvel"][..., 5] = -1.0
+        components = env._reward_components(spinning_left, action)
+        assert (
+            components[turn] > env._reward_components(spinning_right, action)[turn]
+        ).all()
+        env.reset(TensorDict({"task_id": torch.tensor([[2]])}, batch_size=(1,)))
+        assert (
+            env._reward_components(spinning_right, action)[turn]
+            > env._reward_components(spinning_left, action)[turn]
+        ).all()
+        env.close()
+
     def test_microduck_register_reward_adds_a_weighted_term(
         self, tmp_path, monkeypatch
     ):
@@ -1028,6 +1152,56 @@ class TestMujoco:
         assert (metrics["left_swing_phases"] == 0.0).all()
         assert (metrics["left_single_support_steps"] == 0.0).all()
         env.close()
+
+    def test_microduck_trajectory_metrics_exclude_padding(self):
+        rollout = TensorDict(batch_size=(1, 6))
+        rollout["collector", "mask"] = torch.tensor([[True] * 5 + [False]])
+        rollout["command"] = torch.zeros(1, 6, 2)
+        rollout["next", "observation"] = torch.zeros(1, 6, 56)
+        rollout["next", "terminated"] = torch.zeros(1, 6, 1, dtype=torch.bool)
+        for foot in ("left", "right"):
+            rollout["next", f"diagnostic_{foot}_foot_contact"] = torch.tensor(
+                [[[1.0], [0.0], [1.0], [0.0], [1.0], [0.0]]]
+            )
+        for name in ("position_x", "position_y"):
+            rollout["next", f"diagnostic_{name}"] = torch.tensor(
+                [[[0.0], [0.01], [0.0], [0.01], [0.0], [99.0]]]
+            )
+        rollout["next", "diagnostic_time"] = torch.arange(6).view(1, 6, 1).float()
+        for name in ("head_pitch", "head_yaw", "yaw_rate"):
+            rollout["next", f"diagnostic_{name}"] = torch.tensor(
+                [[[0.0]] * 5 + [[99.0]]]
+            )
+        rollout["next", "diagnostic_height_gain"] = torch.tensor(
+            [[[-1.0]] * 5 + [[99.0]]]
+        )
+        # Crossing +/-pi is a small positive turn, not a reversed full turn.
+        rollout["next", "diagnostic_heading"] = torch.tensor(
+            [[[3.0], [3.1], [-3.0831853], [-2.9831853], [-2.8831853], [0.0]]]
+        )
+        metrics = MicroDuckEnv.trajectory_metrics(rollout, jumping=True)
+        assert metrics["airborne_fraction"] == pytest.approx(0.4)
+        assert metrics["drift_speed"] == 0.0
+        assert metrics["displacement_max"] == pytest.approx(math.sqrt(2) * 0.01)
+        assert metrics["heading_rate"] == pytest.approx(0.1)
+        assert metrics["takeoffs_per_episode"] == 2.0
+        assert metrics["landings_per_episode"] == 2.0
+        assert metrics["head_pitch_abs_p95"] == 0.0
+        assert metrics["hop_height_max"] == -1.0
+        # Ground speed comes from displacement and time, independently of
+        # the tilted body-frame velocity in the policy observation.
+        rollout["next", "diagnostic_heading"].zero_()
+        rollout["next", "diagnostic_position_y"].zero_()
+        rollout["next", "diagnostic_position_x"] = torch.tensor(
+            [[[0.0], [1.0], [2.0], [3.0], [4.0], [99.0]]]
+        )
+        metrics = MicroDuckEnv.trajectory_metrics(rollout)
+        assert metrics["ground_forward_speed"] == 1.0
+        assert metrics["ground_lateral_speed"] == 0.0
+        assert (
+            MicroDuckEnv.trajectory_metrics(rollout[..., :1])["ground_forward_speed"]
+            == 0.0
+        )
 
     def test_microduck_example_gait_metrics_count_swing_phases(self):
         gait = self._load_example("heuristic_gait")
@@ -2196,9 +2370,17 @@ class TestMujoco:
         torch._dynamo.reset()
         torch._dynamo.utils.counters.clear()
         env = HopperEnv(num_envs=2, seed=0, compile_step=True)
-        td = env.rollout(3)
-        assert torch.isfinite(td.get(("next", "reward"))).all()
-        unique_graphs = torch._dynamo.utils.counters["stats"].get("unique_graphs")
+        # Older mujoco-torch releases compile a solver while_loop during the
+        # eager reset forward pass. Count the physics-step graph separately.
+        env.reset()
+        reset_graphs = torch._dynamo.utils.counters["stats"].get("unique_graphs", 0)
+        # Both the first reset and later resets must retain the stepped layout.
+        for _ in range(2):
+            td = env.rollout(3)
+            assert torch.isfinite(td.get(("next", "reward"))).all()
+        unique_graphs = (
+            torch._dynamo.utils.counters["stats"].get("unique_graphs", 0) - reset_graphs
+        )
         assert (
             unique_graphs == 1
         ), f"expected a single compiled graph, got {unique_graphs}"
@@ -2880,6 +3062,252 @@ class TestMujoco:
         )
         env.close()
 
+    # ------------------------------------------------------------------
+    # MenagerieEnv: any Menagerie robot by name.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _write_menagerie_fixture(tmp_path: Path, name: str = "tiny_bot") -> Path:
+        """A one-robot Menagerie checkout under ``tmp_path``.
+
+        ``scene.xml`` includes a floating base carrying a two-joint arm with a
+        ``tip`` site, two sensors and ``home`` and ``folded`` keyframes;
+        ``bare.xml`` is the arm alone, fixed to the world, with no keyframe.
+        """
+
+        def robot(*, floating: bool, keyframes: bool) -> str:
+            base = "<freejoint name='root'/>" if floating else ""
+            keys = (
+                "<keyframe>"
+                "<key name='home' qpos='0 0 0.3 1 0 0 0 0.5 -1' ctrl='0.5 -1'/>"
+                "<key name='folded' qpos='0 0 0.3 1 0 0 0 1.5 -1.5' ctrl='1.5 -1.5'/>"
+                "</keyframe>"
+                if keyframes
+                else ""
+            )
+            return (
+                f"<mujoco model='{name}'><option timestep='0.002'/>"
+                "<default><joint damping='0.1'/><geom contype='0' conaffinity='0'/></default>"
+                f"<worldbody><body name='base' pos='0 0 0.3'>{base}"
+                "<geom type='sphere' size='0.05' mass='1'/>"
+                "<body name='link1' pos='0 0 -0.05'>"
+                "<joint name='joint1' axis='0 1 0' range='-1.5 1.5'/>"
+                "<geom type='capsule' size='0.01' fromto='0 0 0 0 0 -0.1' mass='0.1'/>"
+                "<body name='link2' pos='0 0 -0.1'>"
+                "<joint name='joint2' axis='0 1 0' range='-1.5 1.5'/>"
+                "<geom type='capsule' size='0.01' fromto='0 0 0 0 0 -0.1' mass='0.1'/>"
+                "<site name='tip' pos='0 0 -0.1'/>"
+                "</body></body></body></worldbody>"
+                "<actuator>"
+                "<position name='a1' joint='joint1' kp='10' ctrlrange='-1.5 1.5'/>"
+                "<position name='a2' joint='joint2' kp='10' ctrlrange='-1.5 1.5'/>"
+                "</actuator>"
+                "<sensor><jointpos name='joint1_pos' joint='joint1'/>"
+                "<framepos name='tip_pos' objtype='site' objname='tip'/></sensor>"
+                f"{keys}</mujoco>"
+            )
+
+        robot_dir = tmp_path / name
+        robot_dir.mkdir()
+        (robot_dir / f"{name}.xml").write_text(robot(floating=True, keyframes=True))
+        (robot_dir / "scene.xml").write_text(
+            f"<mujoco model='{name} scene'><include file='{name}.xml'/>"
+            "<worldbody><geom name='floor' type='plane' size='2 2 0.1' "
+            "contype='1' conaffinity='1'/></worldbody></mujoco>"
+        )
+        (robot_dir / "bare.xml").write_text(robot(floating=False, keyframes=False))
+        return tmp_path
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_menagerie_specs_keyframe_and_observation(self, tmp_path, backend):
+        root = self._write_menagerie_fixture(tmp_path)
+        env = MenagerieEnv(
+            "tiny_bot",
+            menagerie_path=root,
+            task=MenagerieTask(site_names=("tip",)),
+            backend=backend,
+            num_envs=1 if backend == "mujoco" else 2,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        check_env_specs(env)
+        assert env.model_path == (root / "tiny_bot" / "scene.xml").resolve()
+        assert env.action_spec.shape[-1] == 2
+        observation = env.reset()
+        home = torch.tensor([0.0, 0.0, 0.3, 1.0, 0.0, 0.0, 0.0, 0.5, -1.0])
+        torch.testing.assert_close(
+            observation["qpos"], home.expand(env.num_envs, -1), atol=1e-6, rtol=0
+        )
+        assert torch.equal(observation["qvel"], torch.zeros(env.num_envs, 8))
+        # The joint sensor reads the joint, the frame sensor reads the site.
+        torch.testing.assert_close(
+            observation["sensordata"][..., 0], observation["qpos"][..., 7]
+        )
+        torch.testing.assert_close(
+            observation["sensordata"][..., 1:4],
+            observation["site_positions"][..., 0, :],
+        )
+        torch.testing.assert_close(
+            observation["site_positions"], env.site_positions(["tip"])
+        )
+        rollout = env.rollout(3)
+        assert torch.isfinite(rollout["next", "qpos"]).all()
+        assert torch.equal(rollout["next", "reward"], torch.zeros(env.num_envs, 3, 1))
+        assert not rollout["next", "done"].any()
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_menagerie_task_keyframes_reward_and_termination(self, tmp_path):
+        root = self._write_menagerie_fixture(tmp_path)
+        kwargs = {"menagerie_path": root, "backend": "mujoco", "seed": 0}
+        folded = MenagerieEnv(
+            "tiny_bot",
+            task=MenagerieTask(keyframe="folded"),
+            reset_noise_scale=0.0,
+            **kwargs,
+        )
+        torch.testing.assert_close(
+            folded.reset()["qpos"][0, 7:], torch.tensor([1.5, -1.5])
+        )
+        torch.testing.assert_close(
+            folded.reset_state["qpos"][7:], torch.tensor([1.5, -1.5])
+        )
+        assert torch.equal(folded.reset_state["qvel"], torch.zeros(8))
+        with pytest.raises(KeyError, match="folded"):
+            MenagerieEnv("tiny_bot", task=MenagerieTask(keyframe="nope"), **kwargs)
+        # Without a home keyframe the reset pose is the model's qpos0, and a
+        # fixed base cannot terminate on height.
+        bare = MenagerieEnv("tiny_bot", entry="bare", reset_noise_scale=0.0, **kwargs)
+        assert torch.equal(bare.reset()["qpos"], torch.zeros(1, 2))
+        assert "sensordata" in bare.observation_spec.keys()
+        with pytest.raises(ValueError, match="free joint"):
+            MenagerieEnv(
+                "tiny_bot",
+                entry="bare",
+                task=MenagerieTask(terminate_below_height=0.2),
+                **kwargs,
+            )
+
+        task = MenagerieEnv.hold_pose_task(
+            control_cost_weight=0.01, terminate_below_height=0.2, alive_bonus=0.5
+        )
+        env = MenagerieEnv("tiny_bot", task=task, max_episode_steps=40, **kwargs)
+        rollout = env.rollout(40)
+        # The base is in free fall: the episode ends when it drops below the
+        # height, and only then.
+        height = rollout["next", "qpos"][0, :, 2]
+        assert rollout.shape[-1] < 40
+        assert rollout["next", "terminated"][0, -1, 0]
+        assert not rollout["next", "terminated"][0, :-1].any()
+        assert height[-1] < 0.2 <= height[:-1].min()
+        # The reward follows the task's formula, alive bonus withheld on the
+        # terminating step.
+        joints = rollout["next", "qpos"][0, :, 7:]
+        pose = torch.exp(-(joints - torch.tensor([0.5, -1.0])).square().mean(-1) / 0.25)
+        control = (rollout["action"][0] / 1.5).square().mean(-1)
+        alive = 0.5 * (height >= 0.2).float()
+        torch.testing.assert_close(
+            rollout["next", "reward"][0, :, 0], pose - 0.01 * control + alive
+        )
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_menagerie_model_resolution(self, tmp_path, monkeypatch):
+        from torchrl.envs.custom.mujoco import menagerie as menagerie_module
+
+        root = self._write_menagerie_fixture(tmp_path)
+        scene = (root / "tiny_bot" / "scene.xml").resolve()
+        # A checkout, the robot directory or the XML itself; entries by stem.
+        assert MenagerieEnv.resolve_model("tiny_bot", menagerie_path=root) == scene
+        assert (
+            MenagerieEnv.resolve_model("tiny_bot", menagerie_path=root / "tiny_bot")
+            == scene
+        )
+        assert MenagerieEnv.resolve_model("tiny_bot", menagerie_path=scene) == scene
+        with pytest.raises(ValueError, match="entry='bare'"):
+            MenagerieEnv.resolve_model("tiny_bot", entry="bare", menagerie_path=scene)
+        assert MenagerieEnv.resolve_model(
+            "tiny_bot", entry="bare", menagerie_path=root
+        ) == scene.with_name("bare.xml")
+        with pytest.raises(FileNotFoundError, match="'bare', 'scene', 'tiny_bot'"):
+            MenagerieEnv.resolve_model("tiny_bot", entry="nope", menagerie_path=root)
+        with pytest.raises(FileNotFoundError, match="'other'"):
+            MenagerieEnv.resolve_model("other", menagerie_path=root)
+        monkeypatch.setenv(MENAGERIE_ENV_VAR, str(root))
+        assert MenagerieEnv.resolve_model("tiny_bot") == scene
+        # Without a checkout or the package the error lists every option.
+        monkeypatch.delenv(MENAGERIE_ENV_VAR)
+        monkeypatch.setattr(menagerie_module, "_has_mujoco_menagerie", False)
+        with pytest.raises(FileNotFoundError, match="download=True") as excinfo:
+            MenagerieEnv.resolve_model("tiny_bot")
+        assert MENAGERIE_ENV_VAR in str(excinfo.value)
+        with pytest.raises(ValueError, match="menagerie_path"):
+            MenagerieEnv("tiny_bot", menagerie_path=root, xml_path=scene)
+        # Native workers receive the resolved XML.
+        env = MenagerieEnv(
+            "tiny_bot",
+            menagerie_path=root,
+            backend="mujoco",
+            num_envs=2,
+            parallel=False,
+            seed=0,
+        )
+        assert isinstance(env, SerialEnv)
+        assert env.rollout(3)["next", "qpos"].shape == (2, 1, 3, 9)
+        env.close()
+
+    @pytest.mark.skipif(
+        not _has_mujoco_menagerie, reason="mujoco-menagerie is not installed"
+    )
+    def test_menagerie_package_resolution(self, tmp_path, monkeypatch):
+        import mujoco_menagerie
+
+        root = self._write_menagerie_fixture(tmp_path, name="universal_robots_ur5e")
+        monkeypatch.delenv(MENAGERIE_ENV_VAR, raising=False)
+        monkeypatch.setenv("MENAGERIE_ROOT", str(root))
+        assert (
+            MenagerieEnv.resolve_model("universal_robots_ur5e")
+            == (root / "universal_robots_ur5e" / "scene.xml").resolve()
+        )
+        with pytest.raises(mujoco_menagerie.UnknownRobotError):
+            MenagerieEnv.resolve_model("universal_robots_ur5")
+        # A registered robot missing from MENAGERIE_ROOT is a FileNotFoundError.
+        with pytest.raises(FileNotFoundError, match="checkout"):
+            MenagerieEnv.resolve_model("unitree_go2")
+        # Nothing downloads unless asked.
+        monkeypatch.delenv("MENAGERIE_ROOT")
+        monkeypatch.setenv("MENAGERIE_CACHE_DIR", str(tmp_path / "cache"))
+        with pytest.raises(FileNotFoundError, match="download=True"):
+            MenagerieEnv.resolve_model("universal_robots_ur5e")
+        assert not (tmp_path / "cache").exists()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_menagerie_ur5e_when_available(self):
+        menagerie_path = os.environ.get(MENAGERIE_ENV_VAR)
+        if menagerie_path is None or not Path(menagerie_path).exists():
+            pytest.xfail(
+                f"MenagerieEnv requires {MENAGERIE_ENV_VAR} for Menagerie assets."
+            )
+        env = MenagerieEnv(
+            "universal_robots_ur5e",
+            menagerie_path=menagerie_path,
+            task=MenagerieEnv.hold_pose_task(site_names=("attachment_site",)),
+            reset_noise_scale=0.0,
+            seed=0,
+            max_episode_steps=3,
+        )
+        check_env_specs(env)
+        home = torch.tensor([-1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0])
+        torch.testing.assert_close(env.reset()["qpos"][0], home)
+        assert env.action_spec.shape == torch.Size([1, 6])
+        rollout = env.rollout(3)
+        assert rollout["next", "site_positions"].shape == (1, 3, 1, 3)
+        assert torch.isfinite(rollout["next", "reward"]).all()
+        robot_only = MenagerieEnv(
+            "universal_robots_ur5e", entry="ur5e", menagerie_path=menagerie_path
+        )
+        assert robot_only.model_path.name == "ur5e.xml"
+
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_xml_path_preserves_relative_assets(self, tmp_path, backend):
         assets = tmp_path / "assets"
@@ -2931,6 +3359,168 @@ class TestMujoco:
         td = env.rollout(3)
         assert td.shape == torch.Size([num_envs, 3])
         assert torch.isfinite(td.get(("next", "observation"))).all()
+
+
+class _MicroDuckResetSignalEnv(EnvBase):
+    """Small task env with a controller reset distinct from the fall report."""
+
+    def __init__(self):
+        super().__init__(batch_size=(1,))
+        self.observation_spec = Composite(
+            observation=Unbounded((1, MicroDuckEnv.OBSERVATION_DIM)),
+            fallen=Binary(n=1, shape=(1, 1), dtype=torch.bool),
+            respawned=Binary(n=1, shape=(1, 1), dtype=torch.bool),
+            shape=(1,),
+        )
+        self.action_spec = Unbounded((1, MicroDuckEnv.NUM_JOINTS))
+        self.reward_spec = Unbounded((1, 1))
+        self.done_spec = Binary(n=1, shape=(1, 1), dtype=torch.bool)
+        self._steps = 0
+
+    def _set_seed(self, seed):
+        return seed
+
+    def _reset(self, tensordict=None, **kwargs):
+        self._steps = 0
+        return self.observation_spec.zero().update(self.full_done_spec.zero())
+
+    def _step(self, td):
+        self._steps += 1
+        result = self.observation_spec.zero()
+        result["observation"] = td["observation"].clone()
+        result["observation"][..., 0] += 1
+        result["respawned"] = torch.full_like(result["respawned"], self._steps == 2)
+        result["reward"] = td["action"].sum(-1, keepdim=True)
+        return result.update(self.full_done_spec.zero())
+
+
+class _MicroDuckMemoryPolicy(TensorDictModuleBase):
+    in_keys = ["observation", "task_id", "memory", "is_init"]
+    out_keys = ["action", ("next", "memory")]
+
+    def make_tensordict_primer(self):
+        return TensorDictPrimer(memory=Unbounded((1,)), default_value=0)
+
+    def forward(self, td):
+        observation = td["observation"]
+        action = observation.new_zeros((*td.batch_size, MicroDuckEnv.NUM_JOINTS))
+        action[..., :2] = observation[
+            ..., MicroDuckEnv.COMMAND_START : MicroDuckEnv.COMMAND_START + 2
+        ]
+        action[..., 2:3] = td["task_id"]
+        start = MicroDuckEnv.GAIT_PHASE_START
+        action[..., 3:6] = observation[..., start : start + 3]
+        action[..., 6:7] = td["memory"]
+        td["action"] = action
+        td["next", "memory"] = td["memory"] + 1
+        return td
+
+
+class TestMicroDuckSkillEnv:
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_skill_env_wraps_microduck_env(self, tmp_path):
+        tasks = [
+            MicroDuckEnv.standing_task(),
+            MicroDuckEnv.tracking_task(0.2),
+        ]
+        base_env = MicroDuckEnv(
+            TestMujoco._write_microduck_fixture(tmp_path),
+            backend="mujoco",
+            tasks=tasks,
+            num_envs=1,
+            reset_noise_scale=0.0,
+            seed=0,
+        )
+        env = MicroDuckSkillEnv.from_env(
+            base_env,
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(tasks),
+                action_scale=base_env.action_scale,
+            ),
+            control_steps_per_decision=2,
+            group_key=None,
+        )
+        try:
+            check_env_specs(env)
+            td = env.reset().set("skill", torch.ones(1, dtype=torch.long))
+            transition = env.step(td)
+            assert torch.isfinite(transition["next", "reward"]).all()
+            assert transition["next", "observation"].shape[-1] == (
+                MicroDuckEnv.OBSERVATION_DIM + len(tasks)
+            )
+            torch.testing.assert_close(
+                transition["next", "controller", "memory"], torch.full((1, 1), 2.0)
+            )
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("parameterized", [False, True])
+    def test_skill_maps_task_command_and_gait(self, parameterized):
+        tasks = [
+            MicroDuckEnv.standing_task(),
+            MicroDuckEnv.speed_range_task(0.1, 0.3),
+            MicroDuckEnv.sidestep_task(-0.2),
+        ]
+        argument_key = ("command", "argument") if parameterized else None
+        env = MicroDuckSkillEnv.from_env(
+            _MicroDuckResetSignalEnv(),
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(tasks),
+                action_scale=1.0,
+            ),
+            skill_ids=[2, 1],
+            control_steps_per_decision=1,
+            group_key=None,
+            argument_key=argument_key,
+        )
+        td = env.reset().set("skill", torch.zeros(1, dtype=torch.long))
+        argument = torch.tensor([[-0.5, 0.75]])
+        if parameterized:
+            td[argument_key] = argument
+        transition = env.step(td)
+        row = tasks[2]
+        command = (
+            row.command_low
+            + 0.5 * (argument + 1) * (row.command_high - row.command_low)
+            if parameterized
+            else (row.command_low + row.command_high) / 2
+        )
+        expected_reward = (
+            command.sum(-1)
+            + 2
+            + math.sin(MicroDuckEnv.GAIT_PHASE_OFFSET)
+            + math.cos(MicroDuckEnv.GAIT_PHASE_OFFSET)
+        ).expand(1)
+        torch.testing.assert_close(
+            transition["next", "reward"].squeeze(-1), expected_reward
+        )
+        torch.testing.assert_close(
+            transition["next", "controller", "memory"], torch.ones(1, 1)
+        )
+        env.close()
+
+    def test_skill_env_forwards_reset_key(self):
+        env = MicroDuckSkillEnv.from_env(
+            _MicroDuckResetSignalEnv(),
+            MicroDuckSkills(
+                _MicroDuckMemoryPolicy(),
+                MicroDuckEnv.stack_tasks(MicroDuckEnv.standing_task()),
+                action_scale=1.0,
+            ),
+            control_steps_per_decision=3,
+            group_key=None,
+            reset_key="respawned",
+        )
+        check_env_specs(env)
+        transition = env.rand_step(env.reset())
+        # The signal on physical step two resets memory before step three.
+        torch.testing.assert_close(
+            transition["next", "controller", "memory"], torch.ones(1, 1)
+        )
+        assert not transition["next", "fallen"].any()
+        env.close()
 
 
 if __name__ == "__main__":

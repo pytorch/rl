@@ -62,6 +62,8 @@ TorchRL organizes configurations into several categories using the ``@`` syntax 
 - ``optimizer@<target>``: Optimizer configurations
 - ``loss@<target>``: Loss function configurations
 - ``logger@<target>``: Logging configurations
+- ``checkpoint@<target>``: Checkpoint container configurations
+- ``checkpoint_rotation@<target>``: Checkpoint retention configurations
 
 The ``@<target>`` syntax allows you to assign configurations to specific locations in your config structure.
 
@@ -401,6 +403,7 @@ Transform Configurations
     TensorDictPrimerConfig
     PinMemoryTransformConfig
     RewardSumConfig
+    DoneTransformConfig
     ExcludeTransformConfig
     SelectTransformConfig
     TimeMaxPoolConfig
@@ -421,6 +424,8 @@ Transform Configurations
     LineariseRewardsConfig
     ConditionalSkipConfig
     MultiActionConfig
+    ClosedLoopMultiActionConfig
+    LowLevelControllerConfig
     TimerConfig
     ConditionalPolicySwitchConfig
     FiniteTensorDictCheckConfig
@@ -574,6 +579,53 @@ Logging Configurations
     TensorboardLoggerConfig
     TrackioLoggerConfig
     CSVLoggerConfig
+
+Checkpoint Configurations
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.checkpoint
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_class.rst
+
+    CheckpointConfig
+    CheckpointRotationConfig
+
+The trainer recipes pass both to the trainer, which then saves rotated
+checkpoints every ``save_trainer_interval`` frames and when the run stops:
+
+.. code-block:: yaml
+
+    defaults:
+      - checkpoint@checkpoint: base
+      - checkpoint_rotation@checkpoint_rotation: base
+      - _self_
+
+    resume: null
+
+    checkpoint_rotation:
+      directory: checkpoints
+      keep_last: 2
+
+    trainer:
+      checkpoint: ${checkpoint}
+      checkpoint_rotation: ${checkpoint_rotation}
+
+Resuming a recipe
+~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.trainers.algorithms.configs
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    instantiate_trainer
+
+:func:`instantiate_trainer` replaces ``hydra.utils.instantiate(cfg.trainer)`` in
+the recipe entrypoints and implements ``resume=``; the flow is described in
+:doc:`checkpoint`.
 
 Creating Custom Configurations
 ------------------------------

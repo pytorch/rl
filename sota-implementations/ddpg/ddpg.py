@@ -10,6 +10,7 @@ It supports state environments like MuJoCo.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -19,15 +20,24 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import get_available_device, timeit
+from torchrl.checkpoint import (
+    Checkpoint,
+    GlobalRNGState,
+    resolve_checkpoint_path,
+    resume_config,
+    RunCheckpointer,
+    StopOnSignal,
+)
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     dump_video,
-    log_metrics,
     make_collector,
     make_ddpg_agent,
     make_environment,
@@ -38,7 +48,13 @@ from utils import (
 
 
 @hydra.main(version_base="1.3", config_path="", config_name="config")
-def main(cfg: DictConfig):  # noqa: F821
+def main(cfg: DictConfig):
+    # Resume: the saved configuration is the base, CLI overrides apply on top.
+    resume_path = None
+    if cfg.resume:
+        resume_path = resolve_checkpoint_path(to_absolute_path(cfg.resume))
+        cfg = resume_config(cfg, resume_path)
+
     device = (
         torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()
     )
@@ -48,7 +64,7 @@ def main(cfg: DictConfig):  # noqa: F821
         else get_available_device()
     )
 
-    # Create logger
+    # Create logger, reattached to the saved run when resuming
     exp_name = generate_exp_name("DDPG", cfg.logger.exp_name)
     logger = None
     if cfg.logger.backend:
@@ -56,6 +72,11 @@ def main(cfg: DictConfig):  # noqa: F821
             logger_type=cfg.logger.backend,
             logger_name="ddpg_logging",
             experiment_name=exp_name,
+            state_dict=(
+                Checkpoint.read_component(resume_path, "logger", default=None)
+                if resume_path
+                else None
+            ),
             wandb_kwargs={
                 "mode": cfg.logger.mode,
                 "config": dict(cfg),
@@ -63,6 +84,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+        training_logger = logger.with_prefix("training")
+        evaluation_logger = logger.with_prefix("evaluation")
+        timing_logger = logger.with_prefix("timing")
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -110,6 +134,35 @@ def main(cfg: DictConfig):  # noqa: F821
     optimizer_actor, optimizer_critic = make_optimizer(cfg, loss_module)
     optimizer = group_optimizers(optimizer_actor, optimizer_critic)
 
+    # Checkpointing: the loss holds the online and target networks, so the
+    # policy is not saved a second time; the collector is resynchronized
+    # from the restored loss parameters. The exploration module carries its
+    # annealed noise scale.
+    run_state = {"collected_frames": 0}
+    checkpoint = Checkpoint(
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_updater=target_net_updater,
+        exploration=exploration_policy[1],
+        collector=collector,
+        replay_buffer=replay_buffer,
+        run_state=run_state,
+        rng=GlobalRNGState(),
+        config=OmegaConf.to_container(cfg, resolve=False),
+    )
+    if logger is not None:
+        checkpoint.register("logger", logger)
+    checkpointer = RunCheckpointer(
+        checkpoint,
+        directory=cfg.checkpoint.dir,
+        interval=cfg.checkpoint.interval,
+        keep_last=cfg.checkpoint.keep_last,
+        exclude=() if cfg.checkpoint.include_replay_buffer else ("replay_buffer",),
+        resume_path=resume_path,
+    )
+    if checkpointer.restore(map_location=device):
+        collector.update_policy_weights_()
+
     def update(sampled_tensordict):
         optimizer.zero_grad(set_to_none=True)
 
@@ -131,8 +184,8 @@ def main(cfg: DictConfig):  # noqa: F821
         update = CudaGraphModule(update, warmup=50)
 
     # Main loop
-    collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    collected_frames = run_state["collected_frames"]
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames, initial=collected_frames)
 
     init_random_frames = cfg.collector.init_random_frames
     num_updates = int(cfg.collector.frames_per_batch * cfg.optim.utd_ratio)
@@ -143,88 +196,112 @@ def main(cfg: DictConfig):  # noqa: F821
 
     c_iter = iter(collector)
     total_iter = len(collector)
-    for _ in range(total_iter):
-        timeit.printevery(1000, total_iter, erase=True)
-        with timeit("collecting"):
-            tensordict = next(c_iter)
-        # Update exploration policy
-        exploration_policy[1].step(tensordict.numel())
 
-        # Update weights of the inference policy
-        collector.update_policy_weights_()
+    # SIGINT/SIGTERM stop after the current batch; a second signal interrupts.
+    stop = StopOnSignal()
+    try:
+        with stop:
+            while True:
+                timeit.printevery(1000, total_iter, erase=True)
+                with timeit("collecting"):
+                    tensordict = next(c_iter, None)
+                if tensordict is None:
+                    break
+                # Update exploration policy
+                exploration_policy[1].step(tensordict.numel())
 
-        current_frames = tensordict.numel()
-        pbar.update(current_frames)
+                # Update weights of the inference policy
+                collector.update_policy_weights_()
 
-        # Add to replay buffer
-        with timeit("rb - extend"):
-            tensordict = tensordict.reshape(-1)
-            replay_buffer.extend(tensordict)
+                current_frames = tensordict.numel()
+                pbar.update(current_frames)
 
-        collected_frames += current_frames
+                # Add to replay buffer
+                with timeit("rb - extend"):
+                    tensordict = tensordict.reshape(-1)
+                    replay_buffer.extend(tensordict)
 
-        # Optimization steps
-        if collected_frames >= init_random_frames:
-            tds = []
-            for _ in range(num_updates):
-                # Sample from replay buffer
-                with timeit("rb - sample"):
-                    sampled_tensordict = replay_buffer.sample().to(device)
-                with timeit("update"):
-                    torch.compiler.cudagraph_mark_step_begin()
-                    td_loss = update(sampled_tensordict)
-                tds.append(td_loss.clone())
+                collected_frames += current_frames
 
-                # Update priority
-                if prb:
-                    replay_buffer.update_priority(sampled_tensordict)
-            tds = torch.stack(tds)
+                # Optimization steps
+                if collected_frames >= init_random_frames:
+                    tds = []
+                    for _ in range(num_updates):
+                        # Sample from replay buffer
+                        with timeit("rb - sample"):
+                            sampled_tensordict = replay_buffer.sample().to(device)
+                        with timeit("update"):
+                            torch.compiler.cudagraph_mark_step_begin()
+                            td_loss = update(sampled_tensordict)
+                        tds.append(td_loss.clone())
 
-        episode_end = (
-            tensordict["next", "done"]
-            if tensordict["next", "done"].any()
-            else tensordict["next", "truncated"]
-        )
-        episode_rewards = tensordict["next", "episode_reward"][episode_end]
+                        # Update priority
+                        if prb:
+                            replay_buffer.update_priority(sampled_tensordict)
+                    tds = torch.stack(tds)
 
-        # Logging
-        metrics_to_log = {}
-        if len(episode_rewards) > 0:
-            episode_length = tensordict["next", "step_count"][episode_end]
-            metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
-                episode_length
-            )
-
-        if collected_frames >= init_random_frames:
-            tds = TensorDict(train=tds).flatten_keys("/").mean()
-            metrics_to_log.update(tds.to_dict())
-
-        # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(
-                ExplorationType.DETERMINISTIC
-            ), torch.no_grad(), timeit("eval"):
-                eval_rollout = eval_env.rollout(
-                    eval_rollout_steps,
-                    exploration_policy,
-                    auto_cast_to_device=True,
-                    break_when_any_done=True,
+                episode_end = (
+                    tensordict["next", "done"]
+                    if tensordict["next", "done"].any()
+                    else tensordict["next", "truncated"]
                 )
-                eval_env.apply(dump_video)
-                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                metrics_to_log["eval/reward"] = eval_reward
+                episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
-        if logger is not None:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            log_metrics(logger, metrics_to_log, collected_frames)
+                # Logging
+                training_metrics = {}
+                evaluation_metrics = {}
+                if len(episode_rewards) > 0:
+                    episode_length = tensordict["next", "step_count"][episode_end]
+                    training_metrics["reward"] = episode_rewards.mean().item()
+                    training_metrics[
+                        "episode_length"
+                    ] = episode_length.sum().item() / len(episode_length)
 
-    collector.shutdown()
-    if not eval_env.is_closed:
-        eval_env.close()
-    if not train_env.is_closed:
-        train_env.close()
+                if collected_frames >= init_random_frames:
+                    training_metrics.update(tds.mean().to_dict())
+
+                # Evaluation
+                if abs(collected_frames % eval_iter) < frames_per_batch:
+                    with (
+                        set_exploration_type(ExplorationType.DETERMINISTIC),
+                        torch.no_grad(),
+                        timeit("eval"),
+                    ):
+                        eval_rollout = eval_env.rollout(
+                            eval_rollout_steps,
+                            exploration_policy,
+                            auto_cast_to_device=True,
+                            break_when_any_done=True,
+                        )
+                        eval_env.apply(dump_video)
+                        eval_reward = (
+                            eval_rollout["next", "reward"].sum(-2).mean().item()
+                        )
+                        evaluation_metrics["reward"] = eval_reward
+
+                if logger is not None:
+                    if training_metrics:
+                        training_logger.log_metrics(training_metrics, collected_frames)
+                    if evaluation_metrics:
+                        evaluation_logger.log_metrics(
+                            evaluation_metrics, collected_frames
+                        )
+                    timing_metrics = timeit.todict()
+                    timing_metrics["speed"] = pbar.format_dict["rate"]
+                    if timing_metrics:
+                        timing_logger.log_metrics(timing_metrics, collected_frames)
+
+                run_state["collected_frames"] = collected_frames
+                checkpointer.save(collected_frames)
+                if stop.requested:
+                    break
+        checkpointer.save(collected_frames, force=True)
+    finally:
+        collector.shutdown()
+        if not eval_env.is_closed:
+            eval_env.close()
+        if not train_env.is_closed:
+            train_env.close()
 
 
 if __name__ == "__main__":

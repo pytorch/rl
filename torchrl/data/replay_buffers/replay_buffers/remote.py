@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import Any, TYPE_CHECKING, TypeVar
 
 import torch
 
@@ -44,9 +44,18 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
         batch_size: int | None = None,
         include_info: bool | None = None,
         return_info: bool = False,
+        *,
+        wait: bool = False,
+        timeout: float | None = None,
+        cancel_event: Any | None = None,
     ) -> TensorDictBase:
         return super().sample(
-            batch_size=batch_size, include_info=include_info, return_info=return_info
+            batch_size=batch_size,
+            include_info=include_info,
+            return_info=return_info,
+            wait=wait,
+            timeout=timeout,
+            cancel_event=cancel_event,
         )
 
     def add(self, data: TensorDictBase) -> int:

@@ -19,6 +19,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
 from torchrl.collectors.utils import (
+    _CollectorProgress,
     _map_weight,
     _maybe_normalize_replay_buffer_tensordict_device,
     _traj_emit,
@@ -239,18 +240,16 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
             **Replay buffer integration**
 
-            When combined with a ``replay_buffer``, each complete trajectory is
-            written to the buffer as a **flat 1-D sequence** of valid timesteps
-            (no padding, no accumulation to ``trajs_per_batch``).  The method
-            yields ``None`` on every write — matching the standard replay-buffer
-            collection convention.  This flat storage is directly compatible
-            with :class:`~torchrl.data.SliceSampler` using
-            ``end_key=("next", "done")``.
+            For compatibility, combining this argument with a
+            ``replay_buffer`` while leaving ``replay_write_mode=None`` selects
+            complete-trajectory replay writes. New code should use
+            ``replay_write_mode="trajectory"`` instead.
 
             .. important::
                 When using a **multi-process** collector with a shared replay
                 buffer and a :class:`~torchrl.data.SliceSampler`, setting
-                ``trajs_per_batch`` is strongly recommended. Without it,
+                ``replay_write_mode="trajectory"`` is strongly recommended.
+                Without it,
                 different workers write batches independently and adjacent
                 frames in the buffer can come from unrelated episodes without
                 an intervening ``done`` signal, causing the sampler to draw
@@ -269,17 +268,19 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             is incompatible because variable-length trajectories cannot fill a
             fixed second dimension.
 
-            **Multi-process and distributed collectors**: ``trajs_per_batch``
-            combined with ``replay_buffer`` is supported for
+            **Multi-process and distributed collectors**: trajectory replay
+            writes are supported for
             :class:`~torchrl.collectors.MultiSyncCollector`,
             :class:`~torchrl.collectors.MultiAsyncCollector`,
             :class:`~torchrl.collectors.distributed.RayCollector`, and
-            :class:`~torchrl.collectors.distributed.RPCCollector`.
+            :class:`~torchrl.collectors.distributed.RPCCollector` (through
+            its remote ``collector_kwargs``).
             Trajectory assembly is delegated to each worker's inner collector,
             which calls :meth:`_iter_by_trajectories` independently and writes
-            complete trajectories to the shared replay buffer.  Both the
-            iteration pattern (``for data in collector``) and the async
-            ``start()`` pattern are supported.
+            complete trajectories to the shared replay buffer. Local process
+            and Ray collectors support both iteration (``for data in
+            collector``) and asynchronous ``start()``; RPC uses its remote
+            collector iteration loop.
 
             .. code-block:: python
 
@@ -293,19 +294,32 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     replay_buffer=rb,
                     frames_per_batch=200,
                     total_frames=-1,
-                    trajs_per_batch=32,
+                    replay_write_mode="trajectory",
                 )
                 collector.start()  # workers fill rb with complete trajectories
 
             Defaults to ``None`` (fixed-frame batches).
-        trajs_per_write (int, optional): When ``trajs_per_batch`` is used with
-            a replay buffer, write this many completed trajectories to the
+        trajs_per_write (int, optional): In trajectory replay-write mode,
+            write this many completed trajectories to the
             buffer per ``extend`` call. Larger values reduce Python overhead
             for highly batched environments. For example, if 10 complete
             trajectories are queued for replay-buffer insertion,
             ``trajs_per_write=2`` makes 5 writes, while
             ``trajs_per_write=10`` or larger makes 1 write. Defaults to
             ``None`` (write all currently queued completed trajectories).
+        replay_write_mode (``"rollout"``, ``"trajectory"``, optional): Controls
+            how a collector writes to ``replay_buffer``. ``"rollout"`` keeps
+            the fixed-frame rollout layout. ``"trajectory"`` retains
+            in-flight episodes and writes only completed trajectories as flat
+            1-D sequences. ``trajs_per_write`` optionally groups completed
+            trajectories into each ``extend`` call. Defaults to ``None``,
+            which preserves the legacy behavior: ``replay_buffer`` combined
+            with ``trajs_per_batch`` selects trajectory writes, and other
+            replay-buffer configurations select rollout writes.
+
+            Explicit replay write modes cannot be combined with
+            ``trajs_per_batch``. The latter controls the number of completed
+            trajectories in batches yielded without a replay buffer.
         traj_format (str, optional): layout of the batches yielded when
             ``trajs_per_batch`` is set. ``"padded"`` stacks the
             trajectories into a ``(trajs_per_batch, max_traj_len)`` batch,
@@ -340,6 +354,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
     trajs_per_write: int | None = None
+    replay_write_mode: Literal["rollout", "trajectory"] | None = None
     traj_format: Literal["padded", "cat"] = "padded"
     _pre_collect_hook: Callable[[], None] | None = None
     _post_collect_hook: Callable[[TensorDictBase], None] | None = None
@@ -352,6 +367,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     ):
         self._pre_collect_hook = pre_collect_hook
         self._post_collect_hook = post_collect_hook
+        self._collector_progress = _CollectorProgress()
+        self._collector_progress_worker_idx = 0
 
     @property
     def pre_collect_hook(self) -> Callable[[], None] | None:
@@ -405,7 +422,6 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     def stats(
         self,
         workers: Literal["aggregate", "per_worker", "both"] = "aggregate",
-        **kwargs,
     ) -> dict[str, int | float | bool]:
         """Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -419,13 +435,30 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         Entries are only present when the corresponding state exists on the
         collector:
 
-        - ``"frames"``: total number of frames collected so far;
+        - ``"frames"``: total number of frames delivered so far (the existing
+          collector-specific semantics are unchanged);
+        - ``"stepped_frames"``: environment transitions collected, including
+          frames still held in an unfinished trajectory;
+        - ``"trajectory_completed_frames"``: frames belonging to trajectories
+          that have reached a terminal boundary;
+        - ``"trajectory_pending_frames"``: current in-flight trajectory frames;
+        - ``"replay_written_frames"``: frames successfully inserted in the
+          attached replay buffer;
+        - ``"completed_trajectories"``: trajectories that reached a terminal
+          boundary;
         - ``"batches"``: number of batches delivered so far;
         - ``"total_frames"``: requested total frames (absent for endless collectors);
         - ``"completed"``: whether the frame budget has been reached;
         - ``"requested_frames_per_batch"``: the per-batch frame budget;
         - ``"policy_version"``: current policy version, when the collector
           tracks it with an integer version.
+
+        The progress entries are cumulative except for
+        ``"trajectory_pending_frames"``, which is a gauge. Reset and shutdown
+        drop in-flight trajectory assembly, so they clear that gauge without
+        changing the cumulative entries. Checkpoints restore the cumulative
+        entries but start the gauge at zero because collector checkpoints do
+        not serialize the environment state or partial trajectory payloads.
 
         Args:
             workers (str, optional): controls the worker view. With
@@ -434,7 +467,10 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 or ``"both"``, each worker is queried and its snapshot is
                 namespaced as ``"worker_<idx>/<metric>"``. For multi-worker
                 collectors, ``"workers"`` and ``"workers_alive"`` are always
-                reported.
+                reported. Per-worker queries share the control channel and must
+                not race with concurrent weight updates or other control calls.
+                Ray collectors retain their transport-specific timeout and
+                remote aggregation behavior.
 
         Examples:
             >>> from torchrl.collectors import Collector
@@ -459,7 +495,16 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         stats: dict[str, int | float | bool] = {}
         if workers in ("aggregate", "both"):
-            frames = getattr(self, "_frames", getattr(self, "collected_frames", None))
+            progress = getattr(self, "_collector_progress", None)
+            if progress is not None:
+                stats.update(
+                    progress.snapshot(
+                        None
+                        if getattr(self, "_collector_progress_aggregate", False)
+                        else getattr(self, "_collector_progress_worker_idx", 0)
+                    )
+                )
+            frames = getattr(self, "_frames", None)
             if frames is not None:
                 stats["frames"] = int(frames)
             iters = getattr(self, "_iter", None)
@@ -484,53 +529,52 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             if isinstance(version, int):
                 stats["policy_version"] = version
 
-        has_remote = hasattr(self, "remote_collectors") or hasattr(self, "procs")
-        if has_remote:
-            num_workers = getattr(
-                self, "num_workers", getattr(self, "num_collectors", 0)
-            )
-            if num_workers == 0:
-                remote_collectors = getattr(self, "remote_collectors", [])
-                num_workers = len(remote_collectors)
-            stats["workers"] = int(num_workers)
-
-            try:
-                # If we need worker_frames for aggregate RayCollector, we have to map_fn.
-                # To minimize overhead for MultiSyncCollector (which didn't do this),
-                # we only do it if workers in ("per_worker", "both") OR if we are a RayCollector.
-                worker_results = []
-                if workers in ("per_worker", "both") or hasattr(
-                    self, "remote_collectors"
-                ):
-                    worker_results = self.map_fn("stats")
-                    alive = 0
-                    worker_frames = []
-                    for idx, worker_stats in enumerate(worker_results):
-                        if worker_stats is None or isinstance(worker_stats, Exception):
-                            continue
-                        alive += 1
-                        if "frames" in worker_stats:
-                            worker_frames.append(worker_stats["frames"])
-                        if workers in ("per_worker", "both"):
-                            for key, value in worker_stats.items():
-                                stats[f"worker_{idx}/{key}"] = value
-
-                    stats["workers_alive"] = alive
-                    if workers in ("aggregate", "both") and worker_frames:
-                        stats["worker_frames"] = int(sum(worker_frames))
-                else:
-                    # MultiSyncCollector aggregate path
-                    if hasattr(self, "procs"):
-                        procs = getattr(self, "procs", [])
-                        if procs:
-                            stats["workers_alive"] = sum(
-                                int(proc.is_alive()) for proc in procs
-                            )
-
-            except Exception:
-                stats["workers_alive"] = 0
+        if hasattr(self, "procs"):
+            stats["workers"] = int(self.num_workers)
+            if self.procs:
+                stats["workers_alive"] = sum(int(proc.is_alive()) for proc in self.procs)
+            if workers in ("per_worker", "both"):
+                for idx, worker_stats in enumerate(self.map_fn("stats")):
+                    for key, value in worker_stats.items():
+                        stats[f"worker_{idx}/{key}"] = value
 
         return stats
+
+    def _record_stepped_frames(self, frames: int) -> None:
+        self._collector_progress.increment_stepped(
+            self._collector_progress_worker_idx,
+            frames,
+            trajectory_pending=(
+                self.trajs_per_batch is not None
+                or getattr(self, "replay_write_mode", None) == "trajectory"
+            ),
+        )
+
+    def _record_trajectory_completion(self, frames: int, trajectories: int) -> None:
+        self._collector_progress.record_trajectory_completion(
+            self._collector_progress_worker_idx, frames, trajectories
+        )
+
+    def _record_pending_trajectory_frames(self, frames: int) -> None:
+        self._collector_progress.record_trajectory_pending(
+            self._collector_progress_worker_idx, frames
+        )
+
+    def _record_replay_write(self, frames: int) -> None:
+        self._collector_progress.record_replay_write(
+            self._collector_progress_worker_idx, frames
+        )
+
+    def _clear_pending_trajectory_progress(self) -> None:
+        self._collector_progress.clear_pending(self._collector_progress_worker_idx)
+
+    def _progress_state_dict(self) -> dict[str, int]:
+        return self._collector_progress.snapshot(self._collector_progress_worker_idx)
+
+    def _load_progress_state_dict(self, state: dict[str, int] | None) -> None:
+        self._collector_progress.load_snapshot(
+            self._collector_progress_worker_idx, state or {}
+        )
 
     def enable_profile(
         self,
@@ -1482,7 +1526,10 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         # Mark that iteration has started (used by enable_profile check)
         self._iteration_started = True
         try:
-            if self.trajs_per_batch is None:
+            if self.trajs_per_batch is None and (
+                self.replay_write_mode != "trajectory"
+                or getattr(self, "_trajectory_writes_in_workers", False)
+            ):
                 yield from self.iterator()
             else:
                 yield from self._iter_by_trajectories()
@@ -1501,9 +1548,10 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         along time into flat, unpadded batches (trajectories delimited by
         ``("next", "done")``).
 
-        **With a replay buffer**: each complete trajectory is written to the
-        buffer immediately as a **flat 1-D sequence** of valid timesteps — no
-        padding, no accumulation to ``trajs_per_batch``.  The method yields
+        **With ``replay_write_mode="trajectory"``**: each complete trajectory
+        is written to the buffer immediately as a **flat 1-D sequence** of
+        valid timesteps — no padding and no dependency on
+        ``trajs_per_batch``.  The method yields
         ``None`` on every write, matching the standard replay-buffer collection
         convention.  This flat storage is directly compatible with
         :class:`~torchrl.data.SliceSampler` using
@@ -1521,9 +1569,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         written individually regardless of the environment batch shape.
 
         **Multi-process / distributed collectors**: trajectory assembly is
-        delegated to each worker's inner collector.  The multi-collector
-        redirects ``trajs_per_batch`` to workers (nulling it on itself to
-        avoid an infinite loop in ``__iter__``), and each worker calls this
+        delegated to each worker's inner collector, and each worker calls this
         method independently to write complete trajectories to the shared
         replay buffer.
         """
@@ -1545,7 +1591,15 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             for batch in self.iterator():
                 if batch is None:
                     continue
-                _traj_ingest(batch, partial_trajs, complete_trajs)
+                if getattr(self, "_collector_progress_pending_on_ingest", False):
+                    self._record_pending_trajectory_frames(batch.numel())
+                completed_frames, completed_trajectories = _traj_ingest(
+                    batch, partial_trajs, complete_trajs
+                )
+                if completed_trajectories:
+                    self._record_trajectory_completion(
+                        completed_frames, completed_trajectories
+                    )
                 if has_rb:
                     # Write each complete trajectory to the replay buffer
                     # immediately as a flat sequence — no padding, no
@@ -1569,6 +1623,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                             trajs, rb
                         )
                         rb.extend(trajs)
+                        self._record_replay_write(trajs.numel())
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:
@@ -1597,7 +1652,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     def _flush_trajectory_assembly(self) -> None:
         """Drop partially-assembled and queued-but-not-yet-yielded trajectories.
 
-        Called by ``reset()`` when ``trajs_per_batch`` is in use: after an
+        Called by ``reset()`` when trajectory assembly is in use: after an
         environment reset, steps queued under the pre-reset policy must not
         leak into post-reset batches, and stale partial chunks must not be
         merged with later episodes that reuse a rebased trajectory id.
@@ -1606,6 +1661,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if assembly is not None:
             assembly[0].clear()
             assembly[1].clear()
+        self._clear_pending_trajectory_progress()
 
     @abc.abstractmethod
     def shutdown(

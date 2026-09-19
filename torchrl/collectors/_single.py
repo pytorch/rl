@@ -41,6 +41,7 @@ from torchrl.collectors._constants import (
 from torchrl.collectors.utils import (
     _maybe_normalize_replay_buffer_tensordict_device,
     _TrajectoryPool,
+    _validate_replay_write_mode,
     _validate_traj_format,
     split_trajectories,
 )
@@ -49,7 +50,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase, EnvCreator, StepCounter, TransformedEnv
 from torchrl.envs.common import _do_nothing
-from torchrl.envs.llm.transforms import PolicyVersion
+from torchrl.envs.transforms import PolicyVersion
 from torchrl.envs.utils import (
     _aggregate_end_of_traj,
     _make_compatible_policy,
@@ -439,19 +440,20 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             Episodes spanning internal collection steps are reassembled and
             in-flight episodes are held back, so every row is a whole,
             done-terminated trajectory (``frames_per_batch`` then only sets
-            the internal polling granularity). When combined with
-            ``replay_buffer``, complete trajectories are instead written to
-            the buffer as flat, unpadded 1-D sequences (and the collector
-            yields ``None``) -- the layout
-            :class:`~torchrl.data.replay_buffers.SliceSampler` expects.
+            the internal polling granularity).
             See :ref:`collectors_replay_trajs`. The equivalent on
             :class:`~torchrl.collectors.AsyncBatchedCollector` is the
             ``yield_completed_trajectories`` flag.
             Defaults to ``None`` (fixed-frame batches).
-        trajs_per_write (int, optional): together with ``trajs_per_batch``
-            and ``replay_buffer``, the number of complete trajectories
+        replay_write_mode (``"rollout"``, ``"trajectory"``, optional): Selects
+            fixed-frame rollout writes or flat complete-trajectory writes to
+            ``replay_buffer``. Defaults to ``None``; for compatibility,
+            combining ``replay_buffer`` with ``trajs_per_batch`` still selects
+            trajectory writes.
+        trajs_per_write (int, optional): with
+            ``replay_write_mode="trajectory"``, the number of complete trajectories
             written to the buffer per extend call. Defaults to ``None``
-            (write every trajectory as soon as it completes).
+            (write all currently queued completed trajectories together).
         traj_format (str, optional): layout of the batches yielded under
             ``trajs_per_batch``. ``"padded"`` stacks trajectories
             into ``(trajs_per_batch, max_traj_len)`` with zero padding and a
@@ -565,7 +567,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             RPCCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            A :class:`~torchrl.envs.transforms.PolicyVersion` transform is
             installed on the environment, tagging every collected frame with the current version
             under the ``"policy_version"`` key. The transform's version is bumped exactly once
             per :meth:`update_policy_weights_` call — for multi-process collectors this happens
@@ -573,7 +575,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             tagging tracks real weight updates rather than rollout iterations.
 
             The recommended path is ``track_policy_version=True``: let the collector own the
-            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            transform. Passing a :class:`~torchrl.envs.transforms.PolicyVersion`
             instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
             **without** going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
             a transform and passing it to a collector is supported but discouraged because it
@@ -723,6 +725,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        replay_write_mode: Literal["rollout", "trajectory"] | None = None,
         traj_format: Literal["padded", "cat"] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
@@ -735,10 +738,17 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         # complete constructor API. Subclasses reach this implementation with
         # the defaults only.
         del backend, backend_options, num_collectors, sync
+        collector_progress = kwargs.pop("_collector_progress", None)
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.replay_write_mode = _validate_replay_write_mode(
+            replay_write_mode,
+            has_replay_buffer=replay_buffer is not None,
+            trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
+        )
         self.traj_format = _validate_traj_format(
             traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
         )
@@ -747,6 +757,11 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
         )
+        if collector_progress is not None:
+            self._collector_progress = collector_progress
+            self._collector_progress_worker_idx = (
+                worker_idx if worker_idx is not None else 0
+            )
 
         # Note: weight_sync_schemes can be used to send weights to components
         # within the environment (e.g., RayModuleTransform), not just sub-collectors
@@ -1849,6 +1864,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                         tensordict_out, self.replay_buffer
                     )
                     self.replay_buffer.extend(tensordict_out)
+                    self._record_replay_write(tensordict_out.numel())
                     yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
@@ -2165,6 +2181,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     carrier_for_out = self._carrier.exclude(*self._compact_next_keys)
                 else:
                     carrier_for_out = self._carrier
+                self._record_stepped_frames(carrier_for_out.numel())
 
                 if (
                     self.replay_buffer is not None
@@ -2172,6 +2189,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     and not self.extend_buffer
                 ):
                     self.replay_buffer.add(carrier_for_out)
+                    self._record_replay_write(carrier_for_out.numel())
                     if self._increment_frames(carrier_for_out.numel()):
                         return
                 else:
@@ -2373,6 +2391,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                 ):
                     self._thread.join(timeout=timeout)
                 self.closed = True
+                self._clear_pending_trajectory_progress()
                 del self._carrier
                 if self._use_buffers:
                     del self._final_rollout
@@ -2422,7 +2441,13 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         else:
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
-        state_dict.update({"frames": self._frames, "iter": self._iter})
+        state_dict.update(
+            {
+                "frames": self._frames,
+                "iter": self._iter,
+                "collector_progress": self._progress_state_dict(),
+            }
+        )
         if self.track_traj_ids:
             state_dict["traj_pool"] = self._traj_pool.state_dict()
         if self.policy_version_tracker is not None:
@@ -2451,6 +2476,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             )
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        self._flush_trajectory_assembly()
+        self._load_progress_state_dict(state_dict.get("collector_progress"))
         if self.track_traj_ids:
             traj_pool_state = state_dict.get("traj_pool")
             if traj_pool_state is not None:

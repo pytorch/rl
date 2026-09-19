@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from tensordict.utils import NestedKey
@@ -89,6 +89,12 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        output_layout ("flat" or "batch_time", optional): output layout
+            forwarded to :class:`SliceSampler`. Defaults to ``"flat"``.
+        slice_end_key (NestedKey, optional): structured-output boundary key.
+            Defaults to ``("collector", "slice_end")``.
+        time_dim_name (str or None, optional): structured-output time dimension
+            name. Defaults to ``"time"``.
         shuffle (bool, optional): if ``False``, the order of the trajectories
             is not shuffled. Defaults to ``True``.
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
@@ -226,6 +232,9 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         truncated_key: NestedKey | None = ("next", "truncated"),
         init_key: NestedKey | None = "is_init",
         strict_length: bool = True,
+        output_layout: Literal["flat", "batch_time"] = "flat",
+        slice_end_key: NestedKey = ("collector", "slice_end"),
+        time_dim_name: str | None = "time",
         shuffle: bool = True,
         compile: bool | dict = False,
         use_gpu: bool | torch.device = False,
@@ -241,6 +250,9 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             truncated_key=truncated_key,
             init_key=init_key,
             strict_length=strict_length,
+            output_layout=output_layout,
+            slice_end_key=slice_end_key,
+            time_dim_name=time_dim_name,
             ends=ends,
             trajectories=trajectories,
             compile=compile,
@@ -311,6 +323,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             traj_idx=tuple_to_tensor(indices),
             storage=storage,
         )
+        self._warn_if_short_batch(idx, batch_size)
         return idx, info
 
     def state_dict(self) -> dict[str, Any]:
