@@ -4,8 +4,27 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import torch
 from torch import nn, Tensor
+
+from torchrl._utils import implement_for, is_compiling
+
+__all__ = ["FlowMatchingPolicy", "OneStepPolicy"]
+
+
+@implement_for("torch", None, "2.14")
+def get_flow_scan() -> Callable | None:
+    return None
+
+
+@implement_for("torch", "2.14")
+def get_flow_scan() -> Callable | None:  # noqa: F811
+    return torch._higher_order_ops.scan
+
+
+FLOW_SCAN = get_flow_scan()
 
 
 class FlowMatchingPolicy(nn.Module):
@@ -25,6 +44,7 @@ class FlowMatchingPolicy(nn.Module):
 
     Outputs are clipped to ``[low, high]`` after integration. Wrap in
     :class:`~torchrl.modules.Actor` for TensorDict and collector support.
+    On PyTorch 2.14+, compiled sampling without gradients uses a scan loop.
     """
 
     def __init__(
@@ -53,10 +73,29 @@ class FlowMatchingPolicy(nn.Module):
             noise = observation.new_empty(
                 (*observation.shape[:-1], self.action_dim)
             ).normal_()
-        action = noise
-        for step in range(self.num_steps):
-            time = action.new_full((*action.shape[:-1], 1), step / self.num_steps)
-            action = action + self.velocity(observation, action, time) / self.num_steps
+        num_steps = self.num_steps
+        if (
+            FLOW_SCAN is not None
+            and is_compiling()
+            and not torch.is_grad_enabled()
+            and num_steps > 1
+        ):
+
+            def euler_step(action: Tensor, time: Tensor) -> tuple[Tensor, Tensor]:
+                time = time.to(action).expand(*action.shape[:-1], 1)
+                action = action + self.velocity(observation, action, time) / num_steps
+                return action, action.clone()
+
+            # The first update establishes the scan carry dtype and layout.
+            action, _ = euler_step(noise, noise.new_zeros(()))
+            time_dtype = torch.promote_types(action.dtype, torch.float32)
+            times = torch.arange(1, num_steps, device=action.device, dtype=time_dtype)
+            action, _ = FLOW_SCAN(euler_step, action, times / num_steps)
+        else:
+            action = noise
+            for step in range(num_steps):
+                time = action.new_full((*action.shape[:-1], 1), step / num_steps)
+                action = action + self.velocity(observation, action, time) / num_steps
         return action.clamp(self.low.to(action), self.high.to(action))
 
 
