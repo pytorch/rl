@@ -61,6 +61,11 @@ Resume training
 A **checkpoint** is a snapshot you can interrupt and resume from. An
 **export** is a deployable inference artifact. They are not interchangeable.
 
+If the run is a Hydra trainer recipe or a standalone SAC / TD3 / DDPG
+script, :ref:`checkpoint-recipes` is the shorter path: pass ``resume=``
+at the command line. This section is for scripts that assemble the
+pieces themselves.
+
 The :ref:`export tutorial <export_tuto>` isolates a trained policy for ONNX,
 AOTInductor, or another runtime. That path is inference-only: it drops the
 optimizer, replay buffer, collector, exploration schedule, and target
@@ -229,12 +234,15 @@ is required; skip it in doctest environments that do not have it.
     from torchrl.checkpoint import Checkpoint, GlobalRNGState
     from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, ReplayBuffer
-    from torchrl.envs import GymEnv, StepCounter, TransformedEnv
+    from torchrl.envs import Compose, GymEnv, InitTracker, StepCounter, TransformedEnv
     from torchrl.modules import EGreedyModule, QValueModule
     from torchrl.objectives import DQNLoss, SoftUpdate
 
     def make_agent():  # doctest: +SKIP
-        env = TransformedEnv(GymEnv("CartPole-v1"), StepCounter())
+        env = TransformedEnv(
+            GymEnv("CartPole-v1"),
+            Compose(InitTracker(), StepCounter()),
+        )
         value_net = TensorDictModule(
             nn.Sequential(nn.Linear(4, 64), nn.ReLU(), nn.Linear(64, 2)),
             in_keys=["observation"],
@@ -347,7 +355,8 @@ to ``loss_module``; the updater component stores only updater-local progress.
 Keep the updater alive and call ``target_updater.step()`` immediately after each
 ``optimizer.step()``. A
 :class:`~torchrl.trainers.Trainer` can register the same names for you;
-see :ref:`Trainer integration <checkpoint-trainer>` below and the
+see :ref:`Trainer integration <checkpoint-trainer>` below,
+:ref:`checkpoint-recipes` for Hydra ``resume=``, and the
 :doc:`checkpointing tutorial <../tutorials/checkpointing>`.
 
 Checkpoint versus export
@@ -511,6 +520,8 @@ Standalone scripts use the helper directly:
                 break
         rotation.save(checkpoint, step=step)
 
+.. _checkpoint-recipes:
+
 Resuming recipes
 ----------------
 
@@ -536,6 +547,9 @@ directory. Trainer recipes get all of this from
 restores every component but ``config`` and ``rng``, then ``rng`` last, saves
 every ``interval`` steps through a :class:`CheckpointRotation` under
 :class:`StopOnSignal`, and keeps saving next to the resumed checkpoint.
+
+Scripts that do not use a recipe still reconstruct each object and
+register it on :class:`Checkpoint`; see :ref:`checkpoint_resume`.
 
 Compatibility
 -------------
