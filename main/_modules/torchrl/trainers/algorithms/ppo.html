@@ -1557,7 +1557,25 @@ document.write(`
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LazyTensorStorage</span><span class="p">,</span>
+    <span class="n">SamplerWithoutReplacement</span><span class="p">,</span>
+    <span class="n">TensorDictReplayBuffer</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">set_recurrent_mode</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">ClipPPOLoss</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives.value</span> <span class="kn">import</span> <span class="n">GAE</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.on_policy</span> <span class="kn">import</span> <span class="n">OnPolicyTrainer</span>
+<span class="kn">from</span> <span class="nn">torchrl.trainers.trainers</span> <span class="kn">import</span> <span class="n">BatchSubSampler</span>
 
 
 <div class="viewcode-block" id="PPOTrainer">
@@ -1581,14 +1599,8 @@ document.write(`
 <span class="sd">    PPO typically uses multiple epochs of optimization on the same batch of data.</span>
 <span class="sd">    This trainer defaults to 4 epochs, which is a common choice for PPO implementations.</span>
 
-<span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; # Basic usage with manual configuration</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.trainers.algorithms.ppo import PPOTrainer</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.trainers.algorithms.configs import PPOTrainerConfig</span>
-<span class="sd">        &gt;&gt;&gt; from hydra.utils import instantiate</span>
-<span class="sd">        &gt;&gt;&gt; config = PPOTrainerConfig(...)  # Configure with required parameters</span>
-<span class="sd">        &gt;&gt;&gt; trainer = instantiate(config)</span>
-<span class="sd">        &gt;&gt;&gt; trainer.train()</span>
+<span class="sd">    Use :meth:`from_env` to construct standard PPO components from an environment,</span>
+<span class="sd">    actor and critic; its docstring includes a complete runnable example.</span>
 
 <span class="sd">    .. note::</span>
 <span class="sd">        This trainer requires a configurable environment setup. See the</span>
@@ -1596,7 +1608,215 @@ document.write(`
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_algo_name</span> <span class="o">=</span> <span class="s2">&quot;PPO&quot;</span>
-    <span class="n">_default_num_epochs</span> <span class="o">=</span> <span class="mi">4</span></div>
+    <span class="n">_default_num_epochs</span> <span class="o">=</span> <span class="mi">4</span>
+
+<div class="viewcode-block" id="PPOTrainer.from_env">
+<a class="viewcode-back" href="../../../../reference/trainers_basics.html#torchrl.trainers.algorithms.PPOTrainer.from_env">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_env</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">actor</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span><span class="p">,</span>
+        <span class="n">critic</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1024</span><span class="p">,</span>
+        <span class="n">minibatch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span>
+        <span class="n">sub_traj_len</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">learning_rate</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3e-4</span><span class="p">,</span>
+        <span class="n">value_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;state_value&quot;</span><span class="p">,</span>
+        <span class="n">loss_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">gae_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">trainer_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PPOTrainer</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a PPO trainer from an environment, actor and critic.</span>
+
+<span class="sd">        Constructs a :class:`~torchrl.collectors.Collector`,</span>
+<span class="sd">        :class:`~torchrl.objectives.ClipPPOLoss`, Adam optimizer, GAE and</span>
+<span class="sd">        minibatch sampling. Use the ordinary constructor to supply custom</span>
+<span class="sd">        collectors, losses, optimizers or replay buffers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            env (EnvBase): Environment owned by the resulting collector. Training</span>
+<span class="sd">                closes it. The collector installs missing policy primers and</span>
+<span class="sd">                initialization tracking by default.</span>
+<span class="sd">            actor (TensorDictModuleBase): Probabilistic actor returning actions</span>
+<span class="sd">                and their log probabilities.</span>
+<span class="sd">            critic (TensorDictModuleBase): Value network writing ``value_key``.</span>
+<span class="sd">            total_frames (int): Total environment transitions to collect. For</span>
+<span class="sd">                closed-loop action deployment these count high-level decisions.</span>
+<span class="sd">            frames_per_batch (int, optional): Transitions collected per update,</span>
+<span class="sd">                across all environments. Defaults to 1024.</span>
+<span class="sd">            minibatch_size (int, optional): Transitions per optimization step.</span>
+<span class="sd">                Clamped to the collected batch size. Defaults to 256.</span>
+<span class="sd">            sub_traj_len (int, optional): Consecutive time steps per recurrent</span>
+<span class="sd">                training window. When set, uses :class:`~torchrl.trainers.BatchSubSampler`</span>
+<span class="sd">                and recurrent-mode GAE instead of flattening time into replay.</span>
+<span class="sd">                The minibatch size must be a multiple of this length.</span>
+<span class="sd">                Defaults to ``None`` (feedforward PPO).</span>
+<span class="sd">            learning_rate (float, optional): Adam learning rate. Defaults to 3e-4.</span>
+<span class="sd">            value_key (NestedKey, optional): Critic output key, also configured on</span>
+<span class="sd">                the loss and GAE. Defaults to ``&quot;state_value&quot;``.</span>
+<span class="sd">            loss_kwargs (Mapping, optional): Extra ``ClipPPOLoss`` arguments.</span>
+<span class="sd">                Advantage normalization defaults to ``True``, or ``False`` when</span>
+<span class="sd">                GAE already normalizes advantages (e.g. within each task).</span>
+<span class="sd">            gae_kwargs (Mapping, optional): Extra GAE arguments. For per-task</span>
+<span class="sd">                normalization, pass ``{&quot;group_key&quot;: &quot;task_id&quot;, &quot;average_gae&quot;: True}``.</span>
+<span class="sd">                Recurrent windows default to ``shifted=False, deactivate_vmap=True``</span>
+<span class="sd">                because their value networks may depend on recurrent state that</span>
+<span class="sd">                cannot be reconstructed by shifting observations alone.</span>
+<span class="sd">            collector_kwargs (Mapping, optional): Extra ``Collector`` arguments,</span>
+<span class="sd">                such as ``policy_device`` and ``storing_device``.</span>
+<span class="sd">            **trainer_kwargs: Additional :class:`OnPolicyTrainer` options, such</span>
+<span class="sd">                as ``num_epochs``, ``gamma``, ``lmbda``, logging and checkpointing.</span>
+<span class="sd">                Action/reward keys default to the environment&#39;s unique keys.</span>
+<span class="sd">                Done/terminated keys use the reward&#39;s namespace when available,</span>
+<span class="sd">                otherwise the root namespace; explicit key overrides take precedence.</span>
+<span class="sd">                ``frame_skip`` defaults to 1 and ``clip_norm`` to 1.0.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            PPOTrainer: Configured trainer; call :meth:`train` to start learning.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; import torch</span>
+<span class="sd">            &gt;&gt;&gt; from tensordict.nn import TensorDictModule, NormalParamExtractor</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.modules import ProbabilisticActor, TanhNormal</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv</span>
+<span class="sd">            &gt;&gt;&gt; env = ContinuousActionVecMockEnv()</span>
+<span class="sd">            &gt;&gt;&gt; obs_dim = env.observation_spec[&quot;observation&quot;].shape[-1]</span>
+<span class="sd">            &gt;&gt;&gt; action_dim = env.action_spec.shape[-1]</span>
+<span class="sd">            &gt;&gt;&gt; actor = ProbabilisticActor(</span>
+<span class="sd">            ...     TensorDictModule(</span>
+<span class="sd">            ...         torch.nn.Sequential(torch.nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor()),</span>
+<span class="sd">            ...         in_keys=[&quot;observation&quot;], out_keys=[&quot;loc&quot;, &quot;scale&quot;],</span>
+<span class="sd">            ...     ),</span>
+<span class="sd">            ...     in_keys=[&quot;loc&quot;, &quot;scale&quot;], distribution_class=TanhNormal,</span>
+<span class="sd">            ...     return_log_prob=True,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; critic = TensorDictModule(</span>
+<span class="sd">            ...     torch.nn.Linear(obs_dim, 1), in_keys=[&quot;observation&quot;], out_keys=[&quot;state_value&quot;],</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; trainer = PPOTrainer.from_env(</span>
+<span class="sd">            ...     env, actor=actor, critic=critic, total_frames=32,</span>
+<span class="sd">            ...     frames_per_batch=16, minibatch_size=8, progress_bar=False,</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; trainer.train()</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="n">total_frames</span><span class="p">,</span> <span class="n">frames_per_batch</span><span class="p">,</span> <span class="n">minibatch_size</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Frame and minibatch sizes must be positive.&quot;</span><span class="p">)</span>
+        <span class="n">num_envs</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">frames_per_env</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">frames_per_batch</span> <span class="o">/</span> <span class="n">num_envs</span><span class="p">)</span>
+        <span class="n">collected_batch_size</span> <span class="o">=</span> <span class="n">frames_per_env</span> <span class="o">*</span> <span class="n">num_envs</span>
+        <span class="n">minibatch_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">minibatch_size</span><span class="p">,</span> <span class="n">collected_batch_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sub_traj_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">env</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;sub_traj_len requires a batched environment: an unbatched &quot;</span>
+                    <span class="s2">&quot;env yields 1-D time-only collector batches, and &quot;</span>
+                    <span class="s2">&quot;BatchSubSampler would fall back to shuffling single &quot;</span>
+                    <span class="s2">&quot;transitions instead of returning contiguous windows. &quot;</span>
+                    <span class="s2">&quot;Wrap the env (e.g. SerialEnv(1, ...)) or drop &quot;</span>
+                    <span class="s2">&quot;sub_traj_len for feedforward PPO.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">sub_traj_len</span> <span class="o">&lt;</span> <span class="mi">1</span>
+                <span class="ow">or</span> <span class="n">sub_traj_len</span> <span class="o">&gt;</span> <span class="n">frames_per_env</span>
+                <span class="ow">or</span> <span class="n">minibatch_size</span> <span class="o">%</span> <span class="n">sub_traj_len</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;sub_traj_len must fit within the collected time dimension and &quot;</span>
+                    <span class="s2">&quot;divide minibatch_size.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;action_key&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">trainer_kwargs</span><span class="p">:</span>
+            <span class="n">trainer_kwargs</span><span class="p">[</span><span class="s2">&quot;action_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">action_key</span>
+        <span class="k">if</span> <span class="s2">&quot;reward_key&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">trainer_kwargs</span><span class="p">:</span>
+            <span class="n">trainer_kwargs</span><span class="p">[</span><span class="s2">&quot;reward_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward_key</span>
+        <span class="n">trainer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;episode_reward_key&quot;</span><span class="p">,</span> <span class="n">trainer_kwargs</span><span class="p">[</span><span class="s2">&quot;reward_key&quot;</span><span class="p">])</span>
+        <span class="n">reward_key</span> <span class="o">=</span> <span class="n">trainer_kwargs</span><span class="p">[</span><span class="s2">&quot;reward_key&quot;</span><span class="p">]</span>
+        <span class="n">reward_path</span> <span class="o">=</span> <span class="n">reward_key</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="p">(</span><span class="n">reward_key</span><span class="p">,)</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">):</span>
+            <span class="n">candidate</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">reward_path</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">name</span><span class="p">)</span>
+            <span class="n">trainer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_key&quot;</span><span class="p">,</span>
+                <span class="n">candidate</span> <span class="k">if</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span> <span class="k">else</span> <span class="n">name</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">trainer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;frame_skip&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">trainer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;clip_norm&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="n">gae_options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">gae_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="n">gae_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;gamma&quot;</span><span class="p">,</span> <span class="n">trainer_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;gamma&quot;</span><span class="p">,</span> <span class="mf">0.99</span><span class="p">))</span>
+        <span class="n">gae_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;lmbda&quot;</span><span class="p">,</span> <span class="n">trainer_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;lmbda&quot;</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">sub_traj_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">gae_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;shifted&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="n">gae_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;deactivate_vmap&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">loss_options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">loss_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="n">loss_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span>
+            <span class="s2">&quot;normalize_advantage&quot;</span><span class="p">,</span> <span class="ow">not</span> <span class="n">gae_options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;average_gae&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">ClipPPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">,</span> <span class="o">**</span><span class="n">loss_options</span><span class="p">)</span>
+        <span class="n">loss</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">value_key</span><span class="p">,</span>
+            <span class="o">**</span><span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="n">trainer_kwargs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_key&quot;</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">)</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+        <span class="n">gae</span> <span class="o">=</span> <span class="n">GAE</span><span class="p">(</span><span class="n">value_network</span><span class="o">=</span><span class="n">critic</span><span class="p">,</span> <span class="o">**</span><span class="n">gae_options</span><span class="p">)</span>
+        <span class="n">gae</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">value_key</span><span class="p">,</span>
+            <span class="o">**</span><span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="n">trainer_kwargs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">_key&quot;</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">)</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">sub_traj_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">gae</span> <span class="o">=</span> <span class="n">set_recurrent_mode</span><span class="p">(</span><span class="kc">True</span><span class="p">)(</span><span class="n">gae</span><span class="p">)</span>
+        <span class="n">optimizer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">(</span><span class="n">loss</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">learning_rate</span><span class="p">)</span>
+        <span class="n">replay</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">sub_traj_len</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">replay</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+                <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span>
+                    <span class="n">collected_batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span><span class="n">critic</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">),</span>
+                <span class="n">sampler</span><span class="o">=</span><span class="n">SamplerWithoutReplacement</span><span class="p">(),</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">minibatch_size</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">collector_options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">collector_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="n">collector_options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;auto_register_policy_transforms&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
+            <span class="n">env</span><span class="p">,</span>
+            <span class="n">actor</span><span class="p">,</span>
+            <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+            <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">collector_options</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">trainer</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+                <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+                <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+                <span class="n">loss_module</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+                <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+                <span class="n">gae</span><span class="o">=</span><span class="n">gae</span><span class="p">,</span>
+                <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay</span><span class="p">,</span>
+                <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="p">(</span>
+                    <span class="kc">None</span>
+                    <span class="k">if</span> <span class="n">replay</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="k">else</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">collected_batch_size</span> <span class="o">/</span> <span class="n">minibatch_size</span><span class="p">)</span>
+                <span class="p">),</span>
+                <span class="o">**</span><span class="n">trainer_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">sub_traj_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">BatchSubSampler</span><span class="p">(</span><span class="n">minibatch_size</span><span class="p">,</span> <span class="n">sub_traj_len</span><span class="o">=</span><span class="n">sub_traj_len</span><span class="p">)</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+                    <span class="n">trainer</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">trainer</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+            <span class="k">raise</span></div>
+</div>
 
 </pre></div>
 
@@ -1860,7 +2080,7 @@ document.write(`
        "headline": "torchrl.trainers.algorithms.ppo",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/trainers/algorithms/ppo.html",
-       "articleBody": "Source code for torchrl.trainers.algorithms.ppo # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from torchrl.trainers.algorithms.on_policy import OnPolicyTrainer [docs] class PPOTrainer(OnPolicyTrainer): \"\"\"PPO (Proximal Policy Optimization) trainer implementation. See also :class:`~torchrl.trainers.algorithms.configs.PPOTrainerConfig` for the Hydra configuration counterpart. .. warning:: This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the PPO algorithm for training reinforcement learning agents. It extends :class:`~torchrl.trainers.algorithms.OnPolicyTrainer` with PPO-specific defaults; see that class for the full list of keyword arguments, covering advantage estimation (GAE), replay-buffer wiring, collector weight synchronization and logging. PPO typically uses multiple epochs of optimization on the same batch of data. This trainer defaults to 4 epochs, which is a common choice for PPO implementations. Examples: \u003e\u003e\u003e # Basic usage with manual configuration \u003e\u003e\u003e from torchrl.trainers.algorithms.ppo import PPOTrainer \u003e\u003e\u003e from torchrl.trainers.algorithms.configs import PPOTrainerConfig \u003e\u003e\u003e from hydra.utils import instantiate \u003e\u003e\u003e config = PPOTrainerConfig(...) # Configure with required parameters \u003e\u003e\u003e trainer = instantiate(config) \u003e\u003e\u003e trainer.train() .. note:: This trainer requires a configurable environment setup. See the :class:`~torchrl.trainers.algorithms.configs` module for configuration options. \"\"\" _algo_name = \"PPO\" _default_num_epochs = 4",
+       "articleBody": "Source code for torchrl.trainers.algorithms.ppo # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import math from collections.abc import Mapping from typing import Any import torch from tensordict.nn import TensorDictModuleBase from tensordict.utils import NestedKey from torchrl.collectors import Collector from torchrl.data import ( LazyTensorStorage, SamplerWithoutReplacement, TensorDictReplayBuffer, ) from torchrl.envs.common import EnvBase from torchrl.modules import set_recurrent_mode from torchrl.objectives import ClipPPOLoss from torchrl.objectives.value import GAE from torchrl.trainers.algorithms.on_policy import OnPolicyTrainer from torchrl.trainers.trainers import BatchSubSampler [docs] class PPOTrainer(OnPolicyTrainer): \"\"\"PPO (Proximal Policy Optimization) trainer implementation. See also :class:`~torchrl.trainers.algorithms.configs.PPOTrainerConfig` for the Hydra configuration counterpart. .. warning:: This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the PPO algorithm for training reinforcement learning agents. It extends :class:`~torchrl.trainers.algorithms.OnPolicyTrainer` with PPO-specific defaults; see that class for the full list of keyword arguments, covering advantage estimation (GAE), replay-buffer wiring, collector weight synchronization and logging. PPO typically uses multiple epochs of optimization on the same batch of data. This trainer defaults to 4 epochs, which is a common choice for PPO implementations. Use :meth:`from_env` to construct standard PPO components from an environment, actor and critic; its docstring includes a complete runnable example. .. note:: This trainer requires a configurable environment setup. See the :class:`~torchrl.trainers.algorithms.configs` module for configuration options. \"\"\" _algo_name = \"PPO\" _default_num_epochs = 4 [docs] @classmethod def from_env( cls, env: EnvBase, *, actor: TensorDictModuleBase, critic: TensorDictModuleBase, total_frames: int, frames_per_batch: int = 1024, minibatch_size: int = 256, sub_traj_len: int | None = None, learning_rate: float = 3e-4, value_key: NestedKey = \"state_value\", loss_kwargs: Mapping[str, Any] | None = None, gae_kwargs: Mapping[str, Any] | None = None, collector_kwargs: Mapping[str, Any] | None = None, **trainer_kwargs: Any, ) -\u003e PPOTrainer: \"\"\"Build a PPO trainer from an environment, actor and critic. Constructs a :class:`~torchrl.collectors.Collector`, :class:`~torchrl.objectives.ClipPPOLoss`, Adam optimizer, GAE and minibatch sampling. Use the ordinary constructor to supply custom collectors, losses, optimizers or replay buffers. Args: env (EnvBase): Environment owned by the resulting collector. Training closes it. The collector installs missing policy primers and initialization tracking by default. actor (TensorDictModuleBase): Probabilistic actor returning actions and their log probabilities. critic (TensorDictModuleBase): Value network writing ``value_key``. total_frames (int): Total environment transitions to collect. For closed-loop action deployment these count high-level decisions. frames_per_batch (int, optional): Transitions collected per update, across all environments. Defaults to 1024. minibatch_size (int, optional): Transitions per optimization step. Clamped to the collected batch size. Defaults to 256. sub_traj_len (int, optional): Consecutive time steps per recurrent training window. When set, uses :class:`~torchrl.trainers.BatchSubSampler` and recurrent-mode GAE instead of flattening time into replay. The minibatch size must be a multiple of this length. Defaults to ``None`` (feedforward PPO). learning_rate (float, optional): Adam learning rate. Defaults to 3e-4. value_key (NestedKey, optional): Critic output key, also configured on the loss and GAE. Defaults to ``\"state_value\"``. loss_kwargs (Mapping, optional): Extra ``ClipPPOLoss`` arguments. Advantage normalization defaults to ``True``, or ``False`` when GAE already normalizes advantages (e.g. within each task). gae_kwargs (Mapping, optional): Extra GAE arguments. For per-task normalization, pass ``{\"group_key\": \"task_id\", \"average_gae\": True}``. Recurrent windows default to ``shifted=False, deactivate_vmap=True`` because their value networks may depend on recurrent state that cannot be reconstructed by shifting observations alone. collector_kwargs (Mapping, optional): Extra ``Collector`` arguments, such as ``policy_device`` and ``storing_device``. **trainer_kwargs: Additional :class:`OnPolicyTrainer` options, such as ``num_epochs``, ``gamma``, ``lmbda``, logging and checkpointing. Action/reward keys default to the environment\u0027s unique keys. Done/terminated keys use the reward\u0027s namespace when available, otherwise the root namespace; explicit key overrides take precedence. ``frame_skip`` defaults to 1 and ``clip_norm`` to 1.0. Returns: PPOTrainer: Configured trainer; call :meth:`train` to start learning. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn import TensorDictModule, NormalParamExtractor \u003e\u003e\u003e from torchrl.modules import ProbabilisticActor, TanhNormal \u003e\u003e\u003e from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv \u003e\u003e\u003e env = ContinuousActionVecMockEnv() \u003e\u003e\u003e obs_dim = env.observation_spec[\"observation\"].shape[-1] \u003e\u003e\u003e action_dim = env.action_spec.shape[-1] \u003e\u003e\u003e actor = ProbabilisticActor( ... TensorDictModule( ... torch.nn.Sequential(torch.nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor()), ... in_keys=[\"observation\"], out_keys=[\"loc\", \"scale\"], ... ), ... in_keys=[\"loc\", \"scale\"], distribution_class=TanhNormal, ... return_log_prob=True, ... ) \u003e\u003e\u003e critic = TensorDictModule( ... torch.nn.Linear(obs_dim, 1), in_keys=[\"observation\"], out_keys=[\"state_value\"], ... ) \u003e\u003e\u003e trainer = PPOTrainer.from_env( ... env, actor=actor, critic=critic, total_frames=32, ... frames_per_batch=16, minibatch_size=8, progress_bar=False, ... ) \u003e\u003e\u003e trainer.train() \"\"\" if min(total_frames, frames_per_batch, minibatch_size) \u003c 1: raise ValueError(\"Frame and minibatch sizes must be positive.\") num_envs = env.batch_size.numel() frames_per_env = math.ceil(frames_per_batch / num_envs) collected_batch_size = frames_per_env * num_envs minibatch_size = min(minibatch_size, collected_batch_size) if sub_traj_len is not None: if env.batch_dims == 0: raise ValueError( \"sub_traj_len requires a batched environment: an unbatched \" \"env yields 1-D time-only collector batches, and \" \"BatchSubSampler would fall back to shuffling single \" \"transitions instead of returning contiguous windows. \" \"Wrap the env (e.g. SerialEnv(1, ...)) or drop \" \"sub_traj_len for feedforward PPO.\" ) if ( sub_traj_len \u003c 1 or sub_traj_len \u003e frames_per_env or minibatch_size % sub_traj_len ): raise ValueError( \"sub_traj_len must fit within the collected time dimension and \" \"divide minibatch_size.\" ) if \"action_key\" not in trainer_kwargs: trainer_kwargs[\"action_key\"] = env.action_key if \"reward_key\" not in trainer_kwargs: trainer_kwargs[\"reward_key\"] = env.reward_key trainer_kwargs.setdefault(\"episode_reward_key\", trainer_kwargs[\"reward_key\"]) reward_key = trainer_kwargs[\"reward_key\"] reward_path = reward_key if isinstance(reward_key, tuple) else (reward_key,) for name in (\"done\", \"terminated\"): candidate = (*reward_path[:-1], name) trainer_kwargs.setdefault( f\"{name}_key\", candidate if candidate in env.full_done_spec.keys(True, True) else name, ) trainer_kwargs.setdefault(\"frame_skip\", 1) trainer_kwargs.setdefault(\"clip_norm\", 1.0) gae_options = dict(gae_kwargs or {}) gae_options.setdefault(\"gamma\", trainer_kwargs.get(\"gamma\", 0.99)) gae_options.setdefault(\"lmbda\", trainer_kwargs.get(\"lmbda\", 0.95)) if sub_traj_len is not None: gae_options.setdefault(\"shifted\", False) gae_options.setdefault(\"deactivate_vmap\", True) loss_options = dict(loss_kwargs or {}) loss_options.setdefault( \"normalize_advantage\", not gae_options.get(\"average_gae\", False) ) loss = ClipPPOLoss(actor, critic, **loss_options) loss.set_keys( value=value_key, **{ name: trainer_kwargs[f\"{name}_key\"] for name in (\"action\", \"reward\", \"done\", \"terminated\") }, ) gae = GAE(value_network=critic, **gae_options) gae.set_keys( value=value_key, **{ name: trainer_kwargs[f\"{name}_key\"] for name in (\"reward\", \"done\", \"terminated\") }, ) if sub_traj_len is not None: gae = set_recurrent_mode(True)(gae) optimizer = torch.optim.Adam(loss.parameters(), lr=learning_rate) replay = None if sub_traj_len is None: replay = TensorDictReplayBuffer( storage=LazyTensorStorage( collected_batch_size, device=next(critic.parameters()).device ), sampler=SamplerWithoutReplacement(), batch_size=minibatch_size, ) collector_options = dict(collector_kwargs or {}) collector_options.setdefault(\"auto_register_policy_transforms\", True) collector = Collector( env, actor, total_frames=total_frames, frames_per_batch=frames_per_batch, **collector_options, ) try: trainer = cls( collector=collector, total_frames=total_frames, loss_module=loss, optimizer=optimizer, gae=gae, replay_buffer=replay, optim_steps_per_batch=( None if replay is not None else math.ceil(collected_batch_size / minibatch_size) ), **trainer_kwargs, ) if sub_traj_len is not None: BatchSubSampler(minibatch_size, sub_traj_len=sub_traj_len).register( trainer ) return trainer except Exception: collector.shutdown() raise",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

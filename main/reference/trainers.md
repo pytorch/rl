@@ -42,6 +42,7 @@ trainer.train()
 
 - [Trainer and hooks](trainers_basics.html#trainer-and-hooks)
 - [Algorithm-specific trainers](trainers_basics.html#algorithm-specific-trainers)
+- [PPO from an environment](trainers_basics.html#ppo-from-an-environment)
 - [Builders](trainers_basics.html#builders)
 - [Utils](trainers_basics.html#utils)
 - [Loggers](trainers_loggers.html)
