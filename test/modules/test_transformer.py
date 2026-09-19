@@ -12,6 +12,7 @@ import warnings
 
 import pytest
 import torch
+from packaging import version
 from tensordict import from_module, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
@@ -25,6 +26,10 @@ from torchrl.modules.tensordict_module.transformer import (
 )
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+_NO_COMPILE = TORCH_VERSION < version.parse("2.5.0") or os.name == "nt"
+_NO_COMPILE_REASON = "compile tests need torch>=2.5 and inductor (not on Windows)"
 
 
 class TestMaskHelpers:
@@ -341,7 +346,7 @@ class TestTransformerModule:
         with pytest.raises(RuntimeError, match="max_seq_len"):
             module(_window(torch.randn(2, 5), torch.zeros(2, 1, dtype=torch.bool), [2]))
 
-    @pytest.mark.skipif(os.name == "nt", reason="inductor is not available on Windows")
+    @pytest.mark.skipif(_NO_COMPILE, reason=_NO_COMPILE_REASON)
     @pytest.mark.parametrize("recurrent", [False, True])
     def test_fullgraph_compile_matches_eager(self, recurrent):
         module = self._make_module(max_seq_len=8, validate_windows=not recurrent)
@@ -358,7 +363,7 @@ class TestTransformerModule:
         compiled = _run_steps(torch.compile(module, fullgraph=True), obs, is_init, [2])
         torch.testing.assert_close(compiled, eager, atol=1e-5, rtol=1e-5)
 
-    @pytest.mark.skipif(os.name == "nt", reason="inductor is not available on Windows")
+    @pytest.mark.skipif(_NO_COMPILE, reason=_NO_COMPILE_REASON)
     def test_window_validation_survives_default_compile(self):
         module = torch.compile(self._make_module(max_seq_len=8))
         obs, is_init = self._trajectory([2], 3)
@@ -466,8 +471,8 @@ class TestTransformerModule:
     @pytest.mark.parametrize("compile", [False, True], ids=["eager", "compiled"])
     def test_collector_weight_update_restarts_streams(self, update, compile):
         """Every collector weight path must restart the streams, eager and compiled."""
-        if compile and os.name == "nt":
-            pytest.skip("inductor is not available on Windows")
+        if compile and _NO_COMPILE:
+            pytest.skip(_NO_COMPILE_REASON)
         env = self._make_env()
         obs_dim = env.observation_spec["observation"].shape[-1]
         module = self._make_module(input_size=obs_dim, max_seq_len=64)

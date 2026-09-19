@@ -378,24 +378,23 @@ def _accepts_dtype(new_kv_cache: Callable[..., Any]) -> bool:
     )
 
 
+@implement_for("torch", "2.4", compilable=True)
 def _autocast_dtype(device: torch.device) -> torch.dtype | None:
     """Return the active autocast dtype for ``device``, or ``None`` when disabled."""
     device_type = device.type
-    try:
-        enabled = torch.is_autocast_enabled(device_type)
-        return torch.get_autocast_dtype(device_type) if enabled else None
-    except TypeError:
-        if device_type == "cuda":
-            return (
-                torch.get_autocast_gpu_dtype() if torch.is_autocast_enabled() else None
-            )
-        if device_type == "cpu":
-            return (
-                torch.get_autocast_cpu_dtype()
-                if torch.is_autocast_cpu_enabled()
-                else None
-            )
-        return None
+    if torch.is_autocast_enabled(device_type):
+        return torch.get_autocast_dtype(device_type)
+    return None
+
+
+@implement_for("torch", None, "2.4", compilable=True)
+def _autocast_dtype(device: torch.device) -> torch.dtype | None:  # noqa: F811
+    device_type = device.type
+    if device_type == "cuda" and torch.is_autocast_enabled():
+        return torch.get_autocast_gpu_dtype()
+    if device_type == "cpu" and torch.is_autocast_cpu_enabled():
+        return torch.get_autocast_cpu_dtype()
+    return None
 
 
 class TransformerModule(ModuleBase):
