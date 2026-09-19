@@ -30,8 +30,8 @@ class RewardData:
 class PairwiseDataset:
     """Represents a dataset in a pairwise manner (chosen vs rejected).
 
-    .. deprecated:: 0.14
-        ``PairwiseDataset`` is deprecated and will be removed in v0.16. Build
+    .. deprecated:: 0.15
+        ``PairwiseDataset`` is deprecated and will be removed in v0.17. Build
         pairwise preference data directly for
         :class:`~torchrl.objectives.llm.RewardModelLoss` instead (see the
         ``sota-implementations/reward_model_training`` recipe).
@@ -81,7 +81,7 @@ class PairwiseDataset:
     ):
         """Returns a :class:`PairwiseDataset` from a dataset name.
 
-        .. deprecated:: 0.14
+        .. deprecated:: 0.15
             See the class-level deprecation note.
 
         Args:
@@ -129,7 +129,7 @@ class PairwiseDataset:
 
         """
         warnings.warn(
-            "PairwiseDataset is deprecated and will be removed in v0.16. Build "
+            "PairwiseDataset is deprecated and will be removed in v0.17. Build "
             "pairwise preference data directly for "
             "torchrl.objectives.llm.RewardModelLoss instead (see the "
             "sota-implementations/reward_model_training recipe).",
