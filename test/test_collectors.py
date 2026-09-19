@@ -16,6 +16,7 @@ import sys
 import time
 import traceback
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -6291,6 +6292,51 @@ class TestCollectorStats:
             per_worker = collector.stats(workers="per_worker")
             assert "frames" not in per_worker
             assert "worker_0/frames" in per_worker
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="requires ray.")
+    def test_ray_stats_during_collection(self, tmp_path):
+        entered = tmp_path / "entered"
+        release = tmp_path / "release"
+
+        class GatedEnv(ContinuousActionVecMockEnv):
+            def _step(self, tensordict):
+                entered.touch()
+                deadline = time.monotonic() + 30
+                while not release.exists():
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Collection gate was not released.")
+                    time.sleep(0.01)
+                return super()._step(tensordict)
+
+        probe = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(probe.action_spec)
+        probe.close()
+        collector = RayCollector(
+            GatedEnv,
+            policy=policy,
+            frames_per_batch=16,
+            total_frames=16,
+            num_collectors=1,
+            ray_init_config={"num_cpus": 1, "include_dashboard": False},
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+        )
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                collecting = executor.submit(next, iter(collector))
+                try:
+                    deadline = time.monotonic() + 30
+                    while not entered.exists():
+                        assert time.monotonic() < deadline
+                        time.sleep(0.01)
+                    stats = collector.stats(workers="both", timeout=1.0)
+                    assert stats["workers_alive"] == 1
+                    assert stats["worker_0/frames"] == 0
+                    assert not collecting.done()
+                finally:
+                    release.touch()
+                assert collecting.result(timeout=30).numel() == 16
         finally:
             collector.shutdown()
 

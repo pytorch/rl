@@ -105,6 +105,15 @@ RUNNABLE_EXAMPLES = (
         "examples/distributed/ray_dqn_trainer.py",
     ),
     ExampleSpec(
+        "ray-wandb-monitor",
+        "examples/ray_wandb_monitor.py",
+        env={
+            "WANDB_MODE": "offline",
+            "WANDB_DIR": "{tmp_path}",
+            "RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO": "0",
+        },
+    ),
+    ExampleSpec(
         "env-compile-step-reset",
         "examples/envs/benchmark_compile_step_and_maybe_reset.py",
         (
