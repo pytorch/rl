@@ -1,0 +1,182 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import gymnasium as gym
+import torch
+from tensordict import TensorDict
+from torch import nn
+
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.envs import (
+    ActionScaling,
+    Compose,
+    default_info_dict_reader,
+    DoubleToFloat,
+    GymWrapper,
+    StepCounter,
+    TransformedEnv,
+)
+from torchrl.modules import Actor, FlowMatchingPolicy, MLP, OneStepPolicy, ValueOperator
+from torchrl.objectives import FQLLoss, SoftUpdate
+
+
+REPLAY_KEYS = [
+    "observation",
+    "action",
+    ("next", "observation"),
+    ("next", "reward"),
+    ("next", "done"),
+    ("next", "terminated"),
+    ("next", "truncated"),
+]
+
+
+class SuccessReader(default_info_dict_reader):
+    def __call__(self, info, tensordict):
+        return tensordict.set(
+            "success", torch.tensor(info.get("success", 0.0), dtype=torch.float32)
+        )
+
+
+def wrap_environment(raw_env, cfg):
+    env = GymWrapper(raw_env)
+    if cfg.dataset.name:
+        env.set_info_dict_reader(SuccessReader(["success"]))
+    return TransformedEnv(
+        env,
+        Compose(
+            ActionScaling(), DoubleToFloat(), StepCounter(cfg.env.max_episode_steps)
+        ),
+    )
+
+
+def make_data_and_envs(cfg):
+    if cfg.dataset.name:
+        import ogbench
+
+        raw_env, dataset, _ = ogbench.make_env_and_datasets(
+            cfg.dataset.name, dataset_dir=cfg.dataset.root
+        )
+        raw_eval = ogbench.make_env_and_datasets(cfg.dataset.name, env_only=True)
+        terminated = torch.as_tensor(1 - dataset["masks"], dtype=torch.bool).unsqueeze(
+            -1
+        )
+        boundary = torch.as_tensor(dataset["terminals"], dtype=torch.bool).unsqueeze(-1)
+        data = TensorDict(
+            {
+                "observation": torch.as_tensor(
+                    dataset["observations"], dtype=torch.float32
+                ),
+                "action": torch.as_tensor(
+                    dataset["actions"], dtype=torch.float32
+                ).clamp(-1 + 1e-5, 1 - 1e-5),
+                "next": {
+                    "observation": torch.as_tensor(
+                        dataset["next_observations"], dtype=torch.float32
+                    ),
+                    "reward": torch.as_tensor(
+                        dataset["rewards"], dtype=torch.float32
+                    ).unsqueeze(-1),
+                    "done": boundary | terminated,
+                    "terminated": terminated,
+                    "truncated": boundary & ~terminated,
+                },
+            },
+            batch_size=[len(terminated)],
+        )
+    else:
+        raw_env = gym.make(cfg.env.name)
+        raw_eval = gym.make(cfg.env.name)
+        data = None
+
+    env = wrap_environment(raw_env, cfg)
+    eval_env = wrap_environment(raw_eval, cfg)
+    env.set_seed(cfg.seed)
+    eval_env.set_seed(cfg.seed + 1)
+    if data is None:
+        # Random data exercises the pipeline; it is not an offline benchmark.
+        data = env.rollout(cfg.dataset.random_frames, break_when_any_done=False).select(
+            *REPLAY_KEYS
+        )
+    replay = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(data.numel() + cfg.optim.online_steps),
+        batch_size=cfg.optim.batch_size,
+    )
+    replay.extend(data)
+    return replay, env, eval_env
+
+
+def make_network(in_features, out_features, cfg, device, layer_norm=False):
+    def activation():
+        # FQL puts normalization after GELU; MLP's norm_class puts it before.
+        return (
+            nn.Sequential(
+                nn.GELU(approximate="tanh"), nn.LayerNorm(cfg.network.width, eps=1e-6)
+            )
+            if layer_norm
+            else nn.GELU(approximate="tanh")
+        )
+
+    model = MLP(
+        in_features,
+        out_features,
+        num_cells=[cfg.network.width] * cfg.network.depth,
+        activation_class=activation,
+        device=device,
+    )
+    for layer in model.modules():
+        if isinstance(layer, nn.Linear):
+            nn.init.xavier_uniform_(layer.weight)
+            nn.init.zeros_(layer.bias)
+    return model
+
+
+def make_agent(cfg, env, device):
+    obs_dim = env.observation_spec["observation"].shape[-1]
+    action_dim = env.action_spec.shape[-1]
+    flow = FlowMatchingPolicy(
+        make_network(obs_dim + action_dim + 1, action_dim, cfg, device),
+        action_dim,
+        cfg.network.num_steps,
+    )
+    student = OneStepPolicy(
+        make_network(obs_dim + action_dim, action_dim, cfg, device), action_dim
+    )
+    critics = [
+        ValueOperator(
+            make_network(obs_dim + action_dim, 1, cfg, device, layer_norm=True),
+            in_keys=["observation", "action"],
+        )
+        for _ in range(2)
+    ]
+    loss = FQLLoss(
+        flow,
+        student,
+        critics,
+        alpha=cfg.loss.alpha,
+        q_aggregation=cfg.loss.q_aggregation,
+        normalize_q_loss=cfg.loss.normalize_q_loss,
+    )
+    loss.make_value_estimator(gamma=cfg.loss.gamma)
+    updater = SoftUpdate(loss, tau=cfg.loss.tau)
+    return Actor(student), loss, updater
+
+
+@torch.no_grad()
+def evaluate(policy, env, cfg):
+    returns = []
+    successes = []
+    for _ in range(cfg.evaluation.episodes):
+        rollout = env.rollout(
+            cfg.env.max_episode_steps, policy, auto_cast_to_device=True
+        )
+        returns.append(rollout["next", "reward"].sum().item())
+        if cfg.dataset.name:
+            successes.append(rollout["next", "success"].max().item())
+    metrics = {"evaluation/return": sum(returns) / len(returns)}
+    if successes:
+        metrics["evaluation/success"] = sum(successes) / len(successes)
+    return metrics

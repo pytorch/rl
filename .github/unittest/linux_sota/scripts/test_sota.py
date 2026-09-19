@@ -17,6 +17,13 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "fql": """python sota-implementations/fql/fql.py \
+  device=cpu dataset.name=null dataset.random_frames=64 \
+  env.max_episode_steps=20 \
+  optim.offline_steps=10 optim.online_steps=12 optim.batch_size=16 \
+  network.width=32 network.depth=2 network.num_steps=3 \
+  evaluation.interval=10 evaluation.episodes=1 log_interval=1
+""",
     "dqn_trainer_resume": """python sota-implementations/dqn_trainer/train.py \
   collector.total_frames=2000 \
   collector.frames_per_batch=1000 \
