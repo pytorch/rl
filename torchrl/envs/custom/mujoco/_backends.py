@@ -242,8 +242,17 @@ class _PhysicsBackend(abc.ABC):
         """Sensor readings, shaped ``(num_envs, nsensordata)``."""
         raise NotImplementedError(f"{type(self).__name__} does not expose sensor data.")
 
-    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
-        """World-frame site rotations, shaped ``(num_envs, sites, 3, 3)``."""
+    def site_rotations(
+        self,
+        site_ids: Sequence[int],
+        *,
+        qpos: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """World-frame site rotations, shaped ``(num_envs, sites, 3, 3)``.
+
+        When ``qpos`` is supplied, compute the rotations for that configuration
+        without mutating the backend's current state.
+        """
         raise NotImplementedError(
             f"{type(self).__name__} does not expose site rotations."
         )
@@ -528,9 +537,19 @@ class _TorchBackend(_PhysicsBackend):
     def sensordata(self) -> torch.Tensor:
         return self._dx.sensordata.to(self.device)
 
-    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
+    def site_rotations(
+        self,
+        site_ids: Sequence[int],
+        *,
+        qpos: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         ids = torch.as_tensor(list(site_ids), dtype=torch.long, device=self.device)
-        return self._dx.site_xmat.to(self.device)[:, ids].to(torch.float32)
+        data = self._dx
+        if qpos is not None:
+            data = data.clone()
+            data.qpos.copy_(qpos.to(device=self.device, dtype=self._sim_dtype))
+            data = self._vmap_forward(data)
+        return data.site_xmat.to(self.device)[:, ids].to(torch.float32)
 
     def render(
         self,
@@ -723,9 +742,20 @@ class _MujocoBackend(_PhysicsBackend):
             self._d.sensordata.copy(), device=self.device, dtype=torch.float32
         ).unsqueeze(0)
 
-    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
+    def site_rotations(
+        self,
+        site_ids: Sequence[int],
+        *,
+        qpos: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        data = self._d
+        if qpos is not None:
+            data = self._mujoco.MjData(self._m)
+            _copy_mujoco_data(data, self._d)
+            data.qpos[:] = qpos.detach().cpu().double().numpy()[0]
+            self._mujoco.mj_forward(self._m, data)
         return torch.as_tensor(
-            self._d.site_xmat[list(site_ids)].copy(),
+            data.site_xmat[list(site_ids)].copy(),
             device=self.device,
             dtype=torch.float32,
         ).reshape(1, len(site_ids), 3, 3)
@@ -981,8 +1011,17 @@ class _MJXBackend(_PhysicsBackend):
     def sensordata(self) -> torch.Tensor:
         return self._jax_to_torch(self._dx.sensordata)
 
-    def site_rotations(self, site_ids: Sequence[int]) -> torch.Tensor:
-        return self._jax_to_torch(self._dx.site_xmat[:, list(site_ids)])
+    def site_rotations(
+        self,
+        site_ids: Sequence[int],
+        *,
+        qpos: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        data = self._dx
+        if qpos is not None:
+            data = data.replace(qpos=self._torch_to_jax(qpos))
+            data = self._vmap_forward(data)
+        return self._jax_to_torch(data.site_xmat[:, list(site_ids)])
 
     def render(
         self,
