@@ -52,7 +52,7 @@ The `sota-implementations/reward_model_training` recipe for a
 complete training loop built around this loss. The legacy
 `GPT2RewardModel` and
 `PairwiseDataset` (both deprecated, removal
-in v0.16) can still be wired in during the deprecation window:
+in v0.17) can still be wired in during the deprecation window:
 GPT2RewardModel's forward returns per-token rewards of shape `[B, T]`
 followed by per-sequence `end_scores` of shape `[B, 1]`, so wrap it as
 `TensorDictModule(model, in_keys=["input_ids", "attention_mask"],
