@@ -1873,6 +1873,40 @@ class TestLoggerMonitor:
         logger.close()
 
 
+@pytest.mark.skipif(not _has_hydra, reason="MicroDuck example requires Hydra")
+def test_microduck_reward_charts_use_wall_clock(monkeypatch, tmp_path):
+    recipe = pytest.importorskip("examples.microduck.speed_benchmark")
+    experiment = mock.Mock(config={}, id="benchmark")
+    monkeypatch.setitem(
+        sys.modules,
+        "wandb",
+        argparse.Namespace(init=mock.Mock(return_value=experiment)),
+    )
+    monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+    logger = recipe.NamespacedWandbLogger(
+        exp_name="benchmark", save_dir=tmp_path, log_env_packages=False
+    )
+    logger.started_at = 10.0
+    monkeypatch.setattr(recipe.time, "monotonic", mock.Mock(return_value=14.0))
+    logger.log_metrics({"training/rewards/mean": 2.5}, step=500)
+    logger.log_metrics(
+        {"evaluation/reward": 100.0, "evaluation/wall_clock_seconds": 6.0}, step=1000
+    )
+
+    payloads = [call.args[0] for call in experiment.log.call_args_list]
+    assert payloads[0]["training/rewards/mean"] == 2.5
+    assert payloads[0]["training/wall_clock_seconds"] == 4.0
+    assert payloads[1]["evaluation/reward"] == 100.0
+    assert payloads[1]["evaluation/wall_clock_seconds"] == 6.0
+    axes = {
+        call.args[0]: call.kwargs.get("step_metric")
+        for call in experiment.define_metric.call_args_list
+    }
+    assert axes["training/rewards/mean"] == "training/wall_clock_seconds"
+    assert axes["evaluation/reward"] == "evaluation/wall_clock_seconds"
+    assert all(key.startswith(("training/", "evaluation/")) for key in axes)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

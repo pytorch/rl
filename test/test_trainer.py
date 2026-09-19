@@ -24,6 +24,11 @@ import pytest
 import torch
 from torch import nn
 
+_has_hydra = importlib.util.find_spec("hydra") is not None
+
+if _has_hydra:
+    from examples.microduck.speed_benchmark import AsyncReplayBatch
+
 _has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
@@ -39,7 +44,9 @@ from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    RateLimitedReplayBuffer,
     SamplerWithoutReplacement,
+    SliceSampler,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -47,6 +54,7 @@ from torchrl.envs import Compose, RenameTransform, SerialEnv, TransformedEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.modules import GRUModule, ProbabilisticActor, TanhNormal
 from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
+from torchrl.objectives.value import GAE
 from torchrl.record.loggers.common import PrefixLogger
 from torchrl.testing import PONG_VERSIONED
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
@@ -3460,6 +3468,47 @@ class TestGRPOTrainer:
 
         with pytest.raises(RuntimeError, match="no 'loss_\\*' keys"):
             stepper.step(trainer, _make_grpo_batch())
+
+
+@pytest.mark.skipif(not _has_hydra, reason="MicroDuck example requires Hydra")
+def test_microduck_async_replay_preserves_slice_metadata(tmp_path):
+    replay = RateLimitedReplayBuffer(
+        storage=LazyTensorStorage(8),
+        sampler=SliceSampler(
+            num_slices=1,
+            traj_key="global_traj_id",
+            step_key="step_count",
+            fragmented=True,
+            strict_length=False,
+            output_layout="batch_time",
+        ),
+        batch_size=4,
+        samples_per_insert=5,
+    )
+    replay.extend(
+        TensorDict(
+            {
+                "global_traj_id": torch.zeros(2, dtype=torch.long),
+                "step_count": torch.arange(2),
+                "state_value": torch.zeros(2, 1),
+                ("next", "state_value"): torch.zeros(2, 1),
+                ("next", "reward"): torch.ones(2, 1),
+                ("next", "done"): torch.zeros(2, 1, dtype=torch.bool),
+                ("next", "terminated"): torch.zeros(2, 1, dtype=torch.bool),
+                ("next", "policy_version"): torch.zeros(2, 1, dtype=torch.long),
+            },
+            [2],
+        )
+    )
+    gae = GAE(gamma=1.0, lmbda=1.0, value_network=None, vectorized=False)
+    gae.set_keys(valid=("collector", "mask"))
+    sample = AsyncReplayBatch(replay, gae, tmp_path)(None)
+
+    assert sample["collector", "mask"].tolist() == [[True, True, False, False]]
+    assert sample["next", "done"][0, :, 0].tolist() == [False, True, False, False]
+    torch.testing.assert_close(
+        sample["advantage"][0, :, 0], torch.tensor([2.0, 1.0, 0.0, 0.0])
+    )
 
 
 if __name__ == "__main__":

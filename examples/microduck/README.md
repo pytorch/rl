@@ -405,3 +405,45 @@ hop as drift.
 Always load the ordered task library and action scale from the checkpoint.
 Existing navigation and football policies remain paired with their original
 walker revisions; replacing the walker alone does not retrain their selectors.
+
+## Compare reward against training time
+
+`speed_benchmark.py` runs synchronous PPO (`ppo`), PPO with an EWMA actor
+(`ppo-ewma`), collection overlapped with PPO epochs (`semi-async`), or continuous
+shared-replay collection (`full-async`). All four modes use the same nine skill
+presets and evaluation procedure, with fresh model initialization.
+
+For 32 environments split across two asynchronous collectors of 16:
+
+```bash
+python -m examples.microduck.speed_benchmark \
+  --mode full-async --output-dir outputs/microduck-full-async \
+  --source-revision YOUR_GIT_COMMIT --campaign microduck-speed \
+  --num-envs 32 --collector-workers 2 --collector-chunk 2048 \
+  --frames 20000000 --minibatch-size 2048 --sub-traj-len 128 \
+  --replay-capacity 18432 --samples-per-insert 5 \
+  --evaluation-interval 500000 --wandb-entity YOUR_WANDB_ENTITY
+```
+
+Use a new output directory for every run. `--wandb-offline` stores logs locally.
+The first run downloads the MicroDuck assets. MuJoCo, Hydra, W&B and the video
+recording dependencies used by `ppo_mujoco.py` must be installed.
+
+The full-async mode uses `MultiCollector(sync=False)` and the trainer's
+`async_collection=True` path, which calls `.start()` and trains while the workers
+write into replay. Each worker's environment factory installs the policy's GRU
+primer before shared storage is allocated, so carried recurrent states survive
+replay writes. `SliceSampler` returns padded recurrent windows; the example
+preserves their index layout and validity mask and closes GAE at slice boundaries.
+
+Compare the mean evaluation episode reward across the nine skills against
+`evaluation/wall_clock_seconds`. W&B reward charts use elapsed wall time by
+default; `training/rewards/*` charts use `training/wall_clock_seconds`. Training
+reward summaries describe collected transitions in synchronous modes and valid
+replay samples in full-async mode, so use the common evaluation curve for
+cross-mode comparisons. Elapsed time includes initialization and evaluations.
+
+`best.ckpt` maximizes `evaluation/reward`; equal rewards retain the earliest
+checkpoint. Survival, task scores and tracking metrics are diagnostics only.
+`latest.ckpt` records the final evaluated policy. Full-async runs save renderable
+policy checkpoints but do not support exact trainer-state resumption.
