@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,12 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 
 class GPT2RewardModel(nn.Module):
     """Wrapper around GPT2-like models to enable their use as reward models.
+
+    .. deprecated:: 0.14
+        ``GPT2RewardModel`` is deprecated and will be removed in v0.16. Use
+        :class:`~torchrl.objectives.llm.RewardModelLoss` with a Hugging Face
+        ``AutoModelForSequenceClassification`` backbone instead (see the
+        ``sota-implementations/reward_model_training`` recipe).
 
     This wrapper replaces the language modelling head of the GPT2 model with a new
     linear layer with 1 output that can be used as a reward signal. It also exposes the
@@ -47,6 +54,14 @@ class GPT2RewardModel(nn.Module):
     def __init__(
         self, model_path: str | Path | None = None, pad_token_id: int | None = None
     ) -> None:
+        warnings.warn(
+            "GPT2RewardModel is deprecated and will be removed in v0.16. Use "
+            "torchrl.objectives.llm.RewardModelLoss with a Hugging Face "
+            "AutoModelForSequenceClassification backbone instead (see the "
+            "sota-implementations/reward_model_training recipe).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not _has_transformers:
             raise ImportError("The transformers library is missing.")
 
