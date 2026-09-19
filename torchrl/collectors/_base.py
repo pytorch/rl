@@ -532,7 +532,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if hasattr(self, "procs"):
             stats["workers"] = int(self.num_workers)
             if self.procs:
-                stats["workers_alive"] = sum(int(proc.is_alive()) for proc in self.procs)
+                stats["workers_alive"] = sum(
+                    int(proc.is_alive()) for proc in self.procs
+                )
             if workers in ("per_worker", "both"):
                 for idx, worker_stats in enumerate(self.map_fn("stats")):
                     for key, value in worker_stats.items():
