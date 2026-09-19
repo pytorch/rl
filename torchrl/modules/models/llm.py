@@ -19,8 +19,8 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 class GPT2RewardModel(nn.Module):
     """Wrapper around GPT2-like models to enable their use as reward models.
 
-    .. deprecated:: 0.14
-        ``GPT2RewardModel`` is deprecated and will be removed in v0.16. Use
+    .. deprecated:: 0.15
+        ``GPT2RewardModel`` is deprecated and will be removed in v0.17. Use
         :class:`~torchrl.objectives.llm.RewardModelLoss` with a Hugging Face
         ``AutoModelForSequenceClassification`` backbone instead (see the
         ``sota-implementations/reward_model_training`` recipe).
@@ -55,7 +55,7 @@ class GPT2RewardModel(nn.Module):
         self, model_path: str | Path | None = None, pad_token_id: int | None = None
     ) -> None:
         warnings.warn(
-            "GPT2RewardModel is deprecated and will be removed in v0.16. Use "
+            "GPT2RewardModel is deprecated and will be removed in v0.17. Use "
             "torchrl.objectives.llm.RewardModelLoss with a Hugging Face "
             "AutoModelForSequenceClassification backbone instead (see the "
             "sota-implementations/reward_model_training recipe).",
