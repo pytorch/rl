@@ -2094,7 +2094,6 @@ class TestRateLimitedReplayBuffer:
         assert stats["sample_budget"] == 2
 
 
-
 class _RepeatTwiceUnit(SampleUnit):
     """Toy unit doubling every anchor and recording per-record provenance."""
 

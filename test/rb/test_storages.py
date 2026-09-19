@@ -963,7 +963,6 @@ class TestSharedStorageInit:
         queue.put(sample["x"].tolist())
         completed.set()
 
-
     def blocking_writer(self, rb, first_write, completed, queue):
         rb.add(TensorDict({"x": torch.tensor(1)}, batch_size=[]))
         first_write.set()
@@ -1187,7 +1186,6 @@ class TestSharedStorageInit:
         assert stats["write_count"] == 2
         assert stats["samples_returned"] == 2
         assert stats["sample_wait_count"] >= 1
-
 
     def test_shared_blocking_replay_observes_worker_growth_and_consumption(self):
         storage = LazyTensorStorage(max_size=2, shared_init=True)
