@@ -604,7 +604,7 @@ class RandomCropTensorDictConfig(TransformConfig):
 class InitTrackerConfig(TransformConfig):
     """Configuration for InitTracker transform."""
 
-    init_key: str | None = None
+    init_key: str = "is_init"
     _target_: str = "torchrl.envs.transforms.transforms.InitTracker"
 
     def __post_init__(self) -> None:

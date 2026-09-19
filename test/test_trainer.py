@@ -2780,7 +2780,12 @@ class _RecordingLogger:
 class TestOnPolicyTelemetry:
     @staticmethod
     def _make_trainer(
-        *, telemetry="standard", collector=None, log_rewards=True, replay_buffer=None
+        *,
+        telemetry="standard",
+        collector=None,
+        log_rewards=True,
+        replay_buffer=None,
+        async_collection=False,
     ):
         torch.manual_seed(0)
         actor = ProbabilisticTensorDictSequential(
@@ -2812,6 +2817,7 @@ class TestOnPolicyTelemetry:
                 optimizer=torch.optim.SGD(loss_module.parameters(), lr=0.1),
                 logger=logger,
                 replay_buffer=replay_buffer,
+                async_collection=async_collection,
                 num_epochs=1,
                 add_gae=False,
                 progress_bar=False,
@@ -2886,17 +2892,73 @@ class TestOnPolicyTelemetry:
             "training/throughput/optimizer_updates_per_second",
         }
         assert expected <= logger.records.keys()
-        assert "done_percentage" in logger.records
-        assert "r_training" in logger.records
+        assert not {
+            "done_percentage",
+            "r_training",
+            "r_training_std",
+            "r_max",
+            "r_total",
+        }.intersection(logger.records)
         for name in expected:
             assert torch.isfinite(torch.as_tensor(logger.records[name][-1][1]))
         assert logger.records["training/episodes/completed"][-1][1] == 2
         assert logger.records["training/episodes/return/mean"][-1][1] == 18.0
         assert logger.records["training/episodes/length/mean"][-1][1] == 4.0
+        assert logger.records["training/rewards/mean"][-1][1] == 4.5
         assert logger.records["training/optimizer/learning_rate"][-1][1] == 0.1
         assert logger.records["training/optimizer/learning_rate/group_1"][-1][1] == 0.2
 
-    def test_minimal_avoids_standard_collection_work(self):
+    @pytest.mark.parametrize("log_rewards", [False, True])
+    def test_async_rewards_from_masked_replay_sample(self, log_rewards):
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SamplerWithoutReplacement(),
+            batch_size=8,
+        )
+        trainer, loss_module, logger = self._make_trainer(
+            async_collection=True,
+            replay_buffer=replay_buffer,
+            log_rewards=log_rewards,
+        )
+        batch = self._batch(loss_module)
+        batch["collector", "mask"] = torch.arange(8) < 4
+        batch["next", "agents", "reward"][4:] = 999
+        replay_buffer.extend(batch)
+
+        trainer._setup_hook()
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(None)
+        trainer.optim_steps(None)
+
+        rewards = {
+            key: values[-1][1]
+            for key, values in logger.records.items()
+            if key.startswith("training/rewards/")
+        }
+        assert rewards == (
+            {
+                "training/rewards/min": 1.0,
+                "training/rewards/mean": 2.5,
+                "training/rewards/std": pytest.approx(1.25**0.5),
+                "training/rewards/max": 4.0,
+            }
+            if log_rewards
+            else {}
+        )
+        assert not {
+            "done_percentage",
+            "r_training",
+            "r_training_std",
+            "r_max",
+            "r_total",
+        }.intersection(logger.records)
+        assert not any(
+            key.startswith(("training/episodes/", "training/terminals/"))
+            for key in logger.records
+        )
+
+    @pytest.mark.parametrize("log_rewards", [False, True])
+    def test_minimal_avoids_standard_collection_work(self, log_rewards):
         class FailingStatsCollector(MockingCollector):
             def stats(self):
                 raise AssertionError("minimal telemetry must not query stats")
@@ -2904,18 +2966,21 @@ class TestOnPolicyTelemetry:
         trainer, loss_module, logger = self._make_trainer(
             telemetry="minimal",
             collector=FailingStatsCollector(),
-            log_rewards=False,
+            log_rewards=log_rewards,
         )
         batch = self._batch(loss_module).exclude(
             ("collector", "traj_ids"),
-            ("next", "agents", "reward"),
             ("next", "agents", "terminated"),
             ("next", "agents", "truncated"),
         )
         trainer.collected_frames = batch.numel()
         trainer._pre_steps_log_hook(batch)
 
-        assert logger.records.keys() == {"done_percentage"}
+        expected = {"done_percentage"}
+        if log_rewards:
+            expected.update({"r_training", "r_training_std", "r_max", "r_total"})
+            assert logger.records["r_training"][-1][1] == 4.5
+        assert logger.records.keys() == expected
         assert not hasattr(trainer, "_standard_telemetry")
         assert not any(key.startswith("training/") for key in trainer._log_dict)
 
