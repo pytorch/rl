@@ -1,0 +1,446 @@
+{
+ "Path": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PurePath"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  }
+ ],
+ "PendulumEnv": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.custom.pendulum",
+   "module_short": "torchrl.envs",
+   "name": "PendulumEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.custom",
+   "module_short": "torchrl.envs",
+   "name": "PendulumEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "PendulumEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "PendulumEnv"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs.common",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "EnvBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules.module",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn.modules",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.nn",
+   "module_short": "torch.nn",
+   "name": "Module"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Module"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.envs",
+   "module_short": "torchrl.envs",
+   "name": "PendulumEnv"
+  }
+ ],
+ "RenderConfig": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.render.config",
+   "module_short": "torchrl.render",
+   "name": "RenderConfig"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderConfig"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RenderConfig"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderConfig"
+  }
+ ],
+ "RenderEnvSpec": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.render.config",
+   "module_short": "torchrl.render",
+   "name": "RenderEnvSpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderEnvSpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RenderEnvSpec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderEnvSpec"
+  }
+ ],
+ "RenderPolicySpec": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.render.config",
+   "module_short": "torchrl.render",
+   "name": "RenderPolicySpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderPolicySpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RenderPolicySpec"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderPolicySpec"
+  }
+ ],
+ "artifact_path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "ckpt": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "config": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render.config",
+   "module_short": "torchrl.render",
+   "name": "RenderConfig"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderConfig"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RenderConfig"
+  }
+ ],
+ "make_env": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "make_policy": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "metadata": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "out": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "render_policy": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "render_policy"
+  }
+ ],
+ "result": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render.config",
+   "module_short": "torchrl.render",
+   "name": "RenderResult"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderResult"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torchrl",
+   "module_short": "torchrl",
+   "name": "RenderResult"
+  }
+ ],
+ "result.artifact_path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "result.metadata": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "tempfile.TemporaryDirectory": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tempfile",
+   "module_short": "tempfile",
+   "name": "TemporaryDirectory"
+  }
+ ],
+ "tmpdir": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PosixPath"
+  }
+ ],
+ "torch.save": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "save"
+  }
+ ],
+ "torch.zeros": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "zeros"
+  }
+ ],
+ "torchrl.envs.transforms.StepCounter": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.envs.transforms",
+   "module_short": "torchrl.envs",
+   "name": "StepCounter"
+  }
+ ],
+ "torchrl.render.RenderConfig": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderConfig"
+  }
+ ],
+ "torchrl.render.RenderEnvSpec": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderEnvSpec"
+  }
+ ],
+ "torchrl.render.RenderPolicySpec": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "RenderPolicySpec"
+  }
+ ],
+ "torchrl.render.backends.MujocoStateReader": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.render.backends",
+   "module_short": "torchrl.render",
+   "name": "MujocoStateReader"
+  }
+ ],
+ "torchrl.render.render_policy": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "torchrl.render",
+   "module_short": "torchrl.render",
+   "name": "render_policy"
+  }
+ ]
+}
