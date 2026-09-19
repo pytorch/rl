@@ -17,10 +17,10 @@ import torch
 import torchrl
 from _rb_common import OLD_TORCH, ReplayBufferRNG, TensorDictReplayBufferRNG
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
-
 from torchrl._utils import rl_warnings
 from torchrl.data import (
     PrioritizedReplayBuffer,
+    RateLimitedReplayBuffer,
     ReplayBuffer,
     Sequence,
     TensorDictPrioritizedReplayBuffer,
@@ -34,7 +34,6 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
 )
-
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -1927,6 +1926,130 @@ class TestReplayBufferReadiness:
         assert completed.wait(timeout=1)
         thread.join(timeout=1)
         assert errors and "shut down" in errors[0]
+
+
+class TestRateLimitedReplayBuffer:
+    def test_ratio_uses_cumulative_counts_after_circular_wrap(self):
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(4),
+            batch_size=2,
+            samples_per_insert=0.5,
+        )
+        rb.extend(torch.arange(8))
+
+        rb.sample(wait=True, timeout=1)
+        rb.sample(wait=True, timeout=1)
+        with pytest.raises(TimeoutError, match="sample-ratio budget"):
+            rb.sample(wait=True, timeout=0)
+
+        stats = rb.stats()
+        assert stats["write_count"] == 8
+        assert stats["samples_returned"] == 4
+        assert stats["samples_per_insert"] == 0.5
+        assert stats["sample_budget"] == 0
+        assert rb.stats()["storage_size"] == 4
+
+    def test_concurrent_samples_reserve_ratio_budget_atomically(self):
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(4),
+            batch_size=2,
+            samples_per_insert=1.0,
+        )
+        rb.extend(torch.arange(2))
+        barrier = threading.Barrier(3)
+        cancel_event = threading.Event()
+        sampled = threading.Event()
+        results = []
+
+        def sample():
+            barrier.wait()
+            try:
+                results.append(rb.sample(wait=True, cancel_event=cancel_event))
+                sampled.set()
+            except RuntimeError as error:
+                results.append(str(error))
+
+        threads = [threading.Thread(target=sample) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        assert sampled.wait(timeout=1)
+        cancel_event.set()
+        for thread in threads:
+            thread.join(timeout=1)
+
+        assert sum(isinstance(result, torch.Tensor) for result in results) == 1
+        assert (
+            sum("cancelled" in result for result in results if isinstance(result, str))
+            == 1
+        )
+        assert rb.stats()["samples_returned"] == 2
+
+    def test_timeout_cancellation_and_shutdown_release_waiters(self):
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(4),
+            batch_size=2,
+            samples_per_insert=0.5,
+        )
+        rb.extend(torch.arange(2))
+        with pytest.raises(TimeoutError, match="sample-ratio budget"):
+            rb.sample(wait=True, timeout=0)
+
+        cancel_event = threading.Event()
+        cancel_event.set()
+        with pytest.raises(RuntimeError, match="cancelled"):
+            rb.sample(wait=True, cancel_event=cancel_event)
+
+        started = threading.Event()
+        completed = threading.Event()
+        errors = []
+
+        def sample():
+            started.set()
+            try:
+                rb.sample(wait=True)
+            except RuntimeError as error:
+                errors.append(str(error))
+            completed.set()
+
+        thread = threading.Thread(target=sample)
+        thread.start()
+        assert started.wait(timeout=1)
+        rb.shutdown()
+        assert completed.wait(timeout=1)
+        thread.join(timeout=1)
+        assert errors and "shut down" in errors[0]
+        assert rb.stats()["sample_wait_count"] == 2
+
+    def test_prefetch_rejected_and_checkpoint_roundtrip(self):
+        with pytest.raises(ValueError, match="prefetching"):
+            RateLimitedReplayBuffer(
+                storage=LazyTensorStorage(8),
+                samples_per_insert=1.0,
+                prefetch=1,
+                batch_size=2,
+            )
+
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(8),
+            batch_size=2,
+            samples_per_insert=1.0,
+        )
+        rb.extend(torch.arange(4))
+        rb.sample()
+        state = rb.state_dict()
+
+        restored = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(8),
+            batch_size=2,
+            samples_per_insert=2.0,
+        )
+        restored.load_state_dict(state)
+        stats = restored.stats()
+        assert stats["target_samples_per_insert"] == 1.0
+        assert stats["write_count"] == 4
+        assert stats["samples_returned"] == 2
+        assert stats["sample_budget"] == 2
 
 
 class _RepeatTwiceUnit(SampleUnit):

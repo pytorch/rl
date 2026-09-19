@@ -40,9 +40,9 @@ from tensordict import (
 )
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
-
 from torchrl.data import (
     CompressedListStorage,
+    RateLimitedReplayBuffer,
     ReplayBuffer,
     Sequence,
     TensorDictPrioritizedReplayBuffer,
@@ -934,6 +934,15 @@ class TestSharedStorageInit:
         rb.sample()
         queue.put("done")
 
+    def rate_limited_worker(self, replay_buffer, started, completed, queue):
+        try:
+            replay_buffer.sample(wait=True, timeout=0)
+        except TimeoutError:
+            started.set()
+        sample = replay_buffer.sample(wait=True, timeout=30)
+        queue.put(sample["x"].tolist())
+        completed.set()
+
     def revision_worker(self, rb, queue):
         rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
         queue.put(rb.storage._mutation_revision)
@@ -1048,6 +1057,39 @@ class TestSharedStorageInit:
         assert results == [True]
         assert rb.stats()["sample_calls"] == 1
         assert rb.stats()["samples_returned"] == 2
+
+    def test_shared_rate_limited_replay_unblocks_after_worker_write(self):
+        storage = LazyTensorStorage(max_size=8, shared_init=True)
+        rb = RateLimitedReplayBuffer(
+            storage=storage,
+            batch_size=2,
+            samples_per_insert=1.0,
+            shared=True,
+        )
+        rb.extend(TensorDict({"x": torch.tensor([-1])}, batch_size=(1,)))
+        rb.empty()
+        started = mp.Event()
+        completed = mp.Event()
+        queue = mp.Queue()
+        process = mp.Process(
+            target=self.rate_limited_worker,
+            args=(rb, started, completed, queue),
+        )
+        process.start()
+        assert started.wait(timeout=30)
+
+        rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+
+        assert completed.wait(timeout=30)
+        process.join(timeout=30)
+        assert process.exitcode == 0
+        sample = queue.get(timeout=1)
+        assert len(sample) == 2
+        assert set(sample).issubset({0, 1})
+        stats = rb.stats()
+        assert stats["write_count"] == 2
+        assert stats["samples_returned"] == 2
+        assert stats["sample_wait_count"] >= 1
 
     def test_shared_init_reconciles_non_cpu_device(self):
         """Shared init installs a CPU memmap backing; a non-cpu storage device
