@@ -36,12 +36,9 @@ class FlowMatchingPolicy(nn.Module):
 
     def forward(self, observation, noise=None):
         if noise is None:
-            noise = torch.randn(
-                *observation.shape[:-1],
-                self.action_dim,
-                device=observation.device,
-                dtype=observation.dtype,
-            )
+            noise = observation.new_empty(
+                (*observation.shape[:-1], self.action_dim)
+            ).normal_()
         action = noise
         for step in range(self.num_steps):
             time = action.new_full((*action.shape[:-1], 1), step / self.num_steps)
@@ -69,11 +66,8 @@ class OneStepPolicy(nn.Module):
 
     def forward(self, observation, noise=None, *, clamp=True):
         if noise is None:
-            noise = torch.randn(
-                *observation.shape[:-1],
-                self.action_dim,
-                device=observation.device,
-                dtype=observation.dtype,
-            )
+            noise = observation.new_empty(
+                (*observation.shape[:-1], self.action_dim)
+            ).normal_()
         action = self.network(torch.cat((observation, noise), -1))
         return action.clamp(-1, 1) if clamp else action
