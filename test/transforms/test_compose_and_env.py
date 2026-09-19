@@ -85,6 +85,7 @@ from torchrl.testing import (  # noqa
     rand_reset,
     retry,
 )
+from torchrl.testing._state_candidates import _STATE_CLASSES
 from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingEnv,
@@ -1451,6 +1452,41 @@ class TestBatchSizeTransform(TransformBase):
 
 
 class TestTensorDictPrimer(TransformBase):
+    @pytest.mark.parametrize("container", ["td", "tc", "ttd"])
+    def test_typed_state_partial_reset(self, container):
+        cls = _STATE_CLASSES["gtrxl"][container]
+        state_spec = Composite(
+            memory=Unbounded((2, 3, 8)),
+            valid=Unbounded((3,), dtype=torch.bool),
+            data_cls=cls,
+        )
+        primer = TensorDictPrimer(
+            Composite(
+                {
+                    ("agent", "state"): state_spec,
+                    "counter": Unbounded((1,), dtype=torch.long),
+                }
+            ),
+            expand_specs=True,
+        )
+        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), primer)
+        try:
+            td = env.reset()
+            state = td.get(("agent", "state"))
+            state.get("memory").fill_(3)
+            state.get("valid").fill_(True)
+            td.set("_reset", torch.tensor([[True], [False]]))
+            result = env.reset(td)
+            state = result.get(("agent", "state"))
+            assert type(state) is cls
+            assert state.get("memory")[0].eq(0).all()
+            assert state.get("memory")[1].eq(3).all()
+            assert not state.get("valid")[0].any()
+            assert state.get("valid")[1].all()
+            assert result["counter"].dtype is torch.long
+        finally:
+            env.close()
+
     def test_single_trans_env_check(self):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),

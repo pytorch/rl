@@ -26,6 +26,7 @@ from torchrl.envs.utils import (
     step_mdp,
 )
 from torchrl.testing import get_default_devices, HALFCHEETAH_VERSIONED
+from torchrl.testing._state_candidates import _STATE_CLASSES
 from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -40,6 +41,27 @@ _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
 @pytest.mark.filterwarnings("error")
 class TestStepMdp:
+    @pytest.mark.parametrize("container", ["td", "tc", "ttd"])
+    @pytest.mark.parametrize("optimized", [False, True])
+    def test_typed_state_replaces_plain_destination(self, container, optimized):
+        cls = _STATE_CLASSES["gru"][container]
+        state = cls.from_dict({"carry": torch.ones(2, 3)}, batch_size=[2])
+        data = TensorDict(
+            {"state": {"carry": torch.zeros(2, 3)}, "next": {"state": state}}, [2]
+        )
+        if optimized:
+            result = _StepMDP._grab_and_place(
+                {"state": {"carry": None}},
+                data["next"],
+                data.exclude("next").clone(),
+                True,
+            )
+        else:
+            result = step_mdp(data)
+        assert type(result.get("state")) is cls
+        torch.testing.assert_close(result.get(("state", "carry")), state.get("carry"))
+        assert data.get(("state", "carry")).eq(0).all()
+
     @pytest.mark.parametrize("keep_other", [True, False])
     @pytest.mark.parametrize("exclude_reward", [True, False])
     @pytest.mark.parametrize("exclude_done", [True, False])
