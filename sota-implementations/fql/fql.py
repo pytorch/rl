@@ -28,11 +28,9 @@ def main(cfg):
     output_dir = Path(HydraConfig.get().runtime.output_dir)
     step = 0
 
-    def update(step):
+    def update():
         losses = loss_module(replay.sample().to(device))
         total = sum(losses[key] for key in loss_module.out_keys)
-        if not torch.isfinite(total):
-            raise RuntimeError(f"non-finite loss at step {step}")
         optimizer.zero_grad(set_to_none=True)
         total.backward()
         # Match the reference update's use of pre-optimizer critic parameters.
@@ -50,12 +48,12 @@ def main(cfg):
             metrics = {key: float(value) for key, value in metrics.items()}
             metrics.update(step=step, replay_size=len(replay))
             with (output_dir / "metrics.jsonl").open("a") as stream:
-                stream.write(json.dumps(metrics) + "\n")
+                stream.write(json.dumps(metrics, allow_nan=False) + "\n")
 
     try:
         record({}, step)
         for step in range(1, cfg.optim.offline_steps + 1):
-            record(update(step), step)
+            record(update(), step)
         if cfg.optim.online_steps:
             collector = Collector(
                 env,
@@ -72,7 +70,7 @@ def main(cfg):
                     collector, cfg.optim.offline_steps + 1
                 ):
                     replay.extend(transition.reshape(-1).select(*REPLAY_KEYS))
-                    record(update(step), step)
+                    record(update(), step)
                     collector.update_policy_weights_()
             finally:
                 collector.shutdown()

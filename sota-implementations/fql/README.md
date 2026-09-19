@@ -10,7 +10,7 @@ targets. Other tasks may need different `loss.alpha`, `loss.gamma`, and
 
 ## Setup and smoke test
 
-On a Linux A10 host with Python 3, a C++ compiler, and a working NVIDIA driver:
+On a Linux A100 (40 GB) host with Python 3, a C++ compiler, and a working NVIDIA driver:
 
 ```bash
 bash sota-implementations/fql/setup.sh
