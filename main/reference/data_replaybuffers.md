@@ -33,6 +33,7 @@ buffer.shutdown()
 
 | [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)(*args[, use_ray_service, ...]) | A generic, composable replay buffer class. |
 | --- | --- |
+| [`RateLimitedReplayBuffer`](generated/torchrl.data.RateLimitedReplayBuffer.html#torchrl.data.RateLimitedReplayBuffer)(*args[, ...]) | A replay buffer with a cumulative sample-to-insert ratio limit. |
 | [`OfflineToOnlineReplayBuffer`](generated/torchrl.data.OfflineToOnlineReplayBuffer.html#torchrl.data.OfflineToOnlineReplayBuffer)(offline_dataset, *) | A replay buffer combining an immutable offline dataset with a growing online buffer. |
 | [`ReplayBufferEnsemble`](generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble)(*args[, ...]) | An ensemble of replay buffers. |
 | [`PrioritizedReplayBuffer`](generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer)(*args[, ...]) | Prioritized replay buffer. |
@@ -76,6 +77,34 @@ converted into rates without scanning storage; the round-robin write counter
 uses 64-bit storage for long-running jobs. Circular-buffer capacity is not a
 producer-backpressure signal: after warm-up, writes continue to overwrite old
 slots even though physical utilization remains 100 percent.
+
+## Replay-ratio limiting
+
+[`RateLimitedReplayBuffer`](generated/torchrl.data.RateLimitedReplayBuffer.html#torchrl.data.RateLimitedReplayBuffer) limits the cumulative number of
+samples relative to the number of inserted items. Because the budget uses
+cumulative counters rather than storage occupancy, it remains meaningful after
+a circular buffer reaches capacity. A value such as `samples_per_insert=2.0`
+permits at most two sampled items per inserted item. Concurrent callers reserve
+budget atomically before sampling.
+
+```
+import torch
+from torchrl.data import LazyTensorStorage, RateLimitedReplayBuffer
+
+replay = RateLimitedReplayBuffer(
+ storage=LazyTensorStorage(1024),
+ batch_size=64,
+ samples_per_insert=1.0,
+)
+replay.extend(torch.randn(64, 4))
+batch = replay.sample(wait=True, timeout=5.0)
+```
+
+`replay.stats()` reports the target and measured sample-to-insert ratios,
+available budget, outstanding reservations, and cumulative wait count in
+addition to the standard replay-buffer counters. The rate-limit state is
+included in `state_dict()`. Prefetch is unsupported because it could reserve
+or consume sample budget before the caller requests a batch.
 
 ## Sample units
 

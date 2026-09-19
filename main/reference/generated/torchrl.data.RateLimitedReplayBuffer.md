@@ -1,0 +1,719 @@
+# RateLimitedReplayBuffer
+
+*class*torchrl.data.RateLimitedReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)
+
+A replay buffer with a cumulative sample-to-insert ratio limit.
+
+`RateLimitedReplayBuffer` permits at most `samples_per_insert` sampled
+records for every record written through `add()` or `extend()`.
+The limit uses the replay buffer's cumulative counters rather than its
+current occupancy, so it remains meaningful after circular storage wraps.
+Concurrent callers reserve sample budget atomically.
+
+This class deliberately controls only replay sampling. Policy-version
+freshness is handled by samplers such as
+`StalenessAwareSampler`, while weight publication is
+owned by collectors and trainer weight-update hooks.
+
+Keyword Arguments:
+
+- **samples_per_insert** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)) - maximum cumulative number of sampled
+records per inserted record. Must be finite and positive.
+- ****kwargs** - forwarded to [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer). Prefetching
+is not supported because prefetched samples would consume ratio
+budget before the corresponding call reserves it.
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.data import LazyTensorStorage, RateLimitedReplayBuffer
+>>> replay = RateLimitedReplayBuffer(
+... storage=LazyTensorStorage(8),
+... batch_size=2,
+... samples_per_insert=1.0,
+... )
+>>> _ = replay.extend(torch.arange(2))
+>>> replay.sample(wait=True, timeout=1.0).shape
+torch.Size([2])
+>>> replay.can_sample()
+False
+```
+
+Note
+
+Checkpointing keeps the replay counters and ratio state together in
+the normal replay-buffer state dict.
+
+add(*data: Any*) → int
+
+Add a single element to the replay buffer.
+
+Parameters:
+
+**data** (*Any*) - data to be added to the replay buffer
+
+Returns:
+
+index where the data lives in the replay buffer.
+
+append_transform(*transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)
+
+Appends transform at the end.
+
+Transforms are applied in order when sample is called.
+
+Parameters:
+
+**transform** ([*Transform*](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)) - The transform to be appended
+
+Keyword Arguments:
+
+**invert** (*bool**,**optional*) - if `True`, the transform will be inverted (forward calls will be called
+during writing and inverse calls during reading). Defaults to `False`.
+
+Example
+
+```
+>>> rb = ReplayBuffer(storage=LazyMemmapStorage(10), batch_size=4)
+>>> data = TensorDict({"a": torch.zeros(10)}, [10])
+>>> def t(data):
+... data += 1
+... return data
+>>> rb.append_transform(t, invert=True)
+>>> rb.extend(data)
+>>> assert (data == 1).all()
+```
+
+*classmethod*as_remote(*remote_config=None*)
+
+Creates an instance of a remote ray class.
+
+Parameters:
+
+- **cls** (*Python Class*) - class to be remotely instantiated.
+- **remote_config** (*dict*) - the quantity of CPU cores to reserve for this class.
+Defaults to torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG.
+
+Returns:
+
+A function that creates ray remote class instances.
+
+*property*batch_size
+
+The batch size of the replay buffer.
+
+The batch size can be overridden by setting the batch_size parameter in the `sample()` method.
+
+It defines both the number of samples returned by `sample()` and the number of samples that are
+yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
+
+can_sample(*batch_size: int | None = None*) → bool[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/rate_limited.html#RateLimitedReplayBuffer.can_sample)
+
+Return whether replay readiness and ratio budget permit a sample.
+
+client() → T
+
+Return `self` for the zero-overhead direct backend.
+
+dump(**args*, ***kwargs*)
+
+Alias for `dumps()`.
+
+dumps(*path*)
+
+Saves the replay buffer on disk at the specified path.
+
+Parameters:
+
+**path** (*Path**or**str*) - path where to save the replay buffer.
+
+Examples
+
+```
+>>> import tempfile
+>>> import tqdm
+>>> from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+>>> from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
+>>> import torch
+>>> from tensordict import TensorDict
+>>> # Build and populate the replay buffer
+>>> S = 1_000_000
+>>> sampler = PrioritizedSampler(S, 1.1, 1.0)
+>>> # sampler = RandomSampler()
+>>> storage = LazyMemmapStorage(S)
+>>> rb = TensorDictReplayBuffer(storage=storage, sampler=sampler)
+>>>
+>>> for _ in tqdm.tqdm(range(100)):
+... td = TensorDict({"obs": torch.randn(100, 3, 4), "next": {"obs": torch.randn(100, 3, 4)}, "td_error": torch.rand(100)}, [100])
+... rb.extend(td)
+... sample = rb.sample(32)
+... rb.update_tensordict_priority(sample)
+>>> # save and load the buffer
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... rb.dumps(tmpdir)
+...
+... sampler = PrioritizedSampler(S, 1.1, 1.0)
+... # sampler = RandomSampler()
+... storage = LazyMemmapStorage(S)
+... rb_load = TensorDictReplayBuffer(storage=storage, sampler=sampler)
+... rb_load.loads(tmpdir)
+... assert len(rb) == len(rb_load)
+```
+
+empty(*empty_write_count: bool = True*)
+
+Empties the replay buffer and reset cursor to 0.
+
+Parameters:
+
+**empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
+
+extend(*data: Sequence*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
+Extends the replay buffer with one or more elements contained in an iterable.
+
+If present, the inverse transforms will be called.`
+
+Parameters:
+
+**data** (*iterable*) - collection of data to be added to the replay
+buffer.
+
+Keyword Arguments:
+
+**update_priority** (*bool**,**optional*) - Whether to update the priority of the data. Defaults to True.
+Without effect in this class. See [`extend()`](torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend) for more details.
+
+Returns:
+
+Indices of the data added to the replay buffer.
+
+Warning
+
+`extend()` can have an
+ambiguous signature when dealing with lists of values, which should be interpreted
+either as PyTree (in which case all elements in the list will be put in a slice
+in the stored PyTree in the storage) or a list of values to add one at a time.
+To solve this, TorchRL makes the clear-cut distinction between list and tuple:
+a tuple will be viewed as a PyTree, a list (at the root level) will be interpreted
+as a stack of values to add one at a time to the buffer.
+For [`ListStorage`](torchrl.data.replay_buffers.ListStorage.html#torchrl.data.replay_buffers.ListStorage) instances, only
+unbound elements can be provided (no PyTrees).
+
+*property*initialized*: bool*
+
+Whether the replay buffer has been initialized.
+
+insert_transform(*index: int*, *transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)
+
+Inserts transform.
+
+Transforms are executed in order when sample is called.
+
+Parameters:
+
+- **index** (*int*) - Position to insert the transform.
+- **transform** ([*Transform*](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)) - The transform to be appended
+
+Keyword Arguments:
+
+**invert** (*bool**,**optional*) - if `True`, the transform will be inverted (forward calls will be called
+during writing and inverse calls during reading). Defaults to `False`.
+
+*property*is_alive*: bool*
+
+Whether this direct replay buffer remains available.
+
+load(**args*, ***kwargs*)
+
+Alias for `loads()`.
+
+load_state_dict(*state_dict: dict[str, Any]*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/rate_limited.html#RateLimitedReplayBuffer.load_state_dict)
+
+Restore replay contents, counters, and rate-limit state.
+
+loads(*path*)
+
+Loads a replay buffer state at the given path.
+
+The buffer should have matching components and be saved using `dumps()`.
+
+Parameters:
+
+**path** (*Path**or**str*) - path where the replay buffer was saved.
+
+See `dumps()` for more info.
+
+next()
+
+Returns the next item in the replay buffer.
+
+This method is used to iterate over the replay buffer in contexts where __iter__ is not available,
+such as `RayReplayBuffer`.
+
+query(*predicate: Callable[[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)], bool] | None = None*, ***, *trajectory_key: NestedKey | None = None*) → list[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)]
+
+Filters the stored trajectories with a query predicate.
+
+Splits the buffer content into trajectories (see
+`iter_trajectories()`) and
+returns those matching the predicate as
+[`Trajectory`](torchrl.data.Trajectory.html#torchrl.data.Trajectory) views.
+
+Parameters:
+
+**predicate** (*Callable**[**[*[*Trajectory*](torchrl.data.Trajectory.html#torchrl.data.Trajectory)*]**,**bool**]**,**optional*) - a
+[`TrajectoryPredicate`](torchrl.data.TrajectoryPredicate.html#torchrl.data.TrajectoryPredicate)
+built from `traj`, or
+any callable mapping a trajectory to a boolean. Defaults to
+None (return all trajectories).
+
+Keyword Arguments:
+
+**trajectory_key** (*NestedKey**,**optional*) - entry holding
+per-transition trajectory ids. Defaults to None
+(auto-detection from `("collector", "traj_ids")`,
+`"traj_ids"`, `"episode"` or the done/terminated/truncated
+flags).
+
+Returns:
+
+A list of matching trajectory views, ordered chronologically
+(oldest trajectory first; for multi-dimensional storages, grouped
+by batch coordinate).
+
+The trajectory boundaries are computed from the stored (untransformed)
+data with the same machinery
+[`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) uses, so
+samplers and queries always agree on where trajectories start and
+stop. This includes storages with `ndim > 1` (e.g.
+`LazyTensorStorage(..., ndim=2)` holding `[B, T]` batches), whose
+trajectories are recovered per batch coordinate.
+
+Predicates built from `traj`
+report the keys they read via
+`required_keys()`;
+evaluation then only fetches those entries from the storage and only
+runs the transforms that can affect them. Matching trajectories are
+extracted in full with the complete transform chain applied, so
+predicates and results see the same values a sampler would produce.
+Opaque callables are evaluated against the fully transformed content.
+
+Note
+
+Once the buffer has wrapped around (it is at capacity and older
+entries have been overwritten), the oldest trajectory may have
+lost its first transitions to overwriting and will appear
+truncated at the front. A trajectory written across the wrap
+point is followed through it and returned whole, in time order.
+
+Examples
+
+```
+>>> from torchrl.data import traj
+>>> good_trajs = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
+>>> observations = good_trajs[0].observation
+```
+
+read_all_in_order(*end: int | None = None*) → Any
+
+Read storage contents in physical order.
+
+This is equivalent to `rb[:]` when `end` is `None`.
+
+Parameters:
+
+**end** (*int**,**optional*) - Number of leading storage entries to read.
+Defaults to the entire storage slice.
+
+Returns:
+
+A storage slice containing entries `[:end]`.
+
+register_load_hook(*hook: Callable[[Any], Any]*)
+
+Registers a load hook for the storage.
+
+Note
+
+Hooks are currently not serialized when saving a replay buffer: they must
+be manually re-initialized every time the buffer is created.
+
+register_save_hook(*hook: Callable[[Any], Any]*)
+
+Registers a save hook for the storage.
+
+Note
+
+Hooks are currently not serialized when saving a replay buffer: they must
+be manually re-initialized every time the buffer is created.
+
+sample(*batch_size: int | None = None*, *return_info: bool = False*, ***, *wait: bool = False*, *timeout: float | None = None*, *cancel_event: Any | None = None*) → Any[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/rate_limited.html#RateLimitedReplayBuffer.sample)
+
+Sample after replay readiness and ratio budget permit the request.
+
+*property*sampler*: [Sampler](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler)*
+
+The sampler of the replay buffer.
+
+The sampler must be an instance of [`Sampler`](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler).
+
+save(**args*, ***kwargs*)
+
+Alias for `dumps()`.
+
+*property*service_backend*: str*
+
+The canonical deployment backend for this replay buffer.
+
+set_(*key*, *value*)
+
+Sets the value of a key across the entire replay buffer in-place.
+
+Parameters:
+
+- **key** (*NestedKey*) - the key to set.
+- **value** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the value to write.
+
+Returns:
+
+self
+
+set_at_(*key*, *value*, *index*)
+
+Sets the value of a key at specified indices in the replay buffer.
+
+Parameters:
+
+- **key** (*NestedKey*) - the key to set.
+- **value** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the value to write.
+- **index** - the indices where to write the value.
+
+Returns:
+
+self
+
+set_sampler(*sampler: [Sampler](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler)*)
+
+Sets a new sampler in the replay buffer and returns the previous sampler.
+
+set_storage(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *collate_fn: Callable | None = None*)
+
+Sets a new storage in the replay buffer and returns the previous storage.
+
+Parameters:
+
+- **storage** ([*Storage*](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)) - the new storage for the buffer.
+- **collate_fn** (*callable**,**optional*) - if provided, the collate_fn is set to this
+value. Otherwise it is reset to a default value.
+
+set_writer(*writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*)
+
+Sets a new writer in the replay buffer and returns the previous writer.
+
+shutdown(*timeout: float | None = None*) → None
+
+Wait for pending replay work and close this direct replay buffer.
+
+Pending prefetched samples and asynchronous conditional updates are
+allowed to finish before their executors are closed. Any background
+exception is re-raised after both executors have been shut down.
+Repeated calls are safe.
+
+start() → T
+
+Return this already-started direct replay buffer.
+
+state_dict() → dict[str, Any][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/rate_limited.html#RateLimitedReplayBuffer.state_dict)
+
+Return replay contents, counters, and rate-limit state.
+
+stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/rate_limited.html#RateLimitedReplayBuffer.stats)
+
+Return replay statistics with cumulative ratio state.
+
+*property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
+
+The storage of the replay buffer.
+
+The storage must be an instance of [`Storage`](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage).
+
+submit_update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → Future[[ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)]
+
+Submits an ordered conditional update on a background thread.
+
+The update runs after all samples that were already prefetched when
+this method was called. Samples prefetched after this call wait for
+the update, while unrelated prefetch work remains parallel. Multiple
+submitted updates execute in submission order.
+
+Inputs are retained by reference until the returned future completes.
+Callers must not mutate `index`, `generation`, `patch` or
+`version` in that interval. In particular, values backed by static
+CUDA-graph output buffers must be cloned before submission.
+
+CUDA inputs destined for a CPU storage are copied to pinned host memory
+on their current stream when this method is called, and the background
+update waits for those copies. Work enqueued on the stream afterwards
+therefore does not delay the update or the samples that depend on it.
+
+Keyword arguments have the same meaning as in
+`update_if_present()`.
+
+Returns:
+
+A `concurrent.futures.Future` whose result is the
+[`ConditionalUpdateResult`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult) returned by
+`update_if_present()`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage,
+... TensorDictReplayBuffer,
+... TensorDictRoundRobinWriter,
+... )
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(4),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... )
+>>> index = rb.extend(
+... TensorDict({"value": torch.zeros(4)}, batch_size=[4])
+... )
+>>> generation = rb.writer.generations_of(index)
+>>> future = rb.submit_update_if_present(
+... index=index,
+... generation=generation,
+... patch={"value": torch.ones(4)},
+... )
+>>> future.result().updated_count
+4
+>>> rb.shutdown()
+```
+
+synchronize() → None
+
+Wait for pending samples and asynchronous updates.
+
+Prefetched results remain queued and are returned by subsequent calls
+to `sample()` in the same order. Background exceptions are
+propagated to the caller.
+
+*property*transform*: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*
+
+The transform of the replay buffer.
+
+The transform must be an instance of [`Transform`](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform).
+
+update_(*input_dict_or_td*, *clone=False*, ***, *keys_to_update=None*)
+
+Updates the replay buffer in-place with the given dict or TensorDict.
+
+Parameters:
+
+- **input_dict_or_td** (*dict**or**TensorDictBase*) - the data to update with.
+- **clone** (*bool**,**optional*) - whether to clone the values before writing.
+Defaults to `False`.
+- **keys_to_update** (*sequence**of**NestedKey**,**optional*) - if provided, only
+these keys will be updated.
+
+Returns:
+
+self
+
+update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)
+
+Conditionally updates stored records that are still live.
+
+Replay slots are recycled by round-robin writers, so a physical index
+captured at sampling time can point to a different record by the time
+an asynchronous computation writes back. This method applies `patch`
+only to records whose `(index, generation)` pair still matches the
+writer's current slot generation, skipping records whose slot was
+reused or emptied since the handle was captured. Skipped records are
+never modified.
+
+The whole patch is validated (key existence, shape and dtype) before
+any write happens; a validation failure leaves the storage untouched.
+Updating a record refreshes its content, not its identity: the same
+handle keeps working until the slot is rewritten by `add`,
+`extend` or `empty`.
+
+Generation tracking is opt-in: the buffer must be constructed with a
+writer that tracks slot generations, e.g.
+`RoundRobinWriter(track_generations=True)` (see
+ref_buffers_generations). Calling this method on a buffer whose
+writer does not track generations raises a `RuntimeError`.
+
+Keyword Arguments:
+
+- **index** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - storage indices, as returned by
+`extend()` or found in the sample under `"index"`.
+- **generation** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - slot generations captured with the
+indices, as found in the sample under `"index_generation"`.
+- **patch** (*mapping**of**NestedKey to torch.Tensor**, or**TensorDictBase*) - the fields to overwrite for live records. Leading dimension
+must match the number of records addressed by `index`.
+- **version_key** (*NestedKey**,**optional*) - a stored per-record scalar
+field holding each record's current version. When passed
+(together with `version`), a generation-live record is only
+patched if the incoming version compares favorably against
+the stored one, and the accepted version is written into
+`version_key` atomically with the patch. `version_key`
+may not appear in `patch`. Nested keys must be passed in
+tuple form (`("nested", "version")`); dotted strings are
+rejected. Defaults to `None` (no version comparison).
+- **version** (*int**or*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - the incoming version,
+either a scalar (broadcast to every record) or a tensor with
+one entry per record. Must be passed together with
+`version_key`.
+- **require_newer** (*bool**,**optional*) - if `True`, a record is only
+patched when `version > stored`; if `False`, ties are
+accepted (`version >= stored`). When the same slot is
+addressed several times in one call, only the row carrying
+the highest incoming version is applied (the last such row
+on ties); the losing rows are reported in
+`version_rejected`. Defaults to `False`.
+
+Returns:
+
+A [`ConditionalUpdateResult`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult) whose `updated` mask is
+aligned with the input index order, with `updated_count` and
+`stale_count` conveniences. When `version_key` is passed, its
+`version_rejected` mask marks generation-live records that were
+rejected by the version comparison (`None` otherwise).
+
+Raises:
+
+- **RuntimeError** - if the storage does not support conditional updates
+ (for example `ListStorage`) or the writer does not
+ track slot generations.
+- **KeyError** - if a patch key (or `version_key`) does not exist in
+ the storage.
+- **ValueError** - if a patch entry has an incompatible shape or dtype,
+ if only one of `version_key` / `version` is passed, if
+ `version_key` appears in `patch` or names a non-scalar
+ field, or if it is a dotted string.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage,
+... TensorDictReplayBuffer,
+... TensorDictRoundRobinWriter,
+... )
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(10),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... batch_size=4,
+... )
+>>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
+>>> sample = rb.sample()
+>>> result = rb.update_if_present(
+... index=sample["index"],
+... generation=sample["index_generation"],
+... patch={"obs": torch.ones(4, 3)},
+... )
+>>> print(result.updated_count, result.stale_count)
+4 0
+```
+
+With a version comparison, outdated asynchronous writers lose
+deterministically:
+
+```
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(10),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... batch_size=4,
+... )
+>>> rb.extend(
+... TensorDict(
+... {
+... "obs": torch.zeros(10, 3),
+... "v": torch.full((10,), 5, dtype=torch.int64),
+... },
+... batch_size=[10],
+... )
+... )
+>>> sample = rb.sample()
+>>> result = rb.update_if_present(
+... index=sample["index"],
+... generation=sample["index_generation"],
+... patch={"obs": torch.ones(4, 3)},
+... version_key="v",
+... version=4,
+... require_newer=True,
+... )
+>>> print(result.updated_count, result.version_rejected_count)
+0 4
+```
+
+wait_until_sampleable(*min_items: int | None = None*, *timeout: float | None = None*, *cancel_event: Any | None = None*) → bool
+
+Waits until the replay buffer can serve a sample batch.
+
+Parameters:
+
+- **min_items** (*int**,**optional*) - requested sample batch size. Defaults to
+the batch size configured on the replay buffer.
+- **timeout** (*float**,**optional*) - maximum number of seconds to wait.
+`None` waits indefinitely.
+- **cancel_event** (*optional*) - event-like object exposing `is_set()`.
+The wait returns `False` when the event is set.
+
+Returns:
+
+`True` when the requested batch can be sampled and `False`
+after a timeout or cancellation.
+
+Raises:
+
+**RuntimeError** - if no batch size is available or the replay buffer
+ is shut down while waiting.
+
+Examples
+
+```
+>>> import threading
+>>> import torch
+>>> from torchrl.data import ListStorage, ReplayBuffer
+>>> rb = ReplayBuffer(storage=ListStorage(4), batch_size=2)
+>>> writer = threading.Thread(target=rb.extend, args=(torch.arange(2),))
+>>> writer.start()
+>>> rb.wait_until_sampleable(timeout=1.0)
+True
+>>> writer.join()
+```
+
+write_all(*data: Any*, *end: int | None = None*) → None
+
+Write data back to storage in physical order.
+
+This is equivalent to `rb[:end] = data`. If `end` is `None`,
+`end` defaults to `data.shape[0]` for tensor collections and
+`len(data)` otherwise. If `data` spans the full storage, this is
+equivalent to `rb[:] = data`.
+
+Parameters:
+
+- **data** - Data to write to storage.
+- **end** (*int**,**optional*) - Number of leading storage entries to update.
+Defaults to `data.shape[0]` for tensor collections and
+`len(data)` otherwise.
+
+*property*write_count*: int*
+
+The total number of items written so far in the buffer through add and extend.
+
+*property*writer*: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*
+
+The writer of the replay buffer.
+
+The writer must be an instance of [`Writer`](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer).

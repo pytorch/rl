@@ -101,6 +101,7 @@
 - [OfflineToOnlineReplayBuffer](reference/generated/torchrl.data.OfflineToOnlineReplayBuffer.md)
 - [OneHot](reference/generated/torchrl.data.OneHot.md)
 - [PrioritizedReplayBuffer](reference/generated/torchrl.data.PrioritizedReplayBuffer.md)
+- [RateLimitedReplayBuffer](reference/generated/torchrl.data.RateLimitedReplayBuffer.md)
 - [RayReplayBuffer](reference/generated/torchrl.data.RayReplayBuffer.md)
 - [RemoteTensorDictReplayBuffer](reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.md)
 - [ReplayBuffer](reference/generated/torchrl.data.ReplayBuffer.md)

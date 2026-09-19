@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+RateLimitedReplayBuffer
+=======================
+
+.. autoclass:: RateLimitedReplayBuffer
+    :members:
+    :inherited-members:
