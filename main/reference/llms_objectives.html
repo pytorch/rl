@@ -1585,6 +1585,23 @@ document.write(`
 </table>
 </div>
 </section>
+<section id="reward-model-training">
+<h2>Reward Model Training<a class="headerlink" href="#reward-model-training" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.reward_model_loss.html#torchrl.objectives.llm.reward_model_loss" title="torchrl.objectives.llm.reward_model_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reward_model_loss</span></code></a>(chosen_scores, ...)</p></td>
+<td><p>Compute the Bradley-Terry pairwise reward-model loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.RewardModelLoss.html#torchrl.objectives.llm.RewardModelLoss" title="torchrl.objectives.llm.RewardModelLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardModelLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Bradley-Terry reward-model training loss for RLHF.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput" title="torchrl.objectives.llm.RewardModelLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardModelLossOutput</span></code></a>(loss_reward_model[, ...])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="distillation">
 <h2>Distillation<a class="headerlink" href="#distillation" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
@@ -1687,6 +1704,7 @@ document.write(`
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#grpo">GRPO</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sft">SFT</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reward-model-training">Reward Model Training</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#distillation">Distillation</a></li>
 </ul>
   </nav></div>
@@ -1940,7 +1958,7 @@ document.write(`
        "headline": "LLM Objectives",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/llms_objectives.html",
-       "articleBody": "LLM Objectives# Specialized loss functions for LLM training. GRPO# GRPOLoss(*args, **kwargs) GRPO loss. GRPOLossOutput(loss_objective, ...[, ...]) MCAdvantage(grpo_size[, prompt_key, ...]) Monte-Carlo advantage computation engine. MCAdvantageSelector([strategy, ...]) Select trajectories from an oversampled Monte-Carlo advantage group. RayMCAdvantage(grpo_size[, prompt_key, ...]) Ray actor-backed MCAdvantage. SFT# SFTLoss(*args, **kwargs) Supervised fine-tuning loss. SFTLossOutput(loss_sft[, loss_kl_to_ref, ...]) Distillation# DistillationLoss(*args, **kwargs) Token-level knowledge-distillation loss for LLM policies. DistillationLossOutput(loss_distill, ...[, ...]) k3_kl_token_estimate(target_log_prob, log_prob) Per-token k3 estimate of the KL divergence to a target distribution.",
+       "articleBody": "LLM Objectives# Specialized loss functions for LLM training. GRPO# GRPOLoss(*args, **kwargs) GRPO loss. GRPOLossOutput(loss_objective, ...[, ...]) MCAdvantage(grpo_size[, prompt_key, ...]) Monte-Carlo advantage computation engine. MCAdvantageSelector([strategy, ...]) Select trajectories from an oversampled Monte-Carlo advantage group. RayMCAdvantage(grpo_size[, prompt_key, ...]) Ray actor-backed MCAdvantage. SFT# SFTLoss(*args, **kwargs) Supervised fine-tuning loss. SFTLossOutput(loss_sft[, loss_kl_to_ref, ...]) Reward Model Training# reward_model_loss(chosen_scores, ...) Compute the Bradley-Terry pairwise reward-model loss. RewardModelLoss(*args, **kwargs) Bradley-Terry reward-model training loss for RLHF. RewardModelLossOutput(loss_reward_model[, ...]) Distillation# DistillationLoss(*args, **kwargs) Token-level knowledge-distillation loss for LLM policies. DistillationLossOutput(loss_distill, ...[, ...]) k3_kl_token_estimate(target_log_prob, log_prob) Per-token k3 estimate of the KL divergence to a target distribution.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

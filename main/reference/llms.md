@@ -492,6 +492,13 @@ LLM post-training requires specialized loss functions that are adapted to the un
 | --- | --- |
 | [`SFTLossOutput`](generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput)(loss_sft[, loss_kl_to_ref, ...]) | |
 
+### Reward Model Training
+
+| [`reward_model_loss`](generated/torchrl.objectives.llm.reward_model_loss.html#torchrl.objectives.llm.reward_model_loss)(chosen_scores, ...) | Compute the Bradley-Terry pairwise reward-model loss. |
+| --- | --- |
+| [`RewardModelLoss`](generated/torchrl.objectives.llm.RewardModelLoss.html#torchrl.objectives.llm.RewardModelLoss)(*args, **kwargs) | Bradley-Terry reward-model training loss for RLHF. |
+| [`RewardModelLossOutput`](generated/torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput)(loss_reward_model[, ...]) | |
+
 ### Distillation
 
 | [`DistillationLoss`](generated/torchrl.objectives.llm.DistillationLoss.html#torchrl.objectives.llm.DistillationLoss)(*args, **kwargs) | Token-level knowledge-distillation loss for LLM policies. |

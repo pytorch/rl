@@ -102,6 +102,7 @@
 
 - [GRPO, DAPO, CISPO](llms.html#grpo-dapo-cispo)
 - [SFT](llms.html#sft)
+- [Reward Model Training](llms.html#reward-model-training)
 - [Distillation](llms.html#distillation)
 - [TRL Interoperability](llms.html#trl-interoperability)
 - [torchrl.modules package](modules.html)

@@ -35637,7 +35637,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f544a9fefc0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4a111aeac0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -49377,7 +49377,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f544d9789a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f4a13f7c9a0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -267069,6 +267069,2994 @@ See [`torch.optim.Optimizer.zero_grad()`](https://docs.pytorch.org/docs/stable/g
 
 ---
 
+# RewardModelLoss
+
+*class*torchrl.objectives.llm.RewardModelLoss(**args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/llm/reward.html#RewardModelLoss)
+
+Bradley-Terry reward-model training loss for RLHF.
+
+Trains a scalar reward model from pairwise human preference data. Given a prompt and
+two responses (a `chosen` one preferred by an annotator and a `rejected` one),
+the model is encouraged to assign a higher score to the chosen response. This is the
+reward-modelling stage that precedes policy optimization in RLHF pipelines.
+
+The loss is model-agnostic: `score_network` can wrap any backbone that maps a
+tokenized response to a single scalar score, for example a Hugging Face
+`AutoModelForSequenceClassification` with `num_labels=1` or
+`GPT2RewardModel`.
+
+Parameters:
+
+**score_network** (*TensorDictModule**,**optional*) - a module mapping a (chosen or
+rejected) sub-tensordict to a per-sequence scalar score written under the
+`score` key. The same network is applied to the chosen and rejected
+inputs (weight sharing). If `None`, the chosen and rejected scores are
+expected to already be present under the `score` key of their respective
+sub-tensordicts. Defaults to `None`.
+
+Keyword Arguments:
+
+- **reduction** (*Literal**[**"mean"**,**"sum"**,**"none"**]**,**optional*) - the reduction to apply to
+the loss. Defaults to `"mean"`.
+- **center_coeff** (*float**,**optional*) - if set, adds a centering regularization term
+`center_coeff * (chosen_score**2 + rejected_score**2)` that discourages
+the reward model from drifting to large magnitudes. Defaults to `None`
+(disabled).
+
+Note
+
+The input tensordict is expected to contain the following keys by default:
+
+- `"chosen"`: a sub-tensordict with the chosen response inputs (e.g.
+`input_ids` / `attention_mask`), or the chosen `score` directly
+when `score_network` is `None`.
+- `"rejected"`: the corresponding sub-tensordict for the rejected
+response.
+
+The chosen/rejected keys and the precomputed `score` key can be customized
+using `set_keys()`. When a score
+network is provided, its declared output key is used instead.
+
+See also
+
+The `sota-implementations/reward_model_training` recipe for a
+complete training loop built around this loss. The legacy
+`GPT2RewardModel` and
+`PairwiseDataset` (both deprecated, removal
+in v0.16) can still be wired in during the deprecation window:
+GPT2RewardModel's forward returns per-token rewards of shape `[B, T]`
+followed by per-sequence `end_scores` of shape `[B, 1]`, so wrap it as
+`TensorDictModule(model, in_keys=["input_ids", "attention_mask"],
+out_keys=["rewards", "end_scores"])` and point the loss at the
+per-sequence output with `loss.set_keys(score="end_scores")`;
+PairwiseDataset's fields are named `chosen_data` / `rejected_data`, so
+remap the loss inputs with `loss.set_keys(chosen="chosen_data",
+rejected="rejected_data")`.
+
+References
+
+- Nisan Stiennon, Long Ouyang, Jeff Wu, Daniel M. Ziegler, Ryan Lowe, Chelsea
+Voss, Alec Radford, Dario Amodei, Paul Christiano, 2020.
+["Learning to summarize from human feedback"](https://arxiv.org/abs/2009.01325)
+- Long Ouyang et al., 2022.
+["Training language models to follow instructions with human feedback"](https://arxiv.org/abs/2203.02155)
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule
+>>> from torchrl.objectives.llm.reward import RewardModelLoss
+>>>
+>>> # A toy score network mapping input_ids to a scalar score per sequence.
+>>> class Scorer(torch.nn.Module):
+... def __init__(self, vocab_size=128, embed_dim=8):
+... super().__init__()
+... self.embed = torch.nn.Embedding(vocab_size, embed_dim)
+... self.head = torch.nn.Linear(embed_dim, 1)
+...
+... def forward(self, input_ids, attention_mask):
+... hidden = self.embed(input_ids)
+... mask = attention_mask.unsqueeze(-1)
+... pooled = (hidden * mask).sum(-2) / mask.sum(-2).clamp_min(1)
+... return self.head(pooled)
+>>>
+>>> score_network = TensorDictModule(
+... Scorer(), in_keys=["input_ids", "attention_mask"], out_keys=["score"]
+... )
+>>> loss_fn = RewardModelLoss(score_network=score_network)
+>>> attention_mask = torch.ones(4, 16, dtype=torch.bool)
+>>> attention_mask[:, -4:] = False
+>>> data = TensorDict(
+... chosen=TensorDict(
+... input_ids=torch.randint(0, 128, (4, 16)),
+... attention_mask=attention_mask,
+... batch_size=[4],
+... ),
+... rejected=TensorDict(
+... input_ids=torch.randint(0, 128, (4, 16)),
+... attention_mask=attention_mask,
+... batch_size=[4],
+... ),
+... batch_size=[4],
+... )
+>>> loss_vals = loss_fn(data)
+>>> print(f"Reward model loss: {loss_vals.loss_reward_model.item():.4f}")
+>>> print(f"Accuracy: {loss_vals.accuracy.item():.4f}")
+>>> loss_vals.loss_reward_model.backward()
+```
+
+add_module(*name: str*, *module: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None*) → None
+
+Add a child module to the current module.
+
+The module can be accessed as an attribute using the given name.
+
+Parameters:
+
+- **name** (*str*) - name of the child module. The child module can be
+accessed from this module using the given name
+- **module** (*Module*) - child module to be added to the module.
+
+apply(*fn: Callable[[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)], None]*) → Self
+
+Apply `fn` recursively to every submodule (as returned by `.children()`) as well as self.
+
+Typical use includes initializing the parameters of a model
+(see also [torch.nn.init](https://docs.pytorch.org/docs/stable/nn.init.html#nn-init-doc)).
+
+Parameters:
+
+**fn** (`Module` -> None) - function to be applied to each submodule
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+Example:
+
+```
+>>> @torch.no_grad()
+>>> def init_weights(m):
+>>> print(m)
+>>> if type(m) is nn.Linear:
+>>> m.weight.fill_(1.0)
+>>> print(m.weight)
+>>> net = nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2))
+>>> net.apply(init_weights)
+Linear(in_features=2, out_features=2, bias=True)
+Parameter containing:
+tensor([[1., 1.],
+ [1., 1.]], requires_grad=True)
+Linear(in_features=2, out_features=2, bias=True)
+Parameter containing:
+tensor([[1., 1.],
+ [1., 1.]], requires_grad=True)
+Sequential(
+ (0): Linear(in_features=2, out_features=2, bias=True)
+ (1): Linear(in_features=2, out_features=2, bias=True)
+)
+```
+
+bfloat16() → Self
+
+Casts all floating point parameters and buffers to `bfloat16` datatype.
+
+Note
+
+This method modifies the module in-place.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+buffers(*recurse: bool = True*) → Iterator[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)]
+
+Return an iterator over module buffers.
+
+Parameters:
+
+**recurse** (*bool*) - if True, then yields buffers of this module
+and all submodules. Otherwise, yields only buffers that
+are direct members of this module.
+
+Yields:
+
+*torch.Tensor* - module buffer
+
+Example:
+
+```
+>>> # xdoctest: +SKIP("undefined vars")
+>>> for buf in model.buffers():
+>>> print(type(buf), buf.size())
+<class 'torch.Tensor'> (20L,)
+<class 'torch.Tensor'> (20L, 1L, 5L, 5L)
+```
+
+children() → Iterator[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]
+
+Return an iterator over immediate children modules.
+
+Yields:
+
+*Module* - a child module
+
+compile(**args*, ***kwargs*) → None
+
+Compile this Module's forward using [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
+
+This Module's __call__ method is compiled and all arguments are passed as-is
+to [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile).
+
+See [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) for details on the arguments for this function.
+
+convert_to_functional(*module: [TensorDictModule](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule)*, *module_name: str*, *expand_dim: int | None = None*, *create_target_params: bool = False*, *compare_against: list[[Parameter](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter)] | None = None*, ***kwargs*) → None
+
+Converts a module to functional to be used in the loss.
+
+Parameters:
+
+- **module** (*TensorDictModule**or**compatible*) - a stateful tensordict module.
+Parameters from this module will be isolated in the <module_name>_params
+attribute and a stateless version of the module will be registered
+under the module_name attribute.
+- **module_name** (*str*) - name where the module will be found.
+The parameters of the module will be found under `loss_module.<module_name>_params`
+whereas the module will be found under `loss_module.<module_name>`.
+- **expand_dim** (*int**,**optional*) -
+
+if provided, the parameters of the module
+will be expanded `N` times, where `N = expand_dim` along the
+first dimension. This option is to be used whenever a target
+network with more than one configuration is to be used.
+
+Note
+
+If a `compare_against` list of values is provided, the
+resulting parameters will simply be a detached expansion
+of the original parameters. If `compare_against` is not
+provided, the value of the parameters will be resampled uniformly
+between the minimum and maximum value of the parameter content.
+- **create_target_params** (*bool**,**optional*) - if `True`, a detached
+copy of the parameter will be available to feed a target network
+under the name `loss_module.<module_name>_target_params`.
+If `False` (default), this attribute will still be available
+but it will be a detached instance of the parameters, not a copy.
+In other words, any modification of the parameter value
+will directly be reflected in the target parameters.
+- **compare_against** (*iterable**of**parameters**,**optional*) - if provided,
+this list of parameters will be used as a comparison set for
+the parameters of the module. If the parameters are expanded
+(`expand_dim > 0`), the resulting parameters for the module
+will be a simple expansion of the original parameter. Otherwise,
+the resulting parameters will be a detached version of the
+original parameters. If `None`, the resulting parameters
+will carry gradients as expected.
+
+cpu() → Self
+
+Move all model parameters and buffers to the CPU.
+
+Note
+
+This method modifies the module in-place.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+cuda(*device: int | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → Self
+
+Move all model parameters and buffers to the GPU.
+
+This also makes associated parameters and buffers different objects. So
+it should be called before constructing the optimizer if the module will
+live on GPU while being optimized.
+
+Note
+
+This method modifies the module in-place.
+
+Parameters:
+
+**device** (*int**,**optional*) - if specified, all parameters will be
+copied to that device
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+default_keys
+
+alias of `_AcceptedKeys`
+
+double() → Self
+
+Casts all floating point parameters and buffers to `double` datatype.
+
+Note
+
+This method modifies the module in-place.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+eval() → Self
+
+Set the module in evaluation mode.
+
+This has an effect only on certain modules. See the documentation of
+particular modules for details of their behaviors in training/evaluation
+mode, i.e. whether they are affected, e.g. `Dropout`, `BatchNorm`,
+etc.
+
+This is equivalent with [`self.train(False)`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.train).
+
+See [Locally disabling gradient computation](https://docs.pytorch.org/docs/stable/notes/autograd.html#locally-disable-grad-doc) for a comparison between
+.eval() and several similar mechanisms that may be confused with it.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+extra_repr() → str
+
+Return the extra representation of the module.
+
+To print customized extra information, you should re-implement
+this method in your own modules. Both single-line and multi-line
+strings are acceptable.
+
+float() → Self
+
+Casts all floating point parameters and buffers to `float` datatype.
+
+Note
+
+This method modifies the module in-place.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [RewardModelLossOutput](torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput)[[source]](../../_modules/torchrl/objectives/llm/reward.html#RewardModelLoss.forward)
+
+It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
+
+Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
+training. Other scalars present in the output tensordict will be logged too.
+
+Parameters:
+
+**tensordict** - an input tensordict with the values required to compute the loss.
+
+Returns:
+
+A new tensordict with no batch dimension containing various loss scalars which will be named "loss*". It
+is essential that the losses are returned with this name as they will be read by the trainer before
+backpropagation.
+
+from_stateful_net(*network_name: str*, *stateful_net: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*)
+
+Populates the parameters of a model given a stateful version of the network.
+
+See `get_stateful_net()` for details on how to gather a stateful version of the network.
+
+Parameters:
+
+- **network_name** (*str*) - the network name to reset.
+- **stateful_net** (*nn.Module*) - the stateful network from which the params should be
+gathered.
+
+*property*functional
+
+Whether the module is functional.
+
+Unless it has been specifically designed not to be functional, all losses are functional.
+
+get_buffer(*target: str*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
+Return the buffer given by `target` if it exists, otherwise throw an error.
+
+See the docstring for `get_submodule` for a more detailed
+explanation of this method's functionality as well as how to
+correctly specify `target`.
+
+Parameters:
+
+**target** - The fully-qualified string name of the buffer
+to look for. (See `get_submodule` for how to specify a
+fully-qualified string.)
+
+Returns:
+
+The buffer referenced by `target`
+
+Return type:
+
+[torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+
+Raises:
+
+**AttributeError** - If the target string references an invalid
+ path or resolves to something that is not a
+ buffer
+
+get_extra_state() → Any
+
+Return any extra state to include in the module's state_dict.
+
+Implement this and a corresponding `set_extra_state()` for your module
+if you need to store extra state. This function is called when building the
+module's state_dict().
+
+Note that extra state should be picklable to ensure working serialization
+of the state_dict. We only provide backwards compatibility guarantees
+for serializing Tensors; other objects may break backwards compatibility if
+their serialized pickled form changes.
+
+Returns:
+
+Any extra state to store in the module's state_dict
+
+Return type:
+
+object
+
+get_parameter(*target: str*) → [Parameter](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter)
+
+Return the parameter given by `target` if it exists, otherwise throw an error.
+
+See the docstring for `get_submodule` for a more detailed
+explanation of this method's functionality as well as how to
+correctly specify `target`.
+
+Parameters:
+
+**target** - The fully-qualified string name of the Parameter
+to look for. (See `get_submodule` for how to specify a
+fully-qualified string.)
+
+Returns:
+
+The Parameter referenced by `target`
+
+Return type:
+
+torch.nn.Parameter
+
+Raises:
+
+**AttributeError** - If the target string references an invalid
+ path or resolves to something that is not an
+ `nn.Parameter`
+
+get_stateful_net(*network_name: str*, *copy: bool | None = None*)
+
+Returns a stateful version of the network.
+
+This can be used to initialize parameters.
+
+Such networks will often not be callable out-of-the-box and will require a vmap call
+to be executable.
+
+Parameters:
+
+- **network_name** (*str*) - the network name to gather.
+- **copy** (*bool**,**optional*) -
+
+if `True`, a deepcopy of the network is made.
+Defaults to `True`.
+
+Note
+
+if the module is not functional, no copy is made.
+
+get_submodule(*target: str*) → [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
+
+Return the submodule given by `target` if it exists, otherwise throw an error.
+
+For example, let's say you have an `nn.Module` `A` that
+looks like this:
+
+```
+A(
+ (net_b): Module(
+ (net_c): Module(
+ (conv): Conv2d(16, 33, kernel_size=(3, 3), stride=(2, 2))
+ )
+ (linear): Linear(in_features=100, out_features=200, bias=True)
+ )
+)
+```
+
+(The diagram shows an `nn.Module` `A`. `A` which has a nested
+submodule `net_b`, which itself has two submodules `net_c`
+and `linear`. `net_c` then has a submodule `conv`.)
+
+To check whether or not we have the `linear` submodule, we
+would call `get_submodule("net_b.linear")`. To check whether
+we have the `conv` submodule, we would call
+`get_submodule("net_b.net_c.conv")`.
+
+The runtime of `get_submodule` is bounded by the degree
+of module nesting in `target`. A query against
+`named_modules` achieves the same result, but it is O(N) in
+the number of transitive modules. So, for a simple check to see
+if some submodule exists, `get_submodule` should always be
+used.
+
+Parameters:
+
+**target** - The fully-qualified string name of the submodule
+to look for. (See above example for how to specify a
+fully-qualified string.)
+
+Returns:
+
+The submodule referenced by `target`
+
+Return type:
+
+[torch.nn.Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
+
+Raises:
+
+**AttributeError** - If at any point along the path resulting from
+ the target string the (sub)path resolves to a non-existent
+ attribute name or an object that is not an instance of `nn.Module`.
+
+half() → Self
+
+Casts all floating point parameters and buffers to `half` datatype.
+
+Note
+
+This method modifies the module in-place.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+ipu(*device: int | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → Self
+
+Move all model parameters and buffers to the IPU.
+
+This also makes associated parameters and buffers different objects. So
+it should be called before constructing the optimizer if the module will
+live on IPU while being optimized.
+
+Note
+
+This method modifies the module in-place.
+
+Parameters:
+
+**device** (*int**,**optional*) - if specified, all parameters will be
+copied to that device
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+*static*is_tdmodule_compatible(*module*)
+
+Checks if a module is compatible with TensorDictModule API.
+
+load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
+
+Load a state dict, building the default value estimator first when the state carries one.
+
+The value estimator is created on first use, so a loss saved after its
+first forward pass holds `_value_estimator.*` entries that a freshly
+constructed loss has no target for. Losses configured with a
+non-default estimator must call `make_value_estimator()` before
+loading, as they would before training.
+
+*property*loss_mask_key*: NestedKey | Literal['auto'] | None*
+
+Which input entry marks the positions that contribute to the loss.
+
+`"auto"` (the default) discovers the validity masks TorchRL writes
+itself - see `AUTO_LOSS_MASK_KEYS`. A
+`NestedKey` restricts masking to that single entry;
+`None` disables it. To use an entry literally named `"auto"`, pass
+the one-element tuple `("auto",)`.
+
+make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)
+
+Value-function constructor.
+
+If the non-default value function is wanted, it must be built using
+this method.
+
+Parameters:
+
+- **value_type** ([*ValueEstimators*](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators)*,*[*ValueEstimatorBase*](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase)*, or**type*) -
+
+The value
+estimator to use. This can be one of the following:
+
+- A [`ValueEstimators`](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) enum type
+indicating which value function to use. If none is provided,
+the default stored in the `default_value_estimator`
+attribute will be used.
+- A [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) instance,
+which will be used directly as the value estimator.
+- A [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) subclass,
+which will be instantiated with the provided `hyperparams`.
+
+The resulting value estimator class will be registered in
+`self.value_type`, allowing future refinements.
+- ****hyperparams** - hyperparameters to use for the value function.
+If not provided, the value indicated by
+`default_value_kwargs()` will be
+used. When passing a `ValueEstimatorBase` subclass, these
+hyperparameters are passed directly to the class constructor.
+
+Returns:
+
+Returns the loss module for method chaining.
+
+Return type:
+
+self
+
+Examples
+
+```
+>>> from torchrl.objectives import DQNLoss
+>>> # initialize the DQN loss
+>>> actor = torch.nn.Linear(3, 4)
+>>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+>>> # updating the parameters of the default value estimator
+>>> dqn_loss.make_value_estimator(gamma=0.9)
+>>> dqn_loss.make_value_estimator(
+... ValueEstimators.TD1,
+... gamma=0.9)
+>>> # if we want to change the gamma value
+>>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
+```
+
+Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) subclass:
+
+```
+>>> from torchrl.objectives.value import TD0Estimator
+>>> dqn_loss.make_value_estimator(TD0Estimator, gamma=0.99, value_network=value_net)
+```
+
+Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) instance:
+
+```
+>>> from torchrl.objectives.value import GAE
+>>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
+>>> ppo_loss.make_value_estimator(gae)
+```
+
+modules(*remove_duplicate: bool = True*) → Iterator[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]
+
+Return an iterator over all modules in the network.
+
+Parameters:
+
+**remove_duplicate** - whether to remove the duplicated module instances in the result
+or not.
+
+Yields:
+
+*Module* - a module in the network
+
+Note
+
+Duplicate modules are returned only once by default. In the following
+example, `l` will be returned only once.
+
+Example:
+
+```
+>>> l = nn.Linear(2, 2)
+>>> net = nn.Sequential(l, l)
+>>> for idx, m in enumerate(net.modules()):
+... print(idx, '->', m)
+
+0 -> Sequential(
+ (0): Linear(in_features=2, out_features=2, bias=True)
+ (1): Linear(in_features=2, out_features=2, bias=True)
+)
+1 -> Linear(in_features=2, out_features=2, bias=True)
+```
+
+mtia(*device: int | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → Self
+
+Move all model parameters and buffers to the MTIA.
+
+This also makes associated parameters and buffers different objects. So
+it should be called before constructing the optimizer if the module will
+live on MTIA while being optimized.
+
+Note
+
+This method modifies the module in-place.
+
+Parameters:
+
+**device** (*int**,**optional*) - if specified, all parameters will be
+copied to that device
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+named_buffers(*prefix: str = ''*, *recurse: bool = True*, *remove_duplicate: bool = True*) → Iterator[tuple[str, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)]]
+
+Return an iterator over module buffers, yielding both the name of the buffer as well as the buffer itself.
+
+Parameters:
+
+- **prefix** (*str*) - prefix to prepend to all buffer names.
+- **recurse** (*bool**,**optional*) - if True, then yields buffers of this module
+and all submodules. Otherwise, yields only buffers that
+are direct members of this module. Defaults to True.
+- **remove_duplicate** (*bool**,**optional*) - whether to remove the duplicated buffers in the result. Defaults to True.
+
+Yields:
+
+*(str, torch.Tensor)* - Tuple containing the name and buffer
+
+Example:
+
+```
+>>> # xdoctest: +SKIP("undefined vars")
+>>> for name, buf in self.named_buffers():
+>>> if name in ['running_var']:
+>>> print(buf.size())
+```
+
+named_children() → Iterator[tuple[str, [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)]]
+
+Return an iterator over immediate children modules, yielding both the name of the module as well as the module itself.
+
+Yields:
+
+*(str, Module)* - Tuple containing a name and child module
+
+Example:
+
+```
+>>> # xdoctest: +SKIP("undefined vars")
+>>> for name, module in model.named_children():
+>>> if name in ['conv4', 'conv5']:
+>>> print(module)
+```
+
+named_modules(*memo: set[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)] | None = None*, *prefix: str = ''*, *remove_duplicate: bool = True*)
+
+Return an iterator over all modules in the network, yielding both the name of the module as well as the module itself.
+
+Parameters:
+
+- **memo** - a memo to store the set of modules already added to the result
+- **prefix** - a prefix that will be added to the name of the module
+- **remove_duplicate** - whether to remove the duplicated module instances in the result
+or not
+
+Yields:
+
+*(str, Module)* - Tuple of name and module
+
+Note
+
+Duplicate modules are returned only once. In the following
+example, `l` will be returned only once.
+
+Example:
+
+```
+>>> l = nn.Linear(2, 2)
+>>> net = nn.Sequential(l, l)
+>>> for idx, m in enumerate(net.named_modules()):
+... print(idx, '->', m)
+
+0 -> ('', Sequential(
+ (0): Linear(in_features=2, out_features=2, bias=True)
+ (1): Linear(in_features=2, out_features=2, bias=True)
+))
+1 -> ('0', Linear(in_features=2, out_features=2, bias=True))
+```
+
+named_parameters(*prefix: str = ''*, *recurse: bool = True*) → Iterator[tuple[str, [Parameter](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter)]]
+
+Return an iterator over module parameters, yielding both the name of the parameter as well as the parameter itself.
+
+Parameters:
+
+- **prefix** (*str*) - prefix to prepend to all parameter names.
+- **recurse** (*bool*) - if True, then yields parameters of this module
+and all submodules. Otherwise, yields only parameters that
+are direct members of this module.
+- **remove_duplicate** (*bool**,**optional*) - whether to remove the duplicated
+parameters in the result. Defaults to True.
+
+Yields:
+
+*(str, Parameter)* - Tuple containing the name and parameter
+
+Example:
+
+```
+>>> # xdoctest: +SKIP("undefined vars")
+>>> for name, param in self.named_parameters():
+>>> if name in ['bias']:
+>>> print(param.size())
+```
+
+parameters(*recurse: bool = True*) → Iterator[[Parameter](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter)]
+
+Return an iterator over module parameters.
+
+The exact order of the returned parameters is unspecified, but repeated
+calls to the `parameters()` method of an unchanged module return the
+parameters in the same order.
+
+This is typically passed to an optimizer.
+
+Parameters:
+
+**recurse** (*bool*) - if True, then yields parameters of this module
+and all submodules. Otherwise, yields only parameters that
+are direct members of this module.
+
+Yields:
+
+*Parameter* - module parameter
+
+Example:
+
+```
+>>> # xdoctest: +SKIP("undefined vars")
+>>> for param in model.parameters():
+>>> print(type(param), param.size())
+<class 'torch.Tensor'> (20L,)
+<class 'torch.Tensor'> (20L, 1L, 5L, 5L)
+```
+
+register_backward_hook(*hook: Callable[[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module), tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)], tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None]*) → RemovableHandle
+
+Register a backward hook on the module.
+
+This function is deprecated in favor of [`register_full_backward_hook()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_full_backward_hook) and
+the behavior of this function will change in future versions.
+
+Returns:
+
+a handle that can be used to remove the added hook by calling
+`handle.remove()`
+
+Return type:
+
+`torch.utils.hooks.RemovableHandle`
+
+register_buffer(*name: str*, *tensor: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None*, *persistent: bool = True*) → None
+
+Add a buffer to the module.
+
+This is typically used to register a buffer that should not be
+considered a model parameter. For example, BatchNorm's `running_mean`
+is not a parameter, but is part of the module's state. Buffers, by
+default, are persistent and will be saved alongside parameters. This
+behavior can be changed by setting `persistent` to `False`. The
+only difference between a persistent buffer and a non-persistent buffer
+is that the latter will not be a part of this module's
+`state_dict`.
+
+Buffers can be accessed as attributes using given names.
+
+Parameters:
+
+- **name** (*str*) - name of the buffer. The buffer can be accessed
+from this module using the given name
+- **tensor** (*Tensor**or**None*) - buffer to be registered. If `None`, then operations
+that run on buffers, such as `cuda`, are ignored. If `None`,
+the buffer is **not** included in the module's `state_dict`.
+- **persistent** (*bool*) - whether the buffer is part of this module's
+`state_dict`.
+
+Example:
+
+```
+>>> # xdoctest: +SKIP("undefined vars")
+>>> self.register_buffer('running_mean', torch.zeros(num_features))
+```
+
+register_coeff_buffer(*name: str*, *value: float | int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*) → None
+
+Register a scalar coefficient as a buffer, converting it to a tensor.
+
+Eliminates the recurring `if not isinstance(value, Tensor): value =
+torch.tensor(value); self.register_buffer(name, value)` boilerplate in
+loss `__init__` methods.
+
+If `value` is `None` the attribute is set to `None` instead of a
+buffer being registered, matching the common optional-coefficient idiom
+(e.g. `critic_coeff` / `clip_value`).
+
+Parameters:
+
+- **name** (*str*) - the buffer / attribute name.
+- **value** (*float**,**int**,**Tensor**or**None*) - the coefficient. `None` sets
+the attribute to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - device for the buffer.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - dtype for the buffer.
+
+register_forward_hook(*hook: Callable[[T, tuple[Any, ...], Any], Any | None] | Callable[[T, tuple[Any, ...], dict[str, Any], Any], Any | None]*, ***, *prepend: bool = False*, *with_kwargs: bool = False*, *always_call: bool = False*) → RemovableHandle
+
+Register a forward hook on the module.
+
+The hook will be called every time after `forward()` has computed an output.
+
+If `with_kwargs` is `False` or not specified, the input contains only
+the positional arguments given to the module. Keyword arguments won't be
+passed to the hooks and only to the `forward`. The hook can modify the
+output. It can modify the input inplace but it will not have effect on
+forward since this is called after `forward()` is called. The hook
+should have the following signature:
+
+```
+hook(module, args, output) -> None or modified output
+```
+
+If `with_kwargs` is `True`, the forward hook will be passed the
+`kwargs` given to the forward function and be expected to return the
+output possibly modified. The hook should have the following signature:
+
+```
+hook(module, args, kwargs, output) -> None or modified output
+```
+
+Parameters:
+
+- **hook** (*Callable*) - The user defined hook to be registered.
+- **prepend** (*bool*) - If `True`, the provided `hook` will be fired
+before all existing `forward` hooks on this
+[`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Otherwise, the provided
+`hook` will be fired after all existing `forward` hooks on
+this [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Note that global
+`forward` hooks registered with
+`register_module_forward_hook()` will fire before all hooks
+registered by this method.
+Default: `False`
+- **with_kwargs** (*bool*) - If `True`, the `hook` will be passed the
+kwargs given to the forward function.
+Default: `False`
+- **always_call** (*bool*) - If `True` the `hook` will be run regardless of
+whether an exception is raised while calling the Module.
+Default: `False`
+
+Returns:
+
+a handle that can be used to remove the added hook by calling
+`handle.remove()`
+
+Return type:
+
+`torch.utils.hooks.RemovableHandle`
+
+register_forward_pre_hook(*hook: Callable[[T, tuple[Any, ...]], Any | None] | Callable[[T, tuple[Any, ...], dict[str, Any]], tuple[Any, dict[str, Any]] | None]*, ***, *prepend: bool = False*, *with_kwargs: bool = False*) → RemovableHandle
+
+Register a forward pre-hook on the module.
+
+The hook will be called every time before `forward()` is invoked.
+
+If `with_kwargs` is false or not specified, the input contains only
+the positional arguments given to the module. Keyword arguments won't be
+passed to the hooks and only to the `forward`. The hook can modify the
+input. User can either return a tuple or a single modified value in the
+hook. We will wrap the value into a tuple if a single value is returned
+(unless that value is already a tuple). The hook should have the
+following signature:
+
+```
+hook(module, args) -> None or modified input
+```
+
+If `with_kwargs` is true, the forward pre-hook will be passed the
+kwargs given to the forward function. And if the hook modifies the
+input, both the args and kwargs should be returned. The hook should have
+the following signature:
+
+```
+hook(module, args, kwargs) -> None or a tuple of modified input and kwargs
+```
+
+Parameters:
+
+- **hook** (*Callable*) - The user defined hook to be registered.
+- **prepend** (*bool*) - If true, the provided `hook` will be fired before
+all existing `forward_pre` hooks on this
+[`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Otherwise, the provided
+`hook` will be fired after all existing `forward_pre` hooks
+on this [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Note that global
+`forward_pre` hooks registered with
+`register_module_forward_pre_hook()` will fire before all
+hooks registered by this method.
+Default: `False`
+- **with_kwargs** (*bool*) - If true, the `hook` will be passed the kwargs
+given to the forward function.
+Default: `False`
+
+Returns:
+
+a handle that can be used to remove the added hook by calling
+`handle.remove()`
+
+Return type:
+
+`torch.utils.hooks.RemovableHandle`
+
+register_full_backward_hook(*hook: Callable[[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module), tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)], tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None]*, *prepend: bool = False*) → RemovableHandle
+
+Register a backward hook on the module.
+
+The hook will be called every time the gradients with respect to a module are computed, and its firing rules are as follows:
+
+> 1. Ordinarily, the hook fires when the gradients are computed with respect to the module inputs.
+> 2. If none of the module inputs require gradients, the hook will fire when the gradients are computed
+> with respect to module outputs.
+> 3. If none of the module outputs require gradients, then the hooks will not fire.
+
+The hook should have the following signature:
+
+```
+hook(module, grad_input, grad_output) -> tuple(Tensor) or None
+```
+
+The `grad_input` and `grad_output` are tuples that contain the gradients
+with respect to the inputs and outputs respectively. The hook should
+not modify its arguments, but it can optionally return a new gradient with
+respect to the input that will be used in place of `grad_input` in
+subsequent computations. `grad_input` will only correspond to the inputs given
+as positional arguments and all kwarg arguments are ignored. Entries
+in `grad_input` and `grad_output` will be `None` for all non-Tensor
+arguments.
+
+For technical reasons, when this hook is applied to a Module, its forward function will
+receive a view of each Tensor passed to the Module. Similarly the caller will receive a view
+of each Tensor returned by the Module's forward function.
+
+Warning
+
+Modifying inputs or outputs inplace is not allowed when using backward hooks and
+will raise an error.
+
+Parameters:
+
+- **hook** (*Callable*) - The user-defined hook to be registered.
+- **prepend** (*bool*) - If true, the provided `hook` will be fired before
+all existing `backward` hooks on this
+[`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Otherwise, the provided
+`hook` will be fired after all existing `backward` hooks on
+this [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Note that global
+`backward` hooks registered with
+`register_module_full_backward_hook()` will fire before
+all hooks registered by this method.
+
+Returns:
+
+a handle that can be used to remove the added hook by calling
+`handle.remove()`
+
+Return type:
+
+`torch.utils.hooks.RemovableHandle`
+
+register_full_backward_pre_hook(*hook: Callable[[[Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module), tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)], tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), ...] | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None]*, *prepend: bool = False*) → RemovableHandle
+
+Register a backward pre-hook on the module.
+
+The hook will be called every time the gradients for the module are computed.
+The hook should have the following signature:
+
+```
+hook(module, grad_output) -> tuple[Tensor, ...], Tensor or None
+```
+
+The `grad_output` is a tuple. The hook should
+not modify its arguments, but it can optionally return a new gradient with
+respect to the output that will be used in place of `grad_output` in
+subsequent computations. Entries in `grad_output` will be `None` for
+all non-Tensor arguments.
+
+For technical reasons, when this hook is applied to a Module, its forward function will
+receive a view of each Tensor passed to the Module. Similarly the caller will receive a view
+of each Tensor returned by the Module's forward function.
+
+Warning
+
+Modifying inputs inplace is not allowed when using backward hooks and
+will raise an error.
+
+Parameters:
+
+- **hook** (*Callable*) - The user-defined hook to be registered.
+- **prepend** (*bool*) - If true, the provided `hook` will be fired before
+all existing `backward_pre` hooks on this
+[`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Otherwise, the provided
+`hook` will be fired after all existing `backward_pre` hooks
+on this [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Note that global
+`backward_pre` hooks registered with
+`register_module_full_backward_pre_hook()` will fire before
+all hooks registered by this method.
+
+Returns:
+
+a handle that can be used to remove the added hook by calling
+`handle.remove()`
+
+Return type:
+
+`torch.utils.hooks.RemovableHandle`
+
+register_load_state_dict_post_hook(*hook*)
+
+Register a post-hook to be run after module's `load_state_dict()` is called.
+
+It should have the following signature::
+
+hook(module, incompatible_keys) -> None
+
+The `module` argument is the current module that this hook is registered
+on, and the `incompatible_keys` argument is a `NamedTuple` consisting
+of attributes `missing_keys` and `unexpected_keys`. `missing_keys`
+is a `list` of `str` containing the missing keys and
+`unexpected_keys` is a `list` of `str` containing the unexpected keys.
+
+The given incompatible_keys can be modified inplace if needed.
+
+Note that the checks performed when calling `load_state_dict()` with
+`strict=True` are affected by modifications the hook makes to
+`missing_keys` or `unexpected_keys`, as expected. Additions to either
+set of keys will result in an error being thrown when `strict=True`, and
+clearing out both missing and unexpected keys will avoid an error.
+
+Returns:
+
+a handle that can be used to remove the added hook by calling
+`handle.remove()`
+
+Return type:
+
+`torch.utils.hooks.RemovableHandle`
+
+register_load_state_dict_pre_hook(*hook*)
+
+Register a pre-hook to be run before module's `load_state_dict()` is called.
+
+It should have the following signature::
+
+hook(module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs) -> None # noqa: B950
+
+Parameters:
+
+**hook** (*Callable*) - Callable hook that will be invoked before
+loading the state dict.
+
+register_module(*name: str*, *module: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None*) → None
+
+Alias for `add_module()`.
+
+register_parameter(*name: str*, *param: [Parameter](https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter) | None*) → None
+
+Add a parameter to the module.
+
+The parameter can be accessed as an attribute using given name.
+
+Parameters:
+
+- **name** (*str*) - name of the parameter. The parameter can be accessed
+from this module using the given name
+- **param** (*Parameter**or**None*) - parameter to be added to the module. If
+`None`, then operations that run on parameters, such as `cuda`,
+are ignored. If `None`, the parameter is **not** included in the
+module's `state_dict`.
+
+register_state_dict_post_hook(*hook*)
+
+Register a post-hook for the [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) method.
+
+It should have the following signature::
+
+hook(module, state_dict, prefix, local_metadata) -> None
+
+The registered hooks can modify the `state_dict` inplace.
+
+register_state_dict_pre_hook(*hook*)
+
+Register a pre-hook for the [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) method.
+
+It should have the following signature::
+
+hook(module, prefix, keep_vars) -> None
+
+The registered hooks can be used to perform pre-processing before the `state_dict`
+call is made.
+
+requires_grad_(*requires_grad: bool = True*) → Self
+
+Change if autograd should record operations on parameters in this module.
+
+This method sets the parameters' `requires_grad` attributes
+in-place.
+
+This method is helpful for freezing part of the module for finetuning
+or training parts of a model individually (e.g., GAN training).
+
+See [Locally disabling gradient computation](https://docs.pytorch.org/docs/stable/notes/autograd.html#locally-disable-grad-doc) for a comparison between
+.requires_grad_() and several similar mechanisms that may be confused with it.
+
+Parameters:
+
+**requires_grad** (*bool*) - whether autograd should record operations on
+parameters in this module. Default: `True`.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+reset_out_keys()
+
+Resets the `out_keys` attribute to its orignal value.
+
+Returns: the same module, with its original `out_keys` values.
+
+Examples
+
+```
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule, TensorDictSequential
+>>> import torch
+>>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
+>>> mod.select_out_keys("d")
+>>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
+>>> mod(td)
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+>>> mod.reset_out_keys()
+>>> mod(td)
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+reset_parameters_recursive()
+
+Reset the parameters of the module.
+
+select_out_keys(**out_keys*) → [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)
+
+Selects the keys that will be found in the output tensordict.
+
+This is useful whenever one wants to get rid of intermediate keys in a
+complicated graph, or when the presence of these keys may trigger unexpected
+behaviours.
+
+The original `out_keys` can still be accessed via `module.out_keys_source`.
+
+Parameters:
+
+***out_keys** (*a sequence**of**strings**or**tuples**of**strings*) - the
+out_keys that should be found in the output tensordict.
+
+Returns: the same module, modified in-place with updated `out_keys`.
+
+The simplest usage is with `TensorDictModule`:
+
+Examples
+
+```
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule, TensorDictSequential
+>>> import torch
+>>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
+>>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
+>>> mod(td)
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+>>> mod.select_out_keys("d")
+>>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
+>>> mod(td)
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+This feature will also work with dispatched arguments:
+.. rubric:: Examples
+
+```
+>>> mod(torch.zeros(()), torch.ones(()))
+tensor(2.)
+```
+
+This change will occur in-place (ie the same module will be returned
+with an updated list of out_keys). It can be reverted using the
+`TensorDictModuleBase.reset_out_keys()` method.
+
+Examples
+
+```
+>>> mod.reset_out_keys()
+>>> mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+This will work with other classes too, such as Sequential:
+.. rubric:: Examples
+
+```
+>>> from tensordict.nn import TensorDictSequential
+>>> seq = TensorDictSequential(
+... TensorDictModule(lambda x: x+1, in_keys=["x"], out_keys=["y"]),
+... TensorDictModule(lambda x: x+1, in_keys=["y"], out_keys=["z"]),
+... )
+>>> td = TensorDict({"x": torch.zeros(())}, [])
+>>> seq(td)
+TensorDict(
+ fields={
+ x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+>>> seq.select_out_keys("z")
+>>> td = TensorDict({"x": torch.zeros(())}, [])
+>>> seq(td)
+TensorDict(
+ fields={
+ x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+set_extra_state(*state: Any*) → None
+
+Set extra state contained in the loaded state_dict.
+
+This function is called from `load_state_dict()` to handle any extra state
+found within the state_dict. Implement this function and a corresponding
+`get_extra_state()` for your module if you need to store extra state within its
+state_dict.
+
+Parameters:
+
+**state** (*dict*) - Extra state from the state_dict
+
+set_keys(***kwargs*) → None
+
+Set tensordict key names.
+
+Examples
+
+```
+>>> from torchrl.objectives import DQNLoss
+>>> # initialize the DQN loss
+>>> actor = torch.nn.Linear(3, 4)
+>>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+>>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
+```
+
+set_submodule(*target: str*, *module: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*, *strict: bool = False*) → None
+
+Set the submodule given by `target` if it exists, otherwise throw an error.
+
+Note
+
+If `strict` is set to `False` (default), the method will replace an existing submodule
+or create a new submodule if the parent module exists. If `strict` is set to `True`,
+the method will only attempt to replace an existing submodule and throw an error if
+the submodule does not exist.
+
+For example, let's say you have an `nn.Module` `A` that
+looks like this:
+
+```
+A(
+ (net_b): Module(
+ (net_c): Module(
+ (conv): Conv2d(3, 3, 3)
+ )
+ (linear): Linear(3, 3)
+ )
+)
+```
+
+(The diagram shows an `nn.Module` `A`. `A` has a nested
+submodule `net_b`, which itself has two submodules `net_c`
+and `linear`. `net_c` then has a submodule `conv`.)
+
+To override the `Conv2d` with a new submodule `Linear`, you
+could call `set_submodule("net_b.net_c.conv", nn.Linear(1, 1))`
+where `strict` could be `True` or `False`
+
+To add a new submodule `Conv2d` to the existing `net_b` module,
+you would call `set_submodule("net_b.conv", nn.Conv2d(1, 1, 1))`.
+
+In the above if you set `strict=True` and call
+`set_submodule("net_b.conv", nn.Conv2d(1, 1, 1), strict=True)`, an AttributeError
+will be raised because `net_b` does not have a submodule named `conv`.
+
+Parameters:
+
+- **target** - The fully-qualified string name of the submodule
+to look for. (See above example for how to specify a
+fully-qualified string.)
+- **module** - The module to set the submodule to.
+- **strict** - If `False`, the method will replace an existing submodule
+or create a new submodule if the parent module exists. If `True`,
+the method will only attempt to replace an existing submodule and throw an error
+if the submodule doesn't already exist.
+
+Raises:
+
+- **ValueError** - If the `target` string is empty or if `module` is not an instance of `nn.Module`.
+- **AttributeError** - If at any point along the path resulting from
+ the `target` string the (sub)path resolves to a non-existent
+ attribute name or an object that is not an instance of `nn.Module`.
+
+share_memory() → Self
+
+See [`torch.Tensor.share_memory_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.share_memory_.html#torch.Tensor.share_memory_).
+
+state_dict(**args*, *destination=None*, *prefix=''*, *keep_vars=False*)
+
+Return a dictionary containing references to the whole state of the module.
+
+Both parameters and persistent buffers (e.g. running averages) are
+included. Keys are corresponding parameter and buffer names.
+Parameters and buffers set to `None` are not included.
+
+Note
+
+The returned object is a shallow copy. It contains references
+to the module's parameters and buffers.
+
+Warning
+
+Currently `state_dict()` also accepts positional arguments for
+`destination`, `prefix` and `keep_vars` in order. However,
+this is being deprecated and keyword arguments will be enforced in
+future releases.
+
+Warning
+
+Please avoid the use of argument `destination` as it is not
+designed for end-users.
+
+Parameters:
+
+- **destination** (*dict**,**optional*) - If provided, the state of module will
+be updated into the dict and the same object is returned.
+Otherwise, an `OrderedDict` will be created and returned.
+Default: `None`.
+- **prefix** (*str**,**optional*) - a prefix added to parameter and buffer
+names to compose the keys in state_dict. Default: `''`.
+- **keep_vars** (*bool**,**optional*) - by default the [`Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) s
+returned in the state dict are detached from autograd. If it's
+set to `True`, detaching will not be performed.
+Default: `False`.
+
+Returns:
+
+a dictionary containing a whole state of the module
+
+Return type:
+
+dict
+
+Example:
+
+```
+>>> # xdoctest: +SKIP("undefined vars")
+>>> module.state_dict().keys()
+['bias', 'weight']
+```
+
+to(**args*, ***kwargs*)
+
+Move and/or cast the parameters and buffers.
+
+This can be called as
+
+to(*device=None*, *dtype=None*, *non_blocking=False*)
+
+to(*dtype*, *non_blocking=False*)
+
+to(*tensor*, *non_blocking=False*)
+
+to(*memory_format=torch.channels_last*)
+
+Its signature is similar to [`torch.Tensor.to()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to), but only accepts
+floating point or complex `dtype`s. In addition, this method will
+only cast the floating point or complex parameters and buffers to `dtype`
+(if given). The integral parameters and buffers will be moved
+`device`, if that is given, but with dtypes unchanged. When
+`non_blocking` is set, it tries to convert/move asynchronously
+with respect to the host if possible, e.g., moving CPU Tensors with
+pinned memory to CUDA devices.
+
+See below for examples.
+
+Note
+
+This method modifies the module in-place.
+
+Parameters:
+
+- **device** ([`torch.device`](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the desired device of the parameters
+and buffers in this module
+- **dtype** ([`torch.dtype`](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the desired floating point or complex dtype of
+the parameters and buffers in this module
+- **tensor** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - Tensor whose dtype and device are the desired
+dtype and device for all parameters and buffers in this module
+- **memory_format** ([`torch.memory_format`](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format)) - the desired memory
+format for 4D parameters and buffers in this module (keyword
+only argument)
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+Examples:
+
+```
+>>> # xdoctest: +IGNORE_WANT("non-deterministic")
+>>> linear = nn.Linear(2, 2)
+>>> linear.weight
+Parameter containing:
+tensor([[ 0.1913, -0.3420],
+ [-0.5113, -0.2325]])
+>>> linear.to(torch.double)
+Linear(in_features=2, out_features=2, bias=True)
+>>> linear.weight
+Parameter containing:
+tensor([[ 0.1913, -0.3420],
+ [-0.5113, -0.2325]], dtype=torch.float64)
+>>> # xdoctest: +REQUIRES(env:TORCH_DOCTEST_CUDA1)
+>>> gpu1 = torch.device("cuda:1")
+>>> linear.to(gpu1, dtype=torch.half, non_blocking=True)
+Linear(in_features=2, out_features=2, bias=True)
+>>> linear.weight
+Parameter containing:
+tensor([[ 0.1914, -0.3420],
+ [-0.5112, -0.2324]], dtype=torch.float16, device='cuda:1')
+>>> cpu = torch.device("cpu")
+>>> linear.to(cpu)
+Linear(in_features=2, out_features=2, bias=True)
+>>> linear.weight
+Parameter containing:
+tensor([[ 0.1914, -0.3420],
+ [-0.5112, -0.2324]], dtype=torch.float16)
+
+>>> linear = nn.Linear(2, 2, bias=None).to(torch.cdouble)
+>>> linear.weight
+Parameter containing:
+tensor([[ 0.3741+0.j, 0.2382+0.j],
+ [ 0.5593+0.j, -0.4443+0.j]], dtype=torch.complex128)
+>>> linear(torch.ones(3, 2, dtype=torch.cdouble))
+tensor([[0.6122+0.j, 0.1150+0.j],
+ [0.6122+0.j, 0.1150+0.j],
+ [0.6122+0.j, 0.1150+0.j]], dtype=torch.complex128)
+```
+
+to_empty(***, *device: str | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | int | None*, *recurse: bool = True*) → Self
+
+Move the parameters and buffers to the specified device without copying storage.
+
+Parameters:
+
+- **device** ([`torch.device`](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - The desired device of the parameters
+and buffers in this module.
+- **recurse** (*bool*) - Whether parameters and buffers of submodules should
+be recursively moved to the specified device.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+train(*mode: bool = True*) → Self
+
+Set the module in training mode.
+
+This has an effect only on certain modules. See the documentation of
+particular modules for details of their behaviors in training/evaluation
+mode, i.e., whether they are affected, e.g. `Dropout`, `BatchNorm`,
+etc.
+
+Parameters:
+
+**mode** (*bool*) - whether to set training mode (`True`) or evaluation
+mode (`False`). Default: `True`.
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+type(*dst_type: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | str*) → Self
+
+Casts all parameters and buffers to `dst_type`.
+
+Note
+
+This method modifies the module in-place.
+
+Parameters:
+
+**dst_type** (*type**or**string*) - the desired type
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+*property*value_estimator*: [ValueEstimatorBase](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase)*
+
+The value function blends in the reward and value estimate(s) from upcoming state(s)/state-action pair(s) into a target value estimate for the value network.
+
+*property*vmap_randomness
+
+Vmap random mode.
+
+The vmap randomness mode controls what [`vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) should do when dealing with
+functions with a random outcome such as [`randn()`](https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn) and [`rand()`](https://docs.pytorch.org/docs/stable/generated/torch.rand.html#torch.rand).
+If "error", any random function will raise an exception indicating that vmap does not
+know how to handle the random call.
+
+If "different", every element of the batch along which vmap is being called will
+behave differently. If "same", vmaps will copy the same result across all elements.
+
+`vmap_randomness` defaults to "error" if no random module is detected, and to "different" in
+other cases. By default, only a limited number of modules are listed as random, but the list can be extended
+using the [`add_random_module()`](torchrl.objectives.add_random_module.html#torchrl.objectives.add_random_module) function.
+
+This property supports setting its value.
+
+xpu(*device: int | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → Self
+
+Move all model parameters and buffers to the XPU.
+
+This also makes associated parameters and buffers different objects. So
+it should be called before constructing optimizer if the module will
+live on XPU while being optimized.
+
+Note
+
+This method modifies the module in-place.
+
+Parameters:
+
+**device** (*int**,**optional*) - if specified, all parameters will be
+copied to that device
+
+Returns:
+
+self
+
+Return type:
+
+Module
+
+zero_grad(*set_to_none: bool = True*) → None
+
+Reset gradients of all model parameters.
+
+See similar function under [`torch.optim.Optimizer`](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer) for more context.
+
+Parameters:
+
+**set_to_none** (*bool*) - instead of setting to zero, set the grads to None.
+See [`torch.optim.Optimizer.zero_grad()`](https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.zero_grad.html#torch.optim.Optimizer.zero_grad) for details.
+
+---
+
+# RewardModelLossOutput
+
+*class*torchrl.objectives.llm.RewardModelLossOutput(*loss_reward_model: 'torch.Tensor'*, *loss_center: 'torch.Tensor | None' = None*, *accuracy: 'torch.Tensor | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/objectives/llm/reward.html#RewardModelLossOutput)
+
+cat(*dim: int = 0*, ***, *out=None*)
+
+Concatenates tensordicts into a single tensordict along the given dimension.
+
+This call is equivalent to calling [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) but is compatible with torch.compile.
+
+*property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*
+
+Retrieves the device type of tensor class.
+
+dumps(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Any
+
+Saves the tensordict to disk.
+
+This function is a proxy to `memmap()`.
+
+*classmethod*fields()
+
+Return a tuple describing the fields of this dataclass.
+
+Accepts a dataclass or an instance of one. Tuple elements are of
+type Field.
+
+from_any(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+
+Recursively converts any object to a TensorDict.
+
+Note
+
+`from_any` is less restrictive than the regular TensorDict constructor. It can cast data structures like
+dataclasses or tuples to a tensordict using custom heuristics. This approach may incur some extra overhead and
+involves more opinionated choices in terms of mapping strategies.
+
+Note
+
+This method recursively converts the input object to a TensorDict. If the object is already a
+TensorDict (or any similar tensor collection object), it will be returned as is.
+
+Parameters:
+
+**obj** - The object to be converted.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - if `True`, the batch size will be computed automatically.
+Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output tensordict
+should have. Defaults to `None` (full batch-size at each level).
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
+Exclusive with `auto_batch_size`.
+
+Returns:
+
+A TensorDict representation of the input object.
+
+Supported objects:
+
+- Dataclasses through `from_dataclass()` (dataclasses will be converted to TensorDict instances, not tensorclasses).
+- Namedtuples through `from_namedtuple()`.
+- Dictionaries through `from_dict()`.
+- Tuples through `from_tuple()`.
+- NumPy's structured arrays through `from_struct_array()`.
+- HDF5 objects through `from_h5()`.
+
+from_csv(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, ***kwargs*) → Any
+
+Creates a TensorDict from a CSV file.
+
+Requires either pandas or pyarrow to be installed.
+
+Parameters:
+
+**path** (*str**or**Path*) - Path to the CSV file.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
+be computed automatically. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
+defines how many dimensions the output tensordict should have.
+Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
+`[num_rows]`.
+- **separator** (*str**,**optional*) - If provided, column names are split on
+this separator to create nested TensorDicts. Defaults to `None`.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
+are cast to this dtype. Defaults to `None`.
+- ****kwargs** - Additional keyword arguments forwarded to the CSV reader
+(`pandas.read_csv` or `pyarrow.csv.read_csv`).
+
+Returns:
+
+A TensorDict representation of the CSV data.
+
+Examples
+
+```
+>>> td = TensorDict.from_csv("data.csv")
+>>> td = TensorDict.from_csv("data.csv", separator=".", dtype=torch.float32)
+```
+
+from_dataclass(***, *dest_cls: Type | None = None*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *as_tensorclass: bool = False*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+
+Converts a dataclass into a TensorDict instance.
+
+Parameters:
+
+**dataclass** - The dataclass instance to be converted.
+
+Keyword Arguments:
+
+- **dest_cls** (*tensorclass**,**optional*) - A tensorclass type to be used to map the data. If not provided, a new
+class is created. Without effect if `obj` is a type or as_tensorclass is False.
+- **auto_batch_size** (*bool**,**optional*) - If `True`, automatically determines and applies batch size to the
+resulting TensorDict. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
+tensordict should have. Defaults to `None` (full batch-size at each level).
+- **as_tensorclass** (*bool**,**optional*) - If `True`, delegates the conversion to the free function
+`from_dataclass()` and returns a tensor-compatible class (`tensorclass()`)
+or instance instead of a TensorDict. Defaults to `False`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
+Defaults to `None`.
+
+Returns:
+
+A TensorDict instance derived from the provided dataclass, unless as_tensorclass is True, in which case a tensor-compatible class or instance is returned.
+
+Raises:
+
+**TypeError** - If the provided input is not a dataclass instance.
+
+Warning
+
+This method is distinct from the free function from_dataclass and serves a different purpose.
+While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.
+
+Note
+
+- This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.
+- Each key in the resulting TensorDict is initialized using the cls.from_any method.
+- The auto_batch_size option allows for automatic batch size determination and application to the
+resulting TensorDict.
+
+from_h5(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+
+Creates a PersistentTensorDict from a h5 file.
+
+Parameters:
+
+**filename** (*str*) - The path to the h5 file.
+
+Keyword Arguments:
+
+- **mode** (*str**,**optional*) - Reading mode. Defaults to `"r"`.
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically.
+Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output
+tensordict should have. Defaults to `None` (full batch-size at each level).
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`.
+
+Returns:
+
+A PersistentTensorDict representation of the input h5 file.
+
+Examples
+
+```
+>>> td = TensorDict.from_h5("path/to/file.h5")
+>>> print(td)
+PersistentTensorDict(
+ fields={
+ key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+ key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+from_json(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *lines: bool = False*, ***kwargs*) → Any
+
+Creates a TensorDict from a JSON file.
+
+Supports both standard JSON (array of records) and JSON Lines format.
+For nested JSON objects, use `from_dict()` instead.
+
+Requires pandas for best results. Falls back to stdlib `json`
+for simple cases.
+
+Parameters:
+
+**path** (*str**or**Path*) - Path to the JSON file.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
+be computed automatically. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
+defines how many dimensions the output tensordict should have.
+Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
+`[num_rows]`.
+- **separator** (*str**,**optional*) - If provided, column names are split on
+this separator to create nested TensorDicts. Defaults to `None`.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
+are cast to this dtype. Defaults to `None`.
+- **lines** (*bool**,**optional*) - If `True`, reads the file as JSON Lines
+(one JSON object per line). Defaults to `False`.
+- ****kwargs** - Additional keyword arguments forwarded to the JSON
+reader.
+
+Returns:
+
+A TensorDict representation of the JSON data.
+
+Examples
+
+```
+>>> td = TensorDict.from_json("data.json")
+>>> td = TensorDict.from_json("data.jsonl", lines=True)
+```
+
+from_modules(***, *as_module: bool = False*, *lock: bool = True*, *use_state_dict: bool = False*, *lazy_stack: bool = False*, *expand_identical: bool = False*)
+
+Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
+
+Parameters:
+
+**modules** (*sequence**of**nn.Module*) - the modules to get the parameters from.
+If the modules differ in their structure, a lazy stack is needed
+(see the `lazy_stack` argument below).
+
+Keyword Arguments:
+
+- **as_module** (*bool**,**optional*) - if `True`, a `TensorDictParams`
+instance will be returned which can be used to store parameters
+within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
+- **lock** (*bool**,**optional*) - if `True`, the resulting tensordict will be locked.
+Defaults to `True`.
+- **use_state_dict** (*bool**,**optional*) -
+
+if `True`, the state-dict from the
+module will be used and unflattened into a TensorDict with
+the tree structure of the model. Defaults to `False`.
+
+Note
+
+This is particularly useful when state-dict hooks have to be used.
+- **lazy_stack** (*bool**,**optional*) -
+
+whether parameters should be densly or
+lazily stacked. Defaults to `False` (dense stack).
+
+Note
+
+`lazy_stack` and `as_module` are exclusive features.
+
+Warning
+
+There is a crucial difference between lazy and non-lazy outputs
+in that non-lazy output will reinstantiate parameters with the
+desired batch-size, while `lazy_stack` will just represent
+the parameters as lazily stacked. This means that whilst the
+original parameters can safely be passed to an optimizer
+when `lazy_stack=True`, the new parameters need to be passed
+when it is set to `True`.
+
+Warning
+
+Whilst it can be tempting to use a lazy stack to keep the
+orignal parameter references, remember that lazy stack
+perform a stack each time `get()` is called. This will
+require memory (N times the size of the parameters, more if a
+graph is built) and time to be computed.
+It also means that the optimizer(s) will contain more
+parameters, and operations like [`step()`](https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.step.html#torch.optim.Optimizer.step)
+or [`zero_grad()`](https://docs.pytorch.org/docs/stable/generated/torch.optim.Optimizer.zero_grad.html#torch.optim.Optimizer.zero_grad) will take longer
+to be executed. In general, `lazy_stack` should be reserved
+to very few use cases.
+- **expand_identical** (*bool**,**optional*) - if `True` and the same parameter (same
+identity) is being stacked to itself, an expanded version of this parameter
+will be returned instead. This argument is ignored when `lazy_stack=True`.
+
+Examples
+
+```
+>>> from torch import nn
+>>> from tensordict import TensorDict
+>>> torch.manual_seed(0)
+>>> empty_module = nn.Linear(3, 4, device="meta")
+>>> n_models = 2
+>>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
+>>> params = TensorDict.from_modules(*modules)
+>>> print(params)
+TensorDict(
+ fields={
+ bias: Parameter(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+ weight: Parameter(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([2]),
+ device=None,
+ is_shared=False)
+>>> # example of batch execution
+>>> def exec_module(params, x):
+... with params.to_module(empty_module):
+... return empty_module(x)
+>>> x = torch.randn(3)
+>>> y = torch.vmap(exec_module, (0, None))(params, x)
+>>> assert y.shape == (n_models, 4)
+>>> # since lazy_stack = False, backprop leaves the original params untouched
+>>> y.sum().backward()
+>>> assert params["weight"].grad.norm() > 0
+>>> assert modules[0].weight.grad is None
+```
+
+With `lazy_stack=True`, things are slightly different:
+
+```
+>>> params = TensorDict.from_modules(*modules, lazy_stack=True)
+>>> print(params)
+LazyStackedTensorDict(
+ fields={
+ bias: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+ weight: Tensor(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+ exclusive_fields={
+ },
+ batch_size=torch.Size([2]),
+ device=None,
+ is_shared=False,
+ stack_dim=0)
+>>> # example of batch execution
+>>> y = torch.vmap(exec_module, (0, None))(params, x)
+>>> assert y.shape == (n_models, 4)
+>>> y.sum().backward()
+>>> assert modules[0].weight.grad is not None
+```
+
+from_namedtuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+
+Converts a namedtuple to a TensorDict recursively.
+
+Parameters:
+
+**named_tuple** - The namedtuple instance to be converted.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - if `True`, the batch size will be computed automatically.
+Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
+tensordict should have. Defaults to `None` (full batch-size at each level).
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
+Defaults to `None`.
+
+Returns:
+
+A TensorDict representation of the input namedtuple.
+
+Examples
+
+```
+>>> from tensordict import TensorDict
+>>> import torch
+>>> data = TensorDict({
+... "a_tensor": torch.zeros((3)),
+... "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
+>>> nt = data.to_namedtuple()
+>>> print(nt)
+GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
+>>> TensorDict.from_namedtuple(nt, auto_batch_size=True)
+TensorDict(
+ fields={
+ a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+ nested: TensorDict(
+ fields={
+ a_string: NonTensorData(data=zero!, batch_size=torch.Size([3]), device=None),
+ a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([3]),
+ device=None,
+ is_shared=False)},
+ batch_size=torch.Size([3]),
+ device=None,
+ is_shared=False)
+```
+
+from_pandas(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*) → Any
+
+Converts a pandas DataFrame to a TensorDict.
+
+Numeric columns become tensors, string/object columns become
+[`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData).
+
+Parameters:
+
+**dataframe** (*pd.DataFrame*) - The pandas DataFrame to convert.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
+be computed automatically. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
+defines how many dimensions the output tensordict should have.
+Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
+`[num_rows]`.
+- **separator** (*str**,**optional*) - If provided, column names are split on
+this separator to create nested TensorDicts. For example, with
+`separator="."`, a column `"obs.x"` becomes
+`td["obs", "x"]`. Defaults to `None`.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
+are cast to this dtype. Defaults to `None`.
+
+Returns:
+
+A TensorDict representation of the DataFrame.
+
+Examples
+
+```
+>>> import pandas as pd
+>>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
+>>> td = TensorDict.from_pandas(df)
+>>> print(td)
+TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
+ b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
+ batch_size=torch.Size([3]),
+ device=None,
+ is_shared=False)
+```
+
+from_parquet(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *columns: list[str] | None = None*, ***kwargs*) → Any
+
+Creates a TensorDict from a Parquet file.
+
+Requires either pyarrow or pandas to be installed. Prefers pyarrow
+when available for better performance.
+
+Parameters:
+
+**path** (*str**or**Path*) - Path to the Parquet file.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will
+be computed automatically. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`,
+defines how many dimensions the output tensordict should have.
+Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
+Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
+`[num_rows]`.
+- **separator** (*str**,**optional*) - If provided, column names are split on
+this separator to create nested TensorDicts. Defaults to `None`.
+- **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
+are cast to this dtype. Defaults to `None`.
+- **columns** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**str**,**optional*) - If provided, only read these
+columns from the file. Defaults to `None` (all columns).
+- ****kwargs** - Additional keyword arguments forwarded to the Parquet
+reader.
+
+Returns:
+
+A TensorDict representation of the Parquet data.
+
+Examples
+
+```
+>>> td = TensorDict.from_parquet("data.parquet")
+>>> td = TensorDict.from_parquet("data.parquet", columns=["obs", "reward"])
+```
+
+from_pytree(***, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*)
+
+Converts a pytree to a TensorDict instance.
+
+This method is designed to keep the pytree nested structure as much as possible.
+
+Additional non-tensor keys are added to keep track of each level's identity, providing
+a built-in pytree-to-tensordict bijective transform API.
+
+Accepted classes currently include lists, tuples, named tuples and dict.
+
+Note
+
+For dictionaries, non-NestedKey keys are registered separately as [`NonTensorData`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData)
+instances.
+
+Note
+
+Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
+Note that this transformation is surjective: transforming back the tensordict to a pytree will not
+recover the original types.
+
+Examples
+
+```
+>>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
+>>> class WeirdLookingClass:
+... pass
+...
+>>> weird_key = WeirdLookingClass()
+>>> # Make a pytree with tuple, lists, dict and namedtuple
+>>> pytree = (
+... [torch.randint(10, (3,)), torch.zeros(2)],
+... {
+... "tensor": torch.randn(
+... 2,
+... ),
+... "td": TensorDict({"one": 1}),
+... weird_key: torch.randint(10, (2,)),
+... "list": [1, 2, 3],
+... },
+... {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+... )
+>>> # Build a TensorDict from that pytree
+>>> td = TensorDict.from_pytree(pytree)
+>>> # Recover the pytree
+>>> pytree_recon = td.to_pytree()
+>>> # Check that the leaves match
+>>> def check(v1, v2):
+>>> assert (v1 == v2).all()
+>>>
+>>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+>>> assert weird_key in pytree_recon[1]
+```
+
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+
+Pre-allocate a zero-filled TensorDict from a schema.
+
+Creates a `TensorDictBase` whose storage backend is selected
+by `storage`. Each entry in `schema` maps a field name to an
+`(element_shape, dtype)` pair; the full stored shape is
+`[*batch_size, *element_shape]`.
+
+Parameters:
+
+**schema** - Mapping from field name to `(element_shape, dtype)`.
+`element_shape` is the per-element shape (excluding
+`batch_size`).
+
+Keyword Arguments:
+
+- **batch_size** - Overall batch dimensions prepended to every element
+shape. Defaults to `()`.
+- **storage** (*str**or**None*) -
+
+Backend selector:
+
+- `None` - plain `TensorDict` with regular tensors.
+- `"memmap"` - memory-mapped tensors on disk.
+Pass `prefix=<dir>` in *kwargs*.
+- `"h5"` - HDF5 via `PersistentTensorDict`.
+Pass `filename=<path>` in *kwargs*.
+- `"zarr"` - zarr (requires `zarr>=3.0`) via
+`PersistentTensorDict`. Pass `filename=<path or store>`
+in *kwargs*.
+- `"shared"` - CPU shared-memory tensors.
+- `"redis"` / `"dragonfly"` - delegates to
+`TensorDictStore.from_schema()`.
+- **device** - Device for the resulting tensors (ignored by some
+backends).
+- ****kwargs** - Backend-specific arguments forwarded to the
+underlying constructor (e.g. `prefix` for memmap,
+`filename` for h5, `host`/`port` for redis).
+
+Returns:
+
+A new `TensorDictBase` subclass instance with
+pre-allocated (zero-filled) keys.
+
+Examples
+
+```
+>>> td = TensorDict.from_schema(
+... {"obs": ([84, 84, 3], torch.uint8),
+... "reward": ([], torch.float32)},
+... batch_size=[1000],
+... )
+>>> td["obs"].shape
+torch.Size([1000, 84, 84, 3])
+```
+
+```
+>>> import tempfile
+>>> with tempfile.TemporaryDirectory() as d:
+... td_mm = TensorDict.from_schema(
+... {"obs": ([4], torch.float32)},
+... batch_size=[8],
+... storage="memmap",
+... prefix=d,
+... )
+... assert td_mm.is_memmap()
+```
+
+from_struct_array(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*) → Any
+
+Converts a structured numpy array to a TensorDict.
+
+The resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy operation).
+Changing values of the structured numpy array in-place will affect the content of the TensorDict.
+
+Note
+
+This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory
+content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content
+of the TensorDict.
+
+Parameters:
+
+**struct_array** (*np.ndarray*) - The structured numpy array to be converted.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
+tensordict should have. Defaults to `None` (full batch-size at each level).
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) -
+
+The device on which the TensorDict will be created.
+Defaults to `None`.
+
+Note
+
+Changing the device (i.e., specifying any device other than `None` or `"cpu"`) will transfer the data,
+resulting in a change to the memory location of the returned data.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to None.
+
+Returns:
+
+A TensorDict representation of the input structured numpy array.
+
+Examples
+
+```
+>>> x = np.array(
+... [("Rex", 9, 81.0), ("Fido", 3, 27.0)],
+... dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
+... )
+>>> td = TensorDict.from_struct_array(x)
+>>> x_recon = td.to_struct_array()
+>>> assert (x_recon == x).all()
+>>> assert x_recon.shape == x.shape
+>>> # Try modifying x age field and check effect on td
+>>> x["age"] += 1
+>>> assert (td["age"] == np.array([10, 4])).all()
+```
+
+*classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
+
+Tensor class wrapper to instantiate a new tensor class object.
+
+Parameters:
+
+- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
+- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
+- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+
+from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+
+Converts a tuple to a TensorDict.
+
+Parameters:
+
+**obj** - The tuple instance to be converted.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically. Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output tensordict
+should have. Defaults to `None` (full batch-size at each level).
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created. Defaults to `None`.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`.
+
+Returns:
+
+A TensorDict representation of the input tuple.
+
+Examples
+
+```
+>>> my_tuple = (1, 2, 3)
+>>> td = TensorDict.from_tuple(my_tuple)
+>>> print(td)
+TensorDict(
+ fields={
+ 0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+ 1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+ 2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+from_zarr(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+
+Creates a PersistentTensorDict from a zarr store.
+
+Requires `zarr>=3.0` to be installed.
+
+Parameters:
+
+**filename** (*str**,**path**or**zarr store*) - The path to the zarr store (a
+directory), or a `zarr.abc.store.Store` instance (e.g. a
+`zarr.storage.ZipStore`).
+
+Keyword Arguments:
+
+- **mode** (*str**,**optional*) - Reading mode. Defaults to `"r"`.
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically.
+Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output
+tensordict should have. Defaults to `None` (full batch-size at each level).
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`
+(read from the metadata written by `to_zarr()`, or automatically determined
+for stores written by other tools).
+
+Returns:
+
+A PersistentTensorDict representation of the input zarr store.
+
+Examples
+
+```
+>>> td = TensorDict.from_zarr("path/to/store.zarr")
+>>> print(td)
+PersistentTensorDict(
+ fields={
+ key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+ key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+fromkeys(*value: Any = 0*)
+
+Creates a tensordict from a list of keys and a single value.
+
+Parameters:
+
+- **keys** (*list**of**NestedKey*) - An iterable specifying the keys of the new dictionary.
+- **value** (*compatible type**,**optional*) - The value for all keys. Defaults to `0`.
+
+get(*key: NestedKey*, **args*, ***kwargs*)
+
+Gets the value stored with the input key.
+
+Parameters:
+
+- **key** (*str**,**tuple**of**str*) - key to be queried. If tuple of str it is
+equivalent to chained calls of getattr.
+- **default** - default value if the key is not found in the tensorclass.
+
+Returns:
+
+value stored with the input key
+
+lazy_stack(*dim: int = 0*, ***, *out=None*, ***kwargs*)
+
+Creates a lazy stack of tensordicts.
+
+See `lazy_stack()` for details.
+
+load(**args*, ***kwargs*) → Any
+
+Loads a tensordict from disk.
+
+This class method is a proxy to `load_memmap()`.
+
+load_(*prefix: str | Path*, **args*, ***kwargs*)
+
+Loads a tensordict from disk within the current tensordict.
+
+This class method is a proxy to `load_memmap_()`.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str = 'r'*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
+
+Loads a memory-mapped tensordict from disk.
+
+Parameters:
+
+- **prefix** (*str**or**Path to folder*) - the path to the folder where the
+saved tensordict should be fetched, or the path to a memmap
+archive file written through
+`save(..., archive=True)` / a `".tdz"` prefix (or packed
+with `pack_memmap()`). Archives are
+memory-mapped once and every leaf is exposed as a zero-copy
+view into the mapping: only the pages of the leaves that are
+actually accessed are read from disk. Unlike directory-backed
+tensordicts, in-place writes to the leaves of an
+archive-loaded tensordict do not propagate to the file.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**equivalent**,**optional*) - if provided, the
+data will be asynchronously cast to that device.
+Supports "meta" device, in which case the data isn't loaded
+but a set of empty "meta" tensors are created. This is
+useful to get a sense of the total model size and structure
+without actually opening any file.
+- **non_blocking** (*bool**,**optional*) - if `True`, synchronize won't be
+called after loading tensors on device. Defaults to `False`.
+- **out** (*TensorDictBase**,**optional*) - optional tensordict where the data
+should be written.
+- **robust_key** (*bool**,**optional*) - if `True` (default), expects robust key encoding was used
+when saving and decodes filenames accordingly. If `False`, uses legacy
+behavior. If `None`, uses the default robust behavior.
+- **subpath** (*NestedKey**or**str path**,**optional*) - the location of a
+nested tensordict to load, as a nested key (e.g.
+`("module", "0")`, with arbitrary nesting allowed as usual)
+or as a `"/"`-separated string path (e.g. `"module/0"`).
+Only that subtree is loaded. Works both for directories
+(equivalent to appending the path to `prefix`) and for
+archives.
+- **mode** (*str**,**optional*) - `"r"` (default) or `"r+"`. Only
+relevant when loading an archive: with `"r"` the archive is
+mapped copy-on-write and in-place writes to the leaves stay
+in memory; with `"r+"` the mapping is shared and in-place
+writes propagate to the file, like directory-backed
+tensordicts. `"r+"` requires uncompressed, aligned tensor
+payloads (i.e. archives written by tensordict without
+`compression`) and is not available for nested-tensor
+leaves. In-place writes do not update the per-entry CRC-32
+stored by the zip format; `load_memmap()` ignores
+checksums, but call
+`refresh_archive_checksums()` before handing
+a modified archive to tools that verify them (`unzip`,
+`unpack_memmap()`, ...). Directory prefixes
+are always write-through and ignore this argument.
+- **num_threads** (*int**,**optional*) - number of threads used to decompress
+the leaves of a compressed archive (deflate entries are
+inflated in parallel, which scales nearly linearly). Without
+compression, loading is a metadata-only operation and this
+argument has no effect. Defaults to `0` (sequential).
+- **allow_pickle** (*bool**,**optional*) - whether pickled non-tensor fields
+may be loaded. Pickle can execute arbitrary code, so pass
+`True` only for data from a trusted source and `False`
+for untrusted data. During the 0.14 compatibility window,
+omitting this option loads pickle with a `FutureWarning`;
+the default will change to `False` in 0.15. Saves without
+a pickle sidecar do not require this option.
+
+Examples
+
+```
+>>> from tensordict import TensorDict
+>>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
+>>> td.memmap("./saved_td")
+>>> td_load = TensorDict.load_memmap("./saved_td")
+>>> assert (td == td_load).all()
+```
+
+This method also allows loading nested tensordicts.
+
+Examples
+
+```
+>>> nested = TensorDict.load_memmap("./saved_td/nested")
+>>> assert nested["e"] == 0
+```
+
+A tensordict can also be loaded on "meta" device or, alternatively,
+as a fake tensor.
+
+Examples
+
+```
+>>> import tempfile
+>>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
+>>> with tempfile.TemporaryDirectory() as path:
+... td.save(path)
+... td_load = TensorDict.load_memmap(path, device="meta")
+... print("meta:", td_load)
+... from torch._subclasses import FakeTensorMode
+... with FakeTensorMode():
+... td_load = TensorDict.load_memmap(path)
+... print("fake:", td_load)
+meta: TensorDict(
+ fields={
+ a: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False),
+ b: TensorDict(
+ fields={
+ c: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=meta,
+ is_shared=False)},
+ batch_size=torch.Size([]),
+ device=meta,
+ is_shared=False)
+fake: TensorDict(
+ fields={
+ a: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+ b: TensorDict(
+ fields={
+ c: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=cpu,
+ is_shared=False)},
+ batch_size=torch.Size([]),
+ device=cpu,
+ is_shared=False)
+```
+
+load_state_dict(*state_dict: dict[str, Any]*, *strict=True*, *assign=False*, *from_flatten=None*)
+
+Loads a state_dict into the tensorclass.
+
+Supports both the new format (logical keys with `_metadata`) and the
+legacy format (`_tensordict`/`_non_tensordict` wrapper keys).
+
+maybe_dense_stack(*dim: int = 0*, ***, *out=None*, ***kwargs*)
+
+Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
+
+See `maybe_dense_stack()` for details.
+
+memmap(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Any
+
+Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
+
+Parameters:
+
+- **prefix** (*str*) - directory prefix where the memory-mapped tensors will
+be stored. The directory tree structure will mimic the tensordict's.
+If `prefix` ends with `".tdz"` (or `archive=True` is
+passed), a single-file archive is written instead of a
+directory: a standard zip file whose entries replicate the
+memmap directory layout. See `archive` below.
+- **copy_existing** (*bool*) - If False (default), an exception will be raised if an
+entry in the tensordict is already a tensor stored on disk
+with an associated file, but is not saved in the correct
+location according to prefix.
+If `True`, any existing Tensor will be copied to the new location.
+
+Keyword Arguments:
+
+- **num_threads** (*int**,**optional*) - the number of threads used to write the memmap
+tensors. Defaults to 0.
+- **return_early** (*bool**,**optional*) - if `True` and `num_threads>0`,
+the method will return a future of the tensordict.
+- **share_non_tensor** (*bool**,**optional*) - if `True`, the non-tensor data will be
+shared between the processes and writing operation (such as inplace update
+or set) on any of the workers within a single node will update the value
+on all other workers. If the number of non_tensor leaves is high (e.g.,
+sharing large stacks of non-tensor data) this may result in OOM or similar
+errors. Defaults to `False`.
+- **existsok** (*bool**,**optional*) - if `False`, an exception will be raised if a tensor already
+exists in the same path. Defaults to `True`.
+- **robust_key** (*bool**,**optional*) - if `True` (default), uses robust key encoding that safely
+handles keys with path separators and special characters. If `False`,
+uses legacy behavior (keys used as-is). If `None`, uses the default
+robust behavior.
+- **archive** (*bool**,**optional*) - if `True`, `prefix` designates a
+single file rather than a directory and the tensordict is
+written as a memmap archive: a zip file mirroring the memmap
+directory tree, with tensor payloads stored uncompressed and
+aligned so that `load_memmap()` can memory-map the file
+and expose every leaf as a zero-copy view. If `None`
+(default), archive mode is enabled when `prefix` ends with
+`".tdz"`. The result of `load_memmap()` on an archive
+behaves like the result of `from_consolidated()`: all
+leaves are views into a single storage, and in-place writes do
+not propagate to the file. Archives and memmap directories are
+mutually convertible with `pack_memmap()` /
+`unpack_memmap()` (or any zip tool). Note that
+archives are written sequentially (single data pass) and
+`num_threads` has no effect on them.
+- **compression** (*str**or**int**,**optional*) - compression for archive
+entries (`"stored"`, `"deflate"`, `"bzip2"`, `"lzma"`
+or a `zipfile` constant). Defaults to `"stored"`
+(uncompressed), which is what enables zero-copy loading.
+Compressed archives load correctly but leaves are
+decompressed in memory on access. Only valid in archive mode.
+
+The TensorDict is then locked, meaning that any writing operations that
+isn't in-place will throw an exception (eg, rename, set or remove an
+entry).
+Once the tensordict is unlocked, the memory-mapped attribute is turned to `False`,
+because cross-process identity is not guaranteed anymore.
+
+Returns:
+
+A new tensordict with the tensors stored on disk if `return_early=False`,
+otherwise a `TensorDictFuture` instance.
+
+Note
+
+Serialising in this fashion might be slow with deeply nested tensordicts, so
+it is not recommended to call this method inside a training loop.
+
+memmap_(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*) → Any
+
+Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
+
+Parameters:
+
+- **prefix** (*str*) - directory prefix where the memory-mapped tensors will
+be stored. The directory tree structure will mimic the tensordict's.
+- **copy_existing** (*bool*) - If False (default), an exception will be raised if an
+entry in the tensordict is already a tensor stored on disk
+with an associated file, but is not saved in the correct
+location according to prefix.
+If `True`, any existing Tensor will be copied to the new location.
+
+Keyword Arguments:
+
+- **num_threads** (*int**,**optional*) - the number of threads used to write the memmap
+tensors. Defaults to 0.
+- **return_early** (*bool**,**optional*) - if `True` and `num_threads>0`,
+the method will return a future of the tensordict. The resulting
+tensordict can be queried using future.result().
+- **share_non_tensor** (*bool**,**optional*) - if `True`, the non-tensor data will be
+shared between the processes and writing operation (such as inplace update
+or set) on any of the workers within a single node will update the value
+on all other workers. If the number of non-tensor leaves is high (e.g.,
+sharing large stacks of non-tensor data) this may result in OOM or similar
+errors. Defaults to `False`.
+- **existsok** (*bool**,**optional*) - if `False`, an exception will be raised if a tensor already
+exists in the same path. Defaults to `True`.
+- **robust_key** (*bool**,**optional*) - if `True` (default), uses robust key encoding that safely
+handles keys with path separators and special characters. If `False`,
+uses legacy behavior (keys used as-is). If `None`, uses the default
+robust behavior.
+
+The TensorDict is then locked, meaning that any writing operations that
+isn't in-place will throw an exception (eg, rename, set or remove an
+entry).
+Once the tensordict is unlocked, the memory-mapped attribute is turned to `False`,
+because cross-process identity is not guaranteed anymore.
+
+Returns:
+
+self if `return_early=False`, otherwise a `TensorDictFuture` instance.
+
+Note
+
+Serialising in this fashion might be slow with deeply nested tensordicts, so
+it is not recommended to call this method inside a training loop.
+
+memmap_like(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *existsok: bool = True*, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*) → Any
+
+Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
+
+Parameters:
+
+- **prefix** (*str*) - directory prefix where the memory-mapped tensors will
+be stored. The directory tree structure will mimic the tensordict's.
+If `prefix` ends with `".tdz"` (or `archive=True` is
+passed), a preallocated single-file archive is created
+instead. See `archive` below.
+- **copy_existing** (*bool*) - If False (default), an exception will be raised if an
+entry in the tensordict is already a tensor stored on disk
+with an associated file, but is not saved in the correct
+location according to prefix.
+If `True`, any existing Tensor will be copied to the new location.
+
+Keyword Arguments:
+
+- **num_threads** (*int**,**optional*) - the number of threads used to write the memmap
+tensors. Defaults to 0.
+- **return_early** (*bool**,**optional*) - if `True` and `num_threads>0`,
+the method will return a future of the tensordict.
+- **share_non_tensor** (*bool**,**optional*) - if `True`, the non-tensor data will be
+shared between the processes and writing operation (such as inplace update
+or set) on any of the workers within a single node will update the value
+on all other workers. If the number of non-tensor leaves is high (e.g.,
+sharing large stacks of non-tensor data) this may result in OOM or similar
+errors. Defaults to `False`.
+- **existsok** (*bool**,**optional*) - if `False`, an exception will be raised if a tensor already
+exists in the same path. Defaults to `True`.
+- **robust_key** (*bool**,**optional*) - if `True` (default), uses robust key encoding that safely
+handles keys with path separators and special characters. If `False`,
+uses legacy behavior (keys used as-is). If `None`, uses the default
+robust behavior.
+- **archive** (*bool**,**optional*) - if `True`, `prefix` designates a
+single file and a preallocated, zero-filled memmap archive is
+created and loaded back with
+`load_memmap(prefix, mode="r+")`: the returned tensordict
+writes through to the archive. If `None` (default), archive
+mode is enabled when `prefix` ends with `".tdz"`.
+In-place writes leave the zip per-entry checksums stale; call
+`refresh_archive_checksums()` before handing
+the archive to tools that verify them. Nested tensors are not
+supported in this mode.
+
+The TensorDict is then locked, meaning that any writing operations that
+isn't in-place will throw an exception (eg, rename, set or remove an
+entry).
+Once the tensordict is unlocked, the memory-mapped attribute is turned to `False`,
+because cross-process identity is not guaranteed anymore.
+
+Returns:
+
+A new `TensorDict` instance with data stored as memory-mapped tensors if `return_early=False`,
+otherwise a `TensorDictFuture` instance.
+
+Note
+
+This is the recommended method to write a set of large buffers
+on disk, as `memmap_()` will copy the information, which can
+be slow for large content.
+
+Examples
+
+```
+>>> td = TensorDict({
+... "a": torch.zeros((3, 64, 64), dtype=torch.uint8),
+... "b": torch.zeros(1, dtype=torch.int64),
+... }, batch_size=[]).expand(1_000_000) # expand does not allocate new memory
+>>> buffer = td.memmap_like("/path/to/dataset")
+```
+
+memmap_refresh_(***, *allow_pickle: bool | None = None*)
+
+Refreshes the content of the memory-mapped tensordict if it has a [`saved_path`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.saved_path).
+
+This method will raise an exception if no path is associated with it.
+
+Parameters:
+
+**allow_pickle** (*bool**,**optional*) - whether pickled non-tensor fields
+may be loaded. See `load_memmap()`.
+
+save(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Any
+
+Saves the tensordict to disk.
+
+This function is a proxy to `memmap()`.
+
+select(**keys*, *inplace: bool = False*, *strict: bool = True*, *as_tensordict: bool = False*)
+
+TensorClass-specific select that supports `as_tensordict`.
+
+set(*key: NestedKey*, *value: Any*, *inplace: bool = False*, *non_blocking: bool = False*)
+
+Sets a new key-value pair.
+
+Parameters:
+
+- **key** (*str**,**tuple**of**str*) - name of the key to be set.
+If tuple of str it is equivalent to chained calls of getattr
+followed by a final setattr.
+- **value** (*Any*) - value to be stored in the tensorclass
+- **inplace** (*bool**,**optional*) - if `True`, set will tentatively try to
+update the value in-place. If `False` or if the key isn't present,
+the value will be simply written at its destination.
+
+Returns:
+
+self
+
+stack(*dim: int = 0*, ***, *out=None*)
+
+Stacks tensordicts into a single tensordict along the given dimension.
+
+This call is equivalent to calling [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) but is compatible with torch.compile.
+
+state_dict(*destination=None*, *prefix=''*, *keep_vars=False*, *flatten=True*) → dict[str, Any]
+
+Returns a state_dict with logical keys, matching TensorDictBase conventions.
+
+Tensor fields appear as data keys. Non-tensor fields (strings, ints, etc.)
+and the tensorclass type are stored in `_metadata`. This replaces the
+legacy `_tensordict`/`_non_tensordict` wrapper format.
+
+to_tensordict(***, *retain_none: bool | None = None*) → [TensorDict](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict)
+
+Convert the tensorclass into a regular TensorDict.
+
+Makes a copy of all entries. Memmap and shared memory tensors are converted to
+regular tensors.
+
+Parameters:
+
+**retain_none** (*bool*) - if `True`, the `None` values will be written in the
+tensordict. Otherwise they will be discrarded. Default: `True`.
+
+Returns:
+
+A new TensorDict object containing the same values as the tensorclass.
+
+unbind(*dim: int*)
+
+Returns a tuple of indexed tensorclass instances unbound along the indicated dimension.
+
+Resulting tensorclass instances will share the storage of the initial tensorclass instance.
+
+---
+
 # SFTLoss
 
 *class*torchrl.objectives.llm.SFTLoss(**args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/llm/sft.html#SFTLoss)
@@ -270133,6 +273121,37 @@ Examples
 >>> k3_kl_token_estimate(log_prob, log_prob)
 tensor([0., 0., 0., 0.])
 ```
+
+---
+
+# reward_model_loss
+
+*class*torchrl.objectives.llm.reward_model_loss(*chosen_scores: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *rejected_scores: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *reduction: Literal['mean', 'sum', 'none']*)[[source]](../../_modules/torchrl/objectives/llm/reward.html#reward_model_loss)
+
+Compute the Bradley-Terry pairwise reward-model loss.
+
+The loss is computed as `-log_sigmoid(chosen_scores - rejected_scores)`. It is
+small when the reward model assigns a higher score to the chosen response than to
+the rejected one, and large otherwise.
+
+\[\text{loss} = -\log\sigma(r_\theta(x, y_c) - r_\theta(x, y_r))\]
+
+Parameters:
+
+- **chosen_scores** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the scalar scores assigned to the chosen
+responses. Must have shape `[B]`.
+- **rejected_scores** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the scalar scores assigned to the rejected
+responses. Must have shape `[B]`.
+- **reduction** (*Literal**[**"mean"**,**"sum"**,**"none"**]*) - the reduction to apply to the loss.
+
+Returns:
+
+The Bradley-Terry loss.
+
+References
+
+- Ralph Allan Bradley, Milton E. Terry, 1952. "Rank Analysis of Incomplete Block
+Designs: I. The Method of Paired Comparisons".
 
 ---
 
@@ -283505,6 +286524,7 @@ in the rollout loop
 
 - [GRPO, DAPO, CISPO](llms.html#grpo-dapo-cispo)
 - [SFT](llms.html#sft)
+- [Reward Model Training](llms.html#reward-model-training)
 - [Distillation](llms.html#distillation)
 - [TRL Interoperability](llms.html#trl-interoperability)
 - [torchrl.modules package](modules.html)
@@ -284604,6 +287624,13 @@ LLM post-training requires specialized loss functions that are adapted to the un
 | --- | --- |
 | [`SFTLossOutput`](generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput)(loss_sft[, loss_kl_to_ref, ...]) | |
 
+### Reward Model Training
+
+| [`reward_model_loss`](generated/torchrl.objectives.llm.reward_model_loss.html#torchrl.objectives.llm.reward_model_loss)(chosen_scores, ...) | Compute the Bradley-Terry pairwise reward-model loss. |
+| --- | --- |
+| [`RewardModelLoss`](generated/torchrl.objectives.llm.RewardModelLoss.html#torchrl.objectives.llm.RewardModelLoss)(*args, **kwargs) | Bradley-Terry reward-model training loss for RLHF. |
+| [`RewardModelLossOutput`](generated/torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput)(loss_reward_model[, ...]) | |
+
 ### Distillation
 
 | [`DistillationLoss`](generated/torchrl.objectives.llm.DistillationLoss.html#torchrl.objectives.llm.DistillationLoss)(*args, **kwargs) | Token-level knowledge-distillation loss for LLM policies. |
@@ -284827,6 +287854,13 @@ Specialized loss functions for LLM training.
 | [`SFTLoss`](generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss)(*args, **kwargs) | Supervised fine-tuning loss. |
 | --- | --- |
 | [`SFTLossOutput`](generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput)(loss_sft[, loss_kl_to_ref, ...]) | |
+
+## Reward Model Training
+
+| [`reward_model_loss`](generated/torchrl.objectives.llm.reward_model_loss.html#torchrl.objectives.llm.reward_model_loss)(chosen_scores, ...) | Compute the Bradley-Terry pairwise reward-model loss. |
+| --- | --- |
+| [`RewardModelLoss`](generated/torchrl.objectives.llm.RewardModelLoss.html#torchrl.objectives.llm.RewardModelLoss)(*args, **kwargs) | Bradley-Terry reward-model training loss for RLHF. |
+| [`RewardModelLossOutput`](generated/torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput)(loss_reward_model[, ...]) | |
 
 ## Distillation
 
