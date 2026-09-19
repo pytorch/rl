@@ -32,7 +32,7 @@ def main():
             collector,
             name="ray_collector",
             schedule=Every.counter("frames", 100),
-            workers="both",
+            stats_kwargs={"workers": "both"},
         )
 
         # Run the collection loop

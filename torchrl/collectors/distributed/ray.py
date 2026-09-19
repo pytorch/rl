@@ -10,7 +10,7 @@ import threading
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import torch
 import torch.nn as nn
@@ -1019,6 +1019,12 @@ class RayCollector(BaseCollector):
             other_params = dict(other_params)  # Make a copy to avoid mutating original
             other_params["worker_idx"] = i
 
+            # Read-only stats must remain reachable while the default actor
+            # queue is busy collecting. Keep state-changing calls serialized.
+            remote_config = dict(remote_config)
+            concurrency_groups = dict(remote_config.get("concurrency_groups") or {})
+            concurrency_groups.setdefault("_torchrl_stats", 1)
+            remote_config["concurrency_groups"] = concurrency_groups
             cls = self.collector_class.as_remote(remote_config).remote
             worker_policy = policy[i] if isinstance(policy, Sequence) else policy
             collector = self._make_collector(
@@ -1104,12 +1110,13 @@ class RayCollector(BaseCollector):
         """Returns a cheap, serializable snapshot of the collector's progress.
 
         See :meth:`~torchrl.collectors.BaseCollector.stats` for the general
-        contract. Worker snapshots are requested from all remote collectors
-        concurrently, one RPC per worker bounded by ``timeout``; a worker
-        whose request fails or does not reply in time is counted as dead and
-        skipped. Note that, unlike multiprocessing collectors, every call
-        (including ``workers="aggregate"``) contacts each remote collector to
-        derive ``"workers_alive"`` and ``"worker_frames"``.
+        contract. Worker snapshots use a dedicated actor concurrency group,
+        so they do not queue behind collection. They are requested from all
+        remote collectors concurrently, one RPC per worker bounded by
+        ``timeout``; a worker whose request fails or does not reply in time
+        is counted as dead and skipped. Unlike multiprocessing collectors,
+        every call (including ``workers="aggregate"``) contacts each remote
+        collector to derive ``"workers_alive"`` and ``"worker_frames"``.
 
         Args:
             workers (str, optional): controls the worker view. With
@@ -1146,7 +1153,10 @@ class RayCollector(BaseCollector):
                 stats["completed"] = bool(self.collected_frames >= self.total_frames)
         remote_collectors = self.remote_collectors
         stats["workers"] = len(remote_collectors)
-        futures = [collector.stats.remote() for collector in remote_collectors]
+        futures = [
+            collector.stats.options(concurrency_group="_torchrl_stats").remote()
+            for collector in remote_collectors
+        ]
         ready = set()
         if futures:
             ready_list, _ = ray.wait(futures, num_returns=len(futures), timeout=timeout)
