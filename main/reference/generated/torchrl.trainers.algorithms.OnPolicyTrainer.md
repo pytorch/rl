@@ -77,10 +77,13 @@ Default: "reward".
 - **observation_key** (*NestedKey**,**optional*) - Observation key used for logging. Default: "observation".
 - **telemetry** (*"minimal"**or**"standard"**,**optional*) - Diagnostic telemetry level.
 `"minimal"` preserves the legacy logging set and performs no
-additional metric collection. `"standard"` also records frame,
+additional metric collection. `"standard"` records frame,
 episode, terminal, reward, optimizer, throughput, collector and replay
 diagnostics under the `training/` logger namespace. Missing optional
-fields are omitted. Default: `"standard"`.
+fields are omitted. Legacy reward and terminal metric aliases are
+emitted only in minimal mode. In async mode, reward summaries use
+replay samples; episode and terminal metrics require a collected
+batch and are omitted. Default: `"standard"`.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 

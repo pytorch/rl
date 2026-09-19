@@ -35637,7 +35637,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f10ab89fbf0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f35709372e0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -49377,7 +49377,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f10ae5ed940>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f3571c31940>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -279486,10 +279486,13 @@ Default: "reward".
 - **observation_key** (*NestedKey**,**optional*) - Observation key used for logging. Default: "observation".
 - **telemetry** (*"minimal"**or**"standard"**,**optional*) - Diagnostic telemetry level.
 `"minimal"` preserves the legacy logging set and performs no
-additional metric collection. `"standard"` also records frame,
+additional metric collection. `"standard"` records frame,
 episode, terminal, reward, optimizer, throughput, collector and replay
 diagnostics under the `training/` logger namespace. Missing optional
-fields are omitted. Default: `"standard"`.
+fields are omitted. Legacy reward and terminal metric aliases are
+emitted only in minimal mode. In async mode, reward summaries use
+replay samples; episode and terminal metrics require a collected
+batch and are omitted. Default: `"standard"`.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -291724,10 +291727,17 @@ are available. Optional metrics are omitted when the collected batch does not
 contain enough information to compute them; for example, complete-episode
 returns require trajectory identifiers and reset markers.
 
+Standard mode uses `training/rewards/{min,mean,std,max}` for transition reward
+summaries, without emitting legacy reward or terminal aliases. Synchronous
+training summarizes the collected batch. Fully asynchronous training summarizes
+valid transitions in replay samples instead, since no collected batch reaches
+the learner. Episode and terminal metrics are omitted in that mode: replay slices
+may be incomplete or carry artificial boundaries used for advantage estimation.
+
 Set `telemetry="minimal"` to retain the legacy metric set without querying
 collector or replay statistics or computing the additional reductions. Legacy
-metric names such as `r_training` and `done_percentage` are unchanged in
-both modes.
+metric names such as `r_training` and `done_percentage` are emitted only in
+minimal mode.
 
 | [`OnPolicyTrainer`](generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer)(*args, **kwargs) | Shared implementation for on-policy trainers (PPO, A2C, REINFORCE). |
 | --- | --- |
