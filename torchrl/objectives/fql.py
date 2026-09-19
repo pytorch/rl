@@ -18,7 +18,6 @@ from torchrl.objectives.utils import (
     dispatch_value_estimator,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 class FQLLoss(LossModule):
@@ -96,25 +95,33 @@ class FQLLoss(LossModule):
         self.q_aggregation = q_aggregation
         self.normalize_q_loss = normalize_q_loss
         self.reduction = reduction
-        self.qvalue_vmap = _vmap_func(
-            self.qvalue_network, in_dims=(None, 0), randomness=self.vmap_randomness
-        )
+        self.set_vmap_randomness(self.vmap_randomness)
 
     @property
     def in_keys(self):
         keys = self.tensor_keys
-        return list(
-            dict.fromkeys(
-                [
-                    keys.observation,
-                    keys.action,
-                    *self.qvalue_network.in_keys,
-                    ("next", keys.observation),
-                    ("next", keys.reward),
-                    ("next", keys.done),
-                    ("next", keys.terminated),
-                ]
-            )
+        current = [keys.observation, keys.action, *self.qvalue_network.in_keys]
+        following = [
+            ("next", key)
+            for key in [*current, keys.reward, keys.done, keys.terminated]
+            if key != keys.action
+        ]
+        return list(dict.fromkeys(current + following))
+
+    def set_vmap_randomness(self, value):
+        if value not in ("error", "same", "different"):
+            raise ValueError("vmap randomness must be 'error', 'same' or 'different'")
+        self._vmap_randomness = value
+        self.qvalue_vmap = _vmap_func(
+            self.qvalue_network, in_dims=(None, 0), randomness=value
+        )
+
+    def reduce_loss(self, loss, tensordict, *, reduction=None):
+        return self._reduce_loss(
+            loss,
+            tensordict,
+            reduction=reduction,
+            weights=self._maybe_get_priority_weight(tensordict),
         )
 
     def flow_loss(self, tensordict):
@@ -126,7 +133,7 @@ class FQLLoss(LossModule):
         with self.flow_policy_params.to_module(self.flow_policy):
             velocity = self.flow_policy.velocity(observation, interpolated, time)
         loss = (velocity - (action - noise)).square().mean(-1)
-        return self._reduce_loss(loss, tensordict=tensordict)
+        return self.reduce_loss(loss, tensordict)
 
     def actor_loss(self, tensordict):
         observation = tensordict.get(self.tensor_keys.observation)
@@ -136,19 +143,18 @@ class FQLLoss(LossModule):
         with self.actor_network_params.to_module(self.actor_network):
             action = self.actor_network(observation, noise, clamp=False)
         distillation = (action - target_action).square().mean(-1)
-        actor_td = tensordict.select(*self.qvalue_network.in_keys, strict=False)
+        actor_td = tensordict.select(*self.qvalue_network.in_keys)
         actor_td.set(self.tensor_keys.action, action.clamp(-1, 1))
         # Frozen critic weights still transmit gradients to the sampled action.
         qvalue = self.qvalue_vmap(actor_td, self.qvalue_network_params.detach())
         qvalue = qvalue.get(self.tensor_keys.value).squeeze(-1).mean(0)
         q_loss = -qvalue
         if self.normalize_q_loss:
-            q_loss = q_loss / qvalue.detach().abs().mean().clamp_min(
-                torch.finfo(qvalue.dtype).eps
+            scale = self.reduce_loss(
+                qvalue.detach().abs(), tensordict, reduction="mean"
             )
-        loss = self._reduce_loss(
-            self.alpha * distillation + q_loss, tensordict=tensordict
-        )
+            q_loss = q_loss / scale.clamp_min(torch.finfo(qvalue.dtype).eps)
+        loss = self.reduce_loss(self.alpha * distillation + q_loss, tensordict)
         return loss, {
             "distillation_loss": distillation.detach(),
             "q_loss": q_loss.detach(),
@@ -158,7 +164,7 @@ class FQLLoss(LossModule):
         keys = self.tensor_keys
         td = tensordict.clone(False)
         with torch.no_grad():
-            next_td = td.get("next").clone(False)
+            next_td = td.get("next")
             with self.actor_network_params.to_module(self.actor_network):
                 action = self.actor_network(next_td.get(keys.observation))
             next_td.set(keys.action, action)
@@ -169,15 +175,11 @@ class FQLLoss(LossModule):
             )
             td.set(("next", keys.value), next_value)
             target = self.value_estimator.value_estimate(td).squeeze(-1)
-        prediction = (
-            self.qvalue_vmap(
-                td.select(*self.qvalue_network.in_keys), self.qvalue_network_params
-            )
-            .get(keys.value)
-            .squeeze(-1)
+        prediction = self.qvalue_vmap(
+            td.select(*self.qvalue_network.in_keys), self.qvalue_network_params
         )
-        error = (prediction - target).square()
-        loss = self._reduce_loss(error.mean(0), tensordict=tensordict)
+        error = (prediction.get(keys.value).squeeze(-1) - target).square()
+        loss = self.reduce_loss(error.mean(0), tensordict)
         return loss, {"td_error": error.detach().max(0).values, "target_value": target}
 
     @dispatch
@@ -206,18 +208,14 @@ class FQLLoss(LossModule):
         return result
 
     def make_value_estimator(self, value_type=None, **hyperparams):
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return super().make_value_estimator(value_type, **hyperparams)
-        dispatch_value_estimator(
-            self,
-            self.default_value_estimator if value_type is None else value_type,
-            supported=(ValueEstimators.TD0,),
-            tensor_keys={
-                name: getattr(self.tensor_keys, name)
-                for name in ("value", "reward", "done", "terminated")
-            },
-            value_network=None,
-            **hyperparams,
-        )
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
+        if value_type is not None:
+            dispatch_value_estimator(
+                self,
+                value_type,
+                supported=(ValueEstimators.TD0,),
+                value_network=None,
+                **hp,
+            )
+        self._forward_value_estimator_keys()
+        return self
