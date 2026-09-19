@@ -1169,7 +1169,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "batch_size not specified. Configure it on the replay buffer "
                 "or pass it to can_sample()."
             )
-        with self._replay_lock:
+        # Structured samplers read multiple metadata columns. Keep the snapshot
+        # consistent with process-shared writers, just as in _sample().
+        with self._replay_lock, self._write_lock:
             return self._sampler.can_sample(self._storage, batch_size)
 
     @_maybe_delay_init
@@ -1238,7 +1240,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                     )
                 if cancel_event is not None and cancel_event.is_set():
                     return False
-                with self._replay_lock:
+                with self._replay_lock, self._write_lock:
                     if self._sampler.can_sample(self._storage, min_items):
                         return True
                 wait_time = None

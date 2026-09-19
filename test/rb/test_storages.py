@@ -51,6 +51,7 @@ from torchrl.data import (
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     SamplerWithoutReplacement,
+    SliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
     _MEMMAP_STORAGE_REGISTRY,
@@ -918,6 +919,24 @@ def test_storage_save_hook(tmpdir):
     assert observed["is_full"] is False
 
 
+class _PausingTrajectoryStorage(LazyTensorStorage):
+    """Expose a partial record write until the test releases the producer."""
+
+    def __init__(self):
+        super().__init__(max_size=8, shared_init=True)
+        self.partial_write = mp.Event()
+        self.release_write = mp.Event()
+        self.pause_write = False
+
+    def set(self, cursor, data, *, set_cursor=True):
+        if self.pause_write:
+            super().set(cursor, data.select(("episode", "id")), set_cursor=False)
+            self.partial_write.set()
+            if not self.release_write.wait(timeout=30):
+                raise TimeoutError("Test did not release the partial replay write.")
+        return super().set(cursor, data, set_cursor=set_cursor)
+
+
 class TestSharedStorageInit:
     def worker(self, rb, worker_id, queue):
         length = len(rb)
@@ -1057,6 +1076,61 @@ class TestSharedStorageInit:
         assert results == [True]
         assert rb.stats()["sample_calls"] == 1
         assert rb.stats()["samples_returned"] == 2
+
+    @pytest.mark.parametrize("wait", [False, True])
+    def test_shared_trajectory_readiness_during_overwrite(self, wait):
+        storage = _PausingTrajectoryStorage()
+        rb = TensorDictReplayBuffer(
+            storage=storage,
+            sampler=SliceSampler(
+                num_slices=1,
+                traj_key=("episode", "id"),
+                step_key=("episode", "step"),
+                fragmented=True,
+                output_layout="batch_time",
+            ),
+            batch_size=4,
+        ).share(True)
+        rb.extend(
+            TensorDict(
+                {
+                    ("episode", "id"): torch.arange(2).repeat_interleave(4),
+                    ("episode", "step"): torch.arange(4).repeat(2),
+                },
+                [8],
+            )
+        )
+        storage.pause_write = True
+        data = TensorDict(
+            {
+                ("episode", "id"): torch.ones(4, dtype=torch.long),
+                ("episode", "step"): torch.arange(4, 8),
+            },
+            [4],
+        )
+        process = mp.Process(target=rb.extend, args=(data,))
+        process.start()
+        release = threading.Timer(1.0, storage.release_write.set)
+        try:
+            assert storage.partial_write.wait(timeout=30)
+            # Until the step column is written, the first four slots falsely
+            # duplicate episode 1, steps 0..3 in the second half of storage.
+            release.start()
+            if wait:
+                assert rb.wait_until_sampleable(timeout=5)
+            else:
+                assert rb.can_sample()
+        finally:
+            storage.release_write.set()
+            release.cancel()
+            process.join(timeout=30)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+        assert process.exitcode == 0
+        sample = rb.sample()
+        assert (sample["episode", "id"] == 1).all()
+        assert (sample["episode", "step"].diff(dim=-1) == 1).all()
 
     def test_shared_rate_limited_replay_unblocks_after_worker_write(self):
         storage = LazyTensorStorage(max_size=8, shared_init=True)
