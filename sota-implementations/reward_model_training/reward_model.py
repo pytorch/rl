@@ -40,7 +40,6 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from transformers import PreTrainedTokenizerBase
 from utils import (
     get_vocab_size,
-    log_metrics,
     make_dataset,
     make_optimizer,
     make_replay_buffer,
@@ -108,6 +107,9 @@ def main(cfg: DictConfig) -> None:
                 "group": cfg.logger.group_name,
             },
         )
+        training_logger = logger.with_prefix("training")
+        evaluation_logger = logger.with_prefix("evaluation")
+        timing_logger = logger.with_prefix("timing")
 
     torch.manual_seed(int(cfg.seed))
     device = (
@@ -211,13 +213,13 @@ def main(cfg: DictConfig) -> None:
             acc_val = loss_out.accuracy.item()
             pbar.set_postfix(loss=f"{loss_val:.4f}", acc=f"{acc_val:.3f}")
             if logger is not None:
-                metrics_to_log = {
-                    "train/loss": loss_val,
-                    "train/accuracy": acc_val,
-                    "train/grad_norm": grad_norm.item(),
+                training_metrics = {
+                    "loss": loss_val,
+                    "accuracy": acc_val,
+                    "grad_norm": grad_norm.item(),
                 }
-                metrics_to_log.update(timeit.todict(prefix="time"))
-                log_metrics(logger, metrics_to_log, it)
+                training_logger.log_metrics(training_metrics, it)
+                timing_logger.log_metrics(timeit.todict(), it)
 
         if eval_iter > 0 and eval_iters > 0 and it % eval_iter == 0:
             val_loss, val_acc = evaluate()
@@ -226,7 +228,9 @@ def main(cfg: DictConfig) -> None:
             )
             # Logged at eval cadence so eval metrics are never dropped when
             # eval_iter is not a multiple of log_interval.
-            log_metrics(logger, {"eval/loss": val_loss, "eval/accuracy": val_acc}, it)
+            if logger is not None:
+                evaluation_metrics = {"loss": val_loss, "accuracy": val_acc}
+                evaluation_logger.log_metrics(evaluation_metrics, it)
 
         if save_iter > 0 and it % save_iter == 0:
             _save_export(score_network, tokenizer, cfg.export.save_dir, step=it)

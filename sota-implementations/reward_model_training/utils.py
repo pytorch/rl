@@ -304,10 +304,3 @@ def _maybe_freeze_backbone(score_network: TensorDictModule, freeze_frac: float) 
     num_freeze = int(freeze_frac * len(layers))
     for layer in layers[:num_freeze]:
         layer.requires_grad_(False)
-
-
-def log_metrics(logger, metrics: dict, step: int) -> None:
-    if logger is None:
-        return
-    for key, value in metrics.items():
-        logger.log_scalar(key, value, step)
