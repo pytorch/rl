@@ -13,7 +13,7 @@ uv=.cache/fql-bootstrap/bin/uv
     setuptools setuptools-scm wheel ninja cmake 'pybind11[global]' numpy \
     pre-commit autoflake pytest scipy psutil \
     -r sota-implementations/fql/requirements.txt
-"$uv" pip install --python .venv/bin/python --no-build-isolation -e .
+"$uv" pip install --python .venv/bin/python --no-sources --no-build-isolation -e .
 .venv/bin/python -c 'import torch; assert torch.cuda.is_available(), "CUDA is required"; print(torch.cuda.get_device_properties(0))'
 mkdir -p outputs/fql
 "$uv" pip freeze --python .venv/bin/python > outputs/fql/environment.txt

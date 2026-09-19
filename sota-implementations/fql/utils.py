@@ -42,7 +42,7 @@ class SuccessReader(default_info_dict_reader):
 
 
 def wrap_environment(raw_env, cfg):
-    env = GymWrapper(raw_env)
+    env = GymWrapper(raw_env, device="cpu")
     if cfg.dataset.name:
         env.set_info_dict_reader(SuccessReader(["success"]))
     return TransformedEnv(
