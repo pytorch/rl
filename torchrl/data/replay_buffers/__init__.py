@@ -24,6 +24,7 @@ from .query import (
 )
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
+    BlockingReplayBuffer,
     ConditionalUpdateResult,
     PrioritizedReplayBuffer,
     RateLimitedReplayBuffer,
@@ -79,6 +80,7 @@ from .writers import (
 )
 
 __all__ = [
+    "BlockingReplayBuffer",
     "filter_trajectories",
     "iter_trajectories",
     "traj",

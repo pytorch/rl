@@ -19,6 +19,7 @@ from _rb_common import OLD_TORCH, ReplayBufferRNG, TensorDictReplayBufferRNG
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl._utils import rl_warnings
 from torchrl.data import (
+    BlockingReplayBuffer,
     PrioritizedReplayBuffer,
     RateLimitedReplayBuffer,
     ReplayBuffer,
@@ -1158,6 +1159,47 @@ class TestReplayBufferConsumption:
                 writer=WriterWithoutWriteAt(),
                 consume_after_n_samples=1,
             )
+
+
+class TestBlockingReplayBuffer:
+    def test_extend_is_atomic_and_unblocks_after_consumption(self):
+        rb = BlockingReplayBuffer(storage=LazyTensorStorage(3))
+        rb.extend(torch.arange(3))
+
+        with pytest.raises(TimeoutError, match="write capacity"):
+            rb.extend(torch.arange(3, 5), timeout=0)
+        assert rb.stats()["write_count"] == 3
+
+        started = threading.Event()
+        completed = threading.Event()
+
+        def write():
+            started.set()
+            rb.extend(torch.arange(3, 5), timeout=5)
+            completed.set()
+
+        thread = threading.Thread(target=write)
+        thread.start()
+        assert started.wait(timeout=1)
+        assert not completed.wait(timeout=0.05)
+        rb.sample(2)
+        assert completed.wait(timeout=1)
+        thread.join(timeout=1)
+
+        assert rb.stats()["write_count"] == 5
+        assert len(rb) == 3
+
+    def test_cancelled_write_does_not_modify_buffer(self):
+        rb = BlockingReplayBuffer(storage=LazyTensorStorage(1))
+        rb.add(torch.tensor(0))
+        cancel_event = threading.Event()
+        cancel_event.set()
+
+        with pytest.raises(RuntimeError, match="cancelled"):
+            rb.add(torch.tensor(1), cancel_event=cancel_event)
+
+        assert rb.stats()["write_count"] == 1
+        assert rb[:].item() == 0
 
 
 @pytest.mark.parametrize("size", [10, 15, 20])

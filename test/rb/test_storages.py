@@ -41,6 +41,7 @@ from tensordict import (
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 from torchrl.data import (
+    BlockingReplayBuffer,
     CompressedListStorage,
     RateLimitedReplayBuffer,
     ReplayBuffer,
@@ -962,6 +963,27 @@ class TestSharedStorageInit:
         queue.put(sample["x"].tolist())
         completed.set()
 
+    def blocking_writer(self, rb, first_write, completed, queue):
+        rb.add(TensorDict({"x": torch.tensor(1)}, batch_size=[]))
+        first_write.set()
+        index = rb.add(
+            TensorDict({"x": torch.tensor(2)}, batch_size=[]),
+            timeout=30,
+        )
+        queue.put(index)
+        completed.set()
+
+    def cancellable_blocking_writer(self, rb, started, cancel_event, completed, queue):
+        started.set()
+        try:
+            rb.add(
+                TensorDict({"x": torch.tensor(1)}, batch_size=[]),
+                cancel_event=cancel_event,
+            )
+        except RuntimeError as error:
+            queue.put(str(error))
+        completed.set()
+
     def revision_worker(self, rb, queue):
         rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
         queue.put(rb.storage._mutation_revision)
@@ -1164,6 +1186,53 @@ class TestSharedStorageInit:
         assert stats["write_count"] == 2
         assert stats["samples_returned"] == 2
         assert stats["sample_wait_count"] >= 1
+
+    def test_shared_blocking_replay_observes_worker_growth_and_consumption(self):
+        storage = LazyTensorStorage(max_size=2, shared_init=True)
+        rb = BlockingReplayBuffer(storage=storage, batch_size=1, shared=True)
+        rb.add(TensorDict({"x": torch.tensor(0)}, batch_size=[]))
+        first_write = mp.Event()
+        completed = mp.Event()
+        queue = mp.Queue()
+        process = mp.Process(
+            target=self.blocking_writer,
+            args=(rb, first_write, completed, queue),
+        )
+        process.start()
+        assert first_write.wait(timeout=30)
+        assert not completed.wait(timeout=0.05)
+
+        rb.sample()
+
+        assert completed.wait(timeout=30)
+        process.join(timeout=30)
+        assert process.exitcode == 0
+        assert queue.get(timeout=1) in (0, 1)
+        assert len(rb) == 2
+
+    def test_shared_blocking_replay_write_can_be_cancelled(self):
+        storage = LazyTensorStorage(max_size=1, shared_init=True)
+        rb = BlockingReplayBuffer(storage=storage, shared=True)
+        rb.add(TensorDict({"x": torch.tensor(0)}, batch_size=[]))
+        started = mp.Event()
+        cancel_event = mp.Event()
+        completed = mp.Event()
+        queue = mp.Queue()
+        process = mp.Process(
+            target=self.cancellable_blocking_writer,
+            args=(rb, started, cancel_event, completed, queue),
+        )
+        process.start()
+        assert started.wait(timeout=30)
+        assert not completed.wait(timeout=0.05)
+
+        cancel_event.set()
+
+        assert completed.wait(timeout=30)
+        process.join(timeout=30)
+        assert process.exitcode == 0
+        assert "cancelled" in queue.get(timeout=1)
+        assert rb.stats()["write_count"] == 1
 
     def test_shared_init_reconciles_non_cpu_device(self):
         """Shared init installs a CPU memmap backing; a non-cpu storage device

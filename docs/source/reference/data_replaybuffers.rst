@@ -41,6 +41,7 @@ discovery and buffer lifecycle.
 
     ReplayBuffer
     RateLimitedReplayBuffer
+    BlockingReplayBuffer
     OfflineToOnlineReplayBuffer
     ReplayBufferEnsemble
     PrioritizedReplayBuffer
@@ -86,6 +87,37 @@ converted into rates without scanning storage; the round-robin write counter
 uses 64-bit storage for long-running jobs. Circular-buffer capacity is not a
 producer-backpressure signal: after warm-up, writes continue to overwrite old
 slots even though physical utilization remains 100 percent.
+
+
+Blocking producer admission
+----------------------------
+
+:class:`~torchrl.data.BlockingReplayBuffer` is the bounded alternative to a
+circular replay buffer. It uses the existing consuming-sampler behavior and
+blocks a producer when a write would overwrite records that remain sampleable.
+Sampling frees capacity, and each ``extend`` is admitted in full rather than
+partially written. The storage capacity is the only bound; configurable
+watermarks and drop policies are intentionally outside this API.
+
+.. code-block:: python
+
+    import torch
+    from torchrl.data import BlockingReplayBuffer, LazyTensorStorage
+
+    replay = BlockingReplayBuffer(
+        storage=LazyTensorStorage(1024),
+        batch_size=64,
+        consume_after_n_samples=1,
+    )
+    replay.extend(torch.arange(1024))
+    batch = replay.sample()
+    replay.extend(torch.arange(64), timeout=5.0)
+
+For a shared replay buffer, producers should pass their collector shutdown
+event as ``cancel_event`` so a blocked write can exit during teardown. Remote
+service backends, prefetching, custom samplers, replay transforms,
+multidimensional storage, and compilable writers are not supported by this
+specialized buffer.
 
 
 Replay-ratio limiting

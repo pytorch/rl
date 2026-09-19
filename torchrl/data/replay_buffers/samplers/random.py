@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import multiprocessing
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -115,11 +116,34 @@ class ConsumingSampler(Sampler):
         self.max_sample_count = int(max_sample_count)
         self._sample_count = None
         self._live_mask = None
-        self._known_storage_len = 0
+        self._known_storage_len_value = 0
         self._free_indices = None
         self._free_head = 0
+        self._shared = False
         self._ran_out = False
         self._remaining_batches = 0
+
+    @property
+    def _known_storage_len(self) -> int:
+        value = getattr(
+            self,
+            "_known_storage_len_value",
+            self.__dict__.get("_known_storage_len", 0),
+        )
+        if hasattr(value, "get_lock"):
+            with value.get_lock():
+                return int(value.value)
+        return int(value)
+
+    @_known_storage_len.setter
+    def _known_storage_len(self, value: int) -> None:
+        target = getattr(self, "_known_storage_len_value", None)
+        if hasattr(target, "get_lock"):
+            with target.get_lock():
+                target.value = int(value)
+        else:
+            self.__dict__.pop("_known_storage_len", None)
+            self._known_storage_len_value = int(value)
 
     @staticmethod
     def _storage_device(storage: Storage | None):
@@ -192,6 +216,26 @@ class ConsumingSampler(Sampler):
 
         if self._live_mask is not None and self._sample_count is not None:
             self._live_mask &= self._sample_count < self.max_sample_count
+
+    def _share_memory(self, storage: Storage) -> None:
+        device = self._storage_device(storage)
+        if device is not None and torch.device(device).type != "cpu":
+            raise ValueError(
+                "A shared ConsumingSampler requires CPU replay-buffer storage."
+            )
+        capacity = getattr(storage, "max_size", None)
+        if not isinstance(capacity, (int, np.integer)) or capacity < 1:
+            raise ValueError(
+                "A shared ConsumingSampler requires storage with a finite capacity."
+            )
+        self._ensure_state(storage, min_capacity=int(capacity))
+        if not self._shared:
+            self._sample_count.share_memory_()
+            self._live_mask.share_memory_()
+            self._known_storage_len_value = multiprocessing.Value(
+                "q", self._known_storage_len
+            )
+            self._shared = True
 
     def _compact_free_indices(self) -> None:
         if self._free_indices is None:
@@ -291,6 +335,11 @@ class ConsumingSampler(Sampler):
         self, storage: Storage | None = None, max_count: int | None = None
     ) -> torch.Tensor:
         self._ensure_state(storage)
+        if self._shared:
+            # The free-list is a process-local cache. Rebuild it from the
+            # shared masks so a producer can observe consumption performed by
+            # another process.
+            self._rebuild_free_indices()
         if (
             self._live_mask is None
             or self._sample_count is None
@@ -360,8 +409,12 @@ class ConsumingSampler(Sampler):
         self._ran_out = value
 
     def _empty(self):
-        self._sample_count = None
-        self._live_mask = None
+        if self._shared and self._sample_count is not None:
+            self._sample_count.zero_()
+            self._live_mask.zero_()
+        else:
+            self._sample_count = None
+            self._live_mask = None
         self._known_storage_len = 0
         self._free_indices = None
         self._free_head = 0
@@ -397,9 +450,15 @@ class ConsumingSampler(Sampler):
         def _clone(value):
             return value.clone() if isinstance(value, torch.Tensor) else value
 
+        was_shared = self._shared
         self.max_sample_count = int(state_dict["max_sample_count"])
         self._sample_count = _clone(state_dict["_sample_count"])
         self._live_mask = _clone(state_dict["_live_mask"])
+        if was_shared:
+            if self._sample_count is not None:
+                self._sample_count.share_memory_()
+            if self._live_mask is not None:
+                self._live_mask.share_memory_()
         self._known_storage_len = int(state_dict["_known_storage_len"])
         self._free_indices = _clone(state_dict.get("_free_indices"))
         self._free_head = int(state_dict.get("_free_head", 0))
