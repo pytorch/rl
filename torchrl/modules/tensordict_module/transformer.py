@@ -4,17 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
 
-from tensordict import TensorDictBase, unravel_key_list
+from tensordict import TensorDictBase, unravel_key, unravel_key_list
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from torch import nn
 
 from torchrl._utils import is_compiling
+from torchrl.data.tensor_specs import Composite
 from torchrl.modules.tensordict_module.rnn import recurrent_mode
+
+if TYPE_CHECKING:
+    from torchrl.envs import TensorDictPrimer
 
 
 def positions_from_is_init(is_init: torch.Tensor) -> torch.Tensor:
@@ -395,7 +399,7 @@ class TransformerModule(ModuleBase):
     :class:`~torchrl.modules.set_recurrent_mode` context manager, exactly as
     for the recurrent modules.
 
-    Unlike the recurrent modules, no state travels in the tensordict. The
+    With the reference :class:`CausalTransformer`, no state travels in the tensordict. The
     key/value cache is inference state owned by the module instance: it is
     allocated by the backbone on the first cached step, indexed by batch
     position (one stream per environment of the batch), cleared wherever
@@ -406,6 +410,19 @@ class TransformerModule(ModuleBase):
     observations and features only, never a cache; the training path reads
     ``is_init`` to rebuild positions and a block-diagonal causal mask over the
     window.
+
+    An experimental explicit-state backbone can instead expose
+    ``forward_state(features, state, is_init, *, recurrent) -> (out, next_state)``
+    and a ``state_spec`` :class:`~torchrl.data.Composite`. The wrapper passes
+    flattened environment batches with shape ``[B, T]`` and preserves the
+    returned state container. Use ``in_keys=[features, state, "is_init"]`` and
+    ``out_keys=[out, ("next", state)]`` (including nested state keys), and attach
+    :meth:`make_tensordict_primer`. This path stores state in trajectories and
+    never reads or updates the module-owned cache. In recurrent mode the
+    backbone must initialize from stored state at the window start and each
+    ``is_init`` boundary, including boundaries inserted by a slice sampler.
+    The episode-alignment and ``max_seq_len`` restrictions below concern the
+    reference module-owned-cache path.
 
     Args:
         input_size (int, optional): number of input features. Unused if
@@ -440,7 +457,7 @@ class TransformerModule(ModuleBase):
         default_recurrent_mode (bool, optional): the recurrent mode when not
             overridden by the :class:`~torchrl.modules.set_recurrent_mode`
             context manager. Defaults to ``False``.
-        validate_windows (bool, optional): whether the window path checks that
+        validate_windows (bool, optional): whether the module-owned-cache window path checks that
             every row starts with ``is_init=True`` and raises otherwise. The
             check is data-dependent: under :func:`torch.compile` it costs one
             graph break, and ``fullgraph=True`` rejects it at compile time.
@@ -536,14 +553,15 @@ class TransformerModule(ModuleBase):
                     "A transformer instance cannot be passed along with size "
                     "arguments."
                 )
-            for attr in _BACKBONE_ATTRIBUTES:
+            explicit_state = callable(getattr(transformer, "forward_state", None))
+            for attr in () if explicit_state else _BACKBONE_ATTRIBUTES:
                 if not hasattr(transformer, attr):
                     raise ValueError(
                         "The transformer backbone must expose a "
                         f"{attr!r} attribute; see CausalTransformer for the "
                         "backbone contract."
                     )
-            for method in _BACKBONE_METHODS:
+            for method in () if explicit_state else _BACKBONE_METHODS:
                 if not callable(getattr(transformer, method, None)):
                     raise ValueError(
                         "The transformer backbone must implement "
@@ -581,14 +599,36 @@ class TransformerModule(ModuleBase):
             out_keys = [out_key]
         in_keys = unravel_key_list(in_keys)
         out_keys = unravel_key_list(out_keys)
-        if not isinstance(in_keys, (tuple, list)) or (
-            len(in_keys) != 1 and not (len(in_keys) == 2 and in_keys[-1] == "is_init")
+        self._explicit_state = callable(getattr(transformer, "forward_state", None))
+        if self._explicit_state:
+            if len(in_keys) == 2 and in_keys[-1] != "is_init":
+                in_keys = [*in_keys, "is_init"]
+            if len(in_keys) != 3 or in_keys[-1] != "is_init" or len(out_keys) != 2:
+                raise ValueError(
+                    "Explicit state requires in_keys=[features, state, 'is_init'] "
+                    "and out_keys=[features, ('next', state)]."
+                )
+            state_key = in_keys[1]
+            state_key = (state_key,) if isinstance(state_key, str) else state_key
+            if out_keys[1] != ("next", *state_key):
+                raise ValueError(
+                    "The state output key must be ('next', *state_input_key)."
+                )
+        if (
+            not isinstance(in_keys, (tuple, list))
+            or (
+                len(in_keys) != 1
+                and not (len(in_keys) == 2 and in_keys[-1] == "is_init")
+            )
+            and not self._explicit_state
         ):
             raise ValueError(
                 "TransformerModule expects 1 input: a value (and potentially "
                 f"an 'is_init' marker). Got in_keys {in_keys} instead."
             )
-        if not isinstance(out_keys, (tuple, list)) or len(out_keys) != 1:
+        if not self._explicit_state and (
+            not isinstance(out_keys, (tuple, list)) or len(out_keys) != 1
+        ):
             raise ValueError(
                 "TransformerModule expects 1 output: a value. Got out_keys "
                 f"{out_keys} instead."
@@ -604,6 +644,21 @@ class TransformerModule(ModuleBase):
         self._positions: torch.Tensor | None = None
         self._cache_dtype: torch.dtype | None = None
         self._weights_version: tuple[tuple[int, int], ...] | None = None
+
+    def make_tensordict_primer(self) -> TensorDictPrimer | None:
+        """Initialize explicit recurrent state using the backbone's composite spec.
+
+        Module-owned caches do not require an environment primer.
+        """
+        if not self._explicit_state:
+            return None
+        # EnvBase imports the module package before transforms are initialized.
+        from torchrl.envs import TensorDictPrimer
+
+        return TensorDictPrimer(
+            Composite({unravel_key(self.in_keys[1]): self.transformer.state_spec}),
+            expand_specs=True,
+        )
 
     @property
     def recurrent_mode(self):
@@ -639,6 +694,9 @@ class TransformerModule(ModuleBase):
         once new weights are applied, so every stream restarts instead of
         attending to keys and values computed with the previous weights. Call
         it yourself after updating the parameters by other means.
+
+        Explicit caller-owned state is preserved. Stored activations may be
+        stale relative to the new weights, as with other recurrent replay.
         """
         self.reset_cache()
 
@@ -695,12 +753,14 @@ class TransformerModule(ModuleBase):
     def forward(self, tensordict: TensorDictBase):
         """Run the transformer, honouring ``is_init`` for state resets.
 
-        With ``recurrent_mode=False``, one step is processed against the
+        For the module-owned cache, with ``recurrent_mode=False`` one step is processed against the
         module's cache, whose rows are cleared where ``is_init`` is set; this
         path is inference only and runs under :func:`torch.no_grad`. With
         ``recurrent_mode=True``, a full ``(B, T)`` window is processed under a
         block-diagonal causal mask built from ``is_init``; the cache is
         neither read nor written, and gradients flow through the window.
+        Explicit-state backbones receive the stored state in both modes;
+        only their single-step collection path runs under ``torch.no_grad``.
         """
         shape = tensordict.shape
         if self.recurrent_mode:
@@ -723,7 +783,19 @@ class TransformerModule(ModuleBase):
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         value = tensordict_shaped.get(self.in_keys[0])
 
-        if self.recurrent_mode:
+        if self._explicit_state:
+            state = tensordict_shaped.get(self.in_keys[1])
+            if self.recurrent_mode:
+                out, next_state = self.transformer.forward_state(
+                    value, state, is_init, recurrent=True
+                )
+            else:
+                with torch.no_grad():
+                    out, next_state = self.transformer.forward_state(
+                        value, state, is_init, recurrent=False
+                    )
+            tensordict_shaped.set(self.out_keys[1], next_state)
+        elif self.recurrent_mode:
             if self.validate_windows and not is_init[..., 0].all():
                 raise ValueError(
                     "TransformerModule(recurrent_mode=True) expects "

@@ -77,7 +77,9 @@ def get_primers_from_module(module, warn=True, strict=True):
         if not hasattr(submodule, "make_tensordict_primer"):
             return
         try:
-            primers.append(submodule.make_tensordict_primer())
+            primer = submodule.make_tensordict_primer()
+            if primer is not None:
+                primers.append(primer)
         except Exception as e:
             if strict:
                 raise
