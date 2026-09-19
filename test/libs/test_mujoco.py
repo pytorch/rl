@@ -21,7 +21,14 @@ import torch
 
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
-from torchrl.data import Binary, Composite, Unbounded
+from torchrl.collectors import MultiCollector
+from torchrl.data import (
+    Binary,
+    Composite,
+    LazyTensorStorage,
+    TensorDictReplayBuffer,
+    Unbounded,
+)
 from torchrl.envs import (
     AntEnv,
     Compose,
@@ -1131,6 +1138,46 @@ class TestMujoco:
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
         return module
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_worker_replay_preserves_recurrent_state(self, tmp_path):
+        recipe = pytest.importorskip("examples.microduck.speed_benchmark")
+        config = {
+            "microduck_root": str(self._write_microduck_fixture(tmp_path)),
+            "backend": "mujoco",
+            "num_envs": 4,
+            "max_episode_steps": 4,
+            "tasks": [{"preset": "standing_task"}],
+        }
+        env = recipe.make_env({**config, "num_envs": 1, "parallel": False})
+        actor, _ = recipe.make_models(env, hidden_size=8)
+        replay = TensorDictReplayBuffer(storage=LazyTensorStorage(128))
+        collector = MultiCollector(
+            recipe.make_worker_factories(config, 2, policy=actor),
+            policy=actor,
+            sync=True,
+            frames_per_batch=16,
+            total_frames=16,
+            replay_buffer=replay,
+            replay_write_mode="trajectory",
+            trajs_per_write=1,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            next(iter(collector))
+            batch = replay[:]
+            assert batch["global_traj_id"].unique().numel() == 4
+            assert batch["recurrent_state"].abs().sum() > 0
+            for trajectory_id in batch["global_traj_id"].unique():
+                trajectory = batch[batch["global_traj_id"].squeeze(-1) == trajectory_id]
+                trajectory = trajectory[trajectory["step_count"].squeeze(-1).argsort()]
+                torch.testing.assert_close(
+                    trajectory["recurrent_state"][1:],
+                    trajectory["next", "recurrent_state"][:-1],
+                )
+        finally:
+            collector.shutdown()
+            env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_example_gait_metrics_from_contacts(self, tmp_path):
