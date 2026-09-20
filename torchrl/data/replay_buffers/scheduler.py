@@ -42,8 +42,8 @@ class ParameterScheduler(ABC):
             )
         self.sampler = obj.sampler if isinstance(obj, ReplayBuffer) else obj
         self.param_name = param_name
-        self._min_val = min_value or float("-inf")
-        self._max_val = max_value or float("inf")
+        self._min_val = min_value if min_value is not None else float("-inf")
+        self._max_val = max_value if max_value is not None else float("inf")
         if not hasattr(self.sampler, self.param_name):
             raise ValueError(
                 f"Provided class {type(obj).__name__} does not have an attribute {param_name}"
