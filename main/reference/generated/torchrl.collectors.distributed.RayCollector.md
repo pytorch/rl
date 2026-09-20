@@ -595,12 +595,13 @@ stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*, ***, 
 Returns a cheap, serializable snapshot of the collector's progress.
 
 See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the general
-contract. Worker snapshots are requested from all remote collectors
-concurrently, one RPC per worker bounded by `timeout`; a worker
-whose request fails or does not reply in time is counted as dead and
-skipped. Note that, unlike multiprocessing collectors, every call
-(including `workers="aggregate"`) contacts each remote collector to
-derive `"workers_alive"` and `"worker_frames"`.
+contract. Worker snapshots use a dedicated actor concurrency group,
+so they do not queue behind collection. They are requested from all
+remote collectors concurrently, one RPC per worker bounded by
+`timeout`; a worker whose request fails or does not reply in time
+is counted as dead and skipped. Unlike multiprocessing collectors,
+every call (including `workers="aggregate"`) contacts each remote
+collector to derive `"workers_alive"` and `"worker_frames"`.
 
 Parameters:
 

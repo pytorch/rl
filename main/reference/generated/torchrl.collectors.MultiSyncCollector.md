@@ -939,23 +939,72 @@ stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → d
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
-See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the base
-entries. On top of those, multiprocessing collectors report
-`"workers"` (number of worker processes) and `"workers_alive"`.
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens. Collector
-progress is summed from parent-owned shared counter rows, so
-the call remains non-blocking while workers collect. With
-`"per_worker"` or `"both"`,
-each worker is queried through the control pipes and its
-snapshot is namespaced as `"worker_<idx>/<metric>"`; since
-this shares the control channel with other coordinator
-commands, it should not race with concurrent control calls
-such as weight updates issued from other threads.
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
 
 update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | dict | None = None*, ***, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/collectors/_multi_sync.html#MultiSyncCollector.update_policy_weights_)
 

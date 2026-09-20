@@ -446,7 +446,7 @@ Raises:
 
 **NotImplementedError** - If not implemented by a subclass.
 
-stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/collectors/_base.html#BaseCollector.stats)
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool][[source]](../../_modules/torchrl/collectors/_base.html#BaseCollector.stats)
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -485,8 +485,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 

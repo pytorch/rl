@@ -10779,7 +10779,7 @@ run on the writer thread. Iteration and background collection are
 mutually exclusive. Use `pause()` to quiesce collection and writes,
 and `async_shutdown()` to join the writer and surface its errors.
 
-stats() → dict[str, int | float | bool]
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -10818,8 +10818,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -11600,23 +11610,72 @@ stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → d
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
-See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the base
-entries. On top of those, multiprocessing collectors report
-`"workers"` (number of worker processes) and `"workers_alive"`.
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens. Collector
-progress is summed from parent-owned shared counter rows, so
-the call remains non-blocking while workers collect. With
-`"per_worker"` or `"both"`,
-each worker is queried through the control pipes and its
-snapshot is namespaced as `"worker_<idx>/<metric>"`; since
-this shares the control channel with other coordinator
-commands, it should not race with concurrent control calls
-such as weight updates issued from other threads.
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
 
 update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | dict | None = None*, ***, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, ***kwargs*) → None
 
@@ -12103,7 +12162,7 @@ Raises:
 
 **NotImplementedError** - If not implemented by a subclass.
 
-stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/collectors/_base.html#BaseCollector.stats)
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool][[source]](../../_modules/torchrl/collectors/_base.html#BaseCollector.stats)
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -12142,8 +12201,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -13208,7 +13277,7 @@ Returns:
 an ordered dictionary with fields `"policy_state_dict"` and
 "env_state_dict".
 
-stats() → dict[str, int | float | bool]
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -13247,8 +13316,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -14600,23 +14679,72 @@ stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → d
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
-See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the base
-entries. On top of those, multiprocessing collectors report
-`"workers"` (number of worker processes) and `"workers_alive"`.
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens. Collector
-progress is summed from parent-owned shared counter rows, so
-the call remains non-blocking while workers collect. With
-`"per_worker"` or `"both"`,
-each worker is queried through the control pipes and its
-snapshot is namespaced as `"worker_<idx>/<metric>"`; since
-this shares the control channel with other coordinator
-commands, it should not race with concurrent control calls
-such as weight updates issued from other threads.
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
 
 update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | dict | None = None*, ***, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/collectors/_multi_async.html#MultiAsyncCollector.update_policy_weights_)
 
@@ -15507,27 +15635,76 @@ Returns the state_dict of the data collector.
 
 Each field represents a worker containing its own state_dict.
 
-stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool][[source]](../../_modules/torchrl/collectors/_multi_base.html#MultiCollector.stats)
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
-See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the base
-entries. On top of those, multiprocessing collectors report
-`"workers"` (number of worker processes) and `"workers_alive"`.
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens. Collector
-progress is summed from parent-owned shared counter rows, so
-the call remains non-blocking while workers collect. With
-`"per_worker"` or `"both"`,
-each worker is queried through the control pipes and its
-snapshot is namespaced as `"worker_<idx>/<metric>"`; since
-this shares the control channel with other coordinator
-commands, it should not race with concurrent control calls
-such as weight updates issued from other threads.
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
 
 update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | dict | None = None*, ***, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/collectors/_multi_base.html#MultiCollector.update_policy_weights_)
 
@@ -16639,23 +16816,72 @@ stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → d
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
-See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the base
-entries. On top of those, multiprocessing collectors report
-`"workers"` (number of worker processes) and `"workers_alive"`.
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
 
 Parameters:
 
 **workers** (*str**,**optional*) - controls the worker view. With
 `"aggregate"` (default), only coordinator-side counters are
-reported and no worker communication happens. Collector
-progress is summed from parent-owned shared counter rows, so
-the call remains non-blocking while workers collect. With
-`"per_worker"` or `"both"`,
-each worker is queried through the control pipes and its
-snapshot is namespaced as `"worker_<idx>/<metric>"`; since
-this shares the control channel with other coordinator
-commands, it should not race with concurrent control calls
-such as weight updates issued from other threads.
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
 
 update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | dict | None = None*, ***, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/collectors/_multi_sync.html#MultiSyncCollector.update_policy_weights_)
 
@@ -17656,7 +17882,7 @@ Raises:
 
 **NotImplementedError** - If not implemented by a subclass.
 
-stats() → dict[str, int | float | bool]
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -17695,8 +17921,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -18289,7 +18525,7 @@ Raises:
 
 **NotImplementedError** - If not implemented by a subclass.
 
-stats() → dict[str, int | float | bool]
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -18328,8 +18564,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -19148,7 +19394,7 @@ Raises:
 
 **NotImplementedError** - If not implemented by a subclass.
 
-stats() → dict[str, int | float | bool]
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -19187,8 +19433,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -20056,12 +20312,13 @@ stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*, ***, 
 Returns a cheap, serializable snapshot of the collector's progress.
 
 See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the general
-contract. Worker snapshots are requested from all remote collectors
-concurrently, one RPC per worker bounded by `timeout`; a worker
-whose request fails or does not reply in time is counted as dead and
-skipped. Note that, unlike multiprocessing collectors, every call
-(including `workers="aggregate"`) contacts each remote collector to
-derive `"workers_alive"` and `"worker_frames"`.
+contract. Worker snapshots use a dedicated actor concurrency group,
+so they do not queue behind collection. They are requested from all
+remote collectors concurrently, one RPC per worker bounded by
+`timeout`; a worker whose request fails or does not reply in time
+is counted as dead and skipped. Unlike multiprocessing collectors,
+every call (including `workers="aggregate"`) contacts each remote
+collector to derive `"workers_alive"` and `"worker_frames"`.
 
 Parameters:
 
@@ -21049,7 +21306,7 @@ Returns:
 an ordered dictionary with fields `"policy_state_dict"` and
 "env_state_dict".
 
-stats() → dict[str, int | float | bool]
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -21088,8 +21345,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -21748,7 +22015,7 @@ Returns:
 an ordered dictionary with fields `"policy_state_dict"` and
 "env_state_dict".
 
-stats() → dict[str, int | float | bool]
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
 
 Returns a cheap, serializable snapshot of the collector's progress.
 
@@ -21787,8 +22054,18 @@ changing the cumulative entries. Checkpoints restore the cumulative
 entries but start the gauge at zero because collector checkpoints do
 not serialize the environment state or partial trajectory payloads.
 
-Multi-worker collectors extend this signature with a `workers`
-argument controlling aggregate versus per-worker views.
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
 
 Examples
 
@@ -35637,7 +35914,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f121cc3e070>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f40eb7a6b10>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -49377,7 +49654,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f121e9a1940>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f40ee39d940>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
