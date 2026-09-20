@@ -491,13 +491,9 @@ class ActionDiscretizer(Transform):
             ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
 
         """
-        result = torch.arange(
-            start=0.0,
-            end=1.0,
-            step=1 / nint,
-            dtype=self.dtype,
-            device=device,
-        )
+        # arange(0, 1, 1 / nint) can return nint + 1 values when 1 / nint
+        # does not accumulate to 1.0 exactly (e.g. nint=49), so index first
+        result = torch.arange(nint, dtype=self.dtype, device=device) / nint
         result_ = result
         if self.sampling in (
             self.SamplingStrategy.HIGH,
