@@ -1,3 +1,22 @@
+# Monitor Ray collection progress with Weights & Biases.
+#
+# This example collects 1,000 Pendulum transitions with a random policy on two
+# Ray workers. LoggerMonitor polls collector.stats() in a background thread in
+# the main process, which also writes the metrics to W&B. No logging code is
+# needed inside the collection loop or the remote workers.
+#
+# Polling runs every 0.5 seconds, with logging scheduled every 100 observed
+# frames. Passing stats_kwargs={"workers": "both"} includes aggregate counters
+# such as ray_collector/frames and worker counters such as
+# ray_collector/worker_0/frames. Ray serves stats on a separate concurrency group
+# so a long collection call does not block progress queries.
+#
+# Run with Ray, Gymnasium and W&B installed and W&B authentication configured:
+#     python examples/ray_wandb_monitor.py
+# To save logs locally without signing in:
+#     WANDB_MODE=offline python examples/ray_wandb_monitor.py
+# Short runs may finish between polls; the monitor logs final stats on exit.
+
 from __future__ import annotations
 
 import ray
