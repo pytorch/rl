@@ -154,7 +154,7 @@ class Actor(SafeModule):
         return Delta(action)
 
 
-class FlowMatchingPolicy(SafeModule):
+class FlowMatchingPolicy(TensorDictModule):
     """TensorDict policy that samples actions by Euler integration.
 
     Args:
@@ -210,7 +210,7 @@ class FlowMatchingPolicy(SafeModule):
         )
 
 
-class OneStepPolicy(SafeModule):
+class OneStepPolicy(TensorDictModule):
     """TensorDict policy distilled from a flow policy.
 
     Args:

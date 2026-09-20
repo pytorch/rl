@@ -523,7 +523,7 @@ def test_flow_policy_nested_keys_and_gradients(device, kind, compiled):
     observation = torch.tensor([[-2.0, 0.25], [0.5, 2.0]], device=device)
     noise = torch.zeros_like(observation, requires_grad=True)
     td = TensorDict({obs_key: observation, noise_key: noise}, [2])
-    assert isinstance(policy, SafeModule)
+    assert isinstance(policy, TensorDictModule)
     if compiled:
         torch._dynamo.reset()
         call = torch.compile(policy, backend="aot_eager", fullgraph=True)
