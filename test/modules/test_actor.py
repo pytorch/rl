@@ -28,6 +28,7 @@ from torchrl.envs import CatFrames, Compose, InitTracker, SerialEnv, Transformed
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     DiffusionActor,
+    FlowMatchingModel,
     FlowMatchingPolicy,
     MultiStepActorWrapper,
     OneStepPolicy,
@@ -454,128 +455,220 @@ def test_tanh_atanh(use_vmap, scale):
     torch.testing.assert_close(x.grad, torch.ones_like(x))
 
 
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("compiled", [False, True])
-@pytest.mark.parametrize("batch", [(), (2, 3)])
-@pytest.mark.parametrize("num_steps", [1, 2, 10])
-def test_flow_policy_euler(device, compiled, batch, num_steps):
-    network = nn.Linear(5, 2, bias=False, device=device, dtype=torch.float64)
-    with torch.no_grad():
-        network.weight.copy_(
-            torch.tensor([[1, 0, 1, 0, -8], [0, 1, 0, 1, 8]], device=device)
+class TestFlow:
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("compiled", [False, True])
+    @pytest.mark.parametrize("batch", [(), (2, 3)])
+    @pytest.mark.parametrize("num_steps", [1, 2, 10])
+    def test_euler(self, device, compiled, batch, num_steps):
+        network = nn.Linear(5, 2, bias=False, device=device, dtype=torch.float64)
+        with torch.no_grad():
+            network.weight.copy_(
+                torch.tensor([[1, 0, 1, 0, -8], [0, 1, 0, 1, 8]], device=device)
+            )
+        low = torch.tensor([-0.75, -1.5], device=device)
+        high = -low
+        policy = FlowMatchingPolicy(network, 2, num_steps, low=low, high=high)
+        observation = torch.tensor(
+            [2.0, -2.0], device=device, dtype=torch.float64
+        ).expand(*batch, 2)
+        noise = torch.tensor([0.0, 2.0], device=device, dtype=torch.float64).expand(
+            *batch, 2
         )
-    low = torch.tensor([-0.75, -1.5], device=device)
-    high = -low
-    policy = FlowMatchingPolicy(network, 2, num_steps, low=low, high=high)
-    observation = torch.tensor([2.0, -2.0], device=device, dtype=torch.float64).expand(
-        *batch, 2
-    )
-    noise = torch.tensor([0.0, 2.0], device=device, dtype=torch.float64).expand(
-        *batch, 2
-    )
-    td = TensorDict({"observation": observation, "noise": noise}, batch)
-    original = td.clone()
-    ratio = (1 + 1 / num_steps) ** num_steps
-    expected = (
-        ratio * noise
-        + (ratio - 1) * observation
-        + (ratio - 2) * torch.tensor([-8, 8], device=device)
-    ).clamp(low, high)
-    if compiled:
-        torch._dynamo.reset()
-        call = torch.compile(policy, backend="aot_eager", fullgraph=True)
-    else:
-        call = policy
-    with torch.no_grad():
-        result = call(td)
-    assert result is td
-    assert policy.in_keys == ["observation", "noise"]
-    assert policy.out_keys == ["action"]
-    torch.testing.assert_close(td["action"], expected)
-    torch.testing.assert_close(td.select("observation", "noise"), original)
+        td = TensorDict({"observation": observation, "noise": noise}, batch)
+        original = td.clone()
+        ratio = (1 + 1 / num_steps) ** num_steps
+        expected = (
+            ratio * noise
+            + (ratio - 1) * observation
+            + (ratio - 2) * torch.tensor([-8, 8], device=device)
+        ).clamp(low, high)
+        if compiled:
+            torch._dynamo.reset()
+            call = torch.compile(policy, backend="aot_eager", fullgraph=True)
+        else:
+            call = policy
+        with torch.no_grad():
+            result = call(td)
+        assert result is td
+        assert policy.in_keys == ["observation", "noise"]
+        assert policy.out_keys == ["action"]
+        torch.testing.assert_close(td["action"], expected)
+        torch.testing.assert_close(td.select("observation", "noise"), original)
 
-
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("kind", [FlowMatchingPolicy, OneStepPolicy])
-@pytest.mark.parametrize("compiled", [False, True])
-def test_flow_policy_nested_keys_and_gradients(device, kind, compiled):
-    network = nn.Linear(
-        5 if kind is FlowMatchingPolicy else 4, 2, bias=False, device=device
-    )
-    with torch.no_grad():
-        network.weight.zero_()
-        network.weight[:, :2].copy_(torch.eye(2, device=device))
-        if kind is OneStepPolicy:
-            network.weight[:, 2:].copy_(torch.eye(2, device=device))
-    obs_key, noise_key, action_key = (
-        ("agent", "obs"),
-        ("latent", "noise"),
-        ("agent", "action"),
-    )
-    policy = kind(
-        network,
-        2,
-        low=-0.5,
-        high=torch.tensor([0.4, 0.7], device=device),
-        in_keys=[obs_key, noise_key],
-        out_keys=[action_key],
-    )
-    observation = torch.tensor([[-2.0, 0.25], [0.5, 2.0]], device=device)
-    noise = torch.zeros_like(observation, requires_grad=True)
-    td = TensorDict({obs_key: observation, noise_key: noise}, [2])
-    assert isinstance(policy, TensorDictModule)
-    if compiled:
-        torch._dynamo.reset()
-        call = torch.compile(policy, backend="aot_eager", fullgraph=True)
-    else:
-        call = policy
-    action = call(td)[action_key]
-    torch.testing.assert_close(
-        action, torch.tensor([[-0.5, 0.25], [0.4, 0.7]], device=device)
-    )
-    action.sum().backward()
-    mask = torch.tensor([[0.0, 1.0], [0.0, 0.0]], device=device)
-    torch.testing.assert_close(noise.grad, mask)
-    torch.testing.assert_close(network.weight.grad[:, :2], mask.T @ observation)
-    if kind is OneStepPolicy:
-        noise.grad = None
-        network.zero_grad()
-        raw = policy.module(observation, noise, clamp=False)
-        torch.testing.assert_close(raw, observation)
-        raw.sum().backward()
-        torch.testing.assert_close(noise.grad, torch.ones_like(noise))
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("kind", [FlowMatchingPolicy, OneStepPolicy])
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_keys(self, device, kind, compiled):
+        network = nn.Linear(
+            5 if kind is FlowMatchingPolicy else 4, 2, bias=False, device=device
+        )
+        with torch.no_grad():
+            network.weight.zero_()
+            network.weight[:, :2].copy_(torch.eye(2, device=device))
+            if kind is OneStepPolicy:
+                network.weight[:, 2:].copy_(torch.eye(2, device=device))
+        obs_key, noise_key, action_key = (
+            ("agent", "obs"),
+            ("latent", "noise"),
+            ("agent", "action"),
+        )
+        policy = kind(
+            network,
+            2,
+            low=-0.5,
+            high=torch.tensor([0.4, 0.7], device=device),
+            in_keys=[obs_key, noise_key],
+            out_keys=[action_key],
+        )
+        observation = torch.tensor([[-2.0, 0.25], [0.5, 2.0]], device=device)
+        noise = torch.zeros_like(observation, requires_grad=True)
+        td = TensorDict({obs_key: observation, noise_key: noise}, [2])
+        assert isinstance(policy, TensorDictModule)
+        if compiled:
+            torch._dynamo.reset()
+            call = torch.compile(policy, backend="aot_eager", fullgraph=True)
+        else:
+            call = policy
+        action = call(td)[action_key]
         torch.testing.assert_close(
-            network.weight.grad[:, :2], observation.sum(0).expand(2, 2)
+            action, torch.tensor([[-0.5, 0.25], [0.4, 0.7]], device=device)
+        )
+        action.sum().backward()
+        mask = torch.tensor([[0.0, 1.0], [0.0, 0.0]], device=device)
+        torch.testing.assert_close(noise.grad, mask)
+        torch.testing.assert_close(network.weight.grad[:, :2], mask.T @ observation)
+        if kind is OneStepPolicy:
+            noise.grad = None
+            network.zero_grad()
+            raw = policy.module(observation, noise, clamp=False)
+            torch.testing.assert_close(raw, observation)
+            raw.sum().backward()
+            torch.testing.assert_close(noise.grad, torch.ones_like(noise))
+            torch.testing.assert_close(
+                network.weight.grad[:, :2], observation.sum(0).expand(2, 2)
+            )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("kind", [FlowMatchingPolicy, OneStepPolicy])
+    @pytest.mark.parametrize("in_keys", [None, ["observation"]])
+    def test_noise(self, device, kind, in_keys):
+        network = nn.Linear(
+            5 if kind is FlowMatchingPolicy else 4, 2, bias=False, device=device
+        )
+        with torch.no_grad():
+            network.weight.zero_()
+            if kind is OneStepPolicy:
+                network.weight[:, 2:].copy_(torch.eye(2, device=device))
+        policy = kind(network, 2, in_keys=in_keys)
+        observation = torch.zeros(4, 2, device=device)
+        td = TensorDict({"observation": observation}, [4])
+        torch.manual_seed(17)
+        expected = torch.randn_like(observation).clamp(-1, 1)
+        torch.manual_seed(17)
+        torch.testing.assert_close(policy(td)["action"], expected)
+        assert "noise" not in td
+        if in_keys is not None:
+            return
+        noise = torch.full_like(observation, 0.25)
+        td["noise"] = noise
+        torch.testing.assert_close(policy(td)["action"], noise)
+        torch.testing.assert_close(policy(observation, noise), noise)
+        torch.manual_seed(18)
+        expected = torch.randn_like(noise)
+        torch.manual_seed(18)
+        policy(td)
+        torch.testing.assert_close(torch.randn_like(noise), expected)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("compiled", [False, True])
+    @pytest.mark.parametrize("grad", [False, True])
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize("steps,unroll", [(1, 1), (2, 1), (5, 2), (10, 4), (3, 8)])
+    def test_parity(self, device, compiled, grad, dtype, steps, unroll):
+        torch.manual_seed(17)
+        network = nn.Sequential(
+            nn.Linear(7, 16, device=device, dtype=dtype),
+            nn.Tanh(),
+            nn.Linear(16, 2, device=device, dtype=dtype),
+        )
+        policy = FlowMatchingPolicy(network, 2, steps, unroll=unroll)
+        observation = (
+            torch.randn(3, 2, 4, device=device, dtype=dtype)
+            .transpose(0, 1)
+            .requires_grad_()
+        )
+        noise = torch.randn(2, 3, 2, device=device, dtype=dtype).requires_grad_()
+        expected = noise
+        for step in range(steps):
+            time = expected.new_full((*expected.shape[:-1], 1), step / steps)
+            expected = (
+                expected + network(torch.cat((observation, expected, time), -1)) / steps
+            )
+        expected = expected.clamp(
+            policy.module.low.to(expected), policy.module.high.to(expected)
+        )
+        torch._dynamo.reset()
+        call = torch.compile(policy, fullgraph=True) if compiled else policy
+        with torch.set_grad_enabled(grad):
+            actual = call(
+                TensorDict({"observation": observation, "noise": noise}, [2, 3])
+            )["action"]
+        torch.testing.assert_close(actual, expected)
+        if grad:
+            tensors = (observation, noise, *network.parameters())
+            for left, right in zip(
+                torch.autograd.grad(actual.square().sum(), tensors),
+                torch.autograd.grad(expected.square().sum(), tensors),
+            ):
+                torch.testing.assert_close(left, right)
+
+    @implement_for("torch", None, "2.14")
+    def test_scan(self):
+        pytest.skip("scan requires PyTorch 2.14")
+
+    @implement_for("torch", "2.14")
+    def test_scan(self):  # noqa: F811
+        policy = FlowMatchingModel(nn.Linear(5, 2), 2, num_steps=5, unroll=2)
+        observation = torch.zeros(3, 2, requires_grad=True)
+        noise = torch.zeros_like(observation, requires_grad=True)
+        action = policy(observation, noise)
+        pending = [action.grad_fn]
+        visited = set()
+        while pending:
+            node = pending.pop()
+            if node is None or node in visited:
+                continue
+            visited.add(node)
+            pending.extend(child for child, _ in node.next_functions)
+        assert any("ScanAutograd" in type(node).__name__ for node in visited)
+        with torch.no_grad():
+            explanation = torch._dynamo.explain(policy)(observation, noise)
+        assert explanation.graph_break_count == 0
+        assert any(
+            node.target == torch.ops.higher_order.scan
+            for graph in explanation.graphs
+            for node in graph.graph.nodes
         )
 
-
-@pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize("kind", [FlowMatchingPolicy, OneStepPolicy])
-def test_flow_policy_optional_noise(device, kind):
-    network = nn.Linear(
-        5 if kind is FlowMatchingPolicy else 4, 2, bias=False, device=device
+    @pytest.mark.parametrize(
+        "kwargs", [{"num_steps": 0}, {"unroll": 0}, {"unroll": -1}]
     )
-    with torch.no_grad():
-        network.weight.zero_()
-        if kind is OneStepPolicy:
-            network.weight[:, 2:].copy_(torch.eye(2, device=device))
-    policy = kind(network, 2)
-    observation = torch.zeros(4, 2, device=device)
-    td = TensorDict({"observation": observation}, [4])
-    torch.manual_seed(17)
-    expected = torch.randn_like(observation).clamp(-1, 1)
-    torch.manual_seed(17)
-    torch.testing.assert_close(policy(td)["action"], expected)
-    assert "noise" not in td
-    noise = torch.full_like(observation, 0.25)
-    td["noise"] = noise
-    torch.testing.assert_close(policy(td)["action"], noise)
-    torch.testing.assert_close(policy(observation, noise), noise)
-    torch.manual_seed(18)
-    expected = torch.randn_like(noise)
-    torch.manual_seed(18)
-    policy(td)
-    torch.testing.assert_close(torch.randn_like(noise), expected)
+    def test_steps(self, kwargs):
+        with pytest.raises(ValueError, match="must be positive"):
+            FlowMatchingPolicy(nn.Identity(), 2, **kwargs)
+
+    @pytest.mark.parametrize("kind", [FlowMatchingPolicy, OneStepPolicy])
+    @pytest.mark.parametrize("low,high", [(1, 1), (2, 1), ([-1, 2], 1)])
+    def test_bounds(self, kind, low, high):
+        with pytest.raises(ValueError, match="low.*high"):
+            kind(nn.Identity(), 2, low=low, high=high)
+
+    @pytest.mark.parametrize("kind", [FlowMatchingPolicy, OneStepPolicy])
+    @pytest.mark.parametrize("keys", [[], ["obs", "noise", "extra"]])
+    def test_invalid_keys(self, kind, keys):
+        with pytest.raises(ValueError, match="in_keys"):
+            kind(nn.Identity(), 2, in_keys=keys)
 
 
 class TestDiffusionActor:

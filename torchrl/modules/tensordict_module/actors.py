@@ -164,12 +164,16 @@ class FlowMatchingPolicy(TensorDictModule):
         num_steps (int, optional): Euler integration steps. Defaults to 10.
 
     Keyword Args:
+        unroll (int, optional): Euler steps per scan body on PyTorch 2.14+.
+            Defaults to 1. Larger values trade graph size for fewer iterations.
+            Ignored by the explicit-loop compatibility paths.
         low (float or Tensor, optional): lower action bound, broadcast over
-            actions. Defaults to -1.
+            actions. Must be strictly less than ``high``. Defaults to -1.
         high (float or Tensor, optional): upper action bound, broadcast over
             actions. Defaults to 1.
         in_keys (sequence of NestedKey, optional): observation and optional
-            noise keys, in that order. Defaults to ``["observation", "noise"]``.
+            noise keys, in that order. Must contain one or two keys.
+            Defaults to ``["observation", "noise"]``.
             Missing noise is sampled from a standard normal distribution.
         out_keys (sequence of NestedKey, optional): action output key.
             Defaults to ``["action"]``.
@@ -196,14 +200,22 @@ class FlowMatchingPolicy(TensorDictModule):
         action_dim: int,
         num_steps: int = 10,
         *,
+        unroll: int = 1,
         low: float | Tensor = -1.0,
         high: float | Tensor = 1.0,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ) -> None:
+        if in_keys is not None and len(in_keys) not in (1, 2):
+            raise ValueError("in_keys must contain observation and optionally noise")
         super().__init__(
             FlowMatchingModel(
-                velocity_network, action_dim, num_steps, low=low, high=high
+                velocity_network,
+                action_dim,
+                num_steps,
+                unroll=unroll,
+                low=low,
+                high=high,
             ),
             in_keys=["observation", "noise"] if in_keys is None else in_keys,
             out_keys=["action"] if out_keys is None else out_keys,
@@ -220,11 +232,12 @@ class OneStepPolicy(TensorDictModule):
 
     Keyword Args:
         low (float or Tensor, optional): lower action bound, broadcast over
-            actions. Defaults to -1.
+            actions. Must be strictly less than ``high``. Defaults to -1.
         high (float or Tensor, optional): upper action bound, broadcast over
             actions. Defaults to 1.
         in_keys (sequence of NestedKey, optional): observation and optional
-            noise keys, in that order. Defaults to ``["observation", "noise"]``.
+            noise keys, in that order. Must contain one or two keys.
+            Defaults to ``["observation", "noise"]``.
             Missing noise is sampled from a standard normal distribution.
         out_keys (sequence of NestedKey, optional): action output key.
             Defaults to ``["action"]``.
@@ -254,6 +267,8 @@ class OneStepPolicy(TensorDictModule):
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ) -> None:
+        if in_keys is not None and len(in_keys) not in (1, 2):
+            raise ValueError("in_keys must contain observation and optionally noise")
         super().__init__(
             OneStepModel(network, action_dim, low=low, high=high),
             in_keys=["observation", "noise"] if in_keys is None else in_keys,
