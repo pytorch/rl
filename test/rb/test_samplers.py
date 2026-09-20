@@ -3189,6 +3189,32 @@ def test_prioritized_slice_sampler_episodes(device):
     assert preferred.float().mean() > 0.95
 
 
+@pytest.mark.parametrize("as_tensor", [False, True])
+def test_parameter_scheduler_state_dict(as_tensor, tmp_path):
+    beta = torch.tensor(0.5) if as_tensor else 0.5
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=0.6, beta=beta, storage=ListStorage(max_size=10)
+    )
+    scheduler = StepScheduler(
+        rb, param_name="beta", gamma=0.1, mode="additive", max_value=1.0
+    )
+    scheduler.step()
+    scheduler.step()
+    # used to fail with "cannot pickle 'module' object" because of the backend entry
+    torch.save(scheduler.state_dict(), tmp_path / "scheduler.pt")
+    rb2 = TensorDictPrioritizedReplayBuffer(
+        alpha=0.6, beta=beta, storage=ListStorage(max_size=10)
+    )
+    scheduler2 = StepScheduler(
+        rb2, param_name="beta", gamma=0.1, mode="additive", max_value=1.0
+    )
+    scheduler2.load_state_dict(
+        torch.load(tmp_path / "scheduler.pt", weights_only=False)
+    )
+    assert scheduler2._step_cnt == 2
+    assert scheduler2.backend is (torch if as_tensor else np)
+
+
 @pytest.mark.parametrize("alpha", [0.6, torch.tensor(1.0)])
 @pytest.mark.parametrize("beta", [0.7, torch.tensor(0.1)])
 @pytest.mark.parametrize("gamma", [0.1])
