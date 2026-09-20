@@ -3290,6 +3290,35 @@ def test_prioritized_parameter_scheduler(
         scheduler.step()
 
 
+@pytest.mark.parametrize("as_tensor", [False, True])
+@pytest.mark.parametrize(
+    "param_name,init_value,gamma,bound,expected",
+    [
+        ("alpha", 0.5, -0.2, "min_value", [0.3, 0.1, 0.0, 0.0]),
+        ("beta", 0.0, 0.2, "max_value", [0.0, 0.0, 0.0, 0.0]),
+    ],
+)
+def test_parameter_scheduler_zero_bound(
+    as_tensor, param_name, init_value, gamma, bound, expected
+):
+    # A bound of 0 must clip the parameter and not be mistaken for the None default
+    if as_tensor:
+        init_value = torch.tensor(init_value)
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=init_value, beta=init_value, storage=ListStorage(max_size=10)
+    )
+    scheduler = StepScheduler(
+        rb, param_name=param_name, gamma=gamma, mode="additive", **{bound: 0}
+    )
+    for expected_value in expected:
+        scheduler.step()
+        value = getattr(rb.sampler, param_name)
+        assert torch.is_tensor(value) == as_tensor
+        torch.testing.assert_close(
+            torch.as_tensor(value).float(), torch.tensor(expected_value)
+        )
+
+
 class TestFindStartStopTraj:
     """Tests for the shared trajectory-boundary recovery utility.
 
