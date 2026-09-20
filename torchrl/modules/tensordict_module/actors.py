@@ -23,13 +23,14 @@ from tensordict.nn import (
 from tensordict.nn.distributions import Delta
 from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
-from torch import nn
+from torch import nn, Tensor
 from torch.distributions import Categorical
 
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _process_action_space_spec
 from torchrl.modules.distributions.discrete import OneHotCategorical
+from torchrl.modules.models.flow import FlowMatchingModel, OneStepModel
 from torchrl.modules.models.model_based import (
     _dreamer_v3_init,
     _unimix_probs,
@@ -151,6 +152,113 @@ class Actor(SafeModule):
         action = td_out.get(self.out_keys[0])
 
         return Delta(action)
+
+
+class FlowMatchingPolicy(SafeModule):
+    """TensorDict policy that samples actions by Euler integration.
+
+    Args:
+        velocity_network (nn.Module): maps concatenated observation, action and
+            scalar time to an action-sized velocity.
+        action_dim (int): number of action coordinates.
+        num_steps (int, optional): Euler integration steps. Defaults to 10.
+
+    Keyword Args:
+        low (float or Tensor, optional): lower action bound, broadcast over
+            actions. Defaults to -1.
+        high (float or Tensor, optional): upper action bound, broadcast over
+            actions. Defaults to 1.
+        in_keys (sequence of NestedKey, optional): observation and optional
+            noise keys, in that order. Defaults to ``["observation", "noise"]``.
+            Missing noise is sampled from a standard normal distribution.
+        out_keys (sequence of NestedKey, optional): action output key.
+            Defaults to ``["action"]``.
+
+    The tensor-only :class:`~torchrl.modules.FlowMatchingModel` is available as
+    ``module``. Clipping is applied after the final integration step.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import FlowMatchingPolicy
+        >>> policy = FlowMatchingPolicy(torch.nn.Linear(6, 2), action_dim=2)
+        >>> td = TensorDict(
+        ...     observation=torch.zeros(4, 3), noise=torch.zeros(4, 2),
+        ...     batch_size=[4],
+        ... )
+        >>> policy(td)["action"].shape
+        torch.Size([4, 2])
+    """
+
+    def __init__(
+        self,
+        velocity_network: nn.Module,
+        action_dim: int,
+        num_steps: int = 10,
+        *,
+        low: float | Tensor = -1.0,
+        high: float | Tensor = 1.0,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+    ) -> None:
+        super().__init__(
+            FlowMatchingModel(
+                velocity_network, action_dim, num_steps, low=low, high=high
+            ),
+            in_keys=["observation", "noise"] if in_keys is None else in_keys,
+            out_keys=["action"] if out_keys is None else out_keys,
+        )
+
+
+class OneStepPolicy(SafeModule):
+    """TensorDict policy distilled from a flow policy.
+
+    Args:
+        network (nn.Module): maps concatenated observation and Gaussian noise
+            directly to an action, without an output activation.
+        action_dim (int): number of action coordinates.
+
+    Keyword Args:
+        low (float or Tensor, optional): lower action bound, broadcast over
+            actions. Defaults to -1.
+        high (float or Tensor, optional): upper action bound, broadcast over
+            actions. Defaults to 1.
+        in_keys (sequence of NestedKey, optional): observation and optional
+            noise keys, in that order. Defaults to ``["observation", "noise"]``.
+            Missing noise is sampled from a standard normal distribution.
+        out_keys (sequence of NestedKey, optional): action output key.
+            Defaults to ``["action"]``.
+
+    The tensor-only :class:`~torchrl.modules.OneStepModel` is available as
+    ``module``; call ``module(observation, noise, clamp=False)`` for distillation.
+    Actions are clipped to ``[low, high]`` by default. Both flow policies sample
+    Gaussian noise even under deterministic exploration; pass noise for repeatability.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import OneStepPolicy
+        >>> policy = OneStepPolicy(torch.nn.Linear(5, 2), action_dim=2)
+        >>> td = TensorDict(observation=torch.zeros(4, 3), batch_size=[4])
+        >>> policy(td)["action"].shape
+        torch.Size([4, 2])
+    """
+
+    def __init__(
+        self,
+        network: nn.Module,
+        action_dim: int,
+        *,
+        low: float | Tensor = -1.0,
+        high: float | Tensor = 1.0,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+    ) -> None:
+        super().__init__(
+            OneStepModel(network, action_dim, low=low, high=high),
+            in_keys=["observation", "noise"] if in_keys is None else in_keys,
+            out_keys=["action"] if out_keys is None else out_keys,
+        )
 
 
 class ProbabilisticActor(SafeProbabilisticTensorDictSequential):

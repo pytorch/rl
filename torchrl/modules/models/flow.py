@@ -11,7 +11,7 @@ from torch import nn, Tensor
 
 from torchrl._utils import implement_for, is_compiling
 
-__all__ = ["FlowMatchingPolicy", "OneStepPolicy"]
+__all__ = ["FlowMatchingModel", "OneStepModel"]
 
 
 @implement_for("torch", None, "2.14")
@@ -27,8 +27,8 @@ def get_flow_scan() -> Callable | None:  # noqa: F811
 FLOW_SCAN = get_flow_scan()
 
 
-class FlowMatchingPolicy(nn.Module):
-    """Conditional flow policy for bounded continuous actions.
+class FlowMatchingModel(nn.Module):
+    """Tensor-only Euler sampler for bounded continuous actions.
 
     Args:
         velocity_network (nn.Module): maps concatenated observation, action and
@@ -42,8 +42,8 @@ class FlowMatchingPolicy(nn.Module):
         high (float or Tensor, optional): upper action bound, broadcast over
             actions. Defaults to 1.
 
-    Outputs are clipped to ``[low, high]`` after integration. Wrap in
-    :class:`~torchrl.modules.Actor` for TensorDict and collector support.
+    Outputs are clipped to ``[low, high]`` after integration.
+    :class:`~torchrl.modules.FlowMatchingPolicy` provides the TensorDict interface.
     On PyTorch 2.14+, compiled sampling without gradients uses a scan loop.
     """
 
@@ -99,8 +99,8 @@ class FlowMatchingPolicy(nn.Module):
         return action.clamp(self.low.to(action), self.high.to(action))
 
 
-class OneStepPolicy(nn.Module):
-    """Noise-conditioned policy distilled from a flow policy.
+class OneStepModel(nn.Module):
+    """Tensor-only network for one-step flow distillation.
 
     Args:
         network (nn.Module): maps concatenated observation and Gaussian noise
@@ -113,8 +113,8 @@ class OneStepPolicy(nn.Module):
         high (float or Tensor, optional): upper action bound, broadcast over
             actions. Defaults to 1.
 
-    Outputs are clipped to ``[low, high]``. Wrap in :class:`~torchrl.modules.Actor`
-    for TensorDict and collector support. Both policies sample Gaussian noise
+    :class:`~torchrl.modules.OneStepPolicy` provides the TensorDict interface.
+    Outputs are clipped to ``[low, high]``. Both models sample Gaussian noise
     even under deterministic exploration; pass explicit noise for repeatability.
     """
 
