@@ -113,12 +113,23 @@ is available when a consumer needs the targets on their own.
   executes, including exploration state such as the ``eps`` buffer of
   :class:`~torchrl.modules.EGreedyModule`. This is often a wrapper around
   the training model rather than a second network.
-* **Environment and transform state.** Observation-norm statistics,
-  frame-stack buffers, step counters. A collector ``state_dict`` stores
-  the env/transform state of a :class:`~torchrl.envs.TransformedEnv`.
-* **Collector frame count.** ``frames`` and ``iter``, so schedules
+* **Registered transform parameters and buffers.** For a
+  :class:`~torchrl.envs.TransformedEnv`, the collector saves
+  ``env.transform.state_dict()``: ``nn.Module`` parameters and buffers
+  on the transform stack, such as :class:`~torchrl.envs.ObservationNorm`
+  ``loc``/``scale`` and :class:`~torchrl.envs.CatFrames` stack buffers.
+  Transforms that keep live episode state only in the carrier TensorDict
+  (for example :class:`~torchrl.envs.StepCounter`) contribute an empty
+  payload; that TensorDict is not part of the checkpoint. The base
+  simulator is not saved either.
+* **Collector progress.** ``frames`` and ``iter``, so schedules
   (epsilon annealing, ``init_random_frames``, total-frame budgets)
-  continue instead of restarting at zero.
+  continue instead of restarting at zero. Restoring progress is not a
+  live-episode resume. After five transitions with ``CountingEnv`` plus
+  ``StepCounter``, ``frames`` is 5 and the transform state is empty; the
+  first resumed transition starts at ``step_count=0`` and observation
+  ``0``. Continuing a mid-episode simulator, or worker-local RNG,
+  requires separately supported state handling.
 
 **Replay buffer**
 
@@ -130,8 +141,10 @@ pile of transitions you can no longer address correctly.
 
 **RNG**
 
-:class:`GlobalRNGState` captures process-global Python, NumPy, and Torch
-RNGs so sampling and exploration stay reproducible across a resume.
+:class:`GlobalRNGState` restores **process-global** Python, NumPy, and
+Torch RNGs. That is this process's sampling and exploration generators.
+It does not restore environment or collector-worker RNG, and it is not
+a guarantee of exact trajectory reproducibility across a resume.
 
 Shared modules
 ~~~~~~~~~~~~~~
