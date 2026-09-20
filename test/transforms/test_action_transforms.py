@@ -488,6 +488,43 @@ class TestActionDiscretizer(TransformBase):
         ):
             assert (r["action"] > base_env.action_spec.low).all()
 
+    @pytest.mark.parametrize("interval_as_tensor", [False, True])
+    @pytest.mark.parametrize(
+        "sampling,offset",
+        [
+            (ActionDiscretizer.SamplingStrategy.LOW, 0.0),
+            (ActionDiscretizer.SamplingStrategy.MEDIAN, 0.5),
+            (ActionDiscretizer.SamplingStrategy.HIGH, 1.0),
+        ],
+    )
+    def test_num_intervals_arange_rounding(self, interval_as_tensor, sampling, offset):
+        # 1 / 49 does not accumulate to exactly 1.0, so arange(0, 1, 1 / 49)
+        # used to return 50 positions for 49 requested intervals
+        num_intervals = 49
+        base_env = ContinuousActionVecMockEnv()
+        n_act = base_env.action_spec.shape[-1]
+        if interval_as_tensor:
+            num_intervals_arg = torch.full((n_act,), num_intervals)
+        else:
+            num_intervals_arg = num_intervals
+        env = base_env.append_transform(
+            ActionDiscretizer(
+                num_intervals=num_intervals_arg,
+                sampling=sampling,
+                out_action_key="action_disc",
+            )
+        )
+        check_env_specs(env)
+        nvec = env.full_action_spec["action_disc"].nvec
+        assert nvec.tolist() == [num_intervals] * n_act
+        td = env.reset()
+        td["action_disc"] = torch.arange(n_act) * 8
+        td = env.step(td)
+        low = base_env.action_spec.low
+        high = base_env.action_spec.high
+        expected = low + (td["action_disc"] + offset) * (high - low) / num_intervals
+        torch.testing.assert_close(td["action"], expected)
+
     def test_transform_model(self):
         pytest.skip("Tested elsewhere")
 
