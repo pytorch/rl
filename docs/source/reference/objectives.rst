@@ -12,7 +12,9 @@ Key Features
 ------------
 
 - **Stateful objects**: Expose trainable parameters via ``loss_module.parameters()``.
-  The loss does **not** copy the module you pass in; see :ref:`ref_lossmodule_weight_sharing`.
+  The loss does **not** copy the module object you pass in. Non-expanded
+  parameters share storage with the original network; expanded ensembles and
+  delayed targets do not. See :ref:`ref_lossmodule_weight_sharing`.
 - **TensorDict convention**: Input and output use TensorDict format
 - **Structured output**: Loss values returned with ``"loss_<name>"`` keys
 - **Value estimators**: Support for TD(0), TD(λ), GAE, and more
@@ -46,12 +48,28 @@ Weight sharing
 --------------
 
 Passing a module into a :class:`~torchrl.objectives.LossModule` does **not**
-copy it. The loss stores the same module and the same parameter tensors; an
-optimizer step on ``loss.parameters()`` updates the original network in-place.
+copy the module object. For a **non-expanded** network (the DDPG actor below),
+the loss also keeps the same parameter tensors; an optimizer step on
+``loss.parameters()`` updates the original network in-place.
 
-That is enough for inference without a collector: after ``optim.step()``,
-call the original actor (or ``loss.actor_network``, which is the same object).
-No extra copy-back is required.
+That is enough for inference without a collector on those shared parameters:
+after ``optim.step()``, call the original actor (or ``loss.actor_network``,
+which is the same object). No extra copy-back is required.
+
+This does **not** hold for every registered parameter:
+
+- **Expanded / stacked ensembles.**
+  :meth:`~torchrl.objectives.LossModule.convert_to_functional` with
+  ``expand_dim=N`` clones or resamples independent ensemble parameters.
+  Default :class:`~torchrl.objectives.SACLoss` critics do this
+  (``num_qvalue_nets=2``). Object identity can still hold
+  (``loss.qvalue_network is critic``) while the original module's weights
+  keep their unexpanded shape and are not trained. An optimizer step
+  updates the ensemble; calling the original critic still uses untrained
+  parameters.
+- **Delayed targets.** ``create_target_params=True`` registers a detached
+  copy under ``target_<name>_params``. Those lag the trained weights until
+  an updater such as :class:`~torchrl.objectives.SoftUpdate` runs.
 
 .. code-block:: python
 
@@ -64,7 +82,7 @@ No extra copy-back is required.
     value = ValueOperator(nn.Linear(4, 1), in_keys=["observation", "action"])
     loss = DDPGLoss(actor, value, delay_actor=False, delay_value=False)
 
-    # Same module, same storage.
+    # Same module, same storage (non-expanded actor).
     assert actor is loss.actor_network
     p_actor = next(actor.parameters())
     assert p_actor.data_ptr() == next(loss.actor_network.parameters()).data_ptr()

@@ -1,9 +1,9 @@
 .. currentmodule:: torchrl.weight_update
 
+.. _ref_collectors_weightsync:
+
 Weight Synchronization
 ======================
-
-.. _ref_collectors_weightsync:
 
 RL pipelines are typically split in two big computational buckets: training, and inference.
 While the inference pipeline sends data to the training one, the training pipeline needs to occasionally
@@ -69,10 +69,11 @@ Each of these classes is detailed below.
 When is ``update_policy_weights_`` required?
 --------------------------------------------
 
-:class:`~torchrl.objectives.LossModule` does not copy the policy (see
-:ref:`ref_lossmodule_weight_sharing`). Whether the collector needs an explicit
-sync after an optimizer step depends on whether its inference policy shares
-parameter storage with the training policy:
+:class:`~torchrl.objectives.LossModule` does not copy the policy object (see
+:ref:`ref_lossmodule_weight_sharing`). For a non-expanded actor, an optimizer
+step on the loss updates the original policy in-place. Whether the collector
+needs an explicit sync after that step depends on whether its inference policy
+shares parameter storage with the training policy:
 
 - **Shared storage.** A policy passed directly can retain its parameter storage
   when no device transfer or other copy is needed. No extra sync is required.

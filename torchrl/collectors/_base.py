@@ -1108,7 +1108,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         on another device, and remote policies. Passing ``policy_device`` or
         ``device`` only creates a copy when the requested device differs from the
         policy's current device. :class:`~torchrl.objectives.LossModule` does not
-        copy the policy either (see :ref:`ref_lossmodule_weight_sharing` and
+        copy the policy object either; non-expanded parameters are used in-place
+        (see :ref:`ref_lossmodule_weight_sharing` and
         :ref:`ref_collectors_weightsync`).
 
         The method accepts weights in multiple forms for convenience:

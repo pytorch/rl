@@ -147,8 +147,9 @@ CUDA devices, it may be wise to train on one device and execute the policy for i
 case, a :meth:`~torchrl.collectors.Collector.update_policy_weights_` can be used to copy the parameters from one
 device to the other (if no copy is required, this method is a no-op).
 
-:class:`~torchrl.objectives.LossModule` does not copy the policy either -- the
-same parameters are used in-place (see :ref:`ref_lossmodule_weight_sharing`).
+:class:`~torchrl.objectives.LossModule` does not copy the policy object either.
+Non-expanded policy parameters are used in-place (see
+:ref:`ref_lossmodule_weight_sharing`).
 Whether the collector then needs an explicit sync depends on parameter storage:
 
 - **Not required** when the training and inference policies use the same

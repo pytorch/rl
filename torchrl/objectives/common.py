@@ -95,13 +95,18 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
-    Passing a module into a loss does **not** copy it. The same parameters are
-    used in-place; optimizer steps on the loss update the original module.
-    A collector needs explicit synchronization when its inference policy has
-    distinct parameter storage, such as a worker-created policy, a
-    different-device copy, or a remote policy. Same-device ``policy_device`` or
-    ``device`` arguments need not copy the policy (see
-    :ref:`ref_lossmodule_weight_sharing` and :ref:`ref_collectors_weightsync`).
+    Passing a module into a loss does **not** copy the module object. For a
+    non-expanded network, the same parameters are used in-place; optimizer
+    steps on the loss update the original module. This does not apply to
+    expanded ensembles (``convert_to_functional(..., expand_dim=N)``, as used
+    by default SAC critics) or delayed targets (``create_target_params=True``):
+    those parameters are independent copies, so calling the original module can
+    still use untrained weights. A collector needs explicit synchronization
+    when its inference policy has distinct parameter storage, such as a
+    worker-created policy, a different-device copy, or a remote policy.
+    Same-device ``policy_device`` or ``device`` arguments need not copy the
+    policy (see :ref:`ref_lossmodule_weight_sharing` and
+    :ref:`ref_collectors_weightsync`).
 
     :cvar default_value_estimator: The default value type of the class.
         Losses that require a value estimation are equipped with a default value
@@ -468,8 +473,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             module (TensorDictModule or compatible): a stateful tensordict module.
                 Parameters from this module will be isolated in the `<module_name>_params`
                 attribute and a stateless version of the module will be registered
-                under the `module_name` attribute. The original module is stored
-                as-is and its parameters are not copied.
+                under the `module_name` attribute. The original module object is
+                stored as-is. Its parameters are not copied unless ``expand_dim``
+                is set; see that argument and ``create_target_params``.
             module_name (str): name where the module will be found.
                 The parameters of the module will be found under ``loss_module.<module_name>_params``
                 whereas the module will be found under ``loss_module.<module_name>``.
@@ -477,6 +483,13 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will be expanded ``N`` times, where ``N = expand_dim`` along the
                 first dimension. This option is to be used whenever a target
                 network with more than one configuration is to be used.
+
+                The expanded ensemble does **not** share storage with the original
+                module's unexpanded parameters. Object identity of the module is
+                preserved, but an optimizer step updates the ensemble and leaves
+                the original weights unchanged. Default
+                :class:`~torchrl.objectives.SACLoss` critics use this via
+                ``num_qvalue_nets``.
 
                 .. note::
                   If a ``compare_against`` list of values is provided, the
@@ -488,6 +501,9 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             create_target_params (bool, optional): if ``True``, a detached
                 copy of the parameter will be available to feed a target network
                 under the name ``loss_module.<module_name>_target_params``.
+                These delayed-target parameters do not share storage with the
+                original module; they lag until an updater such as
+                :class:`~torchrl.objectives.SoftUpdate` runs.
                 If ``False`` (default), this attribute will still be available
                 but it will be a detached instance of the parameters, not a copy.
                 In other words, any modification of the parameter value

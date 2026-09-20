@@ -107,9 +107,10 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 #
 # - They are stateful objects: they expose the trainable parameters
 #   such that ``loss_module.parameters()`` gives whatever is needed to train the
-#   algorithm. The module you pass in is **not** copied -- the same parameters
-#   are used in-place, so an optimizer step on the loss updates the original
-#   network. See :ref:`ref_lossmodule_weight_sharing`.
+#   algorithm. The module you pass in is **not** copied. For a non-expanded
+#   network the same parameters are used in-place, so an optimizer step on the
+#   loss updates the original network. Expanded ensembles and delayed targets
+#   do not share that storage. See :ref:`ref_lossmodule_weight_sharing`.
 # - They follow the ``TensorDict`` convention: the :meth:`torch.nn.Module.forward`
 #   method will receive a TensorDict as input that contains all the necessary
 #   information to return a loss value.
