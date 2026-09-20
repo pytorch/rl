@@ -2109,6 +2109,9 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
+        # PrioritizedSampler.mark_update is lazy: the default priorities are
+        # only written to the trees when they are next read.
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
@@ -2127,6 +2130,9 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
+        # PrioritizedSampler.mark_update is lazy: the default priorities are
+        # only written to the trees when they are next read.
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
@@ -2172,6 +2178,9 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
+        # PrioritizedSampler.mark_update is lazy: the default priorities are
+        # only written to the trees when they are next read.
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
@@ -2194,6 +2203,9 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
+        # PrioritizedSampler.mark_update is lazy: the default priorities are
+        # only written to the trees when they are next read.
+        rb.sample()
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 1).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb.sampler._sum_tree[i] for i in range(10)]) == 2).all()
