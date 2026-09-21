@@ -352,6 +352,7 @@ Model and Network Configurations
     TdMpc2MLPConfig
     TdMpc2PolicyPriorConfig
     TdMpc2QEnsembleConfig
+    TdMpc2PlannerConfig
     TdMpc2WorldModelConfig
     DreamerV3MLPConfig
     DreamerV3DiscreteActorConfig

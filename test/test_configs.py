@@ -1556,6 +1556,62 @@ class TestModuleConfigs:
         assert registered.node["_target_"] == cfg._target_
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_planner_config(self):
+        """Test TdMpc2PlannerConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.modules import TdMpc2Planner
+        from torchrl.trainers.algorithms.configs.modules import (
+            TdMpc2PlannerConfig,
+            TdMpc2PolicyPriorConfig,
+            TdMpc2QEnsembleConfig,
+            TdMpc2WorldModelConfig,
+        )
+
+        world_model = instantiate(
+            TdMpc2WorldModelConfig(
+                observation_dim=5,
+                action_dim=2,
+                latent_dim=8,
+                encoder_dim=12,
+                mlp_dim=16,
+                simnorm_dim=4,
+                num_bins=5,
+            )
+        )
+        policy_prior = instantiate(
+            TdMpc2PolicyPriorConfig(latent_dim=8, action_dim=2, mlp_dim=16)
+        )
+        q_ensemble = instantiate(
+            TdMpc2QEnsembleConfig(
+                latent_dim=8,
+                action_dim=2,
+                mlp_dim=16,
+                num_q=2,
+                num_bins=5,
+                dropout=0.0,
+            )
+        )
+        cfg = TdMpc2PlannerConfig(
+            world_model=world_model,
+            policy_prior=policy_prior,
+            q_ensemble=q_ensemble,
+            horizon=2,
+            discount=0.97,
+            num_samples=4,
+            num_elites=2,
+            num_pi_trajs=0,
+            iterations=1,
+        )
+        planner = instantiate(cfg)
+        assert isinstance(planner, TdMpc2Planner)
+        assert planner.world_model is world_model
+        assert planner.policy_prior is policy_prior
+        assert planner.q_ensemble is q_ensemble
+        registered = ConfigStore.instance().load("model/tdmpc2_planner.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     @pytest.mark.parametrize(("out_features", "expected_features"), [(4, 4), (None, 8)])
     def test_dreamer_v3_mlp_config(self, out_features, expected_features):
         """Test DreamerV3MLPConfig."""

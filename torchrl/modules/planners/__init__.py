@@ -6,5 +6,6 @@
 from .cem import CEMPlanner
 from .common import MPCPlannerBase
 from .mppi import MPPIPlanner
+from .tdmpc2 import TdMpc2Planner
 
-__all__ = ["CEMPlanner", "MPCPlannerBase", "MPPIPlanner"]
+__all__ = ["CEMPlanner", "MPCPlannerBase", "MPPIPlanner", "TdMpc2Planner"]
