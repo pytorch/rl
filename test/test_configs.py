@@ -226,6 +226,7 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "LowLevelControllerConfig",
         "MultiActionConfig",
         "MultiAsyncCollectorConfig",
+        "MultiStepTransformConfig",
         "MultiSyncCollectorConfig",
     }
 )
@@ -251,7 +252,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "LazyStackStorageConfig",
         "MeltingpotEnvConfig",
         "ModuleTransformConfig",
-        "MultiStepTransformConfig",
         "MultiThreadedEnvConfig",
         "NormConfig",
         "ObservationNormConfig",
@@ -5119,6 +5119,48 @@ class TestTransformConfigs:
         )
         transformed = transform(td)
         assert transformed["observation"].shape == (2, 3)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_multi_step_transform_config(self):
+        from torchrl.envs.transforms import MultiStepTransform
+        from torchrl.trainers.algorithms.configs.transforms import (
+            MultiStepTransformConfig,
+        )
+
+        transform = instantiate_config(
+            MultiStepTransformConfig(
+                n_steps=2,
+                gamma=0.5,
+                reward_keys=[["agents", "reward"]],
+                done_key=["agents", "done"],
+                done_keys=[["agents", "done"]],
+                mask_key=["agents", "valid"],
+            )
+        )
+        assert isinstance(transform, MultiStepTransform)
+        assert transform.reward_keys == [("agents", "reward")]
+        assert transform.done_key == ("agents", "done")
+        assert transform.done_keys == [("agents", "done")]
+        assert transform.mask_key == ("agents", "valid")
+
+        data = TensorDict(
+            {
+                ("agents", "valid"): torch.ones(4, dtype=torch.bool),
+                ("next", "agents", "reward"): torch.arange(
+                    1, 5, dtype=torch.float32
+                ).unsqueeze(-1),
+                ("next", "agents", "done"): torch.zeros(4, 1, dtype=torch.bool),
+                ("next", "agents", "observation"): torch.arange(4).unsqueeze(-1),
+            },
+            batch_size=[4],
+        )
+        replay_buffer = ReplayBuffer(storage=LazyTensorStorage(10), transform=transform)
+        replay_buffer.extend(data)
+
+        torch.testing.assert_close(
+            replay_buffer[:].get(("next", "agents", "reward")),
+            torch.tensor([[2.0], [3.5]]),
+        )
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_last_action_config(self):
