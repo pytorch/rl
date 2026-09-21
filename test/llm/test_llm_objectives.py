@@ -1458,34 +1458,34 @@ class TestGRPOLossRefactorBehavior:
     """
 
     def test_set_keys_ref_log_probs_is_respected_by_kl_to_ref(self):
-        """Before the fix, forward() pre-fetched ref_log_probs with a hardcoded
-        call to tensordict.get(self.tensor_keys.ref_log_probs, ...) and passed
-        the result directly to _kl_to_ref, bypassing the key parameter entirely.
-        This meant that set_keys(ref_log_probs=custom_key) was silently ignored
-        for the kl_to_ref path -- the loss would either raise KeyError (wrong key)
-        or use stale data.
+        """When a custom ref_log_probs key is configured but absent from the input,
+        _kl_to_ref must raise KeyError naming the missing key rather than silently
+        falling back to the hardcoded default key.
 
-        After the fix, forward() calls _kl_to_ref(key=self.tensor_keys.ref_log_probs)
-        so that the configured key is actually used.
+        Before the fix, forward() pre-fetched ref_log_probs and passed the result
+        (None when the configured key is absent) to _kl_to_ref.  _kl_to_ref then
+        fell back to its default key parameter ("next", "ref_log_probs") and silently
+        read data the user never intended — producing a loss with no diagnostic.
 
-        If the bug is reintroduced, this test raises KeyError because the data
-        does NOT contain the default ("next", "ref_log_probs", "full") key -- only
-        the custom nested key -- and the hardcoded pre-fetch would fail.
+        After the fix, _kl_to_ref fetches using the configured key directly and
+        raises KeyError immediately when it is absent.
+
+        Setup: data stored under the DEFAULT key ("next", "ref_log_probs", "full")
+        only; custom_key is intentionally absent.  Old code: reads default key
+        silently, no error.  New code: raises KeyError naming custom_key.
         """
         policy = _FixedLogProbPolicy()
-        # cur_log_prob = log(0.5), ref_log_prob = log(0.5) => KL = 0.
-        cur_lp = torch.log(torch.tensor([0.5]))
-        ref_lp = cur_lp.clone()
+        ref_lp = torch.log(torch.tensor([0.5]))
 
         data = _policy_loss_data(
-            current_log_prob=cur_lp.tolist(),
+            current_log_prob=ref_lp.tolist(),
             sample_log_prob=[0.0],
             advantage=[1.0],
         )
-        # Store ref log-probs ONLY under a non-default nested key.
-        # The default ("next", "ref_log_probs", "full") is intentionally absent.
-        custom_key = ("custom_ref", "log_probs")
-        data[custom_key] = ref_lp.unsqueeze(-1)
+        # Populate the DEFAULT key so old code would silently read from it.
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+        # The custom key below is intentionally ABSENT from data.
+        custom_key = ("my_custom_ref", "log_probs")
 
         loss_fn = GRPOLoss(
             policy,
@@ -1495,12 +1495,44 @@ class TestGRPOLossRefactorBehavior:
         )
         loss_fn.set_keys(ref_log_probs=custom_key)
 
-        # If the FIXME pre-fetch is reintroduced, this line raises KeyError
-        # because the hardcoded tensordict.get(self.tensor_keys.ref_log_probs, ...)
-        # would read the key BEFORE set_keys changes it in the fetch path.
-        out = loss_fn(data)
+        # Old code: silently reads ("next", "ref_log_probs") — no error raised.
+        # New code: configured key is absent → KeyError naming custom_key.
+        with pytest.raises(KeyError, match="my_custom_ref"):
+            loss_fn(data)
 
-        # cur == ref => KL is 0; loss_kl_to_ref = coeff * 0 = 0.
+    def test_kl_to_ref_single_token_sequence(self):
+        """_kl_to_ref must not crash for single-token sequences (T == 1).
+
+        Before the fix an unconditional squeeze(-1) on a ref_log_prob of shape
+        [B, 1] collapsed the time axis to [B].  expand_as_right then received
+        mask of shape [B, 1] and ref_log_prob of shape [B] and raised:
+
+            RuntimeError: expand_as_right requires the destination tensor to have
+            less dimensions than the input tensor
+
+        The fix makes the squeeze conditional on ref having an extra trailing
+        dimension relative to cur_log_prob.  This test will raise RuntimeError
+        (not pass) if the unconditional squeeze is reintroduced.
+        """
+        cur_lp = torch.log(torch.tensor([0.5]))
+        ref_lp = cur_lp.clone()  # cur == ref => KL = 0
+
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+        # Shape [1, 1]: batch=1, T=1 — the shape that exposed the squeeze bug.
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=1.0,
+        )
+        # Must not raise RuntimeError; cur == ref => KL penalty is 0.
+        out = loss_fn(data)
         torch.testing.assert_close(out.kl_to_ref, torch.tensor(0.0))
 
     def test_kl_to_ref_hand_calculated_value(self):

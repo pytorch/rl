@@ -359,7 +359,7 @@ class MCAdvantageSelector:
 
 
 class GRPOLoss(LossModule):
-    r"""GRPO loss.
+    """GRPO loss.
 
     The clipped importance weighted loss is computed as follows::
 
@@ -432,7 +432,7 @@ class GRPOLoss(LossModule):
             - "sft": Use prompt masking (response tokens only, suitable for single-turn)
             - "rlhf": Use assistant masking (assistant tokens only, suitable for multi-turn)
             - "generic": Use attention masking (all valid tokens)
-            Defaults to \"sft\" since we can't guarantee assistant masks are available.
+            Defaults to "sft" since we can't guarantee assistant masks are available.
         ref_log_prob_padding_side (Literal["left", "right"], optional): side on which to pad the
             reference log-probability tensor when it is retrieved from the input tensordict as a
             ragged sequence. Defaults to ``"left"``.
@@ -876,6 +876,9 @@ class GRPOLoss(LossModule):
     ):
         if coeff is None:
             coeff = self.kl_to_ref_coeff
+        # Fetch cur_log_prob first so its shape can be used as a reference when
+        # deciding whether to squeeze ref_log_prob below.
+        cur_log_prob = tensordict.get("_cur_log_prob")
         if ref_log_prob is None:
             ref_log_prob = tensordict.get(
                 key,
@@ -887,8 +890,20 @@ class GRPOLoss(LossModule):
                 raise KeyError(
                     f"Couldn't find the ref log-prob {key} in the input data ({tensordict.keys(True)=})."
                 )
-            ref_log_prob = ref_log_prob.squeeze(-1)
-        cur_log_prob = tensordict.get("_cur_log_prob")
+            # Squeeze only when the stored tensor carries an extra trailing feature
+            # dimension (e.g. [B, T, 1] -> [B, T]).  An unconditional squeeze(-1)
+            # collapses the time axis when T == 1, turning [B, 1] -> [B] and causing
+            # expand_as_right to crash downstream.
+            if ref_log_prob.ndim == cur_log_prob.ndim + 1:
+                ref_log_prob = ref_log_prob.squeeze(-1)
+        if ref_log_prob.shape != cur_log_prob.shape:
+            raise ValueError(
+                f"ref_log_prob and cur_log_prob must have the same shape, "
+                f"got {ref_log_prob.shape} and {cur_log_prob.shape}. "
+                "Check that the reference log-probabilities were stored with shape "
+                "[B, T] or [B, T, 1] and that the padding configuration matches "
+                "the one used during data collection."
+            )
         if mask is not None:
             ref_log_prob = torch.where(
                 expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
