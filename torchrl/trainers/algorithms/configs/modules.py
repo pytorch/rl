@@ -23,6 +23,7 @@ from torchrl.modules import (
     RSSMStateEstimatorV3,
     TanhModule,
     ValueOperator,
+    WorldModel,
 )
 from torchrl.trainers.algorithms.configs.common import (
     _normalize_hydra_key,
@@ -547,6 +548,126 @@ class ModelConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for model configurations."""
+
+
+@dataclass
+class TdMpc2WorldModelConfig(ConfigBase):
+    """Configuration for a TD-MPC2 world model.
+
+    The resulting :class:`~torchrl.modules.WorldModel` encodes observations,
+    predicts the next latent state from the current latent state and action,
+    and predicts distributional rewards from the current latent state and
+    action. TensorDict routing is configured with the specialized key fields
+    below. Set ``shared=True`` to place the constructed module in shared
+    memory.
+
+    .. seealso:: :class:`~torchrl.modules.WorldModel`
+    """
+
+    observation_dim: int = MISSING
+    action_dim: int = MISSING
+    latent_dim: int = MISSING
+    encoder_dim: int = 256
+    encoder_depth: int = 1
+    mlp_dim: int = 512
+    simnorm_dim: int = 8
+    num_bins: int = 101
+    observation_key: Any = "observation"
+    action_key: Any = "action"
+    latent_key: Any = "latent"
+    reward_logits_key: Any = "reward_logits"
+    device: Any = None
+    shared: bool = False
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_tdmpc2_world_model"
+    )
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for the TD-MPC2 world model config."""
+
+
+def _next_key(key: Any) -> Any:
+    if isinstance(key, tuple):
+        return ("next", *key)
+    return ("next", key)
+
+
+def _make_tdmpc2_world_model(
+    *,
+    observation_dim: int,
+    action_dim: int,
+    latent_dim: int,
+    encoder_dim: int = 256,
+    encoder_depth: int = 1,
+    mlp_dim: int = 512,
+    simnorm_dim: int = 8,
+    num_bins: int = 101,
+    observation_key: Any = "observation",
+    action_key: Any = "action",
+    latent_key: Any = "latent",
+    reward_logits_key: Any = "reward_logits",
+    device: Any = None,
+    shared: bool = False,
+) -> WorldModel:
+    """Build the state-based encoder, dynamics, and reward components of TD-MPC2."""
+    if observation_dim <= 0 or action_dim <= 0 or latent_dim <= 0:
+        raise ValueError("observation_dim, action_dim, and latent_dim must be positive")
+    if encoder_dim <= 0 or mlp_dim <= 0:
+        raise ValueError("encoder_dim and mlp_dim must be positive")
+    if simnorm_dim <= 0 or latent_dim % simnorm_dim:
+        raise ValueError("simnorm_dim must be a positive divisor of latent_dim")
+    if num_bins <= 1:
+        raise ValueError("num_bins must be greater than 1")
+
+    from torchrl.trainers.algorithms.tdmpc2 import SimplicialNormalization
+
+    observation_key = _normalize_hydra_key(observation_key)
+    action_key = _normalize_hydra_key(action_key)
+    latent_key = _normalize_hydra_key(latent_key)
+    reward_logits_key = _normalize_hydra_key(reward_logits_key)
+
+    encoder = TensorDictModule(
+        _make_tdmpc2_mlp(
+            in_features=observation_dim,
+            out_features=latent_dim,
+            depth=encoder_depth,
+            num_cells=encoder_dim,
+            output_activation=SimplicialNormalization(simnorm_dim),
+            device=device,
+        ),
+        in_keys=[observation_key],
+        out_keys=[latent_key],
+    )
+    dynamics = TensorDictModule(
+        _make_tdmpc2_mlp(
+            in_features=latent_dim + action_dim,
+            out_features=latent_dim,
+            depth=2,
+            num_cells=mlp_dim,
+            output_activation=SimplicialNormalization(simnorm_dim),
+            device=device,
+        ),
+        in_keys=[latent_key, action_key],
+        out_keys=[_next_key(latent_key)],
+    )
+    reward = TensorDictModule(
+        _make_tdmpc2_mlp(
+            in_features=latent_dim + action_dim,
+            out_features=max(num_bins, 1),
+            depth=2,
+            num_cells=mlp_dim,
+            device=device,
+        ),
+        in_keys=[latent_key, action_key],
+        out_keys=[_next_key(reward_logits_key)],
+    )
+    with torch.no_grad():
+        reward.module[-1].weight.zero_()
+
+    world_model = WorldModel(encoder, dynamics, reward)
+    if shared:
+        world_model = world_model.share_memory()
+    return world_model
 
 
 @dataclass

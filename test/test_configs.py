@@ -212,6 +212,8 @@ _CONFIG_PARITY_UNRESOLVED = {
     "TdMpc2MLPConfig": "_make_tdmpc2_mlp fixes the TorchRL MLP architecture and "
     "initialization to the TDMPC2-specific MLP kwargs; the remaining MLP kwargs "
     "are intentionally not configurable.",
+    "TdMpc2WorldModelConfig": "The composite factory uses high-level architecture "
+    "and key fields that do not correspond to WorldModel.__init__ parameters.",
     "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
     "the torch versions TorchRL currently supports.",
 }
@@ -1421,6 +1423,65 @@ class TestModuleConfigs:
             module.p for module in configured if isinstance(module, torch.nn.Dropout)
         ] == [0.1, 0.0]
         assert configured(torch.randn(3, 10)).shape == (3, 8)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_world_model_config(self):
+        """Test TdMpc2WorldModelConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.modules import WorldModel
+        from torchrl.trainers.algorithms.configs import TdMpc2WorldModelConfig
+
+        cfg = TdMpc2WorldModelConfig(
+            observation_dim=7,
+            action_dim=3,
+            latent_dim=16,
+            encoder_dim=11,
+            encoder_depth=1,
+            mlp_dim=13,
+            simnorm_dim=4,
+            num_bins=5,
+            observation_key=["agent", "observation"],
+            action_key=["agent", "action"],
+            latent_key=["agent", "latent"],
+            reward_logits_key=["agent", "reward_logits"],
+        )
+        world_model = instantiate(cfg)
+
+        assert isinstance(world_model, WorldModel)
+        assert world_model.encoder.in_keys == [("agent", "observation")]
+        assert world_model.encoder.out_keys == [("agent", "latent")]
+        assert world_model.dynamics.in_keys == [
+            ("agent", "latent"),
+            ("agent", "action"),
+        ]
+        assert world_model.dynamics.out_keys == [("next", "agent", "latent")]
+        assert world_model.reward_head.in_keys == [
+            ("agent", "latent"),
+            ("agent", "action"),
+        ]
+        assert world_model.reward_head.out_keys == [("next", "agent", "reward_logits")]
+
+        batch_shape = torch.Size((2, 3))
+        td = TensorDict(
+            {
+                ("agent", "observation"): torch.randn(*batch_shape, 7),
+                ("agent", "action"): torch.randn(*batch_shape, 3),
+            },
+            batch_size=batch_shape,
+        )
+        out = world_model(td)
+
+        assert out["agent", "latent"].shape == (*batch_shape, 16)
+        assert out["next", "agent", "latent"].shape == (*batch_shape, 16)
+        assert out["next", "agent", "reward_logits"].shape == (
+            *batch_shape,
+            5,
+        )
+        assert torch.count_nonzero(out["next", "agent", "reward_logits"]) == 0
+
+        registered = ConfigStore.instance().load("model/tdmpc2_world_model.yaml")
+        assert registered.node["_target_"] == cfg._target_
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     @pytest.mark.parametrize(("out_features", "expected_features"), [(4, 4), (None, 8)])

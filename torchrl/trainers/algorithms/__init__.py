@@ -22,6 +22,7 @@ from .ppo import PPOTrainer
 from .reinforce import ReinforceTrainer
 from .sac import SACTrainer
 from .td3 import TD3Trainer
+from .tdmpc2 import SimplicialNormalization
 
 __all__ = [
     "A2CTrainer",
@@ -39,4 +40,5 @@ __all__ = [
     "ReinforceTrainer",
     "SACTrainer",
     "TD3Trainer",
+    "SimplicialNormalization",
 ]
