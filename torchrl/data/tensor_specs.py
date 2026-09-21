@@ -4336,6 +4336,9 @@ class Choice(TensorSpec):
     def unsqueeze(self, dim: int):
         return self.__class__([choice.unsqueeze(dim) for choice in self._choices])
 
+    def squeeze(self, dim: int | None = None):
+        return self.__class__([choice.squeeze(dim) for choice in self._choices])
+
     def clone(self) -> Choice:
         return self.__class__([choice.clone() for choice in self._choices])
 
