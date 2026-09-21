@@ -262,18 +262,22 @@ class SACTrainer(Trainer):
     def _pass_action_spec_from_collector_to_loss(
         self, collector: BaseCollector, loss: LossModule
     ):
-        """Pass the action specification from the collector's environment to the loss module.
-
-        This method extracts the action specification from the collector's environment
-        and assigns it to the loss module if the loss module doesn't already have one.
-        This is necessary for SAC loss computation which requires knowledge of the
-        action space bounds for proper entropy calculation and action clipping.
+        """Pass the collector action spec when auto target entropy requires it.
 
         Args:
             collector (BaseCollector): The data collector containing the environment.
             loss (LossModule): The loss module that needs the action specification.
         """
         if hasattr(loss, "_action_spec") and loss._action_spec is None:
+            target_entropy = getattr(loss, "_target_entropy", None)
+            if target_entropy is not None:
+                if target_entropy != "auto":
+                    return
+                actor_action_spec = getattr(loss.actor_network, "spec", None)
+                if hasattr(actor_action_spec, "get"):
+                    actor_action_spec = actor_action_spec.get(loss.tensor_keys.action)
+                if actor_action_spec is not None:
+                    return
             action_spec = collector.getattr_env("full_action_spec_unbatched").cpu()
             loss._action_spec = action_spec
 

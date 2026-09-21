@@ -193,8 +193,17 @@ class CQLTrainer(Trainer):
     def _pass_action_spec_from_collector_to_loss(
         self, collector: BaseCollector, loss: LossModule
     ):
-        """Pass the action specification from the collector's environment to the loss module."""
+        """Pass the collector action spec when auto target entropy requires it."""
         if hasattr(loss, "_action_spec") and loss._action_spec is None:
+            target_entropy = getattr(loss, "_target_entropy", None)
+            if target_entropy is not None:
+                if target_entropy != "auto":
+                    return
+                actor_action_spec = getattr(loss.actor_network, "spec", None)
+                if hasattr(actor_action_spec, "get"):
+                    actor_action_spec = actor_action_spec.get(loss.tensor_keys.action)
+                if actor_action_spec is not None:
+                    return
             action_spec = collector.getattr_env("full_action_spec_unbatched").cpu()
             loss._action_spec = action_spec
 
