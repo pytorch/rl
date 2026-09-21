@@ -200,13 +200,16 @@ if _has_triton:
         triton.Config({"BLOCK_B": 8, "BLOCK_K": 32}, num_warps=4, num_stages=1),
         triton.Config({"BLOCK_B": 8, "BLOCK_K": 64}, num_warps=8, num_stages=1),
     ]
-    # The B2/K16 backward kernel can intermittently produce incorrect gradients.
-    # The same configuration is safe for the forward kernel.
-    _BACKWARD_CONFIGS = [
+    # The B2/K16 tile can intermittently produce incorrect values. It was first
+    # seen on the backward kernel; the B=2 float32 gradient-parity case
+    # (hidden=32, 4 blocks, proj=48) still selected it on the forward path
+    # (#3865). Keep it out of both autotune sets.
+    _SAFE_CONFIGS = [
         config
         for config in _CONFIGS
         if (config.kwargs["BLOCK_B"], config.kwargs["BLOCK_K"]) != (2, 16)
     ]
+    _BACKWARD_CONFIGS = _SAFE_CONFIGS
 
     def _prune_configs(configs, named_args, **kwargs):
         h_pad = kwargs.get("H_PAD") or named_args["H_PAD"]
@@ -241,7 +244,7 @@ if _has_triton:
         return (value > 0.0).to(tl.float32)
 
     @triton.autotune(
-        configs=_CONFIGS,
+        configs=_SAFE_CONFIGS,
         key=[
             "T",
             "H",
