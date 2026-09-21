@@ -15,8 +15,7 @@ from torchrl.testing import get_default_devices
 class TestFlow:
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("compiled", [False, True])
-    @pytest.mark.parametrize("unroll", [1, 2, 5, 10])
-    def test_sampling(self, benchmark, device, compiled, unroll):
+    def test_sampling(self, benchmark, device, compiled):
         model = FlowMatchingModel(
             nn.Sequential(
                 nn.Linear(21, 64, device=device),
@@ -24,7 +23,6 @@ class TestFlow:
                 nn.Linear(64, 4, device=device),
             ),
             4,
-            unroll=unroll,
         )
         observation = torch.randn(64, 16, device=device)
         noise = torch.randn(64, 4, device=device)

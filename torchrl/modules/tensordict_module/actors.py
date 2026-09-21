@@ -164,9 +164,6 @@ class FlowMatchingPolicy(TensorDictModule):
         num_steps (int, optional): Euler integration steps. Defaults to 10.
 
     Keyword Args:
-        unroll (int, optional): Euler steps per scan body on PyTorch 2.14+.
-            Defaults to 1. Larger values trade graph size for fewer iterations.
-            Ignored by the explicit-loop compatibility paths.
         low (float or Tensor, optional): lower action bound, broadcast over
             actions. Must be strictly less than ``high``. Defaults to -1.
         high (float or Tensor, optional): upper action bound, broadcast over
@@ -200,7 +197,6 @@ class FlowMatchingPolicy(TensorDictModule):
         action_dim: int,
         num_steps: int = 10,
         *,
-        unroll: int = 1,
         low: float | Tensor = -1.0,
         high: float | Tensor = 1.0,
         in_keys: Sequence[NestedKey] | None = None,
@@ -213,7 +209,6 @@ class FlowMatchingPolicy(TensorDictModule):
                 velocity_network,
                 action_dim,
                 num_steps,
-                unroll=unroll,
                 low=low,
                 high=high,
             ),

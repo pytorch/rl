@@ -584,15 +584,15 @@ class TestFlow:
     @pytest.mark.parametrize("compiled", [False, True])
     @pytest.mark.parametrize("grad", [False, True])
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-    @pytest.mark.parametrize("steps,unroll", [(1, 1), (2, 1), (5, 2), (10, 4), (3, 8)])
-    def test_parity(self, device, compiled, grad, dtype, steps, unroll):
+    @pytest.mark.parametrize("steps", [1, 5])
+    def test_parity(self, device, compiled, grad, dtype, steps):
         torch.manual_seed(17)
         network = nn.Sequential(
             nn.Linear(7, 16, device=device, dtype=dtype),
             nn.Tanh(),
             nn.Linear(16, 2, device=device, dtype=dtype),
         )
-        policy = FlowMatchingPolicy(network, 2, steps, unroll=unroll)
+        policy = FlowMatchingPolicy(network, 2, steps)
         observation = (
             torch.randn(3, 2, 4, device=device, dtype=dtype)
             .transpose(0, 1)
@@ -629,7 +629,7 @@ class TestFlow:
 
     @implement_for("torch", "2.14")
     def test_scan(self):  # noqa: F811
-        policy = FlowMatchingModel(nn.Linear(5, 2), 2, num_steps=5, unroll=2)
+        policy = FlowMatchingModel(nn.Linear(5, 2), 2, num_steps=5)
         observation = torch.zeros(3, 2, requires_grad=True)
         noise = torch.zeros_like(observation, requires_grad=True)
         action = policy(observation, noise)
@@ -651,12 +651,9 @@ class TestFlow:
             for node in graph.graph.nodes
         )
 
-    @pytest.mark.parametrize(
-        "kwargs", [{"num_steps": 0}, {"unroll": 0}, {"unroll": -1}]
-    )
-    def test_steps(self, kwargs):
+    def test_steps(self):
         with pytest.raises(ValueError, match="must be positive"):
-            FlowMatchingPolicy(nn.Identity(), 2, **kwargs)
+            FlowMatchingPolicy(nn.Identity(), 2, num_steps=0)
 
     @pytest.mark.parametrize("kind", [FlowMatchingPolicy, OneStepPolicy])
     @pytest.mark.parametrize("low,high", [(1, 1), (2, 1), ([-1, 2], 1)])
