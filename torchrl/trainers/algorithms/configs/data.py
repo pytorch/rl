@@ -10,8 +10,17 @@ from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
 
-from torchrl.data.replay_buffers import SamplerEnsemble, StorageEnsemble, WriterEnsemble
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.data.replay_buffers import (
+    SamplerEnsemble,
+    SliceSampler,
+    StorageEnsemble,
+    WriterEnsemble,
+)
+from torchrl.trainers.algorithms.configs.common import (
+    _normalize_hydra_key,
+    _normalize_hydra_keys,
+    ConfigBase,
+)
 
 if TYPE_CHECKING:
     _ReplayServiceBackend = Literal["direct", "ray"]
@@ -56,6 +65,16 @@ class SamplerConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for sampler configurations."""
+
+
+def _make_slice_sampler(*args, **kwargs) -> SliceSampler:
+    """Instantiate a slice sampler after normalizing Hydra nested keys."""
+    for key in ("end_key", "traj_key", "step_key", "truncated_key", "init_key"):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_key(kwargs[key])
+    if "end_keys" in kwargs:
+        kwargs["end_keys"] = _normalize_hydra_keys(kwargs["end_keys"])
+    return SliceSampler(*args, **kwargs)
 
 
 @dataclass
@@ -201,7 +220,7 @@ class SliceSamplerWithoutReplacementConfig(SamplerConfig):
 class SliceSamplerConfig(SamplerConfig):
     """Hydra configuration for :class:`~torchrl.data.SliceSampler`."""
 
-    _target_: str = "torchrl.data.replay_buffers.SliceSampler"
+    _target_: str = "torchrl.trainers.algorithms.configs.data._make_slice_sampler"
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None

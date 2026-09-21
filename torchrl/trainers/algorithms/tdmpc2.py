@@ -1,27 +1,74 @@
-"""TD-MPC2 trainer optimization components."""
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from functools import partial
 from numbers import Real
+from typing import Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
+from torchrl.data.replay_buffers.samplers import PrioritizedSampler, SliceSampler
+from torchrl.modules import TdMpc2Planner
 from torchrl.objectives import TdMpc2Loss
-from torchrl.trainers.trainers import OptimizationStepper, Trainer
+from torchrl.trainers.trainers import (
+    _OPTIM_STEPS_UNSET,
+    OptimizationStepper,
+    ReplayBufferTrainer,
+    Trainer,
+    UpdateWeights,
+)
 
-__all__ = ["TdMpc2OptimizationStepper"]
+
+def _validate_tdmpc2_planner(
+    planner: TensorDictModuleBase,
+    loss_module,
+    collector=None,
+) -> TdMpc2Planner:
+    """Validate planner/loss/collector identity invariants."""
+    if not isinstance(planner, TdMpc2Planner):
+        raise TypeError(
+            f"TD-MPC2 planner must be a TdMpc2Planner, got {type(planner).__name__}."
+        )
+    if (
+        planner.world_model is not loss_module.world_model
+        or planner.policy_prior is not loss_module.policy_prior
+        or planner.q_ensemble is not loss_module.q_ensemble
+    ):
+        raise ValueError(
+            "TD-MPC2 planner must reference the world_model, policy_prior, and "
+            "q_ensemble owned by loss_module."
+        )
+    if planner.horizon != loss_module.horizon:
+        raise ValueError(
+            "TD-MPC2 planner horizon must match loss_module.horizon, got "
+            f"{planner.horizon} and {loss_module.horizon}."
+        )
+    if not math.isclose(planner.discount, loss_module.discount.item(), rel_tol=1e-6):
+        raise ValueError("TD-MPC2 planner discount must match loss_module.discount.")
+    if collector is not None:
+        collector_policy = getattr(collector, "policy", None)
+        if collector_policy is not None and collector_policy is not planner:
+            raise ValueError(
+                "The collector policy must be the same TdMpc2Planner validated "
+                "against loss_module."
+            )
+    return planner
 
 
 class TdMpc2OptimizationStepper(OptimizationStepper):
     """Execute the two-phase TD-MPC2 learner update.
 
-    The model optimizer updates the world model and online Q-functions first;
-    the actor optimizer then updates the policy objective on the detached
-    imagined latent sequence captured by that model update. The policy update
-    uses the model/Q parameters after the first optimizer step. The target
-    Q-functions are soft-updated last.
+    Each step performs the model and Q-function update first, then evaluates
+    the policy objective on the detached imagined latent sequence captured by
+    that model update. The policy update uses the model/Q parameters after the
+    first optimizer step. The target Q-functions are soft-updated last.
 
     Args:
         loss_module: TD-MPC2 loss providing model and actor objectives.
@@ -72,6 +119,7 @@ class TdMpc2OptimizationStepper(OptimizationStepper):
     def register(self, trainer: Trainer, name: str = "optimization_stepper") -> None:
         """Register the stepper and validate exclusive trainer ownership."""
         if getattr(trainer, "learner_backend", "local") != "local":
+            # TODO: Investigate whether this could be supported.
             raise NotImplementedError("Distributed TD-MPC2 updates are not supported.")
         if getattr(trainer, "optimizer", None) is not None:
             raise ValueError(
@@ -143,10 +191,11 @@ class TdMpc2OptimizationStepper(OptimizationStepper):
         self.optimizer_actor.load_state_dict(state_dict["optimizer_actor"])
 
     def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
-        """Run model, actor, and target-Q updates and return detached metrics."""
+        """Run one model, actor, and target-Q update and return detached metrics."""
         if trainer.loss_module is not self.loss_module:
             raise ValueError("The trainer and stepper must share the same loss module.")
         if getattr(trainer, "process_group", None) is not None:
+            # TODO: Investigate whether this can be supported.
             raise NotImplementedError("Distributed TD-MPC2 updates are not supported.")
         if getattr(trainer, "target_net_updater", None) is not None:
             raise ValueError(
@@ -205,3 +254,302 @@ class TdMpc2OptimizationStepper(OptimizationStepper):
             },
             batch_size=[],
         )
+
+
+class TdMpc2Trainer(Trainer):
+    """A trainer class for the TD-MPC2 algorithm.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.TdMpc2TrainerConfig` for the
+    Hydra configuration counterpart.
+
+    This trainer implements TD-MPC2, a scalable and robust model-based reinforcement
+    learning algorithm for continuous control. TD-MPC2 learns a latent world model,
+    including transition, reward, value, and policy components, and uses model
+    predictive control with MPPI-style planning to select actions.
+
+    The trainer handles:
+    - Sequence-based replay buffer sampling for model learning
+    - Joint optimization of the latent world model and policy prior
+    - Model-predictive action planning through a TD-MPC2 planner
+    - Synchronization of planner weights with the data collector
+    - Logging and checkpointing of training metrics
+
+    Args:
+        collector (BaseCollector): The data collector used to gather environment interactions.
+        total_frames (int): Total number of frames to collect during training.
+        loss_module (TdMpc2Loss): The TD-MPC2 loss module.
+        planner (TdMpc2Planner): The planner used for model-predictive action selection.
+        optimizer_model (optim.Optimizer): Optimizer for the world model and value functions.
+        optimizer_actor (optim.Optimizer): Optimizer for the policy prior.
+        replay_buffer (ReplayBuffer): Replay buffer containing training trajectories.
+        batch_size (int, optional): Number of trajectory sequences sampled per update.
+        optim_steps_per_batch (int, optional): Number of optimization steps per collected batch.
+        logger (Logger, optional): Logger for recording training metrics.
+        progress_bar (bool, optional): Whether to show a progress bar during training.
+        seed (int, optional): Random seed for reproducibility.
+    """
+
+    def __init__(
+        self,
+        *,
+        collector,
+        total_frames: int | None,
+        loss_module: TdMpc2Loss,
+        planner: TensorDictModuleBase | None = None,
+        optimizer_model: torch.optim.Optimizer | None = None,
+        optimizer_actor: torch.optim.Optimizer | None = None,
+        optimization_stepper: TdMpc2OptimizationStepper | None = None,
+        replay_buffer=None,
+        batch_size: int | None = None,
+        frame_skip: int = 1,
+        optim_steps_per_batch: int = 1,
+        seed_pretrain_steps: int = 0,
+        logger=None,
+        clip_grad_norm: bool = True,
+        clip_norm: float | None = 20.0,
+        progress_bar: bool = True,
+        seed: int | None = None,
+        save_trainer_interval: int = 10000,
+        log_interval: int = 10000,
+        save_trainer_file=None,
+        checkpoint=None,
+        checkpoint_rotation=None,
+        checkpoint_metadata=None,
+        num_epochs: int = 1,
+        async_collection: bool = False,
+        log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict | None = None,
+        learner_poll_interval: float = 0.05,
+    ) -> None:
+        if learner_backend != "local":
+            # TODO: Investigate whether this can be supported.
+            raise NotImplementedError(
+                "The TD-MPC2 trainer supports local optimization only."
+            )
+        if async_collection:
+            # TODO: Investigate supporting this.
+            raise NotImplementedError(
+                "The TD-MPC2 trainer supports synchronous collection only."
+            )
+        if total_frames is None:
+            try:
+                total_frames = collector.total_frames
+            except AttributeError as err:
+                raise TypeError(
+                    "total_frames must be provided when the collector does not "
+                    "expose a total_frames attribute."
+                ) from err
+        if planner is None:
+            raise ValueError("planner is required for TD-MPC2 training.")
+        _validate_tdmpc2_planner(planner, loss_module, collector)
+        if replay_buffer is None:
+            raise ValueError("replay_buffer is required for TD-MPC2 training.")
+        if isinstance(seed_pretrain_steps, bool) or not isinstance(
+            seed_pretrain_steps, int
+        ):
+            raise TypeError("seed_pretrain_steps must be an integer.")
+        if seed_pretrain_steps < 0:
+            raise ValueError("seed_pretrain_steps must be non-negative.")
+        if batch_size is not None and (
+            isinstance(batch_size, bool) or not isinstance(batch_size, int)
+        ):
+            raise TypeError("batch_size must be an integer or None.")
+        if batch_size is not None and batch_size <= 0:
+            raise ValueError("batch_size must be positive.")
+
+        if replay_buffer is not None:
+            sampler = getattr(replay_buffer, "sampler", None)
+            if isinstance(sampler, PrioritizedSampler):
+                raise NotImplementedError(
+                    "Prioritized replay is not supported by the TD-MPC2 trainer."
+                )
+            if not isinstance(sampler, SliceSampler):
+                raise TypeError(
+                    "replay_buffer must use a SliceSampler to preserve TD-MPC2 "
+                    "sequence continuity."
+                )
+            if sampler.slice_len != loss_module.horizon:
+                raise ValueError(
+                    "The replay SliceSampler slice_len must equal "
+                    f"loss_module.horizon={loss_module.horizon}."
+                )
+            if sampler.num_slices is not None:
+                raise ValueError(
+                    "The TD-MPC2 replay SliceSampler must configure slice_len, "
+                    "not num_slices."
+                )
+            if sampler.output_layout != "batch_time":
+                raise ValueError(
+                    "The TD-MPC2 replay SliceSampler must use "
+                    "output_layout='batch_time'."
+                )
+            if not sampler.strict_length or sampler.pad_output:
+                raise ValueError(
+                    "The TD-MPC2 replay SliceSampler must use strict_length=True "
+                    "without padding."
+                )
+            if (
+                sampler.traj_key is None
+                and sampler.end_key is None
+                and sampler.end_keys is None
+            ):
+                raise ValueError(
+                    "The replay SliceSampler must define traj_key, end_key, or "
+                    "end_keys to preserve episode continuity."
+                )
+
+        if optimization_stepper is None:
+            if optimizer_model is None or optimizer_actor is None:
+                raise TypeError(
+                    "optimizer_model and optimizer_actor are required when "
+                    "optimization_stepper is not provided."
+                )
+            optimization_stepper = TdMpc2OptimizationStepper(
+                loss_module,
+                optimizer_model,
+                optimizer_actor,
+            )
+        elif optimizer_model is not None or optimizer_actor is not None:
+            raise ValueError(
+                "Pass optimizers directly or provide optimization_stepper, not both."
+            )
+        elif optimization_stepper.loss_module is not loss_module:
+            raise ValueError(
+                "optimization_stepper must reference the trainer's loss_module."
+            )
+
+        self.planner = planner
+        super().__init__(
+            collector=collector,
+            total_frames=total_frames,
+            frame_skip=frame_skip,
+            optim_steps_per_batch=optim_steps_per_batch,
+            loss_module=loss_module,
+            optimizer=None,
+            optimization_stepper=optimization_stepper,
+            replay_buffer=replay_buffer,
+            target_net_updater=None,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
+            learner_poll_interval=learner_poll_interval,
+            logger=logger,
+            clip_grad_norm=clip_grad_norm,
+            clip_norm=clip_norm,
+            progress_bar=progress_bar,
+            seed=seed,
+            save_trainer_interval=save_trainer_interval,
+            log_interval=log_interval,
+            save_trainer_file=save_trainer_file,
+            checkpoint=checkpoint,
+            checkpoint_rotation=checkpoint_rotation,
+            checkpoint_metadata=checkpoint_metadata,
+            num_epochs=num_epochs,
+            async_collection=async_collection,
+            log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
+        )
+        self.seed_pretrain_steps = seed_pretrain_steps
+        self._tdmpc2_replay_buffer = None
+
+        if replay_buffer is not None:
+            replay_batch_size = (
+                None if batch_size is None else batch_size * loss_module.horizon
+            )
+            replay_hook = ReplayBufferTrainer(
+                replay_buffer,
+                batch_size=replay_batch_size,
+                # TD-MPC2 flattens collector batches explicitly below.  The
+                # generic flattening fallback also rewrites the final
+                # ``truncated`` entry, which is not valid for already padded
+                # or mask-free collector batches.
+                flatten_tensordicts=False,
+                memmap=False,
+                device=getattr(replay_buffer.storage, "device", "cpu"),
+            )
+            self.register_op("batch_process", self._extend_replay_batch)
+            self.register_op("process_optim_batch", replay_hook.sample)
+            self.register_module("replay_buffer", replay_hook)
+            self._tdmpc2_replay_buffer = replay_hook
+
+        if planner is not None:
+            update_weights = UpdateWeights(
+                self.collector,
+                1,
+                policy_weights_getter=partial(TensorDict.from_module, planner),
+            )
+            self.register_op("post_steps", update_weights)
+
+    def _seed_pretraining_pending(self) -> bool:
+        """Return whether the one-time seed-data optimization burst is pending."""
+        return (
+            self.seed_pretrain_steps > 0
+            and self.collected_frames
+            >= getattr(self.collector, "init_random_frames", 0)
+            and self.optimization_stepper.update_count < self.seed_pretrain_steps
+        )
+
+    def optim_steps(
+        self,
+        batch: TensorDictBase,
+        *,
+        optim_steps_per_batch: int | None | object = _OPTIM_STEPS_UNSET,
+        num_epochs: int | object = _OPTIM_STEPS_UNSET,
+    ) -> None:
+        """Run seed-data pretraining once, then use the normal cadence."""
+        warmup_frames = getattr(self.collector, "init_random_frames", 0)
+        if (
+            self.seed_pretrain_steps > self.optimization_stepper.update_count
+            and self.collected_frames < warmup_frames
+        ):
+            raise RuntimeError(
+                "TD-MPC2 seed pretraining cannot start before "
+                f"collector.init_random_frames ({warmup_frames}) is reached."
+            )
+        if (
+            optim_steps_per_batch is not _OPTIM_STEPS_UNSET
+            or num_epochs is not _OPTIM_STEPS_UNSET
+        ):
+            super().optim_steps(
+                batch,
+                optim_steps_per_batch=optim_steps_per_batch,
+                num_epochs=num_epochs,
+            )
+            return
+        if self._seed_pretraining_pending():
+            completed_before = self.optimization_stepper.update_count
+            remaining_steps = self.seed_pretrain_steps - completed_before
+            super().optim_steps(
+                batch,
+                optim_steps_per_batch=remaining_steps,
+                num_epochs=1,
+            )
+            completed_after = self.optimization_stepper.update_count
+            if completed_after != self.seed_pretrain_steps:
+                raise RuntimeError(
+                    "TD-MPC2 seed pretraining stopped before completing the "
+                    f"requested {self.seed_pretrain_steps} updates: completed "
+                    f"{completed_after}."
+                )
+            return
+        super().optim_steps(batch)
+
+    def _checkpoint_policy(self) -> TensorDictModuleBase | None:
+        """Return the configured execution policy for trainer checkpoints."""
+        if self.planner is not None:
+            return self.planner
+        return super()._checkpoint_policy()
+
+    def _extend_replay_batch(self, batch: TensorDictBase) -> TensorDictBase:
+        """Flatten canonical collector transitions for flat replay storage."""
+        replay_hook = self._tdmpc2_replay_buffer
+        if replay_hook is None:
+            raise RuntimeError("TD-MPC2 replay buffer hook is not initialized.")
+        mask = batch.get(("collector", "mask"), default=None)
+        if mask is not None:
+            batch = batch[mask]
+        else:
+            batch = batch.reshape(-1)
+        return replay_hook.extend(batch)
