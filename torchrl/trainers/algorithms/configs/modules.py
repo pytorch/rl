@@ -5,17 +5,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
 
 import torch
+import torch.nn as nn
 from omegaconf import MISSING
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl.modules import (
     AdditiveGaussianModule,
     DreamerV3DiscreteActor,
     LowLevelController,
+    MLP,
     QValueActor,
     RSSMStateEstimatorV3,
     TanhModule,
@@ -180,6 +183,90 @@ class DreamerV3MLPConfig(NetworkConfig):
     norm_eps: float = 1e-4
     device: Any = None
     _target_: str = "torchrl.modules.DreamerV3MLP"
+
+
+@dataclass
+class TdMpc2MLPConfig(NetworkConfig):
+    """A class to configure a TDMPC2 multilayer perceptron.
+
+    Example:
+        >>> import torch
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import TdMpc2MLPConfig
+        >>> cfg = TdMpc2MLPConfig(
+        ...     in_features=6, out_features=4, depth=2, num_cells=8
+        ... )
+        >>> net = instantiate(cfg)
+        >>> y = net(torch.randn(3, 6))
+        >>> assert y.shape == (3, 4)
+
+    .. seealso:: :class:`~torchrl.modules.MLP`
+    """
+
+    in_features: int = MISSING
+    out_features: int = MISSING
+    depth: int | None = None
+    num_cells: Any = MISSING
+    output_activation: Any = None
+    dropout: float = 0.0
+    device: Any = None
+    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_tdmpc2_mlp"
+
+
+def _make_tdmpc2_mlp(
+    *,
+    in_features: int,
+    out_features: int,
+    depth: int | None,
+    num_cells: int | Sequence[int],
+    output_activation: nn.Module | None = None,
+    dropout: float = 0.0,
+    device: Any = None,
+) -> MLP:
+    """Helper function to create a TDMPC2 MLP."""
+    if isinstance(num_cells, int):
+        hidden_sizes = [num_cells] * (depth or 0)
+    else:
+        hidden_sizes = list(num_cells)
+
+    network = MLP(
+        in_features=in_features,
+        out_features=out_features,
+        depth=depth,
+        num_cells=num_cells,
+        activation_class=nn.Mish,
+        activation_kwargs={"inplace": False},
+        norm_class=nn.LayerNorm,
+        norm_kwargs=[{"normalized_shape": size} for size in hidden_sizes],
+        dropout=dropout or None,
+        activate_last_layer=False,
+        device=device,
+    )
+
+    # TDMPC2 only applies dropout after the first hidden layer.
+    # MLP applies it to all layers, so we disable all after the first.
+    if dropout:
+        dropout_layers = [
+            module for module in network.children() if isinstance(module, nn.Dropout)
+        ]
+        for module in dropout_layers[1:]:
+            module.p = 0.0
+
+    if output_activation is not None:
+        network.append(nn.LayerNorm(out_features, device=device))
+        network.append(
+            output_activation.to(device=device)
+            if device is not None
+            else output_activation
+        )
+
+    for module in network.modules():
+        if isinstance(module, nn.Linear):
+            nn.init.trunc_normal_(module.weight, std=0.02)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+    return network
 
 
 @dataclass
