@@ -1,0 +1,185 @@
+# State-based TD-MPC2 training on DMControl Cartpole Balance.
+
+defaults:
+  - transform@transform0: cat_tensors
+  - transform@transform1: double_to_float
+  - transform@transform2: step_counter
+  - transform@transform3: init_tracker
+
+  - env@training_env: transformed_env
+  - env@training_env.base_env: dm_control
+  - transform@training_env.transform: compose
+  - model@models.world_model: tdmpc2_world_model
+  - model@models.policy_prior: tdmpc2_policy_prior
+  - model@models.q_ensemble: tdmpc2_q_ensemble
+  - model@models.planner: tdmpc2_planner
+  - loss@loss: tdmpc2
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - sampler@replay_buffer.sampler: slice
+  - writer@replay_buffer.writer: round_robin
+  - logger@logger: csv
+  - hook@metric_hooks.training_reward: log_scalar
+  - hook@metric_hooks.training_action: log_scalar
+  - trainer@trainer: tdmpc2
+  - _self_
+
+transform0:
+  in_keys: [position, velocity]
+  out_key: observation
+
+transform1:
+  in_keys: [observation, reward]
+  out_keys: [observation, reward]
+
+transform2:
+  max_steps: 500
+  truncated_key: truncated
+  step_count_key: step_count
+  update_done: true
+
+transform3:
+  init_key: is_init
+
+training_env:
+  base_env:
+    env_name: cartpole
+    task_name: balance
+    from_pixels: false
+    frame_skip: 2
+    device: cpu
+  transform:
+    transforms:
+      - ${transform0}
+      - ${transform1}
+      - ${transform2}
+      - ${transform3}
+  _partial_: true
+
+models:
+  world_model:
+    observation_dim: 5
+    action_dim: 1
+    latent_dim: 128
+    encoder_dim: 256
+    encoder_depth: 1
+    mlp_dim: 384
+    simnorm_dim: 8
+    num_bins: 101
+    device: cpu
+  policy_prior:
+    latent_dim: 128
+    action_dim: 1
+    mlp_dim: 384
+    log_std_min: -10.0
+    log_std_max: 2.0
+    device: cpu
+  q_ensemble:
+    latent_dim: 128
+    action_dim: 1
+    mlp_dim: 384
+    num_q: 2
+    num_bins: 101
+    vmin: -10.0
+    vmax: 10.0
+    dropout: 0.01
+    device: cpu
+  planner:
+    _partial_: true
+    num_samples: 512
+    num_elites: 64
+    num_pi_trajs: 24
+    iterations: 6
+    min_std: 0.05
+    max_std: 2.0
+    temperature: 0.5
+
+loss:
+  # The trainer factory injects the three live component instances here. This
+  # prevents Hydra from constructing a second copy of any network.
+  world_model: null
+  policy_prior: null
+  q_ensemble: null
+  horizon: 3
+  discount: 0.99
+  rho: 0.5
+  consistency_coef: 20.0
+  reward_coef: 0.1
+  value_coef: 0.1
+  entropy_coef: 1.0e-4
+  scale_tau: 0.01
+  _partial_: true
+
+collector:
+  create_env_fn: ${training_env}
+  policy: null
+  auto_register_policy_transforms: true
+  total_frames: 100_000
+  frames_per_batch: 500
+  # Collect five episodes with random actions before using the planner.
+  init_random_frames: 2_500
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1_000_000
+    device: cpu
+    ndim: 1
+  sampler:
+    _target_: torchrl.trainers.algorithms.configs.data._make_slice_sampler
+    slice_len: ${loss.horizon}
+    end_key: [next, done]
+    end_keys: null
+    traj_key: null
+    truncated_key: [next, truncated]
+    init_key: is_init
+    strict_length: true
+    pad_output: false
+    output_layout: batch_time
+  writer:
+    compilable: false
+  batch_size: 512
+
+logger:
+  exp_name: tdmpc2_cartpole_balance
+
+metric_hooks:
+  training_reward:
+    key: [next, reward]
+    logname: train_reward
+    include_std: true
+  training_action:
+    key: action
+    logname: train_action
+    include_std: true
+
+trainer:
+  collector: ${collector}
+  total_frames: ${collector.total_frames}
+  loss_module: ${loss}
+  world_model: ${models.world_model}
+  policy_prior: ${models.policy_prior}
+  q_ensemble: ${models.q_ensemble}
+  planner: ${models.planner}
+  replay_buffer: ${replay_buffer}
+  logger: ${logger}
+  hooks:
+    - ${metric_hooks.training_reward}
+    - ${metric_hooks.training_action}
+  batch_size: 128
+  frame_skip: 1
+  progress_bar: true
+  seed: 1
+  clip_grad_norm: true
+  clip_norm: 20.0
+  optim_steps_per_batch: 500
+  seed_pretrain_steps: 2_500
+  log_interval: 5_000
+  save_trainer_file: null
+
+resume: null
+
+hydra:
+  job:
+    chdir: true

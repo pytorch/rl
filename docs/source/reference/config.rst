@@ -509,6 +509,7 @@ Training and Optimization Configurations
     FQLTrainerConfig
     CQLTrainerConfig
     TD3TrainerConfig
+    TdMpc2TrainerConfig
 
 Trainer Hook Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
