@@ -64,6 +64,7 @@ from .multiagent import (
     VDNMixer,
 )
 from .rbf_controller import RBFController
+from .tdmpc2 import SimplicialNormalization
 from .utils import Squeeze2dLayer, SqueezeLayer
 
 
@@ -122,6 +123,7 @@ __all__ = [
     "Squeeze2dLayer",
     "SqueezeLayer",
     "SymExpTwoHot",
+    "SimplicialNormalization",
     "VDNMixer",
     "reset_noise",
 ]

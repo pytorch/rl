@@ -120,6 +120,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     TanhModuleConfig,
     TanhNormalModelConfig,
     TdMpc2MLPConfig,
+    TdMpc2WorldModelConfig,
     TensorDictModuleConfig,
     TensorDictSequentialConfig,
     ValueModelConfig,
@@ -330,6 +331,7 @@ __all__ = [
     "MLPConfig",
     "LowLevelControllerConfig",
     "TdMpc2MLPConfig",
+    "TdMpc2WorldModelConfig",
     "ModelConfig",
     "TanhModuleConfig",
     "TanhNormalModelConfig",
@@ -591,6 +593,7 @@ def _register_configs():
     cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
     cs.store(group="model", name="value", node=ValueModelConfig)
     cs.store(group="model", name="qvalue", node=QValueModelConfig)
+    cs.store(group="model", name="tdmpc2_world_model", node=TdMpc2WorldModelConfig)
 
     # Exploration configs
     cs.store(
