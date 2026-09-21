@@ -9,9 +9,12 @@ from dataclasses import dataclass
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
+
 from tensordict.nn import TensorDictModuleBase
 from torchrl.collectors import BaseCollector
 from torchrl.data import Categorical, Composite, OneHot
+from torchrl.modules import TdMpc2Planner
+from torchrl.objectives import TdMpc2Loss
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
@@ -28,6 +31,7 @@ from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
+from torchrl.trainers.algorithms.tdmpc2 import TdMpc2OptimizationStepper, TdMpc2Trainer
 
 if TYPE_CHECKING:
     _LearnerBackend = Literal["local", "ray"]
@@ -261,8 +265,7 @@ class OfflineToOnlineTrainerConfig(SACTrainerConfig):
     anneal_frames: int | None = None
 
     _target_: str = (
-        "torchrl.trainers.algorithms.configs.trainers."
-        "_make_offline_to_online_trainer"
+        "torchrl.trainers.algorithms.configs.trainers._make_offline_to_online_trainer"
     )
 
     def __post_init__(self) -> None:
@@ -1663,6 +1666,171 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
         auto_log_optim_steps=auto_log_optim_steps,
         target_net_updater=target_net_updater,
         exploration_module=exploration_module,
+    )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
+
+
+@dataclass
+class TdMpc2TrainerConfig(TrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.TdMpc2Trainer`.
+
+    .. seealso:: :class:`~torchrl.trainers.algorithms.TdMpc2Trainer`
+    """
+
+    collector: Any
+    total_frames: int | None
+    loss_module: Any = None
+    world_model: Any = None
+    policy_prior: Any = None
+    q_ensemble: Any = None
+    planner: Any = None
+    optimizer_model: Any | None = None
+    optimizer_actor: Any | None = None
+    optimization_stepper: Any | None = None
+    replay_buffer: Any = None
+    batch_size: int | None = None
+    logger: Any = None
+    save_trainer_file: Any = None
+    optim_steps_per_batch: int = 1
+    frame_skip: int = 1
+    seed_pretrain_steps: int = 0
+    clip_grad_norm: bool = True
+    clip_norm: float | None = 20.0
+    progress_bar: bool = True
+    seed: int | None = None
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    num_epochs: int = 1
+    async_collection: bool = False
+    log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    learner_backend: _LearnerBackend = "local"
+    learner_backend_options: dict[str, Any] | None = None
+    learner_poll_interval: float = 0.05
+    lr: float = 3e-4
+    encoder_lr_scale: float = 0.3
+    actor_eps: float = 1e-5
+    weight_decay: float = 0.0
+    capturable: bool | None = None
+    target_tau: float = 0.01
+    zero_grad_set_to_none: bool = True
+    hooks: list[Any] | None = None
+    checkpoint: Any = None
+    checkpoint_rotation: Any = None
+    checkpoint_metadata: Any = None
+
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_tdmpc2_trainer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_tdmpc2_trainer(*args, **kwargs) -> TdMpc2Trainer:
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    loss_module = kwargs.pop("loss_module")
+    world_model = kwargs.pop("world_model")
+    policy_prior = kwargs.pop("policy_prior")
+    q_ensemble = kwargs.pop("q_ensemble")
+    planner = kwargs.pop("planner", None)
+
+    if not isinstance(loss_module, TdMpc2Loss):
+        loss_module = loss_module(
+            world_model=world_model,
+            policy_prior=policy_prior,
+            q_ensemble=q_ensemble,
+        )
+
+    if planner is None:
+        planner = TdMpc2Planner
+    if not isinstance(planner, TdMpc2Planner):
+        planner = planner(
+            world_model=loss_module.world_model,
+            policy_prior=loss_module.policy_prior,
+            q_ensemble=loss_module.q_ensemble,
+            horizon=loss_module.horizon,
+            discount=loss_module.discount.item(),
+        )
+
+    if not isinstance(collector, BaseCollector) and callable(collector):
+        collector = collector(
+            policy=planner,
+            auto_register_policy_transforms=True,
+        )
+
+    optimizer_model = kwargs.pop("optimizer_model", None)
+    optimizer_actor = kwargs.pop("optimizer_actor", None)
+    optimization_stepper = kwargs.pop("optimization_stepper", None)
+    lr = kwargs.pop("lr", 3e-4)
+    encoder_lr_scale = kwargs.pop("encoder_lr_scale", 0.3)
+    actor_eps = kwargs.pop("actor_eps", 1e-5)
+    weight_decay = kwargs.pop("weight_decay", 0.0)
+    capturable = kwargs.pop("capturable", None)
+    target_tau = kwargs.pop("target_tau", 0.01)
+    zero_grad_set_to_none = kwargs.pop("zero_grad_set_to_none", True)
+    hooks = kwargs.pop("hooks", None)
+
+    if optimization_stepper is not None and (
+        optimizer_model is not None or optimizer_actor is not None
+    ):
+        raise ValueError(
+            "Pass optimizers directly or provide optimization_stepper, not both."
+        )
+
+    if optimization_stepper is None:
+        capturable_kwargs = {} if capturable is None else {"capturable": capturable}
+        model_params = [
+            *loss_module.world_model.encoder.parameters(),
+            *loss_module.world_model.dynamics.parameters(),
+            *loss_module.world_model.reward_head.parameters(),
+            *loss_module.q_ensemble.q_params.parameters(),
+        ]
+        if optimizer_model is None:
+            encoder_params = list(loss_module.world_model.encoder.parameters())
+            other_params = [
+                *loss_module.world_model.dynamics.parameters(),
+                *loss_module.world_model.reward_head.parameters(),
+                *loss_module.q_ensemble.q_params.parameters(),
+            ]
+            optimizer_model = torch.optim.Adam(
+                [
+                    {"params": encoder_params, "lr": lr * encoder_lr_scale},
+                    {"params": other_params, "lr": lr},
+                ],
+                lr=lr,
+                weight_decay=weight_decay,
+                **capturable_kwargs,
+            )
+        elif not isinstance(optimizer_model, torch.optim.Optimizer):
+            optimizer_model = optimizer_model(params=model_params)
+
+        if optimizer_actor is None:
+            optimizer_actor = torch.optim.Adam(
+                loss_module.policy_prior.parameters(),
+                lr=lr,
+                eps=actor_eps,
+                weight_decay=weight_decay,
+                **capturable_kwargs,
+            )
+        elif not isinstance(optimizer_actor, torch.optim.Optimizer):
+            optimizer_actor = optimizer_actor(
+                params=list(loss_module.policy_prior.parameters())
+            )
+        optimization_stepper = TdMpc2OptimizationStepper(
+            loss_module,
+            optimizer_model,
+            optimizer_actor,
+            target_tau=target_tau,
+            zero_grad_set_to_none=zero_grad_set_to_none,
+        )
+    trainer = TdMpc2Trainer(
+        collector=collector,
+        total_frames=total_frames,
+        loss_module=loss_module,
+        planner=planner,
+        optimization_stepper=optimization_stepper,
+        **kwargs,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer

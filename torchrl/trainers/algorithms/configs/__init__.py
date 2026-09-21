@@ -162,6 +162,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     ReinforceTrainerConfig,
     SACTrainerConfig,
     TD3TrainerConfig,
+    TdMpc2TrainerConfig,
     TrainerConfig,
 )
 from torchrl.trainers.algorithms.configs.transforms import (
@@ -472,6 +473,7 @@ __all__ = [
     "ReinforceTrainerConfig",
     "SACTrainerConfig",
     "TD3TrainerConfig",
+    "TdMpc2TrainerConfig",
     "TrainerConfig",
     "GRPOTrainerConfig",
     # Hooks
@@ -812,6 +814,7 @@ def _register_configs():
     cs.store(group="trainer", name="reinforce", node=ReinforceTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)
+    cs.store(group="trainer", name="tdmpc2", node=TdMpc2TrainerConfig)
     cs.store(group="trainer", name="grpo", node=GRPOTrainerConfig)
 
     # =============================================================================

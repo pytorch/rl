@@ -17,6 +17,20 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "tdmpc2": """python sota-implementations/tdmpc2_trainer/train.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  trainer.batch_size=4 \
+  trainer.optim_steps_per_batch=1 \
+  trainer.seed_pretrain_steps=1 \
+  models.planner.num_samples=16 \
+  models.planner.num_elites=4 \
+  models.planner.num_pi_trajs=2 \
+  models.planner.iterations=2 \
+  logger.backend= \
+  hydra.run.dir=outputs/sota_tdmpc2
+""",
     "dqn_trainer_resume": """python sota-implementations/dqn_trainer/train.py \
   collector.total_frames=2000 \
   collector.frames_per_batch=1000 \

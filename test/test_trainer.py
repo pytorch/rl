@@ -47,7 +47,13 @@ from torchrl.data import (
 )
 from torchrl.envs import Compose, RenameTransform, SerialEnv, TransformedEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.modules import GRUModule, ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.modules import (
+    GRUModule,
+    ProbabilisticActor,
+    TanhNormal,
+    TdMpc2Planner,
+    ValueOperator,
+)
 from torchrl.objectives import (
     ClipPPOLoss,
     CQLLoss,
@@ -73,7 +79,7 @@ from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
-from torchrl.trainers.algorithms.tdmpc2 import TdMpc2OptimizationStepper
+from torchrl.trainers.algorithms.tdmpc2 import TdMpc2OptimizationStepper, TdMpc2Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
@@ -1370,6 +1376,15 @@ class TestOptimizer:
 
 
 class TestLogReward:
+    def test_log_reward_normalizes_hydra_nested_key(self):
+        from omegaconf import ListConfig
+        from torchrl.trainers.algorithms.configs.hooks import _make_log_scalar
+
+        log_reward = _make_log_scalar(ListConfig(["next", "reward"]), "reward")
+        assert log_reward.key == ("next", "reward")
+        td = TensorDict({("next", "reward"): torch.ones(3)}, [3])
+        assert log_reward(td)["reward"] == 1.0
+
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
     @pytest.mark.parametrize("dtype", [torch.float32, torch.int64])
@@ -3686,6 +3701,432 @@ class TestTdMpc2OptimizationStepper:
             + metrics["loss_reward"]
             + metrics["loss_value"],
         )
+
+
+_TDMPC2_OBSERVATION_DIM = 5
+_TDMPC2_ACTION_DIM = 2
+_TDMPC2_LATENT_DIM = 8
+_TDMPC2_HORIZON = 3
+
+
+class _TdMpc2Collector:
+    total_frames = 100
+    init_random_frames = 0
+
+    def update_policy_weights_(self, weights=None):
+        del weights
+
+    def set_seed(self, seed, **kwargs):
+        return seed
+
+    def shutdown(self):
+        pass
+
+    def state_dict(self):
+        return {}
+
+    def load_state_dict(self, state_dict):
+        del state_dict
+
+
+class _TdMpc2BatchCollector(_TdMpc2Collector):
+    init_random_frames = 32
+
+    def __init__(self, batches):
+        self.batches = batches
+        self.shutdown_called = False
+
+    def __iter__(self):
+        return iter(self.batches)
+
+    def shutdown(self):
+        self.shutdown_called = True
+
+
+class _TdMpc2FactoryCollector(_TdMpc2Collector):
+    def __init__(self, policy, total_frames=100, auto_register_policy_transforms=False):
+        self.policy = policy
+        self.total_frames = total_frames
+        self.auto_register_policy_transforms = auto_register_policy_transforms
+
+
+def _tdmpc2_make_factory_collector(*, policy, total_frames=100, **kwargs):
+    return _TdMpc2FactoryCollector(policy, total_frames=total_frames, **kwargs)
+
+
+def _tdmpc2_make_loss():
+    from hydra.utils import instantiate
+
+    from torchrl.trainers.algorithms.configs import (
+        TdMpc2PolicyPriorConfig,
+        TdMpc2QEnsembleConfig,
+        TdMpc2WorldModelConfig,
+    )
+
+    world_model = instantiate(
+        TdMpc2WorldModelConfig(
+            observation_dim=_TDMPC2_OBSERVATION_DIM,
+            action_dim=_TDMPC2_ACTION_DIM,
+            latent_dim=_TDMPC2_LATENT_DIM,
+            encoder_dim=12,
+            mlp_dim=16,
+            simnorm_dim=4,
+            num_bins=5,
+        )
+    )
+    policy_prior = instantiate(
+        TdMpc2PolicyPriorConfig(
+            latent_dim=_TDMPC2_LATENT_DIM,
+            action_dim=_TDMPC2_ACTION_DIM,
+            mlp_dim=16,
+        )
+    )
+    q_ensemble = instantiate(
+        TdMpc2QEnsembleConfig(
+            latent_dim=_TDMPC2_LATENT_DIM,
+            action_dim=_TDMPC2_ACTION_DIM,
+            mlp_dim=16,
+            num_q=2,
+            num_bins=5,
+            dropout=0.0,
+        )
+    )
+    return TdMpc2Loss(
+        world_model,
+        policy_prior,
+        q_ensemble,
+        horizon=_TDMPC2_HORIZON,
+        discount=0.97,
+        rho=0.5,
+    )
+
+
+def _tdmpc2_make_planner(loss):
+    return TdMpc2Planner(
+        loss.world_model,
+        loss.policy_prior,
+        loss.q_ensemble,
+        horizon=loss.horizon,
+        discount=loss.discount.item(),
+        num_samples=4,
+        num_elites=2,
+        num_pi_trajs=1,
+        iterations=1,
+    )
+
+
+def _tdmpc2_make_raw_batch(num_episodes=4):
+    num_items = num_episodes * _TDMPC2_HORIZON
+    terminated = torch.zeros(num_items, dtype=torch.bool)
+    terminated[_TDMPC2_HORIZON - 1 :: _TDMPC2_HORIZON] = True
+    truncated = torch.zeros_like(terminated)
+    return TensorDict(
+        {
+            "observation": torch.randn(num_items, _TDMPC2_OBSERVATION_DIM),
+            "action": torch.randn(num_items, _TDMPC2_ACTION_DIM),
+            ("next", "observation"): torch.randn(num_items, _TDMPC2_OBSERVATION_DIM),
+            ("next", "reward"): torch.randn(num_items, 1),
+            ("next", "terminated"): terminated.unsqueeze(-1),
+            ("next", "truncated"): truncated.unsqueeze(-1),
+            ("next", "done"): terminated.unsqueeze(-1),
+            "episode": torch.arange(num_episodes).repeat_interleave(_TDMPC2_HORIZON),
+        },
+        batch_size=[num_items],
+    )
+
+
+def _tdmpc2_make_replay_buffer(num_episodes=4, batch_size=2, strict_length=True):
+    from torchrl.data import LazyTensorStorage, ReplayBuffer, SliceSampler
+
+    return ReplayBuffer(
+        storage=LazyTensorStorage(num_episodes * _TDMPC2_HORIZON),
+        sampler=SliceSampler(
+            slice_len=_TDMPC2_HORIZON,
+            output_layout="batch_time",
+            end_key=("next", "done"),
+            truncated_key=("next", "truncated"),
+            strict_length=strict_length,
+            init_key=None,
+        ),
+        batch_size=batch_size * _TDMPC2_HORIZON,
+    )
+
+
+class TestTdMpc2Trainer:
+    def test_replay_optimization(self):
+        loss = _tdmpc2_make_loss()
+        replay_buffer = _tdmpc2_make_replay_buffer()
+        trainer = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=loss,
+            planner=_tdmpc2_make_planner(loss),
+            optimizer_model=torch.optim.SGD(
+                [
+                    *loss.world_model.parameters(),
+                    *loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.SGD(loss.policy_prior.parameters(), lr=1e-3),
+            replay_buffer=replay_buffer,
+            batch_size=2,
+            progress_bar=False,
+        )
+
+        batch = _tdmpc2_make_raw_batch()
+        trainer._process_batch_hook(batch)
+        trainer.optim_steps(batch)
+
+        assert trainer.optimization_stepper.update_count == 1
+        assert trainer._tdmpc2_replay_buffer is not None
+        sampled = trainer._tdmpc2_replay_buffer.replay_buffer.sample()
+        assert sampled.batch_size == torch.Size([2, _TDMPC2_HORIZON])
+        assert torch.isfinite(sampled["next", "reward"]).all()
+
+    def test_seed_schedule(self):
+        loss = _tdmpc2_make_loss()
+        batches = []
+        for index in range(3):
+            batch = _tdmpc2_make_raw_batch()
+            batch["episode"] += index * 4
+            batch.set(
+                ("collector", "mask"),
+                torch.ones(batch.batch_size[0], dtype=torch.bool),
+            )
+            batches.append(batch)
+        collector = _TdMpc2BatchCollector(batches)
+        trainer = TdMpc2Trainer(
+            collector=collector,
+            total_frames=36,
+            loss_module=loss,
+            planner=_tdmpc2_make_planner(loss),
+            optimizer_model=torch.optim.SGD(
+                [
+                    *loss.world_model.parameters(),
+                    *loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.SGD(loss.policy_prior.parameters(), lr=1e-3),
+            replay_buffer=_tdmpc2_make_replay_buffer(num_episodes=12),
+            batch_size=2,
+            seed_pretrain_steps=3,
+            progress_bar=False,
+        )
+
+        trainer.train()
+
+        assert trainer.collected_frames == 36
+        assert trainer._optim_count == 3
+        assert trainer.optimization_stepper.update_count == 3
+        assert trainer.collector.shutdown_called
+
+    def test_checkpoint_roundtrip(self, tmp_path):
+        path = tmp_path / "tdmpc2-checkpoint"
+        source_loss = _tdmpc2_make_loss()
+        source = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=source_loss,
+            planner=_tdmpc2_make_planner(source_loss),
+            optimizer_model=torch.optim.Adam(
+                [
+                    *source_loss.world_model.parameters(),
+                    *source_loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.Adam(
+                source_loss.policy_prior.parameters(), lr=1e-3
+            ),
+            replay_buffer=_tdmpc2_make_replay_buffer(),
+            batch_size=2,
+            progress_bar=False,
+            seed_pretrain_steps=3,
+            checkpoint=Checkpoint(format="directory"),
+            save_trainer_file=path,
+        )
+        batch = _tdmpc2_make_raw_batch()
+        source._process_batch_hook(batch)
+        source.collected_frames = 4
+        source.optim_steps(batch)
+        source.collected_frames = 7
+        source.save_trainer(force_save=True)
+
+        restored_loss = _tdmpc2_make_loss()
+        restored = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=restored_loss,
+            planner=_tdmpc2_make_planner(restored_loss),
+            optimizer_model=torch.optim.Adam(
+                [
+                    *restored_loss.world_model.parameters(),
+                    *restored_loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.Adam(
+                restored_loss.policy_prior.parameters(), lr=1e-3
+            ),
+            replay_buffer=_tdmpc2_make_replay_buffer(),
+            batch_size=2,
+            progress_bar=False,
+            seed_pretrain_steps=3,
+            checkpoint=Checkpoint(),
+        )
+        restored.load_from_file(path)
+
+        assert restored.collected_frames == 7
+        assert restored._optim_count == source._optim_count == 3
+        assert restored.optimization_stepper.update_count == 3
+        assert not restored._seed_pretraining_pending()
+        assert len(restored._tdmpc2_replay_buffer.replay_buffer) == len(
+            source._tdmpc2_replay_buffer.replay_buffer
+        )
+        for parameter, restored_parameter in zip(
+            source.loss_module.parameters(), restored.loss_module.parameters()
+        ):
+            torch.testing.assert_close(parameter, restored_parameter)
+
+        torch.manual_seed(2718)
+        source.optim_steps(batch)
+        torch.manual_seed(2718)
+        restored.optim_steps(batch)
+
+        assert (
+            restored.optimization_stepper.update_count
+            == source.optimization_stepper.update_count
+        )
+        assert restored._optim_count == source._optim_count
+        torch.testing.assert_close(
+            source.loss_module.state_dict(),
+            restored.loss_module.state_dict(),
+            atol=1e-6,
+            rtol=1e-6,
+        )
+        torch.testing.assert_close(
+            source.optimization_stepper.state_dict(),
+            restored.optimization_stepper.state_dict(),
+            atol=1e-6,
+            rtol=1e-6,
+        )
+
+    @pytest.mark.parametrize("with_collector_mask", [False, True])
+    def test_timeout_flags(self, with_collector_mask):
+        loss = _tdmpc2_make_loss()
+        replay_buffer = _tdmpc2_make_replay_buffer(num_episodes=1, batch_size=1)
+        trainer = TdMpc2Trainer(
+            collector=_TdMpc2Collector(),
+            total_frames=100,
+            loss_module=loss,
+            planner=_tdmpc2_make_planner(loss),
+            optimizer_model=torch.optim.SGD(
+                [
+                    *loss.world_model.parameters(),
+                    *loss.q_ensemble.q_params.parameters(),
+                ],
+                lr=1e-3,
+            ),
+            optimizer_actor=torch.optim.SGD(loss.policy_prior.parameters(), lr=1e-3),
+            replay_buffer=replay_buffer,
+            batch_size=1,
+            progress_bar=False,
+        )
+        truncated = torch.zeros(_TDMPC2_HORIZON, 1, dtype=torch.bool)
+        truncated[-1] = True
+        batch = TensorDict(
+            {
+                "observation": torch.randn(_TDMPC2_HORIZON, 1, _TDMPC2_OBSERVATION_DIM),
+                "action": torch.randn(_TDMPC2_HORIZON, 1, _TDMPC2_ACTION_DIM),
+                "episode": torch.zeros(_TDMPC2_HORIZON, 1, dtype=torch.long),
+                ("next", "observation"): torch.randn(
+                    _TDMPC2_HORIZON, 1, _TDMPC2_OBSERVATION_DIM
+                ),
+                ("next", "reward"): torch.randn(_TDMPC2_HORIZON, 1, 1),
+                ("next", "terminated"): torch.zeros(
+                    _TDMPC2_HORIZON, 1, 1, dtype=torch.bool
+                ),
+                ("next", "truncated"): truncated,
+                ("next", "done"): truncated,
+            },
+            batch_size=[_TDMPC2_HORIZON, 1],
+        )
+        if with_collector_mask:
+            batch.set(
+                ("collector", "mask"),
+                torch.ones(_TDMPC2_HORIZON, 1, dtype=torch.bool),
+            )
+
+        trainer._process_batch_hook(batch)
+        sample = replay_buffer.sample()
+
+        assert sample.batch_size == torch.Size([1, _TDMPC2_HORIZON])
+        assert not sample["next", "truncated"][..., :-1].any()
+        assert sample["next", "truncated"][..., -1].all()
+        assert not sample["next", "terminated"][..., -1].any()
+        assert sample["next", "done"][..., -1].all()
+
+    @pytest.mark.parametrize(
+        "sampler_kwargs, error",
+        [
+            ({"slice_len": _TDMPC2_HORIZON - 1}, "slice_len"),
+            ({"slice_len": _TDMPC2_HORIZON, "output_layout": "flat"}, "output_layout"),
+            (
+                {
+                    "slice_len": _TDMPC2_HORIZON,
+                    "strict_length": False,
+                    "output_layout": "batch_time",
+                },
+                "strict_length",
+            ),
+            (
+                {
+                    "slice_len": _TDMPC2_HORIZON,
+                    "strict_length": False,
+                    "pad_output": True,
+                    "output_layout": "batch_time",
+                },
+                "strict_length",
+            ),
+            ({"num_slices": 2, "output_layout": "batch_time"}, "slice_len"),
+        ],
+    )
+    def test_replay_validation(self, sampler_kwargs, error):
+        from torchrl.data import LazyTensorStorage, ReplayBuffer, SliceSampler
+
+        loss = _tdmpc2_make_loss()
+        replay_buffer = ReplayBuffer(
+            storage=LazyTensorStorage(16),
+            sampler=SliceSampler(
+                end_key=("next", "done"),
+                truncated_key=("next", "truncated"),
+                init_key=None,
+                **sampler_kwargs,
+            ),
+            batch_size=2 * _TDMPC2_HORIZON,
+        )
+        with pytest.raises((TypeError, ValueError), match=error):
+            TdMpc2Trainer(
+                collector=_TdMpc2Collector(),
+                total_frames=100,
+                loss_module=loss,
+                planner=_tdmpc2_make_planner(loss),
+                optimizer_model=torch.optim.SGD(
+                    [
+                        *loss.world_model.parameters(),
+                        *loss.q_ensemble.q_params.parameters(),
+                    ],
+                    lr=1e-3,
+                ),
+                optimizer_actor=torch.optim.SGD(
+                    loss.policy_prior.parameters(), lr=1e-3
+                ),
+                replay_buffer=replay_buffer,
+                batch_size=2,
+                progress_bar=False,
+            )
 
 
 if __name__ == "__main__":

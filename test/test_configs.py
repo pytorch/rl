@@ -1028,7 +1028,10 @@ class TestDataConfigs:
             span=False,  # Use bool instead of Union[bool, int, tuple]
             use_gpu=False,  # Use bool instead of Union[torch.device, bool]
         )
-        assert cfg._target_ == "torchrl.data.replay_buffers.SliceSampler"
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.data._make_slice_sampler"
+        )
         assert cfg.num_slices == 10
         assert cfg.slice_len is None
         assert cfg.end_key == ("next", "done")
@@ -1056,14 +1059,26 @@ class TestDataConfigs:
             SliceSamplerConfig(
                 num_slices=2,
                 output_layout="batch_time",
+                end_key=["next", "done"],
+                truncated_key=["next", "truncated"],
+                init_key=["metadata", "is_init"],
                 slice_end_key=("metadata", "slice_end"),
                 time_dim_name="sequence",
             )
         )
 
         assert sampler.output_layout == "batch_time"
+        assert sampler.end_key == ("next", "done")
+        assert sampler.end_keys is None
+        assert sampler.truncated_key == ("next", "truncated")
+        assert sampler.init_key == ("metadata", "is_init")
         assert sampler.slice_end_key == ("metadata", "slice_end")
         assert sampler.time_dim_name == "sequence"
+
+        sampler_with_end_keys = instantiate(
+            SliceSamplerConfig(num_slices=2, end_keys=[["next", "done"]])
+        )
+        assert sampler_with_end_keys.end_keys == (("next", "done"),)
 
     def test_streaming_slice_sampler_config(self):
         """Test StreamingSliceSamplerConfig."""
@@ -2770,6 +2785,84 @@ class TestLoggerConfigs:
         assert init_kwargs["entity"] == "unit-test"
 
 
+class _TdMpc2ConfigCollector:
+    def __init__(self, policy, total_frames=100, auto_register_policy_transforms=False):
+        self.policy = policy
+        self.total_frames = total_frames
+        self.auto_register_policy_transforms = auto_register_policy_transforms
+
+
+def _make_tdmpc2_config_collector(
+    *, policy, total_frames=100, auto_register_policy_transforms=False
+):
+    return _TdMpc2ConfigCollector(
+        policy,
+        total_frames=total_frames,
+        auto_register_policy_transforms=auto_register_policy_transforms,
+    )
+
+
+def _make_tdmpc2_config_replay_buffer():
+    return ReplayBuffer(
+        storage=LazyTensorStorage(12),
+        sampler=SliceSampler(
+            slice_len=3,
+            output_layout="batch_time",
+            end_key=("next", "done"),
+            truncated_key=("next", "truncated"),
+            strict_length=True,
+            init_key=None,
+        ),
+        batch_size=6,
+    )
+
+
+def _make_tdmpc2_config_components():
+    from hydra.utils import instantiate
+    from torchrl.trainers.algorithms.configs import (
+        TdMpc2LossConfig,
+        TdMpc2PolicyPriorConfig,
+        TdMpc2QEnsembleConfig,
+        TdMpc2WorldModelConfig,
+    )
+
+    world_model = instantiate(
+        TdMpc2WorldModelConfig(
+            observation_dim=5,
+            action_dim=2,
+            latent_dim=8,
+            encoder_dim=12,
+            mlp_dim=16,
+            simnorm_dim=4,
+            num_bins=5,
+        )
+    )
+    policy_prior = instantiate(
+        TdMpc2PolicyPriorConfig(latent_dim=8, action_dim=2, mlp_dim=16)
+    )
+    q_ensemble = instantiate(
+        TdMpc2QEnsembleConfig(
+            latent_dim=8,
+            action_dim=2,
+            mlp_dim=16,
+            num_q=2,
+            num_bins=5,
+            dropout=0.0,
+        )
+    )
+    loss = instantiate(
+        TdMpc2LossConfig(
+            world_model=world_model,
+            policy_prior=policy_prior,
+            q_ensemble=q_ensemble,
+            horizon=3,
+            discount=0.97,
+            rho=0.5,
+        )
+    )
+    return world_model, policy_prior, q_ensemble, loss
+
+
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
@@ -2790,6 +2883,7 @@ class TestTrainerConfigs:
             "ReinforceTrainerConfig",
             "SACTrainerConfig",
             "TD3TrainerConfig",
+            "TdMpc2TrainerConfig",
         ],
     )
     @pytest.mark.parametrize(
@@ -2820,6 +2914,140 @@ class TestTrainerConfigs:
         assert isinstance(rotation, CheckpointRotation)
         assert rotation.keep_last == 3
         assert rotation.keep_best == ("reward", "max")
+
+    def test_tdmpc2_default_optimizers(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs import TdMpc2TrainerConfig
+        from torchrl.trainers.algorithms.tdmpc2 import TdMpc2Trainer
+
+        _, _, _, loss = _make_tdmpc2_config_components()
+        trainer = instantiate(
+            TdMpc2TrainerConfig(
+                collector=_make_tdmpc2_config_collector,
+                total_frames=100,
+                loss_module=loss,
+                replay_buffer=_make_tdmpc2_config_replay_buffer(),
+                progress_bar=False,
+            )
+        )
+
+        assert isinstance(trainer, TdMpc2Trainer)
+        assert trainer.optimization_stepper.optimizer_model.param_groups[0][
+            "lr"
+        ] == pytest.approx(3e-4 * 0.3)
+        assert trainer.optimization_stepper.optimizer_actor.param_groups[0][
+            "eps"
+        ] == pytest.approx(1e-5)
+        assert trainer.optimization_stepper.optimizer_model.param_groups[1][
+            "lr"
+        ] == pytest.approx(3e-4)
+        assert (
+            trainer.optimization_stepper.optimizer_model.defaults["capturable"] is False
+        )
+        assert (
+            trainer.optimization_stepper.optimizer_actor.defaults["capturable"] is False
+        )
+        assert trainer.clip_norm == pytest.approx(20.0)
+
+    def test_tdmpc2_shared_execution_graph(self):
+        from hydra.utils import instantiate
+        from torchrl.modules import TdMpc2Planner
+        from torchrl.trainers.algorithms.configs import (
+            TdMpc2LossConfig,
+            TdMpc2PolicyPriorConfig,
+            TdMpc2QEnsembleConfig,
+            TdMpc2TrainerConfig,
+            TdMpc2WorldModelConfig,
+        )
+        from torchrl.trainers.algorithms.tdmpc2 import TdMpc2Trainer
+
+        world_model = TdMpc2WorldModelConfig(
+            observation_dim=5,
+            action_dim=2,
+            latent_dim=8,
+            encoder_dim=12,
+            mlp_dim=16,
+            simnorm_dim=4,
+            num_bins=5,
+        )
+        policy_prior = TdMpc2PolicyPriorConfig(
+            latent_dim=8,
+            action_dim=2,
+            mlp_dim=16,
+        )
+        q_ensemble = TdMpc2QEnsembleConfig(
+            latent_dim=8,
+            action_dim=2,
+            mlp_dim=16,
+            num_q=2,
+            num_bins=5,
+            dropout=0.0,
+        )
+        loss = TdMpc2LossConfig(
+            world_model=None,
+            policy_prior=None,
+            q_ensemble=None,
+            horizon=3,
+            discount=0.97,
+            rho=0.5,
+            _partial_=True,
+        )
+        trainer = instantiate(
+            TdMpc2TrainerConfig(
+                collector=partial(_make_tdmpc2_config_collector, total_frames=123),
+                total_frames=None,
+                loss_module=loss,
+                world_model=world_model,
+                policy_prior=policy_prior,
+                q_ensemble=q_ensemble,
+                replay_buffer=_make_tdmpc2_config_replay_buffer(),
+                progress_bar=False,
+            )
+        )
+        loss = trainer.loss_module
+        planner = trainer.planner
+
+        assert isinstance(trainer, TdMpc2Trainer)
+        assert trainer.total_frames == 123
+        assert trainer.collector.policy is planner
+        assert trainer.collector.auto_register_policy_transforms is True
+        assert isinstance(planner, TdMpc2Planner)
+        assert planner.world_model is loss.world_model
+        assert planner.policy_prior is loss.policy_prior
+        assert planner.q_ensemble is loss.q_ensemble
+        assert trainer._checkpoint_policy() is planner
+
+        encoder_ids = {
+            id(parameter) for parameter in loss.world_model.encoder.parameters()
+        }
+        policy_ids = {id(parameter) for parameter in loss.policy_prior.parameters()}
+        q_ids = {id(parameter) for parameter in loss.q_ensemble.q_params.parameters()}
+        model_optimizer_ids = {
+            id(parameter)
+            for group in trainer.optimization_stepper.optimizer_model.param_groups
+            for parameter in group["params"]
+        }
+        actor_optimizer_ids = {
+            id(parameter)
+            for group in trainer.optimization_stepper.optimizer_actor.param_groups
+            for parameter in group["params"]
+        }
+
+        planner_ids = {id(parameter) for parameter in planner.parameters()}
+        assert encoder_ids | policy_ids | q_ids <= planner_ids
+        assert encoder_ids <= model_optimizer_ids
+        assert (
+            model_optimizer_ids
+            == {id(parameter) for parameter in loss.world_model.parameters()} | q_ids
+        )
+        assert actor_optimizer_ids == policy_ids
+        assert not model_optimizer_ids & actor_optimizer_ids
+        for online, target in zip(
+            loss.q_ensemble.q_params.data.values(True, True),
+            loss.q_ensemble.target_q_params.data.values(True, True),
+        ):
+            assert online.data_ptr() != target.data_ptr()
+            torch.testing.assert_close(online, target, atol=0, rtol=0)
 
     @staticmethod
     def _resume_cfg(rotation_dir, budget, logger, resume=None):
