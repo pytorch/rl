@@ -525,6 +525,7 @@ Trainer Hook Configurations
     EarlyStoppingConfig
     LogScalarConfig
     LogTimingConfig
+    TdMpc2OptimizationStepperConfig
     RewardNormalizerConfig
     SelectKeysConfig
 

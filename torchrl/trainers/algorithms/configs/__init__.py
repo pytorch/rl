@@ -95,6 +95,7 @@ from torchrl.trainers.algorithms.configs.hooks import (
     LogTimingConfig,
     RewardNormalizerConfig,
     SelectKeysConfig,
+    TdMpc2OptimizationStepperConfig,
 )
 from torchrl.trainers.algorithms.configs.logging import (
     CSVLoggerConfig,
@@ -481,6 +482,7 @@ __all__ = [
     "EarlyStoppingConfig",
     "DreamerV3OptimizationStepperConfig",
     "DreamerV3UpdateRatioConfig",
+    "TdMpc2OptimizationStepperConfig",
     "LogScalarConfig",
     "LogTimingConfig",
     "RewardNormalizerConfig",
@@ -823,6 +825,11 @@ def _register_configs():
         group="hook",
         name="dreamer_v3_optimization",
         node=DreamerV3OptimizationStepperConfig,
+    )
+    cs.store(
+        group="hook",
+        name="tdmpc2_optimization",
+        node=TdMpc2OptimizationStepperConfig,
     )
     cs.store(group="hook", name="early_stopping", node=EarlyStoppingConfig)
     cs.store(group="hook", name="log_scalar", node=LogScalarConfig)
