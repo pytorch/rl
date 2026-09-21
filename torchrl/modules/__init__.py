@@ -71,6 +71,7 @@ from .models import (
     Squeeze2dLayer,
     SqueezeLayer,
     SymExpTwoHot,
+    TdMpc2QEnsemble,
     VDNMixer,
 )
 from .tensordict_module import (
@@ -270,6 +271,7 @@ __all__ = [
     "SignedHyperbolicValueTransform",
     "SimplicialNormalization",
     "SymExpTwoHot",
+    "TdMpc2QEnsemble",
     "SymLogValueTransform",
     "TanhDelta",
     "TanhModule",

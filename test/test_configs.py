@@ -73,6 +73,7 @@ from torchrl.modules import (
     RSSMPriorV3,
     RSSMStateEstimatorV3,
     TanhModule,
+    TdMpc2QEnsemble,
     ValueOperator,
 )
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
@@ -216,6 +217,8 @@ _CONFIG_PARITY_UNRESOLVED = {
     "and key fields that do not correspond to WorldModel.__init__ parameters.",
     "TdMpc2PolicyPriorConfig": "The factory uses high-level architecture fields "
     "but instantiates a TensorDictModule, so the kwargs do not match.",
+    "TdMpc2QEnsembleConfig": "The composite factory builds and parameterizes a "
+    "vectorized distributional Q-function ensemble.",
     "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
     "the torch versions TorchRL currently supports.",
 }
@@ -1512,6 +1515,44 @@ class TestModuleConfigs:
         assert output["action"].shape == (2, 3)
 
         registered = ConfigStore.instance().load("model/tdmpc2_policy_prior.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_q_ensemble_config(self):
+        """Test TdMpc2QEnsembleConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import TdMpc2QEnsembleConfig
+
+        cfg = TdMpc2QEnsembleConfig(
+            latent_dim=16,
+            action_dim=3,
+            mlp_dim=13,
+            num_q=5,
+            num_bins=5,
+        )
+        q_ensemble = instantiate(cfg)
+
+        assert isinstance(q_ensemble, TdMpc2QEnsemble)
+        assert q_ensemble.in_keys == ["latent", "action"]
+        assert q_ensemble.out_keys == ["q_logits"]
+        assert q_ensemble.q_value_key == "q_value"
+        batch_shape = torch.Size((2, 3))
+        td = TensorDict(
+            {
+                "latent": torch.randn(*batch_shape, 16),
+                "action": torch.randn(*batch_shape, 3),
+            },
+            batch_size=batch_shape,
+        )
+        output = q_ensemble(td)
+        assert output["q_logits"].shape == (*batch_shape, 5, 5)
+
+        torch.manual_seed(0)
+        output = q_ensemble.reduce(output, reduction="min")
+        assert output["q_value"].shape == (*batch_shape, 1)
+
+        registered = ConfigStore.instance().load("model/tdmpc2_q_ensemble.yaml")
         assert registered.node["_target_"] == cfg._target_
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
