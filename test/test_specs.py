@@ -770,6 +770,17 @@ class TestChoiceSpec:
         assert spec.is_in(example_in)
         assert not spec.is_in(example_out)
 
+    @pytest.mark.parametrize("dim", [None, 0, 1])
+    def test_squeeze(self, dim):
+        spec = Choice([Bounded(0, 2.5, (1, 2)), Bounded(10, 12, (1, 2))])
+        squeezed = spec.squeeze(dim)
+        expected = torch.Size((2,)) if dim in (None, 0) else torch.Size((1, 2))
+        assert squeezed.shape == expected
+        assert squeezed.num_choices == spec.num_choices
+        sample = squeezed.rand()
+        assert sample.shape == expected
+        assert squeezed.is_in(sample)
+
     def test_errors(self):
         with pytest.raises(TypeError, match="must be a list"):
             Choice("abc")
