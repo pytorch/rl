@@ -80,8 +80,7 @@ rollout = parallel_env.rollout(100)
 - [When to specialize](macro_primitives.html#when-to-specialize)
 - [Multi-agent Environments](envs_multiagent.html)
 
-- [MarlGroupMapType](generated/torchrl.envs.MarlGroupMapType.html)
-- [check_marl_grouping](generated/torchrl.envs.check_marl_grouping.html)
+- [Multiple agent groups](envs_multiagent.html#multiple-agent-groups)
 - [Library Wrappers](envs_libraries.html)
 
 - [Available wrappers](envs_libraries.html#available-wrappers)
