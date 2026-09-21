@@ -26,6 +26,7 @@ import pytest
 import torch
 import torchrl.collectors._multi_base
 import torchrl.collectors._runner
+import torchrl.collectors.distributed.generic as distributed_generic
 from packaging import version
 from pyvers import implement_for
 from tensordict import (
@@ -877,6 +878,82 @@ class TestCollectorGeneric:
                 )
         assert result is sentinel
         assert target.call_args.kwargs["sync"] is False
+
+    def test_submitit_delayed_forwards_worker_configuration(self):
+        policy = object()
+        policy_factory = object()
+        weight_sync_schemes = {"policy": object()}
+        collector_kwargs = {"device": None}
+        collector = Mock(
+            env_constructors=[ContinuousActionVecMockEnv],
+            num_workers=1,
+            num_workers_per_collector=1,
+            backend="gloo",
+            collector_class=Collector,
+            policy=policy,
+            policy_factory=[policy_factory],
+            collector_kwargs=[collector_kwargs],
+            _sync=False,
+            _frames_per_batch_corrected=7,
+            _weight_sync_schemes=weight_sync_schemes,
+        )
+        scattered_objects = None
+
+        def capture_scatter(output_list, objects, src):
+            nonlocal scattered_objects
+            assert output_list == [None]
+            assert src == 0
+            scattered_objects = objects
+
+        with patch.object(
+            distributed_generic.torch.distributed,
+            "scatter_object_list",
+            side_effect=capture_scatter,
+        ):
+            DistributedCollector._init_worker_dist_submitit_delayed(collector)
+
+        collector._init_master_dist.assert_called_once_with(2, "gloo")
+        payload = scattered_objects[1]
+        assert payload["policy_factory"] is policy_factory
+        assert payload["weight_sync_schemes"] is weight_sync_schemes
+
+        store = object()
+
+        def replay_scatter(output_list, objects, src):
+            assert objects == [None, None]
+            assert src == 0
+            output_list[0] = payload
+
+        with (
+            patch.object(distributed_generic, "_node_init_dist", return_value=store),
+            patch.object(
+                distributed_generic.torch.distributed,
+                "scatter_object_list",
+                side_effect=replay_scatter,
+            ),
+            patch.object(distributed_generic, "_run_collector") as run_collector,
+        ):
+            distributed_generic._distributed_init_delayed(
+                rank=1,
+                backend="gloo",
+                rank0_ip="127.0.0.1",
+                tcpport=29500,
+                world_size=2,
+            )
+
+        run_collector.assert_called_once_with(
+            _store=store,
+            sync=False,
+            collector_class=Collector,
+            num_workers=1,
+            env_make=payload["env_make"],
+            policy=policy,
+            policy_factory=policy_factory,
+            frames_per_batch=7,
+            collector_kwargs=collector_kwargs,
+            weight_sync_schemes=weight_sync_schemes,
+            verbose=False,
+        )
 
     def test_explicit_direct_backend_overrides_context(self):
         with service_backend("ray"):

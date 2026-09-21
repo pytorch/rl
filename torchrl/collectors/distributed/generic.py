@@ -121,8 +121,10 @@ def _distributed_init_delayed(
     num_workers = output["num_workers"]
     env_make = output["env_make"]
     policy = output["policy"]
+    policy_factory = output["policy_factory"]
     frames_per_batch = output["frames_per_batch"]
     collector_kwargs = output["collector_kwargs"]
+    weight_sync_schemes = output["weight_sync_schemes"]
     _run_collector(
         _store=_store,
         sync=sync,
@@ -130,8 +132,10 @@ def _distributed_init_delayed(
         num_workers=num_workers,
         env_make=env_make,
         policy=policy,
+        policy_factory=policy_factory,
         frames_per_batch=frames_per_batch,
         collector_kwargs=collector_kwargs,
+        weight_sync_schemes=weight_sync_schemes,
         verbose=verbose,
     )
 
@@ -916,6 +920,7 @@ class DistributedCollector(BaseCollector):
                 "policy_factory": self.policy_factory[i],
                 "frames_per_batch": self._frames_per_batch_corrected,
                 "collector_kwargs": self.collector_kwargs[i],
+                "weight_sync_schemes": self._weight_sync_schemes,
             }
             for i in range(self.num_workers)
         ]
