@@ -43,6 +43,7 @@ actor = ProbabilisticActor(
 - [TensorDictModules and SafeModules](modules_actors.html#tensordictmodules-and-safemodules)
 - [Probabilistic actors](modules_actors.html#probabilistic-actors)
 - [Q-Value actors](modules_actors.html#q-value-actors)
+- [Flow policies](modules_actors.html#flow-policies)
 - [Exploration Strategies](modules_exploration.html)
 
 - [AdditiveGaussianModule](generated/torchrl.modules.AdditiveGaussianModule.html)
@@ -93,7 +94,11 @@ actor = ProbabilisticActor(
 - [torchrl.modules.mcts package](modules_mcts.html)
 
 - [MCTS Scores](modules_mcts.html#mcts-scores)
-- [Robot Learning](modules_models.html)
+- [Flow models](modules_models.html)
+
+- [FlowMatchingModel](generated/torchrl.modules.FlowMatchingModel.html)
+- [OneStepModel](generated/torchrl.modules.OneStepModel.html)
+- [Robot Learning](modules_models.html#robot-learning)
 - [World Models and Model-Based RL](modules_models.html#world-models-and-model-based-rl)
 
 - [WorldModel](generated/torchrl.modules.WorldModel.html)

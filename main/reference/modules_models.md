@@ -1,3 +1,12 @@
+# Flow models
+
+Tensor-only implementations underlying [`FlowMatchingPolicy`](generated/torchrl.modules.FlowMatchingPolicy.html#torchrl.modules.FlowMatchingPolicy) and
+[`OneStepPolicy`](generated/torchrl.modules.OneStepPolicy.html#torchrl.modules.OneStepPolicy).
+
+| [`FlowMatchingModel`](generated/torchrl.modules.FlowMatchingModel.html#torchrl.modules.FlowMatchingModel)(velocity_network, action_dim) | Tensor-only Euler sampler for bounded continuous actions. |
+| --- | --- |
+| [`OneStepModel`](generated/torchrl.modules.OneStepModel.html#torchrl.modules.OneStepModel)(network, action_dim, *[, low, high]) | Tensor-only network for one-step flow distillation. |
+
 # Robot Learning
 
 Policy architectures for robot manipulation and imitation learning.

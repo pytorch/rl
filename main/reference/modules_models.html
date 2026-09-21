@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Robot Learning &#8212; torchrl main documentation</title>
+    <title>Flow models &#8212; torchrl main documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="WorldModel" href="generated/torchrl.modules.WorldModel.html" />
+    <link rel="next" title="FlowMatchingModel" href="generated/torchrl.modules.FlowMatchingModel.html" />
     <link rel="prev" title="torchrl.modules.mcts.MCTSScores" href="generated/torchrl.modules.mcts.MCTSScores.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -63,7 +63,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="Robot Learning - Documentation for torchrl, part of the PyTorch ecosystem.">
+<meta name="llm:description" content="Flow models - Documentation for torchrl, part of the PyTorch ecosystem.">
 
 
 
@@ -1918,6 +1918,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.DistributionalQValueActor.html">DistributionalQValueActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.QValueModule.html">QValueModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.DistributionalQValueModule.html">DistributionalQValueModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.FlowMatchingPolicy.html">FlowMatchingPolicy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.OneStepPolicy.html">OneStepPolicy</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="modules_exploration.html">Exploration Strategies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -1979,7 +1981,12 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.mcts.MCTSScores.html">torchrl.modules.mcts.MCTSScores</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Robot Learning</a></li>
+<li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Flow models</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.FlowMatchingModel.html">FlowMatchingModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.OneStepModel.html">OneStepModel</a></li>
+</ul>
+</details></li>
+
 
 <li class="toctree-l2 has-children"><a class="reference internal" href="modules_distributions.html">Distribution Classes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.Delta.html">Delta</a></li>
@@ -2509,7 +2516,7 @@ document.write(`
     
     <li class="breadcrumb-item"><a href="modules.html" class="nav-link">torchrl.modules package</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">Robot Learning</li>
+    <li class="breadcrumb-item active" aria-current="page">Flow models</li>
   </ul>
 </nav>
 </div>
@@ -2563,7 +2570,7 @@ document.write(`
     </div>
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="Robot Learning">
+      <meta itemprop="name" content="Flow models">
       <meta itemprop="position" content="3">
     </div>
   </div>
@@ -2602,7 +2609,23 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="robot-learning">
+  <section id="flow-models">
+<h1>Flow models<a class="headerlink" href="#flow-models" title="Link to this heading">#</a></h1>
+<p>Tensor-only implementations underlying <a class="reference internal" href="generated/torchrl.modules.FlowMatchingPolicy.html#torchrl.modules.FlowMatchingPolicy" title="torchrl.modules.FlowMatchingPolicy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FlowMatchingPolicy</span></code></a> and
+<a class="reference internal" href="generated/torchrl.modules.OneStepPolicy.html#torchrl.modules.OneStepPolicy" title="torchrl.modules.OneStepPolicy"><code class="xref py py-class docutils literal notranslate"><span class="pre">OneStepPolicy</span></code></a>.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.FlowMatchingModel.html#torchrl.modules.FlowMatchingModel" title="torchrl.modules.FlowMatchingModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlowMatchingModel</span></code></a>(velocity_network, action_dim)</p></td>
+<td><p>Tensor-only Euler sampler for bounded continuous actions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.OneStepModel.html#torchrl.modules.OneStepModel" title="torchrl.modules.OneStepModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OneStepModel</span></code></a>(network, action_dim, *[, low, high])</p></td>
+<td><p>Tensor-only network for one-step flow distillation.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="robot-learning">
 <h1>Robot Learning<a class="headerlink" href="#robot-learning" title="Link to this heading">#</a></h1>
 <p>Policy architectures for robot manipulation and imitation learning.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
@@ -2744,11 +2767,11 @@ For an overview of how the DreamerV3 components fit together, see
       </div>
     </a>
     <a class="right-next"
-       href="generated/torchrl.modules.WorldModel.html"
+       href="generated/torchrl.modules.FlowMatchingModel.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">WorldModel</p>
+        <p class="prev-next-title">FlowMatchingModel</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2783,11 +2806,11 @@ For an overview of how the DreamerV3 components fit together, see
       </div>
     </a>
     <a class="right-next"
-       href="generated/torchrl.modules.WorldModel.html"
+       href="generated/torchrl.modules.FlowMatchingModel.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">WorldModel</p>
+        <p class="prev-next-title">FlowMatchingModel</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2809,7 +2832,8 @@ For an overview of how the DreamerV3 components fit together, see
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Robot Learning</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Flow models</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#robot-learning">Robot Learning</a></li>
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#world-models-and-model-based-rl">World Models and Model-Based RL</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pilco">PILCO</a></li>
 </ul>
@@ -3063,11 +3087,11 @@ For an overview of how the DreamerV3 components fit together, see
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "Robot Learning",
-       "headline": "Robot Learning",
+       "name": "Flow models",
+       "headline": "Flow models",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules_models.html",
-       "articleBody": "Robot Learning# Policy architectures for robot manipulation and imitation learning. World Models and Model-Based RL# Modules for model-based reinforcement learning, including world models and dynamics models. For an overview of how the DreamerV3 components fit together, see DreamerV3 in a nutshell. WorldModel(*args, **kwargs) A general, composable world model for model-based RL. WorldModelWrapper(*args, **kwargs) World model wrapper. DreamerActor(out_features[, depth, ...]) Dreamer actor network. ObsEncoder([channels, num_layers, ...]) Observation encoder network. ObsDecoder([channels, num_layers, ...]) Observation decoder network. RSSMPosterior([hidden_dim, state_dim, ...]) The posterior network of the RSSM. RSSMPosteriorV3([hidden_dim, ...]) DreamerV3 posterior (representation model) with discrete categorical latent. RSSMPrior(action_spec[, hidden_dim, ...]) The prior network of the RSSM. RSSMPriorV3([action_spec, hidden_dim, ...]) DreamerV3 prior network with discrete categorical latent state. RSSMRollout(*args, **kwargs) Rollout the RSSM network. RSSMRolloutV3(*args, **kwargs) Roll out the DreamerV3 RSSM over a sequence. RSSMStateEstimatorV3(*args, **kwargs) Update the DreamerV3 acting state from an encoded observation. SymExpTwoHot([num_bins]) DreamerV3 categorical scalar representation. DreamerV3BlockGRUCell(input_size, ...) Single-step DreamerV3 block-diagonal GRU cell. DreamerV3BlockGRU(input_size, hidden_size, ...) Batch-major DreamerV3 block-diagonal GRU sequence module. DreamerV3MLP(in_features, out_features[, ...]) RMS-normalized multilayer perceptron used by DreamerV3 heads. DreamerV3ImageEncoder([in_channels, depth, ...]) DreamerV3 convolutional image encoder. DreamerV3ImageDecoder(in_features[, ...]) DreamerV3 transposed-convolution image decoder. PILCO# Components for moment-matching model-based policy search (PILCO). GPWorldModel(obs_dim, action_dim[, in_keys, ...]) Gaussian Process world model with moment-matching uncertainty propagation. RBFController(input_dim, output_dim, max_action) Radial Basis Function controller for moment-matching policy search.",
+       "articleBody": "Flow models# Tensor-only implementations underlying FlowMatchingPolicy and OneStepPolicy. FlowMatchingModel(velocity_network, action_dim) Tensor-only Euler sampler for bounded continuous actions. OneStepModel(network, action_dim, *[, low, high]) Tensor-only network for one-step flow distillation. Robot Learning# Policy architectures for robot manipulation and imitation learning. World Models and Model-Based RL# Modules for model-based reinforcement learning, including world models and dynamics models. For an overview of how the DreamerV3 components fit together, see DreamerV3 in a nutshell. WorldModel(*args, **kwargs) A general, composable world model for model-based RL. WorldModelWrapper(*args, **kwargs) World model wrapper. DreamerActor(out_features[, depth, ...]) Dreamer actor network. ObsEncoder([channels, num_layers, ...]) Observation encoder network. ObsDecoder([channels, num_layers, ...]) Observation decoder network. RSSMPosterior([hidden_dim, state_dim, ...]) The posterior network of the RSSM. RSSMPosteriorV3([hidden_dim, ...]) DreamerV3 posterior (representation model) with discrete categorical latent. RSSMPrior(action_spec[, hidden_dim, ...]) The prior network of the RSSM. RSSMPriorV3([action_spec, hidden_dim, ...]) DreamerV3 prior network with discrete categorical latent state. RSSMRollout(*args, **kwargs) Rollout the RSSM network. RSSMRolloutV3(*args, **kwargs) Roll out the DreamerV3 RSSM over a sequence. RSSMStateEstimatorV3(*args, **kwargs) Update the DreamerV3 acting state from an encoded observation. SymExpTwoHot([num_bins]) DreamerV3 categorical scalar representation. DreamerV3BlockGRUCell(input_size, ...) Single-step DreamerV3 block-diagonal GRU cell. DreamerV3BlockGRU(input_size, hidden_size, ...) Batch-major DreamerV3 block-diagonal GRU sequence module. DreamerV3MLP(in_features, out_features[, ...]) RMS-normalized multilayer perceptron used by DreamerV3 heads. DreamerV3ImageEncoder([in_channels, depth, ...]) DreamerV3 convolutional image encoder. DreamerV3ImageDecoder(in_features[, ...]) DreamerV3 transposed-convolution image decoder. PILCO# Components for moment-matching model-based policy search (PILCO). GPWorldModel(obs_dim, action_dim[, in_keys, ...]) Gaussian Process world model with moment-matching uncertainty propagation. RBFController(input_dim, output_dim, max_action) Radial Basis Function controller for moment-matching policy search.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
