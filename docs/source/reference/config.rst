@@ -350,6 +350,7 @@ Model and Network Configurations
     NetworkConfig
     MLPConfig
     TdMpc2MLPConfig
+    TdMpc2PolicyPriorConfig
     TdMpc2WorldModelConfig
     DreamerV3MLPConfig
     DreamerV3DiscreteActorConfig

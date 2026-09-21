@@ -214,6 +214,8 @@ _CONFIG_PARITY_UNRESOLVED = {
     "are intentionally not configurable.",
     "TdMpc2WorldModelConfig": "The composite factory uses high-level architecture "
     "and key fields that do not correspond to WorldModel.__init__ parameters.",
+    "TdMpc2PolicyPriorConfig": "The factory uses high-level architecture fields "
+    "but instantiates a TensorDictModule, so the kwargs do not match.",
     "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
     "the torch versions TorchRL currently supports.",
 }
@@ -1481,6 +1483,35 @@ class TestModuleConfigs:
         assert torch.count_nonzero(out["next", "agent", "reward_logits"]) == 0
 
         registered = ConfigStore.instance().load("model/tdmpc2_world_model.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_policy_prior_config(self):
+        """Test TdMpc2PolicyPriorConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs import TdMpc2PolicyPriorConfig
+
+        cfg = TdMpc2PolicyPriorConfig(
+            latent_dim=16,
+            action_dim=3,
+            mlp_dim=13,
+        )
+        policy_prior = instantiate(cfg)
+
+        assert isinstance(policy_prior, TensorDictModule)
+        assert policy_prior.in_keys == ["latent"]
+        assert policy_prior.out_keys == [
+            "action",
+            "mean",
+            "log_std",
+            "entropy",
+            "scaled_entropy",
+        ]
+        output = policy_prior(TensorDict({"latent": torch.randn(2, 16)}, [2]))
+        assert output["action"].shape == (2, 3)
+
+        registered = ConfigStore.instance().load("model/tdmpc2_policy_prior.yaml")
         assert registered.node["_target_"] == cfg._target_
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
