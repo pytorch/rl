@@ -32,6 +32,7 @@ from torchrl.objectives.llm.distillation import (
 )
 from torchrl.objectives.llm.grpo import (
     CISPOLoss,
+    DAPO,
     GRPOLoss,
     GRPOLossOutput,
     MCAdvantage,
@@ -1446,6 +1447,156 @@ class TestDistillation:
         loss_vals = loss_fn(td)
         assert loss_vals.loss_distill.device.type == "cuda"
         assert torch.isfinite(loss_vals.loss_distill)
+
+
+class TestGRPOLossRefactorBehavior:
+    """Regression tests covering the _kl_to_ref refactor and the DAPO bug fix.
+
+    Each test is written so that it *fails* if the specific bug it covers is
+    reintroduced, by asserting externally observable behavior rather than
+    implementation details.
+    """
+
+    def test_set_keys_ref_log_probs_is_respected_by_kl_to_ref(self):
+        """When a custom ref_log_probs key is configured but absent from the input,
+        _kl_to_ref must raise KeyError naming the missing key rather than silently
+        falling back to the hardcoded default key.
+
+        Before the fix, forward() pre-fetched ref_log_probs and passed the result
+        (None when the configured key is absent) to _kl_to_ref.  _kl_to_ref then
+        fell back to its default key parameter ("next", "ref_log_probs") and silently
+        read data the user never intended — producing a loss with no diagnostic.
+
+        After the fix, _kl_to_ref fetches using the configured key directly and
+        raises KeyError immediately when it is absent.
+
+        Setup: data stored under the DEFAULT key ("next", "ref_log_probs", "full")
+        only; custom_key is intentionally absent.  Old code: reads default key
+        silently, no error.  New code: raises KeyError naming custom_key.
+        """
+        policy = _FixedLogProbPolicy()
+        ref_lp = torch.log(torch.tensor([0.5]))
+
+        data = _policy_loss_data(
+            current_log_prob=ref_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+        # Populate the DEFAULT key so old code would silently read from it.
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+        # The custom key below is intentionally ABSENT from data.
+        custom_key = ("my_custom_ref", "log_probs")
+
+        loss_fn = GRPOLoss(
+            policy,
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=0.1,
+        )
+        loss_fn.set_keys(ref_log_probs=custom_key)
+
+        # Old code: silently reads ("next", "ref_log_probs") — no error raised.
+        # New code: configured key is absent → KeyError naming custom_key.
+        with pytest.raises(KeyError, match="my_custom_ref"):
+            loss_fn(data)
+
+    def test_kl_to_ref_single_token_sequence(self):
+        """_kl_to_ref must not crash for single-token sequences (T == 1).
+
+        Before the fix an unconditional squeeze(-1) on a ref_log_prob of shape
+        [B, 1] collapsed the time axis to [B].  expand_as_right then received
+        mask of shape [B, 1] and ref_log_prob of shape [B] and raised:
+
+            RuntimeError: expand_as_right requires the destination tensor to have
+            less dimensions than the input tensor
+
+        The fix makes the squeeze conditional on ref having an extra trailing
+        dimension relative to cur_log_prob.  This test will raise RuntimeError
+        (not pass) if the unconditional squeeze is reintroduced.
+        """
+        cur_lp = torch.log(torch.tensor([0.5]))
+        ref_lp = cur_lp.clone()  # cur == ref => KL = 0
+
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+        # Shape [1, 1]: batch=1, T=1 — the shape that exposed the squeeze bug.
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=1.0,
+        )
+        # Must not raise RuntimeError; cur == ref => KL penalty is 0.
+        out = loss_fn(data)
+        torch.testing.assert_close(out.kl_to_ref, torch.tensor(0.0))
+
+    def test_kl_to_ref_hand_calculated_value(self):
+        """Verify the KL formula (k3 estimator) is computed correctly end-to-end.
+
+        This exercises the full path through forward() -> _kl_to_ref() with a
+        precisely known ref_log_prob, so any regression in how ref_log_prob is
+        fetched or used would produce a different numeric result.
+        """
+        cur_lp = torch.log(torch.tensor([0.5]))  # log(0.5) = -0.693...
+        ref_lp = torch.log(torch.tensor([0.25]))  # log(0.25) = -1.386...
+        # k3 KL estimator: (exp(ref - cur) - 1) - (ref - cur)
+        diff = ref_lp - cur_lp  # log(0.25) - log(0.5) = log(0.5) = -0.693...
+        expected_kl = (diff.expm1() - diff).mean()  # (0.5 - 1) - (-0.693) = 0.193...
+
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=cur_lp.tolist(),
+            advantage=[1.0],
+        )
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+
+        kl_coeff = 0.5
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=kl_coeff,
+        )
+        out = loss_fn(data)
+
+        torch.testing.assert_close(out.kl_to_ref, expected_kl)
+        torch.testing.assert_close(out.loss_kl_to_ref, kl_coeff * expected_kl)
+
+    def test_dapo_can_be_instantiated_with_actor_network(self):
+        """Before the fix, DAPO.__init__ took tensordict as its first positional
+        argument (a copy-paste of _kl_to_ref body). Calling
+        DAPO(actor_network, clip_epsilon=...) raised TypeError because 'clip_epsilon'
+        was not in the bogus __init__ signature.
+
+        This test will fail (TypeError) if the bogus __init__ is reintroduced.
+        It further verifies that the resulting loss is numerically identical to
+        GRPOLoss with the same asymmetric epsilon, confirming that DAPO actually
+        runs its inherited _compute_policy_objective correctly.
+        """
+        cur_lp = torch.log(torch.tensor([1.25]))  # ratio > 1, within clip range
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+
+        # Both DAPO and GRPOLoss share _compute_policy_objective; with the same
+        # asymmetric epsilon the numeric output must be identical.
+        eps = (0.20, 0.28)
+        dapo_out = DAPO(_FixedLogProbPolicy(), clip_epsilon=eps, entropy_bonus=False)(
+            data
+        )
+        grpo_out = GRPOLoss(
+            _FixedLogProbPolicy(), clip_epsilon=eps, entropy_bonus=False
+        )(data)
+
+        torch.testing.assert_close(dapo_out.loss_objective, grpo_out.loss_objective)
+        torch.testing.assert_close(dapo_out.clip_fraction, grpo_out.clip_fraction)
 
 
 @pytest.mark.slow
