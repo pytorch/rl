@@ -543,6 +543,7 @@ Trainer Hook Configurations
     IQLLossConfig
     CQLLossConfig
     TD3LossConfig
+    TdMpc2LossConfig
     GAEConfig
     TargetNetUpdaterConfig
     SoftUpdateConfig

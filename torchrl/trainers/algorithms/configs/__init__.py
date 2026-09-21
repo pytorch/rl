@@ -144,6 +144,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     SACLossConfig,
     SoftUpdateConfig,
     TD3LossConfig,
+    TdMpc2LossConfig,
     TQCLossConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
@@ -452,6 +453,7 @@ __all__ = [
     "ReinforceLossConfig",
     "SACLossConfig",
     "TD3LossConfig",
+    "TdMpc2LossConfig",
     "TQCLossConfig",
     # Value functions
     "GAEConfig",
@@ -725,6 +727,7 @@ def _register_configs():
     cs.store(group="loss", name="reinforce", node=ReinforceLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
     cs.store(group="loss", name="td3", node=TD3LossConfig)
+    cs.store(group="loss", name="tdmpc2", node=TdMpc2LossConfig)
     cs.store(group="loss", name="tqc", node=TQCLossConfig)
 
     # =============================================================================

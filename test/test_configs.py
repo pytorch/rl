@@ -2241,6 +2241,62 @@ class TestLossConfigs:
         assert module.group_key == ("metadata", "task_id")
         assert module.tensor_keys.valid == ("collector", "mask")
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_loss_config(self):
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+
+        from torchrl.objectives import TdMpc2Loss
+        from torchrl.trainers.algorithms.configs import (
+            TdMpc2LossConfig,
+            TdMpc2PolicyPriorConfig,
+            TdMpc2QEnsembleConfig,
+            TdMpc2WorldModelConfig,
+        )
+
+        cfg = TdMpc2LossConfig(
+            world_model=TdMpc2WorldModelConfig(
+                observation_dim=5,
+                action_dim=2,
+                latent_dim=8,
+                encoder_dim=12,
+                mlp_dim=16,
+                simnorm_dim=4,
+                num_bins=5,
+            ),
+            policy_prior=TdMpc2PolicyPriorConfig(
+                latent_dim=8, action_dim=2, mlp_dim=16
+            ),
+            q_ensemble=TdMpc2QEnsembleConfig(
+                latent_dim=8,
+                action_dim=2,
+                mlp_dim=16,
+                num_bins=5,
+                dropout=0.0,
+            ),
+        )
+        loss = instantiate(cfg)
+
+        assert isinstance(loss, TdMpc2Loss)
+        assert loss.in_keys == [
+            "observation",
+            "action",
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "terminated"),
+        ]
+        assert loss.out_keys == [
+            "loss_consistency",
+            "loss_reward",
+            "loss_value",
+        ]
+        assert loss.horizon == cfg.horizon
+        assert loss.discount.item() == pytest.approx(cfg.discount)
+        assert loss.q_ensemble.num_bins == cfg.q_ensemble.num_bins
+        assert ConfigStore.instance().load("loss/tdmpc2.yaml").node["_target_"] == (
+            cfg._target_
+        )
+
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):
