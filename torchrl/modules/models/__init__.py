@@ -21,6 +21,7 @@ from .exploration import (
     NoisyLinear,
     reset_noise,
 )
+from .flow import FlowMatchingModel, OneStepModel
 from .gp import GPWorldModel
 from .llm import GPT2RewardModel
 from .model_based import (
@@ -96,6 +97,8 @@ __all__ = [
     "DTActor",
     "DuelingCnnDQNet",
     "DuelingMlpDQNet",
+    "FlowMatchingModel",
+    "OneStepModel",
     "GPT2RewardModel",
     "GPWorldModel",
     "MLP",

@@ -1,5 +1,18 @@
 .. currentmodule:: torchrl.modules
 
+Flow models
+===========
+
+Tensor-only implementations underlying :class:`FlowMatchingPolicy` and
+:class:`OneStepPolicy`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    FlowMatchingModel
+    OneStepModel
+
 Robot Learning
 ==============
 
