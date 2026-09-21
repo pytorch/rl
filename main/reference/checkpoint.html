@@ -2605,6 +2605,10 @@ document.write(`
 <p>TorchRL checkpoints use one manifest-driven format for standalone scripts,
 trainers, and policy-only consumers. Components are registered independently,
 so a checkpoint may contain only a policy or a complete training state.</p>
+<p>To interrupt a run and continue it later, see <a class="reference internal" href="#checkpoint-resume"><span class="std std-ref">Resume training</span></a>. To
+ship a trained policy for inference, see the <a class="reference internal" href="../tutorials/export.html#export-tuto"><span class="std std-ref">export tutorial</span></a>.
+Those are different jobs: a resume checkpoint keeps optimizer, collector,
+replay-buffer, and target-network state; an export drops them on purpose.</p>
 <p>The directory and archive containers share the same logical layout. Directory
 checkpoints are the default and are best suited to large replay buffers;
 archives are convenient single-file artifacts. Loading either container is
@@ -2640,6 +2644,341 @@ metrics, and metadata are also stored without pickle.</p>
 <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a> to keep large components such as replay buffers out of
 scheduled Trainer saves. An explicit <code class="docutils literal notranslate"><span class="pre">components=</span></code> argument to
 <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save" title="torchrl.checkpoint.Checkpoint.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Checkpoint.save()</span></code></a> overrides this default selection.</p>
+</section>
+<section id="resume-training">
+<span id="checkpoint-resume"></span><h2>Resume training<a class="headerlink" href="#resume-training" title="Link to this heading">#</a></h2>
+<p>A <strong>checkpoint</strong> is a snapshot you can interrupt and resume from. An
+<strong>export</strong> is a deployable inference artifact. They are not interchangeable.</p>
+<p>If the run is a Hydra trainer recipe or a standalone SAC / TD3 / DDPG
+script, <a class="reference internal" href="#checkpoint-recipes"><span class="std std-ref">Resuming recipes</span></a> is the shorter path: pass <code class="docutils literal notranslate"><span class="pre">resume=</span></code>
+at the command line. This section is for scripts that assemble the
+pieces themselves.</p>
+<p>The <a class="reference internal" href="../tutorials/export.html#export-tuto"><span class="std std-ref">export tutorial</span></a> isolates a trained policy for ONNX,
+AOTInductor, or another runtime. That path is inference-only: it drops the
+optimizer, replay buffer, collector, exploration schedule, and target
+networks. Use <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a> when the goal is to continue training.</p>
+<p>Reconstruct the same objects first (same module classes, same
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> wiring, same replay-buffer storage
+type), register those live objects, then save or load. <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a>
+does not rebuild an architecture from the file. What it persists is each
+component’s <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> or <code class="docutils literal notranslate"><span class="pre">dump</span></code> payload – the same mapping
+<code class="docutils literal notranslate"><span class="pre">policy.state_dict()</span></code> would return, not a pickled container.</p>
+<section id="what-to-save">
+<h3>What to save<a class="headerlink" href="#what-to-save" title="Link to this heading">#</a></h3>
+<p>Resuming an RL job is more than <code class="docutils literal notranslate"><span class="pre">torch.save(model.state_dict())</span></code>. The
+pieces below are independent, and omitting any of them is why a
+weights-only dump cannot restart training.</p>
+<p><strong>Training setup</strong></p>
+<ul class="simple">
+<li><p><strong>Training model.</strong> The <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> (or
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>) being optimized. Save that module. The
+adapter writes its <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>; you do not need a wrapper type that
+exists only for serialization.</p></li>
+<li><p><strong>Optimizer.</strong> Adam / RMSprop moments, step counts, and param-group
+state. Without it, a resume is a fresh run that happens to start from
+pretrained weights.</p></li>
+<li><p><strong>Target networks.</strong> Off-policy losses such as
+<a class="reference internal" href="generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss" title="torchrl.objectives.DQNLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">DQNLoss</span></code></a> keep a delayed copy under
+<code class="docutils literal notranslate"><span class="pre">target_*_params</span></code> when <code class="docutils literal notranslate"><span class="pre">delay_value=True</span></code> (or the equivalent flag).
+Those tensors live on the loss, not on the policy the collector runs.
+Register the loss – or the target params themselves – or a resume
+re-bootstraps the targets from the current online weights.</p></li>
+</ul>
+<p>There is no reserved <code class="docutils literal notranslate"><span class="pre">target=</span></code> keyword on <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a>. Any extra
+name is a regular component, so <code class="docutils literal notranslate"><span class="pre">loss_module=loss</span></code> is the usual way to
+keep targets, and
+<code class="docutils literal notranslate"><span class="pre">checkpoint.register(&quot;target_params&quot;,</span> <span class="pre">loss.target_value_network_params)</span></code>
+is available when a consumer needs the targets on their own.</p>
+<p><strong>Collector</strong></p>
+<ul class="simple">
+<li><p><strong>Inference / exploration policy.</strong> The module the collector actually
+executes, including exploration state such as the <code class="docutils literal notranslate"><span class="pre">eps</span></code> buffer of
+<a class="reference internal" href="generated/torchrl.modules.EGreedyModule.html#torchrl.modules.EGreedyModule" title="torchrl.modules.EGreedyModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">EGreedyModule</span></code></a>. This is often a wrapper around
+the training model rather than a second network.</p></li>
+<li><p><strong>Registered transform parameters and buffers.</strong> For a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code>, the collector saves
+<code class="docutils literal notranslate"><span class="pre">env.transform.state_dict()</span></code>: <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> parameters and buffers
+on the transform stack, such as <code class="xref py py-class docutils literal notranslate"><span class="pre">ObservationNorm</span></code>
+<code class="docutils literal notranslate"><span class="pre">loc</span></code>/<code class="docutils literal notranslate"><span class="pre">scale</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">CatFrames</span></code> stack buffers.
+Transforms that keep live episode state only in the carrier TensorDict
+(for example <code class="xref py py-class docutils literal notranslate"><span class="pre">StepCounter</span></code>) contribute an empty
+payload; that TensorDict is not part of the checkpoint. The base
+simulator is not saved either.</p></li>
+<li><p><strong>Collector progress.</strong> <code class="docutils literal notranslate"><span class="pre">frames</span></code> and <code class="docutils literal notranslate"><span class="pre">iter</span></code>, so schedules
+(epsilon annealing, <code class="docutils literal notranslate"><span class="pre">init_random_frames</span></code>, total-frame budgets)
+continue instead of restarting at zero. Restoring progress is not a
+live-episode resume. After five transitions with <code class="docutils literal notranslate"><span class="pre">CountingEnv</span></code> plus
+<code class="docutils literal notranslate"><span class="pre">StepCounter</span></code>, <code class="docutils literal notranslate"><span class="pre">frames</span></code> is 5 and the transform state is empty; the
+first resumed transition starts at <code class="docutils literal notranslate"><span class="pre">step_count=0</span></code> and observation
+<code class="docutils literal notranslate"><span class="pre">0</span></code>. Continuing a mid-episode simulator, or worker-local RNG,
+requires separately supported state handling.</p></li>
+</ul>
+<p><strong>Replay buffer</strong></p>
+<p><a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dump" title="torchrl.data.ReplayBuffer.dump"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dump()</span></code></a> / <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.load" title="torchrl.data.ReplayBuffer.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load()</span></code></a>
+persist the writer (next-write cursor), the sampler (including priorities
+on a prioritized buffer), the buffer transforms, and the underlying
+storage. A restored buffer that is missing the writer or sampler is a
+pile of transitions you can no longer address correctly.</p>
+<p><strong>RNG</strong></p>
+<p><a class="reference internal" href="generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState" title="torchrl.checkpoint.GlobalRNGState"><code class="xref py py-class docutils literal notranslate"><span class="pre">GlobalRNGState</span></code></a> restores <strong>process-global</strong> Python, NumPy, and
+Torch RNGs. That is this process’s sampling and exploration generators.
+It does not restore environment or collector-worker RNG, and it is not
+a guarantee of exact trajectory reproducibility across a resume.</p>
+</section>
+<section id="shared-modules">
+<h3>Shared modules<a class="headerlink" href="#shared-modules" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.convert_to_functional" title="torchrl.objectives.LossModule.convert_to_functional"><code class="xref py py-meth docutils literal notranslate"><span class="pre">convert_to_functional()</span></code></a> wraps the
+module you passed in. For <code class="docutils literal notranslate"><span class="pre">DQNLoss(value_network=policy)</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">loss.value_network</span></code> is that same <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">loss.value_network_params</span></code> holds its parameters;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">loss.target_value_network_params</span></code> is a detached copy used as the
+target.</p></li>
+</ul>
+<p>The online weights are therefore <strong>not</strong> an independent copy of
+<code class="docutils literal notranslate"><span class="pre">policy</span></code>. Saving both <code class="docutils literal notranslate"><span class="pre">policy</span></code> and <code class="docutils literal notranslate"><span class="pre">loss_module</span></code> as if they were
+two networks writes the same tensors twice. Loading those two payloads
+into a pair of <em>separately constructed</em> modules desynchronizes the
+collector from the loss – the confusion that
+<a class="reference external" href="https://github.com/pytorch/rl/issues/3032">#3032</a> describes.</p>
+<p>Rebuild the same graph first (pass the same <code class="docutils literal notranslate"><span class="pre">policy</span></code> into the loss),
+then persist one owner of the online weights:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">loss_module=loss</span></code> covers online and target parameters;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">policy=policy</span></code> is enough when a policy-only consumer will load just
+that component, but then register the target params (or the whole
+loss) as well if you intend to resume training.</p></li>
+</ul>
+<p>A <a class="reference internal" href="generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Trainer</span></code></a> may register both names for
+convenience. They still share the online weights. Do not construct a
+second network and save it under another name thinking it is a
+distinct snapshot.</p>
+</section>
+<section id="construct-save-and-load">
+<h3>Construct, save, and load<a class="headerlink" href="#construct-save-and-load" title="Link to this heading">#</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.checkpoint</span> <span class="kn">import</span> <span class="n">Checkpoint</span><span class="p">,</span> <span class="n">GlobalRNGState</span>
+
+<span class="n">checkpoint</span> <span class="o">=</span> <span class="n">Checkpoint</span><span class="p">(</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+    <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+    <span class="n">loss_module</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+    <span class="n">exploration</span><span class="o">=</span><span class="n">exploration</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="n">GlobalRNGState</span><span class="p">(),</span>
+<span class="p">)</span>
+<span class="n">checkpoint</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;run/checkpoint&quot;</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">checkpoint</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+    <span class="s2">&quot;run/checkpoint&quot;</span><span class="p">,</span>
+    <span class="n">components</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;policy&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;optimizer&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;replay_buffer&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;collector&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;loss_module&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;exploration&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;rng&quot;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">components</span></code> on <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.load" title="torchrl.checkpoint.Checkpoint.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Checkpoint.load()</span></code></a> selects which already-registered
+objects to restore. Unrequested payloads, including a large replay
+buffer, stay on disk. <code class="docutils literal notranslate"><span class="pre">map_location</span></code> is forwarded to the state-dict
+adapter, the same way it is for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>.</p>
+<p>To persist only the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> – still a
+<code class="docutils literal notranslate"><span class="pre">state_dict</span></code>, not a pickle of the Python object – register that
+module alone:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">policy_only</span> <span class="o">=</span> <span class="n">Checkpoint</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
+<span class="n">policy_only</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;run/policy-only&quot;</span><span class="p">)</span>
+<span class="c1"># Later, after reconstructing the same TensorDictModule:</span>
+<span class="n">Checkpoint</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">new_policy</span><span class="p">)</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+    <span class="s2">&quot;run/policy-only&quot;</span><span class="p">,</span>
+    <span class="n">components</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">},</span>
+    <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>That policy-only file is a checkpoint of the training weights. It is
+not an export: it still needs TorchRL to rebuild the module, and it
+cannot resume an optimizer, buffer, or target network.</p>
+</section>
+<section id="copy-paste-dqn-example">
+<h3>Copy-paste DQN example<a class="headerlink" href="#copy-paste-dqn-example" title="Link to this heading">#</a></h3>
+<p>The snippet below rebuilds the same object graph before loading. Gym
+is required; skip it in doctest environments that do not have it.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span> <span class="nn">torch.optim</span> <span class="kn">import</span> <span class="n">Adam</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.checkpoint</span> <span class="kn">import</span> <span class="n">Checkpoint</span><span class="p">,</span> <span class="n">GlobalRNGState</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">InitTracker</span><span class="p">,</span> <span class="n">StepCounter</span><span class="p">,</span> <span class="n">TransformedEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">EGreedyModule</span><span class="p">,</span> <span class="n">QValueModule</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">DQNLoss</span><span class="p">,</span> <span class="n">SoftUpdate</span>
+
+<span class="k">def</span> <span class="nf">make_agent</span><span class="p">():</span>  <span class="c1"># doctest: +SKIP</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
+        <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">),</span>
+        <span class="n">Compose</span><span class="p">(</span><span class="n">InitTracker</span><span class="p">(),</span> <span class="n">StepCounter</span><span class="p">()),</span>
+    <span class="p">)</span>
+    <span class="n">value_net</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
+        <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action_value&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span>
+        <span class="n">value_net</span><span class="p">,</span> <span class="n">QValueModule</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">exploration</span> <span class="o">=</span> <span class="n">EGreedyModule</span><span class="p">(</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">,</span> <span class="n">annealing_num_steps</span><span class="o">=</span><span class="mi">10_000</span>
+    <span class="p">)</span>
+    <span class="n">policy_explore</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">exploration</span><span class="p">)</span>
+    <span class="n">collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
+        <span class="n">env</span><span class="p">,</span>
+        <span class="n">policy_explore</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">20_000</span><span class="p">))</span>
+    <span class="c1"># Same TensorDictModule as ``policy``: online weights are shared;</span>
+    <span class="c1"># target weights live only on the loss.</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="n">DQNLoss</span><span class="p">(</span>
+        <span class="n">value_network</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+        <span class="n">action_space</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">,</span>
+        <span class="n">delay_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">optimizer</span> <span class="o">=</span> <span class="n">Adam</span><span class="p">(</span><span class="n">loss</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+    <span class="n">target_updater</span> <span class="o">=</span> <span class="n">SoftUpdate</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">0.99</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">policy</span><span class="p">,</span>
+        <span class="n">exploration</span><span class="p">,</span>
+        <span class="n">collector</span><span class="p">,</span>
+        <span class="n">replay_buffer</span><span class="p">,</span>
+        <span class="n">loss</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="p">,</span>
+        <span class="n">target_updater</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="p">(</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">exploration</span><span class="p">,</span>
+    <span class="n">collector</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="p">,</span>
+    <span class="n">loss</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="p">,</span>
+    <span class="n">target_updater</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">=</span> <span class="n">make_agent</span><span class="p">()</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">collector</span><span class="p">))</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># doctest: +SKIP</span>
+
+<span class="n">checkpoint</span> <span class="o">=</span> <span class="n">Checkpoint</span><span class="p">(</span>  <span class="c1"># doctest: +SKIP</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+    <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+    <span class="n">loss_module</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+    <span class="n">target_updater</span><span class="o">=</span><span class="n">target_updater</span><span class="p">,</span>
+    <span class="n">exploration</span><span class="o">=</span><span class="n">exploration</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="n">GlobalRNGState</span><span class="p">(),</span>
+<span class="p">)</span>
+<span class="n">checkpoint</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;run/checkpoint&quot;</span><span class="p">)</span>  <span class="c1"># doctest: +SKIP</span>
+
+<span class="c1"># Interrupt. Rebuild the same graph, then restore into those objects.</span>
+<span class="p">(</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">exploration</span><span class="p">,</span>
+    <span class="n">collector</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="p">,</span>
+    <span class="n">loss</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="p">,</span>
+    <span class="n">target_updater</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">=</span> <span class="n">make_agent</span><span class="p">()</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">restored</span> <span class="o">=</span> <span class="n">Checkpoint</span><span class="p">(</span>  <span class="c1"># doctest: +SKIP</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+    <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+    <span class="n">loss_module</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+    <span class="n">target_updater</span><span class="o">=</span><span class="n">target_updater</span><span class="p">,</span>
+    <span class="n">exploration</span><span class="o">=</span><span class="n">exploration</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="n">GlobalRNGState</span><span class="p">(),</span>
+<span class="p">)</span>
+<span class="n">restored</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>  <span class="c1"># doctest: +SKIP</span>
+    <span class="s2">&quot;run/checkpoint&quot;</span><span class="p">,</span>
+    <span class="n">components</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;policy&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;optimizer&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;replay_buffer&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;collector&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;loss_module&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;target_updater&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;exploration&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;rng&quot;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Resume each optimization iteration in this order.</span>
+<span class="n">training_batch</span> <span class="o">=</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">loss_value</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span><span class="n">training_batch</span><span class="p">)[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">loss_value</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># doctest: +SKIP</span>
+<span class="n">target_updater</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>  <span class="c1"># doctest: +SKIP</span>
+</pre></div>
+</div>
+<p>Train as usual between construction and <code class="docutils literal notranslate"><span class="pre">save</span></code>.
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SoftUpdate</span></code> supports <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> and
+<code class="docutils literal notranslate"><span class="pre">load_state_dict()</span></code>, so it is registered directly. Its target tensors belong
+to <code class="docutils literal notranslate"><span class="pre">loss_module</span></code>; the updater component stores only updater-local progress.
+Keep the updater alive and call <code class="docutils literal notranslate"><span class="pre">target_updater.step()</span></code> immediately after each
+<code class="docutils literal notranslate"><span class="pre">optimizer.step()</span></code>. A
+<a class="reference internal" href="generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Trainer</span></code></a> can register the same names for you;
+see <a class="reference internal" href="#checkpoint-trainer"><span class="std std-ref">Trainer integration</span></a> below,
+<a class="reference internal" href="#checkpoint-recipes"><span class="std std-ref">Resuming recipes</span></a> for Hydra <code class="docutils literal notranslate"><span class="pre">resume=</span></code>, and the
+<a class="reference internal" href="../tutorials/checkpointing.html"><span class="doc">checkpointing tutorial</span></a>.</p>
+</section>
+<section id="checkpoint-versus-export">
+<h3>Checkpoint versus export<a class="headerlink" href="#checkpoint-versus-export" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 40.0%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"></th>
+<th class="head"><p>Checkpoint</p></th>
+<th class="head"><p>Export</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Intent</p></td>
+<td><p>Interrupt and resume, or inspect an intermediate run</p></td>
+<td><p>Deploy a policy</p></td>
+</tr>
+<tr class="row-odd"><td><p>Typical contents</p></td>
+<td><p>Policy, optimizer, loss/targets, collector, replay buffer, RNG</p></td>
+<td><p>Isolated inference module</p></td>
+</tr>
+<tr class="row-even"><td><p>Consumer</p></td>
+<td><p>The same training script</p></td>
+<td><p>ONNX, AOTInductor, edge runtime</p></td>
+</tr>
+<tr class="row-odd"><td><p>API</p></td>
+<td><p><a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a></p></td>
+<td><p><a class="reference internal" href="../tutorials/export.html#export-tuto"><span class="std std-ref">export tutorial</span></a></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A checkpoint can later be reduced to a policy-only file (register just
+<code class="docutils literal notranslate"><span class="pre">policy</span></code> and save). Turning that file into a standalone executable is
+the export tutorial’s job, not <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save" title="torchrl.checkpoint.Checkpoint.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Checkpoint.save()</span></code></a>.</p>
+</section>
 </section>
 <section id="state-dict-payload-formats">
 <h2>State-dict payload formats<a class="headerlink" href="#state-dict-payload-formats" title="Link to this heading">#</a></h2>
@@ -2704,7 +3043,7 @@ metadata.</p>
 </div>
 </section>
 <section id="trainer-integration">
-<h2>Trainer integration<a class="headerlink" href="#trainer-integration" title="Link to this heading">#</a></h2>
+<span id="checkpoint-trainer"></span><h2>Trainer integration<a class="headerlink" href="#trainer-integration" title="Link to this heading">#</a></h2>
 <p>Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
 checkpoints. The Trainer uses <code class="docutils literal notranslate"><span class="pre">collected_frames</span></code> as the checkpoint step and
 adds <code class="docutils literal notranslate"><span class="pre">collected_frames</span></code> and <code class="docutils literal notranslate"><span class="pre">optim_steps</span></code> to the manifest metadata.</p>
@@ -2757,7 +3096,7 @@ helper and calls <code class="docutils literal notranslate"><span class="pre">Tr
 </div>
 </section>
 <section id="resuming-recipes">
-<h2>Resuming recipes<a class="headerlink" href="#resuming-recipes" title="Link to this heading">#</a></h2>
+<span id="checkpoint-recipes"></span><h2>Resuming recipes<a class="headerlink" href="#resuming-recipes" title="Link to this heading">#</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">sota-implementations/*_trainer</span></code> recipes and the standalone <code class="docutils literal notranslate"><span class="pre">sac</span></code>,
 <code class="docutils literal notranslate"><span class="pre">td3</span></code> and <code class="docutils literal notranslate"><span class="pre">ddpg</span></code> recipes save rotated checkpoints under <code class="docutils literal notranslate"><span class="pre">checkpoints/</span></code> in
 their Hydra run directory and stop cleanly on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. A run
@@ -2778,6 +3117,8 @@ directory. Trainer recipes get all of this from
 restores every component but <code class="docutils literal notranslate"><span class="pre">config</span></code> and <code class="docutils literal notranslate"><span class="pre">rng</span></code>, then <code class="docutils literal notranslate"><span class="pre">rng</span></code> last, saves
 every <code class="docutils literal notranslate"><span class="pre">interval</span></code> steps through a <a class="reference internal" href="generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation" title="torchrl.checkpoint.CheckpointRotation"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckpointRotation</span></code></a> under
 <a class="reference internal" href="generated/torchrl.checkpoint.StopOnSignal.html#torchrl.checkpoint.StopOnSignal" title="torchrl.checkpoint.StopOnSignal"><code class="xref py py-class docutils literal notranslate"><span class="pre">StopOnSignal</span></code></a>, and keeps saving next to the resumed checkpoint.</p>
+<p>Scripts that do not use a recipe still reconstruct each object and
+register it on <a class="reference internal" href="generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint" title="torchrl.checkpoint.Checkpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">Checkpoint</span></code></a>; see <a class="reference internal" href="#checkpoint-resume"><span class="std std-ref">Resume training</span></a>.</p>
 </section>
 <section id="compatibility">
 <h2>Compatibility<a class="headerlink" href="#compatibility" title="Link to this heading">#</a></h2>
@@ -2984,6 +3325,14 @@ the default changes in v0.15.</p>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-usage">Basic usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resume-training">Resume training</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-save">What to save</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-modules">Shared modules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#construct-save-and-load">Construct, save, and load</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#copy-paste-dqn-example">Copy-paste DQN example</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#checkpoint-versus-export">Checkpoint versus export</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#state-dict-payload-formats">State-dict payload formats</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#custom-components">Custom components</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reading-a-component-without-its-object">Reading a component without its object</a></li>
@@ -3247,7 +3596,7 @@ the default changes in v0.15.</p>
        "headline": "Checkpointing",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/checkpoint.html",
-       "articleBody": "Checkpointing# TorchRL checkpoints use one manifest-driven format for standalone scripts, trainers, and policy-only consumers. Components are registered independently, so a checkpoint may contain only a policy or a complete training state. The directory and archive containers share the same logical layout. Directory checkpoints are the default and are best suited to large replay buffers; archives are convenient single-file artifacts. Loading either container is automatic. TorchRL checkpoints target local filesystems. URI paths and coordinated distributed rank checkpoints are rejected rather than importing an optional remote-storage stack implicitly. Basic usage# from torchrl.checkpoint import Checkpoint, GlobalRNGState checkpoint = Checkpoint( policy=policy, optimizer=optimizer, replay_buffer=replay_buffer, rng=GlobalRNGState(), ) checkpoint.save(\"run/checkpoint\") checkpoint.load( \"run/checkpoint\", components={\"policy\", \"optimizer\", \"rng\"}, map_location=\"cpu\", ) Replay buffers use their dump and load implementations, including the configured storage checkpointer and compression. Other TorchRL and PyTorch objects normally use state_dict and load_state_dict. Their tensor state is stored with tensordict.save() by default, while a JSON schema preserves the state-dict structure without pickle. JSON-compatible configuration, metrics, and metadata are also stored without pickle. Set save_components={\"policy\", \"optimizer\", \"trainer_state\"} on a Checkpoint to keep large components such as replay buffers out of scheduled Trainer saves. An explicit components= argument to Checkpoint.save() overrides this default selection. State-dict payload formats# The inferred StateDictCheckpointAdapter writes a TensorDict directory. The same adapter can write a TensorDict ZIP archive or consolidated file, and loads auto-detect all of these payloads. This component payload choice is independent of the outer Checkpoint directory or archive container. from torchrl.checkpoint import Checkpoint, StateDictCheckpointAdapter checkpoint = Checkpoint().register( \"policy\", policy, adapter=StateDictCheckpointAdapter(payload_format=\"archive\"), ) Use payload_format=\"consolidated\" for consolidated TensorDict storage. Pickle-based torch.save() remains available explicitly with payload_format=\"torch\". TensorDict payloads reject unsupported Python objects with an error that points to this opt-in rather than silently falling back to pickle. Custom components# Objects exposing dump(path, ...) and load(path, ...) are detected before objects exposing state_dict and load_state_dict. A custom CheckpointAdapter can instead be supplied to Checkpoint.register(), or registered by type on one checkpoint with Checkpoint.register_adapter(). Use CheckpointOptions to preserve component-specific arguments. Options registered with a component are the baseline; operation-level keyword arguments override matching entries and explicitly supplied positional arguments replace the baseline tuple. Reading a component without its object# Checkpoint.read_component() returns the stored payload of one state-dict or JSON component, so a checkpoint can be inspected before the objects it belongs to exist. Tensors are copied out of the checkpoint. Components stored through dump and load require a live object and are rejected. Checkpoint rotation# CheckpointRotation retains the newest checkpoints and can preserve an older checkpoint with the best recorded metric. Metrics are read from manifest metadata. from torchrl.checkpoint import Checkpoint, CheckpointRotation checkpoint = Checkpoint(policy=policy, optimizer=optimizer) rotation = CheckpointRotation( \"run/checkpoints\", keep_last=3, keep_best=(\"eval_reward\", \"max\"), ) rotation.save( checkpoint, step=100_000, metadata={\"eval_reward\": 42.5}, ) rotation.load_latest(checkpoint) Trainer integration# Pass a rotation policy with a unified checkpoint to retain scheduled Trainer checkpoints. The Trainer uses collected_frames as the checkpoint step and adds collected_frames and optim_steps to the manifest metadata. The Trainer registers the process-global RNG state under rng and restores it after every other component. Trainer.load_from_file accepts a checkpoint path or a rotation directory, in which case the newest retained checkpoint is restored. Scheduled saves in asynchronous collection mode pause the collector while the checkpoint is written. A WandbLogger refuses to load state written by a different W\u0026B run; construct it for the saved run, for example through get_logger(..., state_dict=...), before loading the trainer. trainer = SACTrainer( ..., checkpoint=Checkpoint(), checkpoint_rotation=CheckpointRotation( \"run/checkpoints\", keep_last=3, keep_best=(\"eval_reward\", \"max\"), ), checkpoint_metadata=lambda trainer: { \"eval_reward\": evaluation_state[\"reward\"] }, ) The metadata callback runs immediately before each save. Metrics used by keep_best should describe the checkpoint being saved rather than an older evaluation. Stopping at a safe boundary# StopOnSignal turns SIGINT and SIGTERM into a stop request that a training loop checks between batches, so the current batch completes and a final checkpoint is written before the process exits. A second signal raises KeyboardInterrupt for loops that cannot reach a boundary. Previous handlers are restored when the context exits. Trainer.stop_on_signal wraps the same helper and calls Trainer.request_stop: with trainer.stop_on_signal(): trainer.train() Standalone scripts use the helper directly: with StopOnSignal() as stop: for batch in collector: ... if stop.requested: break rotation.save(checkpoint, step=step) Resuming recipes# The sota-implementations/*_trainer recipes and the standalone sac, td3 and ddpg recipes save rotated checkpoints under checkpoints/ in their Hydra run directory and stop cleanly on SIGINT or SIGTERM. A run continues from its checkpoint directory with a single override; the saved configuration is the base and further overrides apply on top of it: python sota-implementations/sac_trainer/train.py resume=outputs/\u003cdate\u003e/\u003ctime\u003e/checkpoints python sota-implementations/sac/sac.py resume=outputs/\u003cdate\u003e/\u003ctime\u003e/checkpoints collector.total_frames=2_000_000 Three helpers implement this flow. resolve_checkpoint_path() maps a rotation directory to its newest checkpoint. resume_config() reads the saved config component with Checkpoint.read_component() and applies the current command-line overrides on top of it. The saved logger component, passed to get_logger(..., state_dict=...), reopens a W\u0026B run with resume=\"must\" or keeps a CSV or TensorBoard logger appending to the saved directory. Trainer recipes get all of this from instantiate_trainer(); RunCheckpointer gives standalone scripts the same behavior: it restores every component but config and rng, then rng last, saves every interval steps through a CheckpointRotation under StopOnSignal, and keeps saving next to the resumed checkpoint. Compatibility# The manifest records the checkpoint format version, adapter versions, component files, and TorchRL, TensorDict, and PyTorch versions. Newer unsupported formats and incompatible adapters fail clearly. A dependency-version mismatch does not block restoration, but emits a warning and is reported by CheckpointLoadResult.comparison. This lets long-running off-policy jobs resume across environment changes while retaining an explicit compatibility signal. Manifests created before dependency provenance was recorded continue to load silently. Partial restoration reports loaded, missing, incompatible, and unrequested components through CheckpointLoadResult. Trainer\u2019s legacy CKPT_BACKEND path remains available during the migration window. Passing checkpoint=Checkpoint(...) to a trainer opts into the unified format. Existing torch, torchsnapshot, and memmap trainer checkpoints remain readable. The torchrl.render.save_render_checkpoint() helper also keeps its legacy torch.save payload by default during the compatibility window. Pass format=\"archive\" or format=\"directory\" to opt into the unified format; the default changes in v0.15. API# Checkpoint(*[, format, strict, ...]) Standard TorchRL checkpoint coordinator. CheckpointAdapter() Interface used to save and restore one checkpoint component. CheckpointError(message[, result]) Error raised when a checkpoint cannot be saved or restored. CheckpointLoadResult(loaded, missing, ...) Structured result returned by Checkpoint.load(). CheckpointOptions([save_args, save_kwargs, ...]) Arguments forwarded to a component\u0027s serialization methods. CheckpointRotation(directory, *, keep_last) Manage a directory of retained TorchRL checkpoints. CheckpointFormat alias of Literal[\u0027directory\u0027, \u0027archive\u0027] CheckpointStrictness alias of Literal[\u0027error\u0027, \u0027warn\u0027, \u0027ignore\u0027] DumpLoadCheckpointAdapter() Adapter for objects exposing dump(path) and load(path). GlobalRNGState() Checkpointable process-global random-number-generator state. JSONCheckpointAdapter() Adapter for JSON-compatible configuration, metrics, and metadata. RunCheckpointer(checkpoint, *, directory, ...) Save a training script\u0027s Checkpoint at loop boundaries and restore it on resume. StateDictCheckpointAdapter([payload_format, ...]) Adapter for state_dict / load_state_dict objects. StateDictFormat alias of Literal[\u0027directory\u0027, \u0027archive\u0027, \u0027consolidated\u0027, \u0027torch\u0027] StopOnSignal([signals, on_request]) Turn termination signals into a stop request checked at loop boundaries. resolve_checkpoint_path(path, *[, prefix]) Return the checkpoint at path or the newest checkpoint of a rotation directory. resume_config(cfg, checkpoint_path, *[, ...]) Return the configuration of a run resumed from checkpoint_path.",
+       "articleBody": "Checkpointing# TorchRL checkpoints use one manifest-driven format for standalone scripts, trainers, and policy-only consumers. Components are registered independently, so a checkpoint may contain only a policy or a complete training state. To interrupt a run and continue it later, see Resume training. To ship a trained policy for inference, see the export tutorial. Those are different jobs: a resume checkpoint keeps optimizer, collector, replay-buffer, and target-network state; an export drops them on purpose. The directory and archive containers share the same logical layout. Directory checkpoints are the default and are best suited to large replay buffers; archives are convenient single-file artifacts. Loading either container is automatic. TorchRL checkpoints target local filesystems. URI paths and coordinated distributed rank checkpoints are rejected rather than importing an optional remote-storage stack implicitly. Basic usage# from torchrl.checkpoint import Checkpoint, GlobalRNGState checkpoint = Checkpoint( policy=policy, optimizer=optimizer, replay_buffer=replay_buffer, rng=GlobalRNGState(), ) checkpoint.save(\"run/checkpoint\") checkpoint.load( \"run/checkpoint\", components={\"policy\", \"optimizer\", \"rng\"}, map_location=\"cpu\", ) Replay buffers use their dump and load implementations, including the configured storage checkpointer and compression. Other TorchRL and PyTorch objects normally use state_dict and load_state_dict. Their tensor state is stored with tensordict.save() by default, while a JSON schema preserves the state-dict structure without pickle. JSON-compatible configuration, metrics, and metadata are also stored without pickle. Set save_components={\"policy\", \"optimizer\", \"trainer_state\"} on a Checkpoint to keep large components such as replay buffers out of scheduled Trainer saves. An explicit components= argument to Checkpoint.save() overrides this default selection. Resume training# A checkpoint is a snapshot you can interrupt and resume from. An export is a deployable inference artifact. They are not interchangeable. If the run is a Hydra trainer recipe or a standalone SAC / TD3 / DDPG script, Resuming recipes is the shorter path: pass resume= at the command line. This section is for scripts that assemble the pieces themselves. The export tutorial isolates a trained policy for ONNX, AOTInductor, or another runtime. That path is inference-only: it drops the optimizer, replay buffer, collector, exploration schedule, and target networks. Use Checkpoint when the goal is to continue training. Reconstruct the same objects first (same module classes, same TensorDictModule wiring, same replay-buffer storage type), register those live objects, then save or load. Checkpoint does not rebuild an architecture from the file. What it persists is each component\u2019s state_dict or dump payload \u2013 the same mapping policy.state_dict() would return, not a pickled container. What to save# Resuming an RL job is more than torch.save(model.state_dict()). The pieces below are independent, and omitting any of them is why a weights-only dump cannot restart training. Training setup Training model. The TensorDictModule (or Module) being optimized. Save that module. The adapter writes its state_dict; you do not need a wrapper type that exists only for serialization. Optimizer. Adam / RMSprop moments, step counts, and param-group state. Without it, a resume is a fresh run that happens to start from pretrained weights. Target networks. Off-policy losses such as DQNLoss keep a delayed copy under target_*_params when delay_value=True (or the equivalent flag). Those tensors live on the loss, not on the policy the collector runs. Register the loss \u2013 or the target params themselves \u2013 or a resume re-bootstraps the targets from the current online weights. There is no reserved target= keyword on Checkpoint. Any extra name is a regular component, so loss_module=loss is the usual way to keep targets, and checkpoint.register(\"target_params\", loss.target_value_network_params) is available when a consumer needs the targets on their own. Collector Inference / exploration policy. The module the collector actually executes, including exploration state such as the eps buffer of EGreedyModule. This is often a wrapper around the training model rather than a second network. Registered transform parameters and buffers. For a TransformedEnv, the collector saves env.transform.state_dict(): nn.Module parameters and buffers on the transform stack, such as ObservationNorm loc/scale and CatFrames stack buffers. Transforms that keep live episode state only in the carrier TensorDict (for example StepCounter) contribute an empty payload; that TensorDict is not part of the checkpoint. The base simulator is not saved either. Collector progress. frames and iter, so schedules (epsilon annealing, init_random_frames, total-frame budgets) continue instead of restarting at zero. Restoring progress is not a live-episode resume. After five transitions with CountingEnv plus StepCounter, frames is 5 and the transform state is empty; the first resumed transition starts at step_count=0 and observation 0. Continuing a mid-episode simulator, or worker-local RNG, requires separately supported state handling. Replay buffer dump() / load() persist the writer (next-write cursor), the sampler (including priorities on a prioritized buffer), the buffer transforms, and the underlying storage. A restored buffer that is missing the writer or sampler is a pile of transitions you can no longer address correctly. RNG GlobalRNGState restores process-global Python, NumPy, and Torch RNGs. That is this process\u2019s sampling and exploration generators. It does not restore environment or collector-worker RNG, and it is not a guarantee of exact trajectory reproducibility across a resume. Shared modules# convert_to_functional() wraps the module you passed in. For DQNLoss(value_network=policy): loss.value_network is that same TensorDictModule; loss.value_network_params holds its parameters; loss.target_value_network_params is a detached copy used as the target. The online weights are therefore not an independent copy of policy. Saving both policy and loss_module as if they were two networks writes the same tensors twice. Loading those two payloads into a pair of separately constructed modules desynchronizes the collector from the loss \u2013 the confusion that #3032 describes. Rebuild the same graph first (pass the same policy into the loss), then persist one owner of the online weights: loss_module=loss covers online and target parameters; policy=policy is enough when a policy-only consumer will load just that component, but then register the target params (or the whole loss) as well if you intend to resume training. A Trainer may register both names for convenience. They still share the online weights. Do not construct a second network and save it under another name thinking it is a distinct snapshot. Construct, save, and load# from torchrl.checkpoint import Checkpoint, GlobalRNGState checkpoint = Checkpoint( policy=policy, optimizer=optimizer, replay_buffer=replay_buffer, collector=collector, loss_module=loss, exploration=exploration, rng=GlobalRNGState(), ) checkpoint.save(\"run/checkpoint\") result = checkpoint.load( \"run/checkpoint\", components={ \"policy\", \"optimizer\", \"replay_buffer\", \"collector\", \"loss_module\", \"exploration\", \"rng\", }, map_location=\"cpu\", ) components on Checkpoint.load() selects which already-registered objects to restore. Unrequested payloads, including a large replay buffer, stay on disk. map_location is forwarded to the state-dict adapter, the same way it is for torch.load(). To persist only the TensorDictModule \u2013 still a state_dict, not a pickle of the Python object \u2013 register that module alone: policy_only = Checkpoint(policy=policy) policy_only.save(\"run/policy-only\") # Later, after reconstructing the same TensorDictModule: Checkpoint(policy=new_policy).load( \"run/policy-only\", components={\"policy\"}, map_location=\"cpu\", ) That policy-only file is a checkpoint of the training weights. It is not an export: it still needs TorchRL to rebuild the module, and it cannot resume an optimizer, buffer, or target network. Copy-paste DQN example# The snippet below rebuilds the same object graph before loading. Gym is required; skip it in doctest environments that do not have it. from torch import nn from torch.optim import Adam from tensordict.nn import TensorDictModule, TensorDictSequential from torchrl.checkpoint import Checkpoint, GlobalRNGState from torchrl.collectors import Collector from torchrl.data import LazyTensorStorage, ReplayBuffer from torchrl.envs import Compose, GymEnv, InitTracker, StepCounter, TransformedEnv from torchrl.modules import EGreedyModule, QValueModule from torchrl.objectives import DQNLoss, SoftUpdate def make_agent(): # doctest: +SKIP env = TransformedEnv( GymEnv(\"CartPole-v1\"), Compose(InitTracker(), StepCounter()), ) value_net = TensorDictModule( nn.Sequential(nn.Linear(4, 64), nn.ReLU(), nn.Linear(64, 2)), in_keys=[\"observation\"], out_keys=[\"action_value\"], ) policy = TensorDictSequential( value_net, QValueModule(spec=env.action_spec) ) exploration = EGreedyModule( env.action_spec, annealing_num_steps=10_000 ) policy_explore = TensorDictSequential(policy, exploration) collector = Collector( env, policy_explore, frames_per_batch=64, total_frames=10_000, ) replay_buffer = ReplayBuffer(storage=LazyTensorStorage(20_000)) # Same TensorDictModule as ``policy``: online weights are shared; # target weights live only on the loss. loss = DQNLoss( value_network=policy, action_space=env.action_spec, delay_value=True, ) optimizer = Adam(loss.parameters()) target_updater = SoftUpdate(loss, eps=0.99) return ( policy, exploration, collector, replay_buffer, loss, optimizer, target_updater, ) ( policy, exploration, collector, replay_buffer, loss, optimizer, target_updater, ) = make_agent() # doctest: +SKIP batch = next(iter(collector)) # doctest: +SKIP replay_buffer.extend(batch) # doctest: +SKIP checkpoint = Checkpoint( # doctest: +SKIP policy=policy, optimizer=optimizer, replay_buffer=replay_buffer, collector=collector, loss_module=loss, target_updater=target_updater, exploration=exploration, rng=GlobalRNGState(), ) checkpoint.save(\"run/checkpoint\") # doctest: +SKIP # Interrupt. Rebuild the same graph, then restore into those objects. ( policy, exploration, collector, replay_buffer, loss, optimizer, target_updater, ) = make_agent() # doctest: +SKIP restored = Checkpoint( # doctest: +SKIP policy=policy, optimizer=optimizer, replay_buffer=replay_buffer, collector=collector, loss_module=loss, target_updater=target_updater, exploration=exploration, rng=GlobalRNGState(), ) restored.load( # doctest: +SKIP \"run/checkpoint\", components={ \"policy\", \"optimizer\", \"replay_buffer\", \"collector\", \"loss_module\", \"target_updater\", \"exploration\", \"rng\", }, map_location=\"cpu\", ) # Resume each optimization iteration in this order. training_batch = replay_buffer.sample(32) # doctest: +SKIP optimizer.zero_grad() # doctest: +SKIP loss_value = loss(training_batch)[\"loss\"] # doctest: +SKIP loss_value.backward() # doctest: +SKIP optimizer.step() # doctest: +SKIP target_updater.step() # doctest: +SKIP Train as usual between construction and save. SoftUpdate supports state_dict() and load_state_dict(), so it is registered directly. Its target tensors belong to loss_module; the updater component stores only updater-local progress. Keep the updater alive and call target_updater.step() immediately after each optimizer.step(). A Trainer can register the same names for you; see Trainer integration below, Resuming recipes for Hydra resume=, and the checkpointing tutorial. Checkpoint versus export# Checkpoint Export Intent Interrupt and resume, or inspect an intermediate run Deploy a policy Typical contents Policy, optimizer, loss/targets, collector, replay buffer, RNG Isolated inference module Consumer The same training script ONNX, AOTInductor, edge runtime API Checkpoint export tutorial A checkpoint can later be reduced to a policy-only file (register just policy and save). Turning that file into a standalone executable is the export tutorial\u2019s job, not Checkpoint.save(). State-dict payload formats# The inferred StateDictCheckpointAdapter writes a TensorDict directory. The same adapter can write a TensorDict ZIP archive or consolidated file, and loads auto-detect all of these payloads. This component payload choice is independent of the outer Checkpoint directory or archive container. from torchrl.checkpoint import Checkpoint, StateDictCheckpointAdapter checkpoint = Checkpoint().register( \"policy\", policy, adapter=StateDictCheckpointAdapter(payload_format=\"archive\"), ) Use payload_format=\"consolidated\" for consolidated TensorDict storage. Pickle-based torch.save() remains available explicitly with payload_format=\"torch\". TensorDict payloads reject unsupported Python objects with an error that points to this opt-in rather than silently falling back to pickle. Custom components# Objects exposing dump(path, ...) and load(path, ...) are detected before objects exposing state_dict and load_state_dict. A custom CheckpointAdapter can instead be supplied to Checkpoint.register(), or registered by type on one checkpoint with Checkpoint.register_adapter(). Use CheckpointOptions to preserve component-specific arguments. Options registered with a component are the baseline; operation-level keyword arguments override matching entries and explicitly supplied positional arguments replace the baseline tuple. Reading a component without its object# Checkpoint.read_component() returns the stored payload of one state-dict or JSON component, so a checkpoint can be inspected before the objects it belongs to exist. Tensors are copied out of the checkpoint. Components stored through dump and load require a live object and are rejected. Checkpoint rotation# CheckpointRotation retains the newest checkpoints and can preserve an older checkpoint with the best recorded metric. Metrics are read from manifest metadata. from torchrl.checkpoint import Checkpoint, CheckpointRotation checkpoint = Checkpoint(policy=policy, optimizer=optimizer) rotation = CheckpointRotation( \"run/checkpoints\", keep_last=3, keep_best=(\"eval_reward\", \"max\"), ) rotation.save( checkpoint, step=100_000, metadata={\"eval_reward\": 42.5}, ) rotation.load_latest(checkpoint) Trainer integration# Pass a rotation policy with a unified checkpoint to retain scheduled Trainer checkpoints. The Trainer uses collected_frames as the checkpoint step and adds collected_frames and optim_steps to the manifest metadata. The Trainer registers the process-global RNG state under rng and restores it after every other component. Trainer.load_from_file accepts a checkpoint path or a rotation directory, in which case the newest retained checkpoint is restored. Scheduled saves in asynchronous collection mode pause the collector while the checkpoint is written. A WandbLogger refuses to load state written by a different W\u0026B run; construct it for the saved run, for example through get_logger(..., state_dict=...), before loading the trainer. trainer = SACTrainer( ..., checkpoint=Checkpoint(), checkpoint_rotation=CheckpointRotation( \"run/checkpoints\", keep_last=3, keep_best=(\"eval_reward\", \"max\"), ), checkpoint_metadata=lambda trainer: { \"eval_reward\": evaluation_state[\"reward\"] }, ) The metadata callback runs immediately before each save. Metrics used by keep_best should describe the checkpoint being saved rather than an older evaluation. Stopping at a safe boundary# StopOnSignal turns SIGINT and SIGTERM into a stop request that a training loop checks between batches, so the current batch completes and a final checkpoint is written before the process exits. A second signal raises KeyboardInterrupt for loops that cannot reach a boundary. Previous handlers are restored when the context exits. Trainer.stop_on_signal wraps the same helper and calls Trainer.request_stop: with trainer.stop_on_signal(): trainer.train() Standalone scripts use the helper directly: with StopOnSignal() as stop: for batch in collector: ... if stop.requested: break rotation.save(checkpoint, step=step) Resuming recipes# The sota-implementations/*_trainer recipes and the standalone sac, td3 and ddpg recipes save rotated checkpoints under checkpoints/ in their Hydra run directory and stop cleanly on SIGINT or SIGTERM. A run continues from its checkpoint directory with a single override; the saved configuration is the base and further overrides apply on top of it: python sota-implementations/sac_trainer/train.py resume=outputs/\u003cdate\u003e/\u003ctime\u003e/checkpoints python sota-implementations/sac/sac.py resume=outputs/\u003cdate\u003e/\u003ctime\u003e/checkpoints collector.total_frames=2_000_000 Three helpers implement this flow. resolve_checkpoint_path() maps a rotation directory to its newest checkpoint. resume_config() reads the saved config component with Checkpoint.read_component() and applies the current command-line overrides on top of it. The saved logger component, passed to get_logger(..., state_dict=...), reopens a W\u0026B run with resume=\"must\" or keeps a CSV or TensorBoard logger appending to the saved directory. Trainer recipes get all of this from instantiate_trainer(); RunCheckpointer gives standalone scripts the same behavior: it restores every component but config and rng, then rng last, saves every interval steps through a CheckpointRotation under StopOnSignal, and keeps saving next to the resumed checkpoint. Scripts that do not use a recipe still reconstruct each object and register it on Checkpoint; see Resume training. Compatibility# The manifest records the checkpoint format version, adapter versions, component files, and TorchRL, TensorDict, and PyTorch versions. Newer unsupported formats and incompatible adapters fail clearly. A dependency-version mismatch does not block restoration, but emits a warning and is reported by CheckpointLoadResult.comparison. This lets long-running off-policy jobs resume across environment changes while retaining an explicit compatibility signal. Manifests created before dependency provenance was recorded continue to load silently. Partial restoration reports loaded, missing, incompatible, and unrequested components through CheckpointLoadResult. Trainer\u2019s legacy CKPT_BACKEND path remains available during the migration window. Passing checkpoint=Checkpoint(...) to a trainer opts into the unified format. Existing torch, torchsnapshot, and memmap trainer checkpoints remain readable. The torchrl.render.save_render_checkpoint() helper also keeps its legacy torch.save payload by default during the compatibility window. Pass format=\"archive\" or format=\"directory\" to opt into the unified format; the default changes in v0.15. API# Checkpoint(*[, format, strict, ...]) Standard TorchRL checkpoint coordinator. CheckpointAdapter() Interface used to save and restore one checkpoint component. CheckpointError(message[, result]) Error raised when a checkpoint cannot be saved or restored. CheckpointLoadResult(loaded, missing, ...) Structured result returned by Checkpoint.load(). CheckpointOptions([save_args, save_kwargs, ...]) Arguments forwarded to a component\u0027s serialization methods. CheckpointRotation(directory, *, keep_last) Manage a directory of retained TorchRL checkpoints. CheckpointFormat alias of Literal[\u0027directory\u0027, \u0027archive\u0027] CheckpointStrictness alias of Literal[\u0027error\u0027, \u0027warn\u0027, \u0027ignore\u0027] DumpLoadCheckpointAdapter() Adapter for objects exposing dump(path) and load(path). GlobalRNGState() Checkpointable process-global random-number-generator state. JSONCheckpointAdapter() Adapter for JSON-compatible configuration, metrics, and metadata. RunCheckpointer(checkpoint, *, directory, ...) Save a training script\u0027s Checkpoint at loop boundaries and restore it on resume. StateDictCheckpointAdapter([payload_format, ...]) Adapter for state_dict / load_state_dict objects. StateDictFormat alias of Literal[\u0027directory\u0027, \u0027archive\u0027, \u0027consolidated\u0027, \u0027torch\u0027] StopOnSignal([signals, on_request]) Turn termination signals into a stop request checked at loop boundaries. resolve_checkpoint_path(path, *[, prefix]) Return the checkpoint at path or the newest checkpoint of a rotation directory. resume_config(cfg, checkpoint_path, *[, ...]) Return the configuration of a run resumed from checkpoint_path.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

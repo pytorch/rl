@@ -20,6 +20,13 @@
 - [Checkpointing](checkpoint.html)
 
 - [Basic usage](checkpoint.html#basic-usage)
+- [Resume training](checkpoint.html#resume-training)
+
+- [What to save](checkpoint.html#what-to-save)
+- [Shared modules](checkpoint.html#shared-modules)
+- [Construct, save, and load](checkpoint.html#construct-save-and-load)
+- [Copy-paste DQN example](checkpoint.html#copy-paste-dqn-example)
+- [Checkpoint versus export](checkpoint.html#checkpoint-versus-export)
 - [State-dict payload formats](checkpoint.html#state-dict-payload-formats)
 - [Custom components](checkpoint.html#custom-components)
 - [Reading a component without its object](checkpoint.html#reading-a-component-without-its-object)

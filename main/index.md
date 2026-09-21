@@ -134,6 +134,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Checkpointing](reference/checkpoint.html)
 
 - [Basic usage](reference/checkpoint.html#basic-usage)
+- [Resume training](reference/checkpoint.html#resume-training)
 - [State-dict payload formats](reference/checkpoint.html#state-dict-payload-formats)
 - [Custom components](reference/checkpoint.html#custom-components)
 - [Reading a component without its object](reference/checkpoint.html#reading-a-component-without-its-object)
