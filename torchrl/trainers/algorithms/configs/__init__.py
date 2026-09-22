@@ -119,6 +119,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     RSSMStateEstimatorV3Config,
     TanhModuleConfig,
     TanhNormalModelConfig,
+    TdMpc2MLPConfig,
     TensorDictModuleConfig,
     TensorDictSequentialConfig,
     ValueModelConfig,
@@ -328,6 +329,7 @@ __all__ = [
     "RSSMStateEstimatorV3Config",
     "MLPConfig",
     "LowLevelControllerConfig",
+    "TdMpc2MLPConfig",
     "ModelConfig",
     "TanhModuleConfig",
     "TanhNormalModelConfig",
@@ -551,6 +553,7 @@ def _register_configs():
 
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
+    cs.store(group="network", name="tdmpc2_mlp", node=TdMpc2MLPConfig)
     cs.store(group="network", name="dreamer_v3_mlp", node=DreamerV3MLPConfig)
     cs.store(
         group="network",
