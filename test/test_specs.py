@@ -3746,6 +3746,53 @@ def test_composite_contains():
     assert ("a", ("b", ("c",))) in spec.keys(True, True)
 
 
+def test_composite_keys_nested_order():
+    """keys(True, False) yields children before their parent Composite.
+
+    The walk matches TensorDict and is part of the public contract: empty
+    nested specs can be deleted in a single pass over list(spec.keys(True, False)).
+    """
+    spec = Composite(
+        next=Composite(
+            obs=Unbounded(shape=()),
+            nested=Composite(x=Unbounded(shape=())),
+        )
+    )
+    keys = list(spec.keys(True, False))
+    assert keys == [
+        ("next", "obs"),
+        ("next", "nested", "x"),
+        ("next", "nested"),
+        "next",
+    ]
+    assert keys == list(spec.zero().keys(True, False))
+
+    empty = Composite(a=Composite(b=Composite()))
+    for key in list(empty.keys(True, False)):
+        if isinstance(empty[key], Composite) and empty[key].is_empty():
+            del empty[key]
+    assert list(empty.keys(True, False)) == []
+
+    stacked = torch.stack(
+        [
+            Composite(
+                next=Composite(obs=Unbounded(shape=(3,))),
+                shape=(3,),
+            ),
+            Composite(
+                next=Composite(
+                    obs=Unbounded(shape=(3,)),
+                    extra=Unbounded(shape=(3,)),
+                ),
+                shape=(3,),
+            ),
+        ],
+        0,
+    )
+    assert isinstance(stacked, StackedComposite)
+    assert list(stacked.keys(True, False)) == [("next", "obs"), "next"]
+
+
 def get_all_keys(spec: TensorSpec, include_exclusive: bool):
     """Given a TensorSpec, returns all exclusive and non-exclusive keys as a set of tuples.
 
