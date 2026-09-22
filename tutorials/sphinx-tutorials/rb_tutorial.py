@@ -954,6 +954,35 @@ assert selected[0].length == 5
 #         rb.extend(data)
 #         batch = rb.sample()  # contiguous sub-sequences
 #
+# For **batched** or :class:`~torchrl.envs.ParallelEnv` collectors the
+# tensordict is ``[num_envs, T]``. Keep that layout and set ``ndim=2`` on
+# the storage. Do **not** call ``data.reshape(-1)`` before ``extend``:
+# flattening collapses the time dimension, and when ``T=1`` subsequent
+# writes interleave environments so :class:`~torchrl.data.replay_buffers.SliceSampler`
+# only sees length-1 trajectories.
+#
+# .. code-block:: python
+#
+#     from torchrl.envs import ParallelEnv
+#
+#     rb = ReplayBuffer(
+#         storage=LazyTensorStorage(100_000, ndim=2),
+#         sampler=SliceSampler(
+#             slice_len=20,
+#             traj_key=("collector", "traj_ids"),
+#         ),
+#         batch_size=256,
+#     )
+#     collector = Collector(
+#         ParallelEnv(4, make_env),
+#         policy,
+#         frames_per_batch=200,  # T = frames_per_batch / num_envs must be >= slice_len
+#         total_frames=-1,
+#         auto_register_policy_transforms=True,
+#     )
+#     for data in collector:
+#         rb.extend(data)  # data.shape == [num_envs, T]
+#
 # For **multi-process** collectors, a subtlety arises: different workers
 # write their batches independently, so adjacent frames in the buffer can
 # come from unrelated episodes *without* an intervening ``done`` signal.
