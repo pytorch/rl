@@ -2918,8 +2918,11 @@ class LogValidationReward(TrainerHookBase):
     Args:
         record_interval (int): total number of optimization steps
             between two calls to the recorder for testing.
-        record_frames (int): number of frames to be recorded during
-            testing.
+        record_frames (int, optional): number of frames per environment to record
+            during testing. Specify either this or ``record_episodes``.
+        record_episodes (int, optional): number of complete episodes per environment
+            to record during testing. Environments must eventually terminate or
+            truncate. Cannot be used with ``record_frames``.
         frame_skip (int): frame_skip used in the environment. It is
             important to let the trainer know the number of frames skipped at
             each iteration, otherwise the frame count can be underestimated.
@@ -2961,7 +2964,8 @@ class LogValidationReward(TrainerHookBase):
         self,
         *,
         record_interval: int,
-        record_frames: int,
+        record_frames: int | None = None,
+        record_episodes: int | None = None,
         frame_skip: int = 1,
         policy_exploration: TensorDictModule,
         environment: EnvBase = None,
@@ -2979,7 +2983,14 @@ class LogValidationReward(TrainerHookBase):
             raise ValueError("environment and recorder conflict.")
         self.policy_exploration = policy_exploration
         self.environment = environment
+        if (record_frames is None) == (record_episodes is None):
+            raise ValueError(
+                "Specify exactly one of record_frames and record_episodes."
+            )
+        if record_episodes is not None and record_episodes <= 0:
+            raise ValueError("record_episodes must be positive.")
         self.record_frames = record_frames
+        self.record_episodes = record_episodes
         self.frame_skip = frame_skip
         self._count = 0
         self.record_interval = record_interval
@@ -3002,13 +3013,27 @@ class LogValidationReward(TrainerHookBase):
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.eval()
                 self.environment.eval()
-                td_record = self.environment.rollout(
-                    policy=self.policy_exploration,
-                    max_steps=self.record_frames,
-                    auto_reset=True,
-                    auto_cast_to_device=True,
-                    break_when_any_done=False,
-                ).clone()
+                rollouts = []
+                for _ in range(self.record_episodes or 1):
+                    td_record = self.environment.rollout(
+                        policy=self.policy_exploration,
+                        max_steps=(
+                            self.record_frames
+                            if self.record_episodes is None
+                            else sys.maxsize
+                        ),
+                        auto_reset=True,
+                        auto_cast_to_device=True,
+                        break_when_any_done=False,
+                        break_when_all_done=self.record_episodes is not None,
+                    ).clone()
+                    if self.record_episodes is not None:
+                        # Batched rollouts repeat terminal steps while other envs finish.
+                        done = td_record.get(("next", "done")).squeeze(-1).long()
+                        td_record = td_record[done.cumsum(-1) - done == 0]
+                    rollouts.append(td_record)
+                if self.record_episodes is not None:
+                    td_record = torch.cat(rollouts, dim=0)
                 td_record = split_trajectories(td_record)
                 if isinstance(self.policy_exploration, torch.nn.Module):
                     self.policy_exploration.train()
