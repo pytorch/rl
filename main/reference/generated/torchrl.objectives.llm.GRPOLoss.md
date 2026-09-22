@@ -81,13 +81,16 @@ clipping will be performed. Defaults to `False`.
 - **kl_to_ref_coeff** (*float**,**optional*) - coefficient for the KL divergence to the reference policy. Defaults to `None` (no KL divergence).
 - **kl_to_inference_coeff** (*float**,**optional*) - coefficient for the KL divergence to the inference policy. Defaults to `None` (no KL divergence).
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - device of the buffers. Defaults to `None`.
-- **masking_strategy** (*Literal**[**"sft"**,**"rlhf"**,**"generic"**]**,**optional*) -
-
-The masking strategy to use for distribution creation.
+- **masking_strategy** (*Literal**[**"sft"**,**"rlhf"**,**"generic"**]**,**optional*) - The masking strategy to use for distribution creation.
 - "sft": Use prompt masking (response tokens only, suitable for single-turn)
 - "rlhf": Use assistant masking (assistant tokens only, suitable for multi-turn)
 - "generic": Use attention masking (all valid tokens)
 Defaults to "sft" since we can't guarantee assistant masks are available.
+- **ref_log_prob_padding_side** (*Literal**[**"left"**,**"right"**]**,**optional*) - side on which to pad the
+reference log-probability tensor when it is retrieved from the input tensordict as a
+ragged sequence. Defaults to `"left"`.
+- **ref_log_prob_padding_value** (*float**,**optional*) - fill value used when padding the reference
+log-probability tensor. Defaults to `0.0`.
 
 Note
 

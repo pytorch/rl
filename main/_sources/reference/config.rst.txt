@@ -349,6 +349,7 @@ Model and Network Configurations
     ModelConfig
     NetworkConfig
     MLPConfig
+    TdMpc2MLPConfig
     DreamerV3MLPConfig
     DreamerV3DiscreteActorConfig
     DreamerV3SeededPolicyConfig

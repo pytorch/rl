@@ -818,6 +818,7 @@
 - [torchrl.trainers.algorithms.configs.modules.QValueModelConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.QValueModelConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.TanhModuleConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.TanhModuleConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.TanhNormalModelConfig.md)
+- [torchrl.trainers.algorithms.configs.modules.TdMpc2MLPConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.TdMpc2MLPConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.TensorDictSequentialConfig.md)
 - [torchrl.trainers.algorithms.configs.modules.ValueModelConfig](reference/generated/torchrl.trainers.algorithms.configs.modules.ValueModelConfig.md)
