@@ -120,6 +120,8 @@ from torchrl.trainers.algorithms.configs.modules import (
     TanhModuleConfig,
     TanhNormalModelConfig,
     TdMpc2MLPConfig,
+    TdMpc2PolicyPriorConfig,
+    TdMpc2QEnsembleConfig,
     TdMpc2WorldModelConfig,
     TensorDictModuleConfig,
     TensorDictSequentialConfig,
@@ -142,6 +144,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     SACLossConfig,
     SoftUpdateConfig,
     TD3LossConfig,
+    TdMpc2LossConfig,
     TQCLossConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
@@ -331,6 +334,8 @@ __all__ = [
     "MLPConfig",
     "LowLevelControllerConfig",
     "TdMpc2MLPConfig",
+    "TdMpc2PolicyPriorConfig",
+    "TdMpc2QEnsembleConfig",
     "TdMpc2WorldModelConfig",
     "ModelConfig",
     "TanhModuleConfig",
@@ -448,6 +453,7 @@ __all__ = [
     "ReinforceLossConfig",
     "SACLossConfig",
     "TD3LossConfig",
+    "TdMpc2LossConfig",
     "TQCLossConfig",
     # Value functions
     "GAEConfig",
@@ -593,6 +599,8 @@ def _register_configs():
     cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
     cs.store(group="model", name="value", node=ValueModelConfig)
     cs.store(group="model", name="qvalue", node=QValueModelConfig)
+    cs.store(group="model", name="tdmpc2_policy_prior", node=TdMpc2PolicyPriorConfig)
+    cs.store(group="model", name="tdmpc2_q_ensemble", node=TdMpc2QEnsembleConfig)
     cs.store(group="model", name="tdmpc2_world_model", node=TdMpc2WorldModelConfig)
 
     # Exploration configs
@@ -719,6 +727,7 @@ def _register_configs():
     cs.store(group="loss", name="reinforce", node=ReinforceLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
     cs.store(group="loss", name="td3", node=TD3LossConfig)
+    cs.store(group="loss", name="tdmpc2", node=TdMpc2LossConfig)
     cs.store(group="loss", name="tqc", node=TQCLossConfig)
 
     # =============================================================================

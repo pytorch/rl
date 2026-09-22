@@ -19,6 +19,7 @@ Additional loss modules for specialized algorithms.
     DreamerModelLoss
     DreamerValueLoss
     WorldModelLoss
+    TdMpc2Loss
     ExponentialQuadraticCost
     RNDLoss
 
