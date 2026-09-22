@@ -26,6 +26,45 @@ TensorSpec classes define the shape, dtype, and domain of tensors in TorchRL.
     UnboundedContinuous
     UnboundedDiscrete
 
+.. _composite-spec-shapes:
+
+Composite shape vs leaf shape
+-----------------------------
+
+A :class:`~torchrl.data.Composite` has a ``shape`` that is the leading batch
+of every leaf, the same way a :class:`~tensordict.TensorDict` has a
+``batch_size``. Leaves carry that batch plus their feature size.
+
+Environment specs follow this layout. An unbatched env has composite shape
+``[]``; an image leaf is then just the feature, for example ``[3, 64, 64]``.
+A batched env with ``batch_size=[N]`` (as with
+:class:`~torchrl.envs.ParallelEnv`) gives every spec a leading ``[N, *]``:
+the composite is ``[N]`` and the image leaf is ``[N, 3, 64, 64]``. Nested
+composites can introduce extra leading dimensions for agent groups.
+
+.. code-block:: python
+
+    from torchrl.data import Bounded, Composite
+
+    # Unbatched env: empty composite shape, image leaf is feature-only.
+    observation_spec = Composite(
+        pixels=Bounded(low=0, high=255, shape=(3, 64, 64), dtype=torch.uint8),
+        shape=(),
+    )
+    assert observation_spec.shape == ()
+    assert observation_spec["pixels"].shape == (3, 64, 64)
+
+    # Batched env with N=2: every spec carries a leading [2].
+    batched_observation_spec = Composite(
+        pixels=Bounded(low=0, high=255, shape=(2, 3, 64, 64), dtype=torch.uint8),
+        shape=(2,),
+    )
+    assert batched_observation_spec.shape == (2,)
+    assert batched_observation_spec["pixels"].shape == (2, 3, 64, 64)
+
+See :ref:`env_spec_shapes` for the same examples in the env tutorial, and
+:ref:`Environment-spec-shapes` for the env-API statement of this rule.
+
 Supported PyTorch Operations
 ----------------------------
 

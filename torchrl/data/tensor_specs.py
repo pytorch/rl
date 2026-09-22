@@ -5049,6 +5049,12 @@ class Composite(TensorSpec):
     the :class:`~tensordict.TensorDict` class. Like :class:`~tensordict.TensorDict`, it has a ``shape`` (akin to the
     ``TensorDict``'s ``batch_size``) and an optional ``device``.
 
+    Environment specs use that layout: the composite ``shape`` is the env batch
+    size (empty if the env is unbatched) and each leaf is that batch plus the
+    feature. An unbatched image observation is therefore composite shape ``[]``
+    with a ``[3, 64, 64]`` leaf; a batched env with ``N`` copies uses ``[N]``
+    and ``[N, 3, 64, 64]``. See :ref:`env_spec_shapes`.
+
     Args:
         *args: if an unnamed argument is passed, it must be a dictionary with keys
             matching the expected keys to be found in the :obj:`Composite` object.

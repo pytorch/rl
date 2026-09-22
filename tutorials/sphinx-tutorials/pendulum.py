@@ -431,10 +431,15 @@ def _reset(self, tensordict):
 # ^^^^^^^^^^^
 #
 # The environment specs leading dimensions must match the
-# environment batch-size. This is done to enforce that every component of an
+# environment batch-size. The composite spec has that batch shape (it can be
+# empty) and the leaves have that size plus their feature size: an unbatched
+# image env has composite shape ``[]`` and a ``[3, 64, 64]`` leaf, while a
+# batched env with ``batch_size=[N]`` uses ``[N]`` and ``[N, 3, 64, 64]``.
+# This is done to enforce that every component of an
 # environment (including its transforms) have an accurate representation of
 # the expected input and output shapes. This is something that should be
-# accurately coded in stateful settings.
+# accurately coded in stateful settings. Worked examples are in
+# :ref:`env_spec_shapes`.
 #
 # For non batch-locked environments, such as the one in our example (see below),
 # this is irrelevant as the environment batch size will most likely be empty.
