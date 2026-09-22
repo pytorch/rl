@@ -432,7 +432,7 @@ class GAEConfig(LossConfig):
     gamma: float | None = None
     lmbda: float | None = None
     value_network: Any = None
-    average_gae: bool = True
+    average_gae: bool = False
     differentiable: bool = False
     vectorized: bool | None = None
     skip_existing: bool | None = None
