@@ -7,7 +7,8 @@ from typing import Any
 
 from omegaconf import MISSING
 
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
+from torchrl.trainers.trainers import LogScalar
 
 
 @dataclass
@@ -94,10 +95,19 @@ class LogScalarConfig(HookConfig):
     log_pbar: bool = False
     include_std: bool = True
     reduction: str = "mean"
-    _target_: str = "torchrl.trainers.trainers.LogScalar"
+    _target_: str = "torchrl.trainers.algorithms.configs.hooks._make_log_scalar"
 
     def __post_init__(self) -> None:
         super().__post_init__()
+
+
+def _make_log_scalar(*args: Any, **kwargs: Any) -> LogScalar:
+    """Instantiate a scalar logging hook after normalizing Hydra nested keys."""
+    if args:
+        args = (_normalize_hydra_key(args[0]), *args[1:])
+    elif "key" in kwargs:
+        kwargs["key"] = _normalize_hydra_key(kwargs["key"])
+    return LogScalar(*args, **kwargs)
 
 
 @dataclass
@@ -204,6 +214,37 @@ class DreamerV3OptimizationStepperConfig(HookConfig):
     warmup_steps: int = 5
     mixed_precision: bool = False
     _target_: str = "torchrl.trainers.algorithms.DreamerV3OptimizationStepper"
+
+
+@dataclass
+class TdMpc2OptimizationStepperConfig(HookConfig):
+    """Configuration for the TD-MPC2 optimization stepper.
+
+    The stepper owns the model and actor optimizers and performs the staged
+    model, policy, and target-Q updates.
+
+    Examples:
+        >>> from hydra.utils import instantiate
+        >>> from torchrl.trainers.algorithms.configs import (
+        ...     TdMpc2OptimizationStepperConfig,
+        ... )
+        >>> configured_stepper = instantiate(  # doctest: +SKIP
+        ...     TdMpc2OptimizationStepperConfig(
+        ...         loss_module=loss_module,
+        ...         optimizer_model=optimizer_model,
+        ...         optimizer_actor=optimizer_actor,
+        ...     )
+        ... )
+
+    See also :class:`~torchrl.trainers.algorithms.TdMpc2OptimizationStepper`.
+    """
+
+    loss_module: Any = None
+    optimizer_model: Any = None
+    optimizer_actor: Any = None
+    target_tau: float = 0.01
+    zero_grad_set_to_none: bool = True
+    _target_: str = "torchrl.trainers.algorithms.tdmpc2.TdMpc2OptimizationStepper"
 
 
 @dataclass

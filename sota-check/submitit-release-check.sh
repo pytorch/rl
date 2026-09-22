@@ -69,6 +69,7 @@ scripts=(
     run_tqc.sh
     run_td3.sh
     run_td3bc.sh
+    run_tdmpc2.sh
     run_dt.sh
     run_dt_online.sh
     run_vla_grpo.sh

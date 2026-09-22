@@ -350,6 +350,9 @@ Model and Network Configurations
     NetworkConfig
     MLPConfig
     TdMpc2MLPConfig
+    TdMpc2PolicyPriorConfig
+    TdMpc2QEnsembleConfig
+    TdMpc2PlannerConfig
     TdMpc2WorldModelConfig
     DreamerV3MLPConfig
     DreamerV3DiscreteActorConfig
@@ -505,6 +508,7 @@ Training and Optimization Configurations
     IQLTrainerConfig
     CQLTrainerConfig
     TD3TrainerConfig
+    TdMpc2TrainerConfig
 
 Trainer Hook Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -522,6 +526,7 @@ Trainer Hook Configurations
     EarlyStoppingConfig
     LogScalarConfig
     LogTimingConfig
+    TdMpc2OptimizationStepperConfig
     RewardNormalizerConfig
     SelectKeysConfig
 
@@ -541,6 +546,7 @@ Trainer Hook Configurations
     IQLLossConfig
     CQLLossConfig
     TD3LossConfig
+    TdMpc2LossConfig
     GAEConfig
     TargetNetUpdaterConfig
     SoftUpdateConfig
