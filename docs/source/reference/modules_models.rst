@@ -54,6 +54,8 @@ For an overview of how the DreamerV3 components fit together, see
     DreamerV3ImageEncoder
     DreamerV3ImageDecoder
     SimplicialNormalization
+    TdMpc2QEnsemble
+    TdMpc2Planner
 
 PILCO
 -----

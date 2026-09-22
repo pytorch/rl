@@ -61,6 +61,7 @@ minimal mode.
     CQLTrainer
     TD3Trainer
     GRPOTrainer
+    TdMpc2OptimizationStepper
 
 PPO from an environment
 -----------------------

@@ -55,6 +55,7 @@ from torchrl.objectives import (
     LossModule,
     SACLoss,
     SoftUpdate,
+    TdMpc2Loss,
 )
 from torchrl.record.loggers.common import PrefixLogger
 from torchrl.testing import PONG_VERSIONED
@@ -72,6 +73,7 @@ from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
+from torchrl.trainers.algorithms.tdmpc2 import TdMpc2OptimizationStepper
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
@@ -3568,6 +3570,122 @@ class TestGRPOTrainer:
 
         with pytest.raises(RuntimeError, match="no 'loss_\\*' keys"):
             stepper.step(trainer, _make_grpo_batch())
+
+
+def _make_tdmpc2_loss_for_stepper():
+    from hydra.utils import instantiate
+
+    from torchrl.trainers.algorithms.configs import (
+        TdMpc2PolicyPriorConfig,
+        TdMpc2QEnsembleConfig,
+        TdMpc2WorldModelConfig,
+    )
+
+    world_model = instantiate(
+        TdMpc2WorldModelConfig(
+            observation_dim=5,
+            action_dim=2,
+            latent_dim=8,
+            encoder_dim=12,
+            mlp_dim=16,
+            simnorm_dim=4,
+            num_bins=5,
+        )
+    )
+    policy_prior = instantiate(
+        TdMpc2PolicyPriorConfig(latent_dim=8, action_dim=2, mlp_dim=16)
+    )
+    q_ensemble = instantiate(
+        TdMpc2QEnsembleConfig(
+            latent_dim=8,
+            action_dim=2,
+            mlp_dim=16,
+            num_q=2,
+            num_bins=5,
+            dropout=0.0,
+        )
+    )
+    return TdMpc2Loss(world_model, policy_prior, q_ensemble, horizon=3)
+
+
+class TestTdMpc2OptimizationStepper:
+    def test_step(self):
+        loss = _make_tdmpc2_loss_for_stepper()
+        optimizer_model = torch.optim.Adam(
+            [*loss.world_model.parameters(), *loss.q_ensemble.q_params.parameters()],
+            lr=1e-3,
+        )
+        optimizer_actor = torch.optim.Adam(loss.policy_prior.parameters(), lr=1e-3)
+        stepper = TdMpc2OptimizationStepper(
+            loss,
+            optimizer_model,
+            optimizer_actor,
+            target_tau=0.5,
+        )
+        batch_size = [2, loss.horizon]
+        sample = TensorDict(
+            {
+                "observation": torch.randn(*batch_size, 5),
+                "action": torch.randn(*batch_size, 2).tanh(),
+                ("next", "observation"): torch.randn(*batch_size, 5),
+                ("next", "reward"): torch.randn(*batch_size, 1),
+                ("next", "terminated"): torch.zeros(*batch_size, 1),
+            },
+            batch_size=batch_size,
+        )
+
+        world_model_before = [
+            parameter.detach().clone() for parameter in loss.world_model.parameters()
+        ]
+        q_before = [
+            parameter.detach().clone()
+            for parameter in loss.q_ensemble.q_params.parameters()
+        ]
+        actor_before = [
+            parameter.detach().clone() for parameter in loss.policy_prior.parameters()
+        ]
+        target_before = [
+            parameter.detach().clone()
+            for parameter in loss.q_ensemble.target_q_params.parameters()
+        ]
+        trainer = Namespace(
+            loss_module=loss,
+            process_group=None,
+            target_net_updater=None,
+            clip_grad_norm=True,
+            clip_norm=20.0,
+        )
+        loss.eval()
+        metrics = stepper.step(trainer, sample)
+
+        assert stepper.update_count == 1
+        assert not loss.training
+        assert metrics["pi_entropy"].ndim == 0
+        assert metrics["pi_scaled_entropy"].ndim == 0
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(world_model_before, loss.world_model.parameters())
+        )
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(q_before, loss.q_ensemble.q_params.parameters())
+        )
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(actor_before, loss.policy_prior.parameters())
+        )
+        for before, target, online in zip(
+            target_before,
+            loss.q_ensemble.target_q_params.parameters(),
+            loss.q_ensemble.q_params.parameters(),
+        ):
+            torch.testing.assert_close(target, before.lerp(online, 0.5))
+        torch.testing.assert_close(
+            metrics["loss_model"],
+            metrics["loss_consistency"]
+            + metrics["loss_reward"]
+            + metrics["loss_value"],
+        )
 
 
 if __name__ == "__main__":
