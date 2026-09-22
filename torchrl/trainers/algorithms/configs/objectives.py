@@ -8,6 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import torch
+from hydra.utils import instantiate
+from omegaconf import MISSING
+
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
@@ -21,6 +25,7 @@ from torchrl.objectives import (
     ReinforceLoss,
     SACLoss,
     TD3Loss,
+    TdMpc2Loss,
 )
 from torchrl.objectives.iql import DiscreteIQLLoss
 from torchrl.objectives.sac import DiscreteSACLoss
@@ -40,6 +45,82 @@ class LossConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for loss configurations."""
+
+
+@dataclass
+class TdMpc2LossConfig(LossConfig):
+    """Hydra configuration for :class:`~torchrl.objectives.TdMpc2Loss`.
+
+    This configuration is intended to be instantiated with shared world-model,
+    policy-prior, and Q-ensemble instances supplied by a trainer factory.
+    """
+
+    world_model: Any = MISSING
+    policy_prior: Any = MISSING
+    q_ensemble: Any = MISSING
+    horizon: int = 3
+    discount: float = 0.99
+    rho: float = 0.5
+    consistency_coef: float = 20.0
+    reward_coef: float = 0.1
+    value_coef: float = 0.1
+    entropy_coef: float = 1e-4
+    scale_tau: float = 0.01
+    observation_key: Any = "observation"
+    action_key: Any = "action"
+    reward_key: Any = "reward"
+    terminated_key: Any = "terminated"
+    _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_tdmpc2_loss"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for TD-MPC2 loss configurations."""
+        super().__post_init__()
+
+
+def _make_tdmpc2_loss(
+    *,
+    world_model: Any,
+    policy_prior: Any,
+    q_ensemble: Any,
+    horizon: int = 3,
+    discount: float = 0.99,
+    rho: float = 0.5,
+    consistency_coef: float = 20.0,
+    reward_coef: float = 0.1,
+    value_coef: float = 0.1,
+    entropy_coef: float = 1e-4,
+    scale_tau: float = 0.01,
+    observation_key: Any = "observation",
+    action_key: Any = "action",
+    reward_key: Any = "reward",
+    terminated_key: Any = "terminated",
+) -> TdMpc2Loss:
+    """Build a TD-MPC2 loss from configured model components."""
+    components = {
+        "world_model": world_model,
+        "policy_prior": policy_prior,
+        "q_ensemble": q_ensemble,
+    }
+    for name, component in components.items():
+        if not isinstance(component, torch.nn.Module) and hasattr(
+            component, "_target_"
+        ):
+            components[name] = instantiate(component)
+    return TdMpc2Loss(
+        **components,
+        horizon=horizon,
+        discount=discount,
+        rho=rho,
+        consistency_coef=consistency_coef,
+        reward_coef=reward_coef,
+        value_coef=value_coef,
+        entropy_coef=entropy_coef,
+        scale_tau=scale_tau,
+        observation_key=_normalize_hydra_key(observation_key),
+        action_key=_normalize_hydra_key(action_key),
+        reward_key=_normalize_hydra_key(reward_key),
+        terminated_key=_normalize_hydra_key(terminated_key),
+    )
 
 
 @dataclass
