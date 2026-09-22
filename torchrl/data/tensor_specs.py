@@ -5827,17 +5827,32 @@ class Composite(TensorSpec):
     ) -> _CompositeSpecKeysView:  # noqa: D417
         """Keys of the Composite.
 
-        The keys argument reflect those of :class:`tensordict.TensorDict`.
+        The arguments match those of :meth:`tensordict.TensorDict.keys`.
+
+        Nested keys are walked in the same order as :class:`~tensordict.TensorDict`:
+        a depth-first traversal that yields each nested :class:`Composite` after
+        its children (child before parent). Sibling keys keep insertion order.
+        This walk order is part of the public contract. For example,
+        ``Composite(next=Composite(obs=None))`` yields
+        ``[("next", "obs"), "next"]`` when ``include_nested=True`` and
+        ``leaves_only=False``. :meth:`Composite.items` and
+        :meth:`Composite.values` use the same walk.
+
+        Empty nested specs can be pruned by iterating
+        ``list(spec.keys(True, False))`` and deleting empty composites as they
+        appear: children are visited first, so a parent that becomes empty
+        after its children are removed is still seen later in the same pass.
 
         Args:
             include_nested (bool, optional): if ``False``, the returned keys will not be nested. They will
                 represent only the immediate children of the root, and not the whole nested sequence, i.e. a
-                :obj:`Composite(next=Composite(obs=None))` will lead to the keys
-                :obj:`["next"]. Default is ``False``, i.e. nested keys will not
+                :class:`Composite` built as ``Composite(next=Composite(obs=None))`` will lead to the keys
+                ``["next"]``. Default is ``False``, i.e. nested keys will not
                 be returned.
             leaves_only (bool, optional): if ``False``, the values returned
-                will contain every level of nesting, i.e. a :obj:`Composite(next=Composite(obs=None))`
-                will lead to the keys :obj:`["next", ("next", "obs")]`.
+                will contain every level of nesting, i.e. a :class:`Composite` built as
+                ``Composite(next=Composite(obs=None))``
+                will lead to the keys ``[("next", "obs"), "next"]``.
                 Default is ``False``.
 
         Keyword Args:
@@ -5846,6 +5861,11 @@ class Composite(TensorSpec):
                 leaves.
             step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
                 Default is ``False``.
+
+        Examples:
+            >>> spec = Composite(next=Composite(obs=None, nested=Composite(x=None)))
+            >>> list(spec.keys(include_nested=True, leaves_only=False))
+            [('next', 'obs'), ('next', 'nested', 'x'), ('next', 'nested'), 'next']
 
         """
         return _CompositeSpecItemsView(
@@ -5874,7 +5894,7 @@ class Composite(TensorSpec):
                 be returned.
             leaves_only (bool, optional): if ``False``, the values returned
                 will contain every level of nesting, i.e. a :obj:`Composite(next=Composite(obs=None))`
-                will lead to the keys :obj:`["next", ("next", "obs")]`.
+                will lead to the keys :obj:`[("next", "obs"), "next"]`.
                 Default is ``False``.
 
         Keyword Args:
@@ -5910,7 +5930,7 @@ class Composite(TensorSpec):
                 be returned.
             leaves_only (bool, optional): if ``False``, the values returned
                 will contain every level of nesting, i.e. a :obj:`Composite(next=Composite(obs=None))`
-                will lead to the keys :obj:`["next", ("next", "obs")]`.
+                will lead to the keys :obj:`[("next", "obs"), "next"]`.
                 Default is ``False``.
 
         Keyword Args:
@@ -6601,7 +6621,18 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         *,
         is_leaf: Callable[[type], bool] | None = None,
         step_mdp_static_only: bool = False,
-    ) -> _CompositeSpecKeysView:
+    ) -> _CompositeSpecKeysView:  # noqa: D417
+        """Keys of the stacked composite.
+
+        Nested keys follow the same child-before-parent walk as
+        :meth:`Composite.keys` and :meth:`tensordict.TensorDict.keys`.
+        Exclusive keys (present on only some stacked specs) are omitted from
+        the default view.
+
+        See :meth:`Composite.keys` for the argument descriptions and the
+        guaranteed walk order.
+
+        """
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
