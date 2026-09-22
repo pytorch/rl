@@ -1270,6 +1270,14 @@ class TestVLAWrapperBase:
                 log_probs_mode="word",
             )
 
+    def test_constructor_device_is_not_cached(self):
+        # device= is accepted for API stability; it must not be stored as
+        # module state. .to() moves parameters/buffers, not Python attrs.
+        base = VLAWrapperBase(action_dim=2, chunk_size=2, device="cpu")
+        assert "device" not in vars(base)
+        base.to("meta")
+        assert "device" not in vars(base)
+
 
 class TestTinyVLA:
     def test_continuous(self):
@@ -1563,6 +1571,15 @@ class TestTinyVLA:
         out["vla_action", "chunk"].sum().backward()
         grads = [p.grad for p in policy.parameters() if p.requires_grad]
         assert any(g is not None and g.abs().sum() > 0 for g in grads)
+
+    def test_constructor_device_is_not_cached_after_to(self):
+        policy = TinyVLA(action_dim=2, chunk_size=2, device="cpu")
+        policy(_make_obs_td())
+        assert {p.device.type for p in policy.parameters()} == {"cpu"}
+        assert "device" not in vars(policy)
+        policy.to("meta")
+        assert "device" not in vars(policy)
+        assert {p.device.type for p in policy.parameters()} == {"meta"}
 
 
 class _DummyChunkPolicy:
