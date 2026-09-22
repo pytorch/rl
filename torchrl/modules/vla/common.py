@@ -80,6 +80,10 @@ class VLAWrapperBase(TensorDictModuleBase):
         inplace (bool | "empty" | None): Output TensorDict behavior. ``True``
             updates the input, ``False`` returns a new output TensorDict, and
             ``"empty"`` returns an empty TensorDict populated with outputs.
+        device (torch.device or str, optional): accepted so subclasses can
+            place parameters at construction. The base class does not store
+            this value; runtime tensors use ``chunk.device`` / ``out.device``.
+            Defaults to ``None``.
         num_samples (int, optional): Number of token samples to draw per input.
 
     Examples:
@@ -219,7 +223,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         self.default_interaction_type = default_interaction_type
         self.log_probs_mode = log_probs_mode
         self.inplace = True if inplace is None else inplace
-        self.device = None if device is None else torch.device(device)
+        # `device` is accepted for subclass init placement and is not stored.
         self.num_samples = None if num_samples is None else int(num_samples)
         if action_chunk_key is None:
             action_chunk_key = self._vla_field_key(vla_action_key, "chunk")
