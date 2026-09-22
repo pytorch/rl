@@ -22,7 +22,9 @@ Key learnings:
 
   - How to compute the advantage signal for policy gradient methods;
   - How to create a stochastic policy using a probabilistic neural network;
-  - How to create a dynamic replay buffer and sample from it without repetition.
+  - How to create a dynamic replay buffer and sample from it without repetition;
+
+- How to save a trained policy with ``state_dict`` / :func:`torch.save` and reload it.
 
 We will cover six crucial components of TorchRL:
 
@@ -98,6 +100,9 @@ We will cover six crucial components of TorchRL:
 # 4. Next, we will create the replay buffer and data loader.
 #
 # 5. Finally, we will run our training loop and analyze the results.
+#
+# 6. We will save the policy with ``state_dict`` / :func:`torch.save` and
+#    reload it into a freshly built actor.
 #
 # Throughout this tutorial, we'll be using the :mod:`tensordict` library.
 # :class:`~tensordict.TensorDict` is the lingua franca of TorchRL: it helps us abstract
@@ -718,6 +723,70 @@ plt.title("Max step count (test)")
 plt.show()
 
 ######################################################################
+# Save and reload the policy
+# --------------------------
+#
+# :class:`~tensordict.nn.TensorDictModule` and
+# :class:`~torchrl.modules.ProbabilisticActor` are regular
+# :class:`~torch.nn.Module` instances. To reuse a trained policy, persist
+# ``policy.state_dict()`` with :func:`torch.save`, rebuild the same actor,
+# and call :meth:`~torch.nn.Module.load_state_dict`. That is the usual
+# PyTorch contract -- there is no extra TorchRL saver type for this job.
+#
+# The same calls work as soon as the dummy forward pass above has
+# initialized the ``LazyLinear`` layers; they do not depend on finishing
+# the training loop. Resuming an interrupted *training* job (optimizer,
+# collector, replay buffer, transform stats) is covered in
+# :ref:`checkpoint_resume`. Shipping a policy to ONNX or AOTInductor is
+# covered in :ref:`export_tuto`.
+#
+
+# Persist the actor weights. Any path works; this is the same mapping
+# ``policy.state_dict()`` always returns.
+torch.save(policy_module.state_dict(), "policy.pt")
+
+# Rebuild the same ProbabilisticActor (same in_keys, distribution, and
+# network layout as above). LazyLinear still needs a dummy forward before
+# load_state_dict.
+# If you reconstruct the environment in another process, also persist
+# ``env.transform[0].state_dict()``: the ObservationNorm loc/scale buffers
+# are not part of the policy.
+reloaded_actor_net = nn.Sequential(
+    nn.LazyLinear(num_cells, device=device),
+    nn.Tanh(),
+    nn.LazyLinear(num_cells, device=device),
+    nn.Tanh(),
+    nn.LazyLinear(num_cells, device=device),
+    nn.Tanh(),
+    nn.LazyLinear(2 * env.action_spec.shape[-1], device=device),
+    NormalParamExtractor(),
+)
+reloaded_policy = TensorDictModule(
+    reloaded_actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+)
+reloaded_policy = ProbabilisticActor(
+    module=reloaded_policy,
+    spec=env.action_spec,
+    in_keys=["loc", "scale"],
+    distribution_class=TanhNormal,
+    distribution_kwargs={
+        "low": env.action_spec_unbatched.space.low,
+        "high": env.action_spec_unbatched.space.high,
+    },
+    return_log_prob=True,
+)
+reloaded_policy(env.reset())
+reloaded_policy.load_state_dict(
+    torch.load("policy.pt", map_location=device, weights_only=True)
+)
+reloaded_policy.eval()
+
+# The reloaded policy can be passed to env.rollout like any other
+# TensorDictModule.
+with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
+    env.rollout(3, policy=reloaded_policy)
+
+######################################################################
 # Conclusion and next steps
 # -------------------------
 #
@@ -725,7 +794,8 @@ plt.show()
 #
 # 1. How to create and customize an environment with :py:mod:`torchrl`;
 # 2. How to write a model and a loss function;
-# 3. How to set up a typical training loop.
+# 3. How to set up a typical training loop;
+# 4. How to save and reload the policy with ``state_dict`` and :func:`torch.save`.
 #
 # If you want to experiment with this tutorial a bit more, you can apply the following modifications:
 #
@@ -738,3 +808,16 @@ plt.show()
 #   inverted pendulum in action. Check :py:mod:`torchrl.record` to
 #   know more.
 #
+# Further reading:
+#
+# * To interrupt training and resume later, see :ref:`checkpoint_resume`
+#   and the :doc:`/tutorials/checkpointing` tutorial.
+# * To export a trained policy for deployment, see :ref:`export_tuto`.
+#
+
+# sphinx_gallery_start_ignore
+from pathlib import Path
+
+Path("policy.pt").unlink(missing_ok=True)
+# sphinx_gallery_end_ignore
+
