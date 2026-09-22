@@ -3627,6 +3627,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`NetworkConfig`](generated/torchrl.trainers.algorithms.configs.modules.NetworkConfig.html#torchrl.trainers.algorithms.configs.modules.NetworkConfig)([_partial_]) | Parent class to configure a network. |
 | [`MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig)(_partial_, in_features, ...) | A class to configure a multi-layer perceptron. |
 | [`TdMpc2MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.TdMpc2MLPConfig.html#torchrl.trainers.algorithms.configs.modules.TdMpc2MLPConfig)([_partial_, in_features, ...]) | A class to configure a TDMPC2 multilayer perceptron. |
+| [`TdMpc2WorldModelConfig`](generated/torchrl.trainers.algorithms.configs.modules.TdMpc2WorldModelConfig.html#torchrl.trainers.algorithms.configs.modules.TdMpc2WorldModelConfig)([observation_dim, ...]) | Configuration for a TD-MPC2 world model. |
 | [`DreamerV3MLPConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3MLPConfig)([_partial_, in_features, ...]) | A class to configure a DreamerV3 multilayer perceptron. |
 | [`DreamerV3DiscreteActorConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3DiscreteActorConfig)([_partial_, ...]) | Hydra configuration for `DreamerV3DiscreteActor`. |
 | [`DreamerV3SeededPolicyConfig`](generated/torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig.html#torchrl.trainers.algorithms.configs.modules.DreamerV3SeededPolicyConfig)([_partial_, ...]) | Hydra configuration for `DreamerV3SeededPolicy`. |
@@ -36611,7 +36612,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4929c0af70>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fc3fddf9490>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -50351,7 +50352,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f492ca194e0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fc400ef14e0>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -223762,6 +223763,23 @@ Apply the signed-parabolic inverse to `value`.
 
 ---
 
+# SimplicialNormalization
+
+*class*torchrl.modules.SimplicialNormalization(*dim: int*)[[source]](../../_modules/torchrl/modules/models/tdmpc2.html#SimplicialNormalization)
+
+Apply softmax independently to fixed-size feature simplices.
+
+Parameters:
+
+**dim** (*int*) - Number of features in each simplex. The last input
+dimension must be divisible by `dim`.
+
+forward(*x: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/tdmpc2.html#SimplicialNormalization.forward)
+
+Normalize the last dimension of `x` in groups of `dim`.
+
+---
+
 # SymExpTwoHot
 
 *class*torchrl.modules.SymExpTwoHot(*num_bins: int = 255*)[[source]](../../_modules/torchrl/modules/models/model_based.html#SymExpTwoHot)
@@ -282428,6 +282446,25 @@ See also
 
 ---
 
+# torchrl.trainers.algorithms.configs.modules.TdMpc2WorldModelConfig
+
+*class*torchrl.trainers.algorithms.configs.modules.TdMpc2WorldModelConfig(*observation_dim: int = '???'*, *action_dim: int = '???'*, *latent_dim: int = '???'*, *encoder_dim: int = 256*, *encoder_depth: int = 1*, *mlp_dim: int = 512*, *simnorm_dim: int = 8*, *num_bins: int = 101*, *observation_key: Any = 'observation'*, *action_key: Any = 'action'*, *latent_key: Any = 'latent'*, *reward_logits_key: Any = 'reward_logits'*, *device: Any = None*, *shared: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.configs.modules._make_tdmpc2_world_model'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/modules.html#TdMpc2WorldModelConfig)
+
+Configuration for a TD-MPC2 world model.
+
+The resulting [`WorldModel`](torchrl.modules.WorldModel.html#torchrl.modules.WorldModel) encodes observations,
+predicts the next latent state from the current latent state and action,
+and predicts distributional rewards from the current latent state and
+action. TensorDict routing is configured with the specialized key fields
+below. Set `shared=True` to place the constructed module in shared
+memory.
+
+See also
+
+[`WorldModel`](torchrl.modules.WorldModel.html#torchrl.modules.WorldModel)
+
+---
+
 # torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig
 
 *class*torchrl.trainers.algorithms.configs.modules.TensorDictModuleConfig(*_partial_: bool = False*, *in_keys: Any = None*, *out_keys: Any = None*, *shared: bool = False*, *module: [MLPConfig](torchrl.trainers.algorithms.configs.modules.MLPConfig.html#torchrl.trainers.algorithms.configs.modules.MLPConfig) = '???'*, *_target_: str = 'torchrl.trainers.algorithms.configs.modules._make_tensordict_module'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/modules.html#TensorDictModuleConfig)
@@ -289668,6 +289705,7 @@ actor = ProbabilisticActor(
 - [DreamerV3MLP](generated/torchrl.modules.DreamerV3MLP.html)
 - [DreamerV3ImageEncoder](generated/torchrl.modules.DreamerV3ImageEncoder.html)
 - [DreamerV3ImageDecoder](generated/torchrl.modules.DreamerV3ImageDecoder.html)
+- [SimplicialNormalization](generated/torchrl.modules.SimplicialNormalization.html)
 - [PILCO](modules_models.html#pilco)
 - [Distribution Classes](modules_distributions.html)
 
@@ -290313,6 +290351,7 @@ For an overview of how the DreamerV3 components fit together, see
 | [`DreamerV3MLP`](generated/torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP)(in_features, out_features[, ...]) | RMS-normalized multilayer perceptron used by DreamerV3 heads. |
 | [`DreamerV3ImageEncoder`](generated/torchrl.modules.DreamerV3ImageEncoder.html#torchrl.modules.DreamerV3ImageEncoder)([in_channels, depth, ...]) | DreamerV3 convolutional image encoder. |
 | [`DreamerV3ImageDecoder`](generated/torchrl.modules.DreamerV3ImageDecoder.html#torchrl.modules.DreamerV3ImageDecoder)(in_features[, ...]) | DreamerV3 transposed-convolution image decoder. |
+| [`SimplicialNormalization`](generated/torchrl.modules.SimplicialNormalization.html#torchrl.modules.SimplicialNormalization)(dim) | Apply softmax independently to fixed-size feature simplices. |
 
 ## PILCO
 

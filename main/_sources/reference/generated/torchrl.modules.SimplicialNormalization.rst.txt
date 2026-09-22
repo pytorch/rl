@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+SimplicialNormalization
+=======================
+
+.. autoclass:: SimplicialNormalization
+    :members:
