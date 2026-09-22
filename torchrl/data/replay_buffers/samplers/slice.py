@@ -209,6 +209,47 @@ class SliceSampler(Sampler):
           boundary carries a ``done`` signal (note: this introduces artificial
           truncations that value estimators must account for).
 
+    .. note:: Batched environments and :class:`~torchrl.envs.ParallelEnv`
+        collectors yield tensordicts of shape ``[num_envs, T]``. Do **not**
+        flatten that batch with ``data.reshape(-1)`` before
+        :meth:`~torchrl.data.ReplayBuffer.extend` if you intend to sample
+        trajectory slices. Flattening collapses the time dimension — and when
+        ``T=1`` (one step per env per collector iteration) subsequent writes
+        interleave environments — so the sampler only sees length-1
+        trajectories and raises
+        ``Did not find a single trajectory with sufficient length``.
+
+        Keep the ``[num_envs, T]`` layout and set ``ndim=2`` on the storage.
+        ``T`` on each ``extend`` must be at least ``slice_len`` when
+        ``strict_length=True``: collecting one step at a time does **not**
+        concatenate time across ``extend`` calls (each write is a new row of
+        length 1). Increase ``frames_per_batch`` so each collector batch has a
+        long enough time dimension.
+
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import LazyTensorStorage, SliceSampler, TensorDictReplayBuffer
+        >>> num_envs, T, slice_len = 4, 8, 4
+        >>> data = TensorDict(
+        ...     {
+        ...         "obs": torch.arange(T).unsqueeze(0).expand(num_envs, T) + 100 * torch.arange(num_envs).unsqueeze(1),
+        ...         ("collector", "traj_ids"): torch.arange(num_envs).unsqueeze(1).expand(num_envs, T),
+        ...     },
+        ...     [num_envs, T],
+        ... )
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(64, ndim=2),
+        ...     sampler=SliceSampler(
+        ...         slice_len=slice_len, traj_key=("collector", "traj_ids")
+        ...     ),
+        ...     batch_size=slice_len * 2,
+        ... )
+        >>> index = rb.extend(data)  # keep [num_envs, T]; do not reshape(-1)
+        >>> sample = rb.sample()
+
+        See :ref:`data-layout-storage-ndim` for the corresponding collector
+        wiring.
+
     .. note:: When using `strict_length=False`, it is recommended to use
         :func:`~torchrl.collectors.utils.split_trajectories` to split the sampled trajectories.
         However, if two samples from the same episode are placed next to each other,
