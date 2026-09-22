@@ -49,6 +49,13 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
     a Storage of length 50x10^6 elements. Under the hood, this dataset is split
     in 50 memory-mapped tensordicts of length 1 million each.
 
+    .. warning::
+      The public Google Cloud Storage source
+      (``gs://atari-replay-datasets/dqn/...``) is no longer available
+      (AccessDenied; the hosted dataset has been removed). Automatic
+      download will fail. The class remains usable when a previously
+      downloaded copy is present under ``root``.
+
     Args:
         dataset_id (str): The dataset to be downloaded.
             Must be part of ``AtariDQNExperienceReplay.available_datasets``.
@@ -60,12 +67,17 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
             `~/.cache/torchrl/atari`.atari`.
+            Because the public GCS source is unavailable, pass ``root``
+            pointing at a local copy of the processed dataset.
         num_procs (int, optional): number of processes to launch for preprocessing.
             Has no effect whenever the data is already downloaded. Defaults to 0
             (no multiprocessing used).
         download (bool or str, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
+            The public GCS bucket is no longer available, so a download
+            attempt raises an error unless a local copy already exists
+            under ``root``.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
@@ -108,9 +120,12 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             to cheaply sample slices of episodes.
 
     Examples:
+        The snippets below require a local copy of the dataset under ``root``.
+        They are skipped by doctest because the public GCS source is unavailable.
+
         >>> from torchrl.data.datasets import AtariDQNExperienceReplay
-        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128)
-        >>> for data in dataset:
+        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128, root="/path/to/atari")  # doctest: +SKIP
+        >>> for data in dataset:  # doctest: +SKIP
         ...     print(data)
         ...     break
         TensorDict(
@@ -158,8 +173,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
 
         >>> from torchrl.data.datasets import AtariDQNExperienceReplay
         >>> from torchrl.data.replay_buffers import SliceSampler
-        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64)
-        >>> for data in dataset:
+        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64, root="/path/to/atari")  # doctest: +SKIP
+        >>> for data in dataset:  # doctest: +SKIP
         ...     print(data)
         ...     print(data.get("index"))  # indices are in 4 groups of consecutive values
         ...     break
@@ -213,11 +228,11 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         >>> from torchrl.data.replay_buffers import ReplayBufferEnsemble
         >>> # we change this parameter for quick experimentation, in practice it should be left untouched
         >>> AtariDQNExperienceReplay._max_runs = 2
-        >>> dataset_asterix = AtariDQNExperienceReplay("Asterix/5", batch_size=128, slice_len=64, num_procs=4)
-        >>> dataset_pong = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64, num_procs=4)
-        >>> dataset = ReplayBufferEnsemble(dataset_pong, dataset_asterix, batch_size=128, sample_from_all=True)
-        >>> sample = dataset.sample()
-        >>> print("first sample, Asterix", sample[0])
+        >>> dataset_asterix = AtariDQNExperienceReplay("Asterix/5", batch_size=128, slice_len=64, num_procs=4, root="/path/to/atari")  # doctest: +SKIP
+        >>> dataset_pong = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64, num_procs=4, root="/path/to/atari")  # doctest: +SKIP
+        >>> dataset = ReplayBufferEnsemble(dataset_pong, dataset_asterix, batch_size=128, sample_from_all=True)  # doctest: +SKIP
+        >>> sample = dataset.sample()  # doctest: +SKIP
+        >>> print("first sample, Asterix", sample[0])  # doctest: +SKIP
         first sample, Asterix TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int32, is_shared=False),
@@ -250,7 +265,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             batch_size=torch.Size([64]),
             device=None,
             is_shared=False)
-        >>> print("second sample, Pong", sample[1])
+        >>> print("second sample, Pong", sample[1])  # doctest: +SKIP
         second sample, Pong TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int32, is_shared=False),
@@ -283,7 +298,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             batch_size=torch.Size([64]),
             device=None,
             is_shared=False)
-        >>> print("Aggregate (metadata hidden)", sample)
+        >>> print("Aggregate (metadata hidden)", sample)  # doctest: +SKIP
         Aggregate (metadata hidden) LazyStackedTensorDict(
             fields={
                 action: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),
