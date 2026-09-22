@@ -1152,9 +1152,21 @@ class SliceSampler(Sampler):
             if self.strict_length:
                 idx = lengths >= seq_length
                 if not idx.any():
-                    raise RuntimeError(
-                        f"Did not find a single trajectory with sufficient length (length range: {lengths.min()} - {lengths.max()} / required={seq_length}))."
+                    msg = (
+                        "Did not find a single trajectory with sufficient length "
+                        f"(length range: {lengths.min()} - {lengths.max()} / required={seq_length})."
                     )
+                    if seq_length > 1 and int(lengths.max()) == 1:
+                        msg += (
+                            " If this data came from a batched or ParallelEnv "
+                            "collector, do not flatten each `[num_envs, T]` batch "
+                            "with `tensordict.reshape(-1)` before "
+                            "`replay_buffer.extend`: that destroys the time "
+                            "dimension (and interleaves environments when T=1). "
+                            "Keep the collector's `[num_envs, T]` shape and use "
+                            "`LazyTensorStorage(..., ndim=2)`."
+                        )
+                    raise RuntimeError(msg)
                 if (
                     isinstance(seq_length, torch.Tensor)
                     and seq_length.shape == lengths.shape
