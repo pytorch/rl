@@ -1271,12 +1271,16 @@ class TestVLAWrapperBase:
             )
 
     def test_constructor_device_is_not_cached(self):
-        # device= is accepted for API stability; it must not be stored as
-        # module state. .to() moves parameters/buffers, not Python attrs.
+        # device= is kept until v0.16 as a deprecated constructor value.
+        # It must not live in the instance dict as ``self.device``.
         base = VLAWrapperBase(action_dim=2, chunk_size=2, device="cpu")
         assert "device" not in vars(base)
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert base.device == torch.device("cpu")
         base.to("meta")
         assert "device" not in vars(base)
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert base.device == torch.device("cpu")
 
 
 class TestTinyVLA:
@@ -1577,9 +1581,13 @@ class TestTinyVLA:
         policy(_make_obs_td())
         assert {p.device.type for p in policy.parameters()} == {"cpu"}
         assert "device" not in vars(policy)
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert policy.device == torch.device("cpu")
         policy.to("meta")
         assert "device" not in vars(policy)
         assert {p.device.type for p in policy.parameters()} == {"meta"}
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert policy.device == torch.device("cpu")
 
 
 class _DummyChunkPolicy:
