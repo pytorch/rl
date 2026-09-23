@@ -1496,7 +1496,7 @@ class ActionScaling(Transform):
     ):
         if in_keys_inv is None:
             in_keys_inv = ["action"]
-        if isinstance(in_keys_inv, (str, tuple)):
+        if isinstance(in_keys_inv, NestedKey):
             in_keys_inv = [in_keys_inv]
         if len(in_keys_inv) > 1:
             raise ValueError(
@@ -1939,7 +1939,7 @@ class FlattenAction(Transform):
     ):
         if in_keys_inv is None:
             in_keys_inv = ["action"]
-        if isinstance(in_keys_inv, (str, tuple)):
+        if isinstance(in_keys_inv, NestedKey):
             in_keys_inv = [in_keys_inv]
         if out_keys_inv is None:
             out_keys_inv = copy(list(in_keys_inv))
