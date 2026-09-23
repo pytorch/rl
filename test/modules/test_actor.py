@@ -1270,6 +1270,18 @@ class TestVLAWrapperBase:
                 log_probs_mode="word",
             )
 
+    def test_constructor_device_is_not_cached(self):
+        # device= is kept until v0.16 as a deprecated constructor value.
+        # It must not live in the instance dict as ``self.device``.
+        base = VLAWrapperBase(action_dim=2, chunk_size=2, device="cpu")
+        assert "device" not in vars(base)
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert base.device == torch.device("cpu")
+        base.to("meta")
+        assert "device" not in vars(base)
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert base.device == torch.device("cpu")
+
 
 class TestTinyVLA:
     def test_continuous(self):
@@ -1563,6 +1575,19 @@ class TestTinyVLA:
         out["vla_action", "chunk"].sum().backward()
         grads = [p.grad for p in policy.parameters() if p.requires_grad]
         assert any(g is not None and g.abs().sum() > 0 for g in grads)
+
+    def test_constructor_device_is_not_cached_after_to(self):
+        policy = TinyVLA(action_dim=2, chunk_size=2, device="cpu")
+        policy(_make_obs_td())
+        assert {p.device.type for p in policy.parameters()} == {"cpu"}
+        assert "device" not in vars(policy)
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert policy.device == torch.device("cpu")
+        policy.to("meta")
+        assert "device" not in vars(policy)
+        assert {p.device.type for p in policy.parameters()} == {"meta"}
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            assert policy.device == torch.device("cpu")
 
 
 class _DummyChunkPolicy:
