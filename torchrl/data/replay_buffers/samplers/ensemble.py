@@ -46,6 +46,8 @@ class SamplerEnsemble(Sampler):
       This format is different from with other samplers which usually return indices
       as regular tensors.
 
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.SamplerEnsembleConfig`
+
     """
 
     def __init__(

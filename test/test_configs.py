@@ -232,6 +232,7 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiActionConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
+        "SamplerEnsembleConfig",
     }
 )
 
@@ -274,7 +275,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "Reward2GoTransformConfig",
         "RewardSumConfig",
         "SMACv2EnvConfig",
-        "SamplerEnsembleConfig",
         "SelectTransformConfig",
         "SignTransformConfig",
         "SliceSamplerWithoutReplacementConfig",
@@ -893,26 +893,40 @@ class TestDataConfigs:
         writer = instantiate(cfg)
         assert isinstance(writer, ImmutableDatasetWriter)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_sampler_ensemble_config(self):
         """Test SamplerEnsembleConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             RandomSamplerConfig,
             SamplerEnsembleConfig,
         )
 
         cfg = SamplerEnsembleConfig(
-            samplers=[RandomSamplerConfig(), RandomSamplerConfig()], p=[0.5, 0.5]
+            samplers=[RandomSamplerConfig(), RandomSamplerConfig()],
+            p=[0.75, 0.25],
         )
-        assert cfg._target_ == "torchrl.data.replay_buffers.SamplerEnsemble"
-        assert len(cfg.samplers) == 2
-        assert cfg.p == [0.5, 0.5]
-
-        # Test instantiation - use direct instantiation to avoid Union type issues
-        sampler1 = RandomSampler()
-        sampler2 = RandomSampler()
-        sampler = SamplerEnsemble(sampler1, sampler2, p=[0.5, 0.5])
+        sampler = instantiate(cfg)
         assert isinstance(sampler, SamplerEnsemble)
         assert len(sampler._samplers) == 2
+        assert all(isinstance(child, RandomSampler) for child in sampler._samplers)
+        torch.testing.assert_close(sampler.p, torch.tensor([0.75, 0.25]))
+        assert sampler.num_buffer_sampled == 2
+
+        one_cfg = SamplerEnsembleConfig(
+            samplers=[RandomSamplerConfig(), RandomSamplerConfig()],
+            num_buffer_sampled=1,
+        )
+        assert instantiate(one_cfg).num_buffer_sampled == 1
+
+        all_cfg = SamplerEnsembleConfig(
+            samplers=[RandomSamplerConfig(), RandomSamplerConfig()],
+            sample_from_all=True,
+        )
+        all_sampler = instantiate(all_cfg)
+        assert isinstance(all_sampler, SamplerEnsemble)
+        assert all_sampler.sample_from_all is True
+        assert all_sampler.num_buffer_sampled == 2
 
     def test_prioritized_slice_sampler_config(self):
         """Test PrioritizedSliceSamplerConfig."""
