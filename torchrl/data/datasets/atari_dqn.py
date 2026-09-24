@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import warnings
 from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
@@ -33,6 +34,37 @@ from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.utils import _classproperty
 
 
+def _atari_dqn_gcs_unavailable(stderr: bytes | str | None = None) -> RuntimeError:
+    extra = ""
+    if stderr:
+        text = (
+            stderr.decode("utf-8", errors="replace")
+            if isinstance(stderr, bytes)
+            else stderr
+        )
+        text = text.strip()
+        if text:
+            extra = f" gsutil reported: {text.splitlines()[0]}"
+    return RuntimeError(
+        "The public Atari DQN replay dataset at "
+        "gs://atari-replay-datasets/dqn/ is no longer available "
+        "(the hosted dataset has been removed; downloads fail with "
+        "AccessDenied). Point `root=` at a local copy under "
+        "`<root>/<dataset_id>` instead of downloading." + extra
+    )
+
+
+def _raise_if_gcs_unavailable(output: subprocess.CompletedProcess) -> None:
+    stderr = output.stderr or b""
+    stdout = output.stdout or b""
+    if (
+        output.returncode != 0
+        or b"AccessDenied" in stderr
+        or b"AccessDenied" in stdout
+    ):
+        raise _atari_dqn_gcs_unavailable(stderr or stdout)
+
+
 class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
     """Atari DQN Experience replay class.
 
@@ -49,6 +81,13 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
     a Storage of length 50x10^6 elements. Under the hood, this dataset is split
     in 50 memory-mapped tensordicts of length 1 million each.
 
+    .. warning::
+      The public Google Cloud Storage source
+      (``gs://atari-replay-datasets/dqn/...``) is no longer available
+      (AccessDenied; the hosted dataset has been removed). Automatic
+      download will fail. The class remains usable when a previously
+      downloaded copy is present under ``root``.
+
     Args:
         dataset_id (str): The dataset to be downloaded.
             Must be part of ``AtariDQNExperienceReplay.available_datasets``.
@@ -60,12 +99,17 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
             `~/.cache/torchrl/atari`.atari`.
+            Because the public GCS source is unavailable, pass ``root``
+            pointing at a local copy of the processed dataset.
         num_procs (int, optional): number of processes to launch for preprocessing.
             Has no effect whenever the data is already downloaded. Defaults to 0
             (no multiprocessing used).
         download (bool or str, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
+            The public GCS bucket is no longer available, so a download
+            attempt raises an error unless a local copy already exists
+            under ``root``.
         sampler (Sampler, optional): the sampler to be used. If none is provided
             a default RandomSampler() will be used.
         writer (Writer, optional): the writer to be used. If none is provided
@@ -108,9 +152,12 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             to cheaply sample slices of episodes.
 
     Examples:
+        The snippets below require a local copy of the dataset under ``root``.
+        They are skipped by doctest because the public GCS source is unavailable.
+
         >>> from torchrl.data.datasets import AtariDQNExperienceReplay
-        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128)
-        >>> for data in dataset:
+        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128, root="/path/to/atari")  # doctest: +SKIP
+        >>> for data in dataset:  # doctest: +SKIP
         ...     print(data)
         ...     break
         TensorDict(
@@ -158,8 +205,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
 
         >>> from torchrl.data.datasets import AtariDQNExperienceReplay
         >>> from torchrl.data.replay_buffers import SliceSampler
-        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64)
-        >>> for data in dataset:
+        >>> dataset = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64, root="/path/to/atari")  # doctest: +SKIP
+        >>> for data in dataset:  # doctest: +SKIP
         ...     print(data)
         ...     print(data.get("index"))  # indices are in 4 groups of consecutive values
         ...     break
@@ -213,11 +260,11 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         >>> from torchrl.data.replay_buffers import ReplayBufferEnsemble
         >>> # we change this parameter for quick experimentation, in practice it should be left untouched
         >>> AtariDQNExperienceReplay._max_runs = 2
-        >>> dataset_asterix = AtariDQNExperienceReplay("Asterix/5", batch_size=128, slice_len=64, num_procs=4)
-        >>> dataset_pong = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64, num_procs=4)
-        >>> dataset = ReplayBufferEnsemble(dataset_pong, dataset_asterix, batch_size=128, sample_from_all=True)
-        >>> sample = dataset.sample()
-        >>> print("first sample, Asterix", sample[0])
+        >>> dataset_asterix = AtariDQNExperienceReplay("Asterix/5", batch_size=128, slice_len=64, num_procs=4, root="/path/to/atari")  # doctest: +SKIP
+        >>> dataset_pong = AtariDQNExperienceReplay("Pong/5", batch_size=128, slice_len=64, num_procs=4, root="/path/to/atari")  # doctest: +SKIP
+        >>> dataset = ReplayBufferEnsemble(dataset_pong, dataset_asterix, batch_size=128, sample_from_all=True)  # doctest: +SKIP
+        >>> sample = dataset.sample()  # doctest: +SKIP
+        >>> print("first sample, Asterix", sample[0])  # doctest: +SKIP
         first sample, Asterix TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int32, is_shared=False),
@@ -250,7 +297,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             batch_size=torch.Size([64]),
             device=None,
             is_shared=False)
-        >>> print("second sample, Pong", sample[1])
+        >>> print("second sample, Pong", sample[1])  # doctest: +SKIP
         second sample, Pong TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int32, is_shared=False),
@@ -283,7 +330,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             batch_size=torch.Size([64]),
             device=None,
             is_shared=False)
-        >>> print("Aggregate (metadata hidden)", sample)
+        >>> print("Aggregate (metadata hidden)", sample)  # doctest: +SKIP
         Aggregate (metadata hidden) LazyStackedTensorDict(
             fields={
                 action: Tensor(shape=torch.Size([2, 64]), device=cpu, dtype=torch.int32, is_shared=False),
@@ -411,10 +458,10 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         mp_start_method: str = "fork",
         **kwargs,
     ):
-        import warnings
-
         warnings.warn(
-            "This dataset is no longer available. We are working on a fix, or possibly a deprecation.",
+            "The public GCS source for AtariDQNExperienceReplay "
+            "(gs://atari-replay-datasets/dqn/) is no longer available. "
+            "The class remains usable with a local copy under `root`.",
             DeprecationWarning,
         )
         if dataset_id not in self.available_datasets:
@@ -523,7 +570,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
                 output = subprocess.run(
                     command, shell=True, capture_output=True
-                )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                )
+                _raise_if_gcs_unavailable(output)
                 files = [
                     file.decode("utf-8").replace("$", r"\$")  # noqa: W605
                     for file in output.stdout.splitlines()
@@ -532,7 +580,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 self.remote_gz_files = self._list_runs(None, files)
                 remote_gz_files = list(self.remote_gz_files)
                 if not len(remote_gz_files):
-                    raise RuntimeError("No files in file list.")
+                    raise _atari_dqn_gcs_unavailable(output.stderr or output.stdout)
 
                 total_runs = remote_gz_files[-1]
                 if self.num_procs == 0:
@@ -589,9 +637,8 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             command = f"gsutil -m cp {files_str} {tempdir}/{run}"
         else:
             command = f"gsutil cp {files_str} {tempdir}/{run}"
-        subprocess.run(
-            command, shell=True
-        )  # , stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        result = subprocess.run(command, shell=True, capture_output=True)
+        _raise_if_gcs_unavailable(result)
         local_gz_files = cls._list_runs(tempdir / str(run))
         # we iterate over the dict but this one has length 1
         for run in local_gz_files:
