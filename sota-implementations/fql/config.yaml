@@ -1,0 +1,48 @@
+seed: 0
+device: cuda
+num_threads: 1
+log_interval: 1000
+resume: null
+
+logger:
+  backend: csv
+  project: torchrl-fql
+  mode: online
+
+env:
+  name: Pendulum-v1
+  max_episode_steps: 1000
+
+dataset:
+  name: antmaze-large-navigate-singletask-v0
+  root: ./data/ogbench
+  random_frames: 1000
+
+network:
+  width: 512
+  depth: 4
+  num_steps: 10
+
+loss:
+  alpha: 10.0
+  gamma: 0.99
+  tau: 0.005
+  q_aggregation: min
+  normalize_q_loss: false
+
+optim:
+  offline_steps: 1000000
+  online_steps: 0
+  batch_size: 256
+  lr: 0.0003
+  compile_loss: false
+
+evaluation:
+  interval: 100000
+  episodes: 50
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/fql/${now:%Y-%m-%d}/${now:%H-%M-%S}

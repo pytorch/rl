@@ -259,6 +259,9 @@ class OfflineToOnlineTrainerConfig(SACTrainerConfig):
     """
 
     anneal_frames: int | None = None
+    offline_steps: int = 0
+    device: str | None = None
+    compile_loss: bool = False
 
     _target_: str = (
         "torchrl.trainers.algorithms.configs.trainers."
@@ -304,6 +307,9 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
     auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
     batch_size = kwargs.pop("batch_size", None)
     anneal_frames = kwargs.pop("anneal_frames", None)
+    offline_steps = kwargs.pop("offline_steps", 0)
+    device = kwargs.pop("device", None)
+    compile_loss = kwargs.pop("compile_loss", False)
     enable_logging = kwargs.pop("enable_logging", True)
     log_rewards = kwargs.pop("log_rewards", True)
     log_actions = kwargs.pop("log_actions", True)
@@ -324,7 +330,11 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
     if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
 
-    if not isinstance(collector, BaseCollector):
+    if (
+        collector is not None
+        and not isinstance(collector, BaseCollector)
+        and not offline_steps
+    ):
         collector = collector()
 
     if not isinstance(loss_module, LossModule):
@@ -342,8 +352,14 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
         optimizer = optimizer(params=loss_module.parameters())
 
     # Quick instance checks
-    if not isinstance(collector, BaseCollector):
-        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
+    if (
+        collector is not None
+        and not isinstance(collector, BaseCollector)
+        and not callable(collector)
+    ):
+        raise ValueError(
+            f"collector must be a BaseCollector or factory, got {type(collector)}"
+        )
     if not isinstance(loss_module, LossModule):
         raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
     if not isinstance(optimizer, torch.optim.Optimizer):
@@ -361,6 +377,9 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
         loss_module=loss_module,
         replay_buffer=replay_buffer,
         anneal_frames=anneal_frames,
+        offline_steps=offline_steps,
+        device=device,
+        compile_loss=compile_loss,
         batch_size=batch_size,
         optimizer=optimizer,
         logger=logger,
