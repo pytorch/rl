@@ -1218,8 +1218,10 @@ class TestDataConfigs:
         assert storage.max_size == 1000
         assert storage.stack_dim == 1
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_storage_ensemble_config(self):
         """Test StorageEnsembleConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             ListStorageConfig,
             StorageEnsembleConfig,
@@ -1227,20 +1229,12 @@ class TestDataConfigs:
 
         cfg = StorageEnsembleConfig(
             storages=[ListStorageConfig(max_size=100), ListStorageConfig(max_size=200)],
-            transforms=[],
+            transforms=[None, None],
         )
-        assert cfg._target_ == "torchrl.data.replay_buffers.StorageEnsemble"
-        assert len(cfg.storages) == 2
-        assert len(cfg.transforms) == 0
-
-        # Test instantiation - use direct instantiation since StorageEnsemble expects *storages
-        storage1 = ListStorage(max_size=100)
-        storage2 = ListStorage(max_size=200)
-        storage = StorageEnsemble(
-            storage1, storage2, transforms=[None, None]
-        )  # Provide transforms for each storage
+        storage = instantiate(cfg)
         assert isinstance(storage, StorageEnsemble)
-        assert len(storage._storages) == 2
+        assert storage.max_size == 300
+        assert [member.max_size for member in storage._storages] == [100, 200]
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_lazy_memmap_storage_config(self):

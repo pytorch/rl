@@ -10,7 +10,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
 
-from torchrl.data.replay_buffers import SamplerEnsemble, WriterEnsemble
+from torchrl.data.replay_buffers import SamplerEnsemble, StorageEnsemble, WriterEnsemble
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 if TYPE_CHECKING:
@@ -374,11 +374,18 @@ class LazyStackStorageConfig(StorageConfig):
     stack_dim: int = 0
 
 
+def _make_storage_ensemble(
+    storages: list[Any], transforms: list[Any] | None = None
+) -> StorageEnsemble:
+    """Pass Hydra's storage list as positional arguments to StorageEnsemble."""
+    return StorageEnsemble(*storages, transforms=transforms)
+
+
 @dataclass
 class StorageEnsembleConfig(StorageConfig):
-    """Configuration for storage ensemble."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.StorageEnsemble`."""
 
-    _target_: str = "torchrl.data.replay_buffers.StorageEnsemble"
+    _target_: str = "torchrl.trainers.algorithms.configs.data._make_storage_ensemble"
     storages: list[Any] = MISSING
     transforms: list[Any] = MISSING
 
