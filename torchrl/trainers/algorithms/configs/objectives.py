@@ -14,6 +14,7 @@ from torchrl.objectives import (
     CQLLoss,
     DDPGLoss,
     DQNLoss,
+    FQLLoss,
     IQLLoss,
     KLPENPPOLoss,
     PPOLoss,
@@ -40,6 +41,30 @@ class LossConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for loss configurations."""
+
+
+@dataclass
+class FQLLossConfig(LossConfig):
+    """Hydra configuration for :class:`~torchrl.objectives.FQLLoss`."""
+
+    flow_policy: Any = None
+    actor_network: Any = None
+    qvalue_network: Any = None
+    num_qvalue_nets: int = 2
+    alpha: float = 10.0
+    q_aggregation: str = "mean"
+    normalize_q_loss: bool = False
+    reduction: str = "mean"
+    gamma: float = 0.99
+    _target_: str = "torchrl.trainers.algorithms.configs.objectives.make_fql_loss"
+    _convert_: str = "object"
+
+
+def make_fql_loss(*, gamma=0.99, **kwargs) -> FQLLoss:
+    """Build FQL and configure its TD target discount."""
+    loss = FQLLoss(**kwargs)
+    loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass

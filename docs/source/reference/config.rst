@@ -503,6 +503,7 @@ Training and Optimization Configurations
     DQNTrainerConfig
     DDPGTrainerConfig
     IQLTrainerConfig
+    FQLTrainerConfig
     CQLTrainerConfig
     TD3TrainerConfig
 
@@ -539,6 +540,7 @@ Trainer Hook Configurations
     DQNLossConfig
     DDPGLossConfig
     IQLLossConfig
+    FQLLossConfig
     CQLLossConfig
     TD3LossConfig
     GAEConfig
@@ -676,6 +678,7 @@ TorchRL currently provides configuration-driven trainers for the following algor
 - **DQN** (off-policy, discrete): ``DQNTrainerConfig``, ``DQNLossConfig``
 - **DDPG** (off-policy, continuous): ``DDPGTrainerConfig``, ``DDPGLossConfig``
 - **IQL** (offline): ``IQLTrainerConfig``, ``IQLLossConfig``
+- **FQL** (offline and offline-to-online): ``FQLTrainerConfig``, ``FQLLossConfig``
 - **CQL** (offline): ``CQLTrainerConfig``, ``CQLLossConfig``
 - **TD3** (off-policy, continuous): ``TD3TrainerConfig``, ``TD3LossConfig``
 
