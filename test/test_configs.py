@@ -35,13 +35,13 @@ from torchrl.collectors import (
 )
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
+    ReplayBufferEnsemble,
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
     RandomSampler,
-    SamplerEnsemble,
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
@@ -893,9 +893,76 @@ class TestDataConfigs:
         writer = instantiate(cfg)
         assert isinstance(writer, ImmutableDatasetWriter)
 
+    @staticmethod
+    def _ensemble_buffer(sampler):
+        storages = StorageEnsemble(LazyTensorStorage(4), LazyTensorStorage(4))
+        for member, storage in enumerate(storages._storages):
+            storage.set(
+                torch.arange(4),
+                TensorDict(
+                    member=torch.full((4,), member),
+                    step=torch.arange(4),
+                    batch_size=[4],
+                ),
+            )
+        return ReplayBufferEnsemble(
+            storages=storages,
+            samplers=sampler,
+            writers=WriterEnsemble(RoundRobinWriter(), RoundRobinWriter()),
+            batch_size=8,
+        )
+
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_sampler_ensemble_config(self):
-        """Test SamplerEnsembleConfig."""
+    @pytest.mark.parametrize(
+        "strategy,expected_members",
+        [
+            ({"p": [0.0, 1.0]}, [[1] * 4, [1] * 4]),
+            ({"sample_from_all": True}, [[0] * 4, [1] * 4]),
+            ({"p": [1.0, 0.0], "num_buffer_sampled": 1}, [[0] * 8]),
+        ],
+    )
+    def test_sampler_ensemble_config(self, strategy, expected_members):
+        """A YAML-shaped SamplerEnsembleConfig drives sampling in a buffer ensemble."""
+        from hydra.utils import instantiate
+        from omegaconf import OmegaConf
+        from torchrl.trainers.algorithms.configs.data import SamplerEnsembleConfig
+
+        cfg = OmegaConf.merge(
+            OmegaConf.structured(SamplerEnsembleConfig),
+            {
+                "samplers": [
+                    {"_target_": "torchrl.data.replay_buffers.RandomSampler"},
+                    {"_target_": "torchrl.data.replay_buffers.RandomSampler"},
+                ],
+                **strategy,
+            },
+        )
+        rb = self._ensemble_buffer(instantiate(cfg))
+        assert rb.sample()["member"].tolist() == expected_members
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_sampler_ensemble_config_member_samplers(self):
+        """Each nested sampler config drives its own ensemble member."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.data import (
+            RandomSamplerConfig,
+            SamplerEnsembleConfig,
+            SamplerWithoutReplacementConfig,
+        )
+
+        cfg = SamplerEnsembleConfig(
+            samplers=[SamplerWithoutReplacementConfig(), RandomSamplerConfig()],
+            sample_from_all=True,
+        )
+        rb = self._ensemble_buffer(instantiate(cfg))
+        for _ in range(5):
+            steps = rb.sample()["step"]
+            assert sorted(steps[0].tolist()) == [0, 1, 2, 3]
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_sampler_ensemble_config_conflicting_strategy(self):
+        """Hydra surfaces the p / sample_from_all conflict at instantiation."""
+        from hydra.errors import InstantiationException
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             RandomSamplerConfig,
@@ -904,29 +971,11 @@ class TestDataConfigs:
 
         cfg = SamplerEnsembleConfig(
             samplers=[RandomSamplerConfig(), RandomSamplerConfig()],
-            p=[0.75, 0.25],
-        )
-        sampler = instantiate(cfg)
-        assert isinstance(sampler, SamplerEnsemble)
-        assert len(sampler._samplers) == 2
-        assert all(isinstance(child, RandomSampler) for child in sampler._samplers)
-        torch.testing.assert_close(sampler.p, torch.tensor([0.75, 0.25]))
-        assert sampler.num_buffer_sampled == 2
-
-        one_cfg = SamplerEnsembleConfig(
-            samplers=[RandomSamplerConfig(), RandomSamplerConfig()],
-            num_buffer_sampled=1,
-        )
-        assert instantiate(one_cfg).num_buffer_sampled == 1
-
-        all_cfg = SamplerEnsembleConfig(
-            samplers=[RandomSamplerConfig(), RandomSamplerConfig()],
+            p=[0.5, 0.5],
             sample_from_all=True,
         )
-        all_sampler = instantiate(all_cfg)
-        assert isinstance(all_sampler, SamplerEnsemble)
-        assert all_sampler.sample_from_all is True
-        assert all_sampler.num_buffer_sampled == 2
+        with pytest.raises(InstantiationException, match="sample_from_all"):
+            instantiate(cfg)
 
     def test_prioritized_slice_sampler_config(self):
         """Test PrioritizedSliceSamplerConfig."""
