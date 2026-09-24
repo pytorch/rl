@@ -1691,10 +1691,11 @@ class TestTrainerCheckpointComponents:
         assert "optimizer" in trainer.checkpoint.components
 
 
+@pytest.mark.parametrize("record_frames", [None, 3, 6])
 @pytest.mark.parametrize("record_episodes", [1, 3])
 @pytest.mark.parametrize("batched", [False, True])
 @pytest.mark.parametrize("truncated", [False, True])
-def test_recorder_episodes(record_episodes, batched, truncated):
+def test_recorder_episodes(record_frames, record_episodes, batched, truncated):
     def make_env(length):
         env = TransformedEnv(
             CountingEnv(max_steps=100 if truncated else length - 1),
@@ -1714,20 +1715,60 @@ def test_recorder_episodes(record_episodes, batched, truncated):
     recorder = LogValidationReward(
         record_interval=2,
         record_episodes=record_episodes,
+        record_frames=record_frames,
         frame_skip=2,
         policy_exploration=policy,
         environment=environment,
         log_keys=[("next", "reward"), ("next", "done")],
     )
     result = recorder(None)
-    assert result[("next", "done")].sum() == record_episodes * (2 if batched else 1)
+    finished = 2 if batched and record_frames != 3 else 1
+    assert result[("next", "done")].sum() == record_episodes * finished
     assert result["r_evaluation"] == 0.5
-    assert result["total_r_evaluation"] == (3.0 if batched else 2.0)
+    expected_total = (2.5 if record_frames == 3 else 3.0) if batched else 2.0
+    assert result["total_r_evaluation"] == expected_total
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_recorder_episodes_nonterminating(batched):
+    def make_env(max_steps):
+        return TransformedEnv(
+            CountingEnv(max_steps=max_steps), RewardScaling(loc=1.0, scale=1.0)
+        )
+
+    environment = (
+        TransformedEnv(
+            SerialEnv(2, [lambda: make_env(1), lambda: make_env(float("inf"))])
+        )
+        if batched
+        else make_env(float("inf"))
+    )
+    calls = 0
+
+    def policy(td):
+        nonlocal calls
+        calls += 1
+        assert calls <= 6, "Evaluation exceeded the per-episode step cap"
+        return td.set("action", torch.ones_like(td["observation"]))
+
+    recorder = LogValidationReward(
+        record_interval=1,
+        record_episodes=2,
+        record_frames=3,
+        policy_exploration=policy,
+        environment=environment,
+        log_keys=[("next", "reward"), ("next", "done")],
+    )
+    result = recorder(None)
+    assert calls == 6
+    assert result[("next", "done")].sum() == (2 if batched else 0)
+    assert result["r_evaluation"] == 1.0
+    assert result["total_r_evaluation"] == (2.5 if batched else 3.0)
 
 
 @pytest.mark.parametrize(
     "kwargs",
-    [{}, {"record_frames": 10, "record_episodes": 1}, {"record_episodes": 0}],
+    [{}, {"record_frames": 0, "record_episodes": 1}, {"record_episodes": 0}],
 )
 def test_recorder_recording_mode(kwargs):
     with pytest.raises(ValueError, match="record_frames|record_episodes"):

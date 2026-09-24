@@ -2919,10 +2919,11 @@ class LogValidationReward(TrainerHookBase):
         record_interval (int): total number of optimization steps
             between two calls to the recorder for testing.
         record_frames (int, optional): number of frames per environment to record
-            during testing. Specify either this or ``record_episodes``.
+            during testing. With ``record_episodes``, caps the number of steps
+            per episode; capped partial episodes are included in reward statistics.
         record_episodes (int, optional): number of complete episodes per environment
-            to record during testing. Environments must eventually terminate or
-            truncate. Cannot be used with ``record_frames``.
+            to record during testing, unless capped by ``record_frames``. Without
+            a frame cap, environments must eventually terminate or truncate.
         frame_skip (int): frame_skip used in the environment. It is
             important to let the trainer know the number of frames skipped at
             each iteration, otherwise the frame count can be underestimated.
@@ -2983,10 +2984,10 @@ class LogValidationReward(TrainerHookBase):
             raise ValueError("environment and recorder conflict.")
         self.policy_exploration = policy_exploration
         self.environment = environment
-        if (record_frames is None) == (record_episodes is None):
-            raise ValueError(
-                "Specify exactly one of record_frames and record_episodes."
-            )
+        if record_frames is None and record_episodes is None:
+            raise ValueError("Specify record_frames or record_episodes.")
+        if record_frames is not None and record_frames <= 0:
+            raise ValueError("record_frames must be positive.")
         if record_episodes is not None and record_episodes <= 0:
             raise ValueError("record_episodes must be positive.")
         self.record_frames = record_frames
@@ -3014,12 +3015,12 @@ class LogValidationReward(TrainerHookBase):
                     self.policy_exploration.eval()
                 self.environment.eval()
                 rollouts = []
-                for _ in range(self.record_episodes or 1):
+                for episode in range(self.record_episodes or 1):
                     td_record = self.environment.rollout(
                         policy=self.policy_exploration,
                         max_steps=(
                             self.record_frames
-                            if self.record_episodes is None
+                            if self.record_frames is not None
                             else sys.maxsize
                         ),
                         auto_reset=True,
@@ -3030,6 +3031,14 @@ class LogValidationReward(TrainerHookBase):
                     if self.record_episodes is not None:
                         # Batched rollouts repeat terminal steps while other envs finish.
                         done = td_record.get(("next", "done")).squeeze(-1).long()
+                        # Keep reset boundaries even when a capped episode is not done.
+                        traj_ids = torch.arange(
+                            done[..., 0].numel(), device=done.device
+                        ).reshape(done.shape[:-1])
+                        traj_ids = traj_ids + episode * traj_ids.numel()
+                        td_record.set(
+                            "traj_ids", traj_ids.unsqueeze(-1).expand_as(done)
+                        )
                         td_record = td_record[done.cumsum(-1) - done == 0]
                     rollouts.append(td_record)
                 if self.record_episodes is not None:
