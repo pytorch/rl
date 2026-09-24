@@ -1950,6 +1950,20 @@ class TestLossConfigs:
         assert module.value_chunk_dim == 1
         assert module.group_key == ("metadata", "task_id")
 
+    def test_gae_config_average_gae_default_matches_gae(self):
+        from hydra.utils import instantiate
+
+        from torchrl.objectives.value import GAE
+        from torchrl.trainers.algorithms.configs.objectives import GAEConfig
+
+        gae = GAE(gamma=0.99, lmbda=0.95, value_network=None)
+        assert gae.average_gae is False
+        assert GAEConfig().average_gae is False
+        module = instantiate(GAEConfig(gamma=0.99, lmbda=0.95))
+        assert isinstance(module, GAE)
+        assert module.average_gae is False
+        assert module.average_gae is gae.average_gae
+
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):
