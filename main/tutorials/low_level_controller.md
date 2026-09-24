@@ -262,7 +262,7 @@ See [`LowLevelController`](../reference/generated/torchrl.modules.LowLevelContro
 [`ClosedLoopMultiAction`](../reference/generated/torchrl.envs.transforms.ClosedLoopMultiAction.html#torchrl.envs.transforms.ClosedLoopMultiAction),
 [`GRUModule`](../reference/generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule), and the multi-agent PPO tutorial.
 
-**Total running time of the script:** (0 minutes 1.609 seconds)
+**Total running time of the script:** (0 minutes 1.607 seconds)
 
 [`Download Jupyter notebook: low_level_controller.ipynb`](../_downloads/65f13b2eedcc9aad0ef73e22469f6723/low_level_controller.ipynb)
 
