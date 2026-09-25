@@ -8,13 +8,14 @@ This is the reference implementation of the temporal-transformer backbone
 contract consumed by [`TransformerModule`](torchrl.modules.TransformerModule.html#torchrl.modules.TransformerModule):
 
 - `forward(features, positions, mask=None, kv_cache=None) -> (out, kv_cache)`
-- `new_kv_cache(batch_size, device=None) -> kv_cache`
+- `new_kv_cache(batch_size, device=None, dtype=None) -> kv_cache`
 - `reset_kv_cache(kv_cache, mask) -> kv_cache`
 
 together with `num_layers`, `num_heads`, `head_dim` and
 `max_seq_len` attributes. The cache object is opaque to the module: the
 backbone decides its layout, dtype and device and how a reset clears the
-rows selected by a boolean mask over the batch. Any module honoring that
+rows selected by a boolean mask over the batch. `dtype` is the autocast
+dtype, or `None`; a backbone may ignore it. Any module honoring that
 contract can be used in its place, including adapters over an inference
 engine that keeps the cache in its own representation.
 
