@@ -10,7 +10,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
 
-from torchrl.data.replay_buffers import WriterEnsemble
+from torchrl.data.replay_buffers import SamplerEnsemble, StorageEnsemble, WriterEnsemble
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 if TYPE_CHECKING:
@@ -121,13 +121,30 @@ class ImmutableDatasetWriterConfig(WriterConfig):
     _target_: str = "torchrl.data.replay_buffers.ImmutableDatasetWriter"
 
 
+def _make_sampler_ensemble(
+    samplers: list[Any],
+    p: Any = None,
+    sample_from_all: bool = False,
+    num_buffer_sampled: int | None = None,
+) -> SamplerEnsemble:
+    """Pass Hydra's sampler list as positional arguments to SamplerEnsemble."""
+    return SamplerEnsemble(
+        *samplers,
+        p=p,
+        sample_from_all=sample_from_all,
+        num_buffer_sampled=num_buffer_sampled,
+    )
+
+
 @dataclass
 class SamplerEnsembleConfig(SamplerConfig):
-    """Configuration for ensemble sampler that combines multiple samplers."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.SamplerEnsemble`."""
 
-    _target_: str = "torchrl.data.replay_buffers.SamplerEnsemble"
+    _target_: str = "torchrl.trainers.algorithms.configs.data._make_sampler_ensemble"
     samplers: list[Any] = field(default_factory=list)
     p: Any = None
+    sample_from_all: bool = False
+    num_buffer_sampled: int | None = None
 
 
 @dataclass
@@ -357,13 +374,20 @@ class LazyStackStorageConfig(StorageConfig):
     stack_dim: int = 0
 
 
+def _make_storage_ensemble(
+    storages: list[Any], transforms: list[Any] | None = None
+) -> StorageEnsemble:
+    """Pass Hydra's storage list as positional arguments to StorageEnsemble."""
+    return StorageEnsemble(*storages, transforms=transforms)
+
+
 @dataclass
 class StorageEnsembleConfig(StorageConfig):
-    """Configuration for storage ensemble."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.StorageEnsemble`."""
 
-    _target_: str = "torchrl.data.replay_buffers.StorageEnsemble"
+    _target_: str = "torchrl.trainers.algorithms.configs.data._make_storage_ensemble"
     storages: list[Any] = MISSING
-    transforms: list[Any] = MISSING
+    transforms: list[Any] | None = None
 
 
 @dataclass

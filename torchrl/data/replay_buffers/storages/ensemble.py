@@ -37,6 +37,8 @@ class StorageEnsemble(Storage):
        To extend one of the replay buffers, simply index the parent
        :class:`~torchrl.data.ReplayBufferEnsemble` object.
 
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig`
+
     """
 
     _default_checkpointer = StorageEnsembleCheckpointer
