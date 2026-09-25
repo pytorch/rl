@@ -29,10 +29,10 @@ jobs:
       matrix:
         python_version: ["3.12"]
         cuda_arch_version: ["12.9"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g6.4xlarge.experimental.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-l4"
       docker-image: "pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel"
       timeout: 60
       script: |
@@ -72,10 +72,10 @@ jobs:
       matrix:
         python_version: ["3.12"]
         cuda_arch_version: ["12.9"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g6.4xlarge.experimental.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-l4"
       docker-image: "pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel"
       timeout: 60
       script: |
