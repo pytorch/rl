@@ -3755,6 +3755,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`DQNTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`DQNTrainer`](generated/torchrl.trainers.algorithms.DQNTrainer.html#torchrl.trainers.algorithms.DQNTrainer). |
 | [`DDPGTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`DDPGTrainer`](generated/torchrl.trainers.algorithms.DDPGTrainer.html#torchrl.trainers.algorithms.DDPGTrainer). |
 | [`IQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`IQLTrainer`](generated/torchrl.trainers.algorithms.IQLTrainer.html#torchrl.trainers.algorithms.IQLTrainer). |
+| [`FQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig)(loss_module, optimizer, ...) | Hydra configuration for [`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer). |
 | [`CQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer). |
 | [`TD3TrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer). |
 
@@ -3780,6 +3781,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`DQNLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html#torchrl.trainers.algorithms.configs.objectives.DQNLossConfig)([_partial_, value_network, ...]) | Hydra configuration for [`DQNLoss`](generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss). |
 | [`DDPGLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html#torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`DDPGLoss`](generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss). |
 | [`IQLLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html#torchrl.trainers.algorithms.configs.objectives.IQLLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`IQLLoss`](generated/torchrl.objectives.IQLLoss.html#torchrl.objectives.IQLLoss) (and [`DiscreteIQLLoss`](generated/torchrl.objectives.DiscreteIQLLoss.html#torchrl.objectives.DiscreteIQLLoss) when `discrete=True`). |
+| [`FQLLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.FQLLossConfig.html#torchrl.trainers.algorithms.configs.objectives.FQLLossConfig)([_partial_, flow_policy, ...]) | Hydra configuration for [`FQLLoss`](generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss). |
 | [`CQLLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html#torchrl.trainers.algorithms.configs.objectives.CQLLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`CQLLoss`](generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss). |
 | [`TD3LossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html#torchrl.trainers.algorithms.configs.objectives.TD3LossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`TD3Loss`](generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss). |
 | [`GAEConfig`](generated/torchrl.trainers.algorithms.configs.objectives.GAEConfig.html#torchrl.trainers.algorithms.configs.objectives.GAEConfig)([_partial_, gamma, lmbda, ...]) | Hydra configuration for [`GAE`](generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE). |
@@ -3891,6 +3893,7 @@ TorchRL currently provides configuration-driven trainers for the following algor
 - **DQN** (off-policy, discrete): `DQNTrainerConfig`, `DQNLossConfig`
 - **DDPG** (off-policy, continuous): `DDPGTrainerConfig`, `DDPGLossConfig`
 - **IQL** (offline): `IQLTrainerConfig`, `IQLLossConfig`
+- **FQL** (offline and offline-to-online): `FQLTrainerConfig`, `FQLLossConfig`
 - **CQL** (offline): `CQLTrainerConfig`, `CQLLossConfig`
 - **TD3** (off-policy, continuous): `TD3TrainerConfig`, `TD3LossConfig`
 
@@ -36612,7 +36615,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7fddb8d2ff60>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f0d65ffb420>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -50352,7 +50355,7 @@ Yields:
 
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fddbbcd1940>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0d68ce9940>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -248485,6 +248488,136 @@ backpropagation.
 
 ---
 
+# FQLLoss
+
+*class*torchrl.objectives.FQLLoss(**args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/fql.html#FQLLoss)
+
+Flow Q-learning for normalized continuous actions.
+
+Implements [https://arxiv.org/abs/2502.02538](https://arxiv.org/abs/2502.02538). The flow learns the behavior
+distribution; the one-step actor balances distillation and mean critic value.
+Only the critics have target parameters, updated with `SoftUpdate`.
+
+Parameters:
+
+- **flow_policy** ([*FlowMatchingPolicy*](torchrl.modules.FlowMatchingPolicy.html#torchrl.modules.FlowMatchingPolicy)*or**TensorDictSequential*) - behavior flow
+policy, optionally preceded by TensorDict observation encoders.
+- **actor_network** ([*OneStepPolicy*](torchrl.modules.OneStepPolicy.html#torchrl.modules.OneStepPolicy)*or**TensorDictSequential*) - noise-conditioned
+one-step policy, optionally preceded by TensorDict observation encoders.
+Each sequence must end in the corresponding policy. Observation keys
+are read from these modules' `in_keys`.
+- **qvalue_network** (*TensorDictModule**or**list*) - critic reading observations
+and actions and writing `state_action_value`. A single critic is
+duplicated; a list supplies independently initialized critics.
+
+Keyword Arguments:
+
+- **num_qvalue_nets** (*int**,**optional*) - number of critics. Defaults to 2.
+- **alpha** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - distillation weight. Defaults to 10.
+- **q_aggregation** (*str**,**optional*) - target critic aggregation, `mean` or
+`min`. The actor always uses the mean. Defaults to `mean`.
+- **normalize_q_loss** (*bool**,**optional*) - divide actor Q loss by the detached
+mean absolute Q value. Defaults to False.
+- **reduction** (*str**,**optional*) - `none`, `mean` or `sum`. Defaults to
+`mean`. Action and critic coordinates are always averaged first.
+
+default_keys
+
+alias of `_AcceptedKeys`
+
+forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*) → [TensorDict](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict)[[source]](../../_modules/torchrl/objectives/fql.html#FQLLoss.forward)
+
+It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
+
+Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
+training. Other scalars present in the output tensordict will be logged too.
+
+Parameters:
+
+**tensordict** - an input tensordict with the values required to compute the loss.
+
+Returns:
+
+A new tensordict with no batch dimension containing various loss scalars which will be named "loss*". It
+is essential that the losses are returned with this name as they will be read by the trainer before
+backpropagation.
+
+make_value_estimator(*value_type=None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/fql.html#FQLLoss.make_value_estimator)
+
+Value-function constructor.
+
+If the non-default value function is wanted, it must be built using
+this method.
+
+Parameters:
+
+- **value_type** ([*ValueEstimators*](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators)*,*[*ValueEstimatorBase*](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase)*, or**type*) -
+
+The value
+estimator to use. This can be one of the following:
+
+- A [`ValueEstimators`](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) enum type
+indicating which value function to use. If none is provided,
+the default stored in the `default_value_estimator`
+attribute will be used.
+- A [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) instance,
+which will be used directly as the value estimator.
+- A [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) subclass,
+which will be instantiated with the provided `hyperparams`.
+
+The resulting value estimator class will be registered in
+`self.value_type`, allowing future refinements.
+- ****hyperparams** - hyperparameters to use for the value function.
+If not provided, the value indicated by
+`default_value_kwargs()` will be
+used. When passing a `ValueEstimatorBase` subclass, these
+hyperparameters are passed directly to the class constructor.
+
+Returns:
+
+Returns the loss module for method chaining.
+
+Return type:
+
+self
+
+Examples
+
+```
+>>> from torchrl.objectives import DQNLoss
+>>> # initialize the DQN loss
+>>> actor = torch.nn.Linear(3, 4)
+>>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+>>> # updating the parameters of the default value estimator
+>>> dqn_loss.make_value_estimator(gamma=0.9)
+>>> dqn_loss.make_value_estimator(
+... ValueEstimators.TD1,
+... gamma=0.9)
+>>> # if we want to change the gamma value
+>>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
+```
+
+Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) subclass:
+
+```
+>>> from torchrl.objectives.value import TD0Estimator
+>>> dqn_loss.make_value_estimator(TD0Estimator, gamma=0.99, value_network=value_net)
+```
+
+Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase) instance:
+
+```
+>>> from torchrl.objectives.value import GAE
+>>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
+>>> ppo_loss.make_value_estimator(gae)
+```
+
+policy_operator(*policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)*, ***, *method: str | None = None*, *method_kwargs: dict | None = None*) → [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)[[source]](../../_modules/torchrl/objectives/fql.html#FQLLoss.policy_operator)
+
+Bind a policy operation while retaining its observation encoders.
+
+---
+
 # GAILLoss
 
 *class*torchrl.objectives.GAILLoss(**args*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/gail.html#GAILLoss)
@@ -278953,6 +279086,10 @@ Defaults to `"local"`.
 - **learner_poll_interval** (*float*) - Remote replay polling interval. Defaults
 to `0.05` seconds.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...][[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.compute_loss)
 
 Evaluate the configured loss through the active execution boundary.
@@ -279287,6 +279424,10 @@ Note
 This trainer requires a configurable environment setup. See the
 `configs` module for configuration options.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
 Evaluate the configured loss through the active execution boundary.
@@ -279423,6 +279564,10 @@ Note
 This is an experimental/prototype feature. The API may change in future versions.
 CQL is designed for offline RL but also works online. The conservative penalty
 prevents overestimation of Q-values for unseen actions.
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -279570,6 +279715,10 @@ Note
 
 This is an experimental/prototype feature. The API may change in future versions.
 DDPG is designed for continuous action spaces. For discrete actions, use DQNTrainer.
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -279766,6 +279915,10 @@ Note
 This is an experimental/prototype feature. The API may change in future versions.
 DQN is designed for discrete action spaces (e.g., CartPole, Atari).
 For continuous control, consider using SACTrainer or DDPGTrainer instead.
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -280098,6 +280251,143 @@ Return the ratio and cumulative progress, including fractional updates.
 
 ---
 
+# FQLTrainer
+
+*class*torchrl.trainers.algorithms.FQLTrainer(**args*, ***kwargs*)[[source]](../../_modules/torchrl/trainers/algorithms/fql.html#FQLTrainer)
+
+Train FQL with shared offline-to-online replay and Trainer lifecycle hooks.
+
+See `FQLTrainerConfig` for the
+Hydra configuration counterpart.
+
+The standard optimizer hook updates all networks before the target-network
+hook runs. Unlike reference FQL, the target EMA uses the updated critic.
+Allocate replay capacity for the offline dataset and online transitions.
+Online collection performs one update per batch, so use one frame per batch
+for one update per interaction. `update()` performs a single replay update.
+
+`collector` may be omitted for offline-only training or provided as a
+factory initialized after pretraining. `compile_loss` compiles the loss
+without changing its checkpoint keys. See [`OfflineToOnlineTrainer`](torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer)
+for logging, checkpointing and hook options.
+
+Parameters:
+
+- **loss_module** ([*FQLLoss*](torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss)) - flow, actor and critic objective.
+- **optimizer** ([*torch.optim.Optimizer*](https://docs.pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)) - optimizer for the loss parameters.
+- **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)) - offline dataset and online replay storage.
+- **target_net_updater** (*TargetNetUpdater*) - critic target update rule.
+- **offline_steps** (*int*) - gradient updates before online collection.
+
+Keyword Arguments:
+
+- **logger** ([*Logger*](torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger)*,**optional*) - scalar logger. Defaults to `None`.
+- **checkpoint** ([*Checkpoint*](torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint)*,**optional*) - checkpoint component registry.
+- **checkpoint_rotation** ([*CheckpointRotation*](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)*,**optional*) - checkpoint retention
+policy. Use with `checkpoint`; alternatively set `save_trainer_file`.
+
+*property*checkpoint_step*: int*
+
+Use update counts across both phases when pretraining is configured.
+
+*property*completed_steps*: int*
+
+Number of completed offline and online updates.
+
+compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
+
+Evaluate the configured loss through the active execution boundary.
+
+load_from_file(*file: str | Path*, ***kwargs*) → [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)
+
+Loads a file and its state-dict in the trainer.
+
+Keyword arguments are passed to the [`load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load) function for
+legacy torch checkpoints and unified components explicitly saved with
+the torch state-dict payload format. Unified checkpoints additionally
+accept `strict` to control missing or incompatible components.
+Arguments are ignored when `CKPT_BACKEND=memmap`.
+
+Note
+
+Unified state-dict components use TensorDict storage by default and
+do not invoke the pickle loader. For explicit torch payloads and
+`CKPT_BACKEND=torch` checkpoints, `weights_only=True` is the
+default for safer deserialization. Pass `weights_only=False`
+explicitly only if the state dict contains custom objects. On
+torch < 2.4 the default is `weights_only=False` because the
+weights-only unpickler of those versions cannot deserialize the
+`torch.device` instances contained in TensorDict state-dicts.
+
+Note
+
+Explicit torch payloads and `CKPT_BACKEND=torch` checkpoints use
+`mmap=True` by default. Pass `mmap=False` for legacy pre-zipfile
+`torch.save` files or file-like objects. On Windows the default
+is `mmap=False` because a mapped checkpoint keeps the file locked,
+preventing deletion or re-save.
+
+Note
+
+Unified checkpoint tensors are mapped to CPU by default. Pass an
+explicit `map_location` to select another device mapping.
+
+Note
+
+After restoring an independently registered policy component, the
+trainer synchronizes the collector once so local policy copies and
+remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
+optim_steps(*batch: ~tensordict.base.TensorDictBase*, ***, *optim_steps_per_batch: int | None | object = <object object>*, *num_epochs: int | object = <object object>*) → None
+
+Run the configured optimization loop for one collected batch.
+
+Keyword overrides are applied only to this call and do not change the
+trainer configuration. They are useful for algorithms that need a
+one-time optimization schedule while retaining the standard Trainer
+hooks and logging behavior.
+
+request_stop(*reason: str | None = None*) → None
+
+Signal that training should stop at the next loop boundary.
+
+shutdown() → None
+
+Release the online collector, if it was initialized.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
+
+update() → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+
+Run one replay update through the standard optimization hooks.
+
+---
+
 # GRPOTrainer
 
 *class*torchrl.trainers.algorithms.GRPOTrainer(**args*, ***kwargs*)[[source]](../../_modules/torchrl/trainers/algorithms/grpo.html#GRPOTrainer)
@@ -280220,6 +280510,10 @@ Examples
 ... )
 >>> trainer.train()
 ```
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -280361,6 +280655,10 @@ This is an experimental/prototype feature. The API may change in future versions
 IQL works well for both online and offline RL. For offline RL, configure the
 collector to use a pre-collected dataset.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
 Evaluate the configured loss through the active execution boundary.
@@ -280451,27 +280749,27 @@ Examples
 
 *class*torchrl.trainers.algorithms.OfflineToOnlineTrainer(**args*, ***kwargs*)[[source]](../../_modules/torchrl/trainers/algorithms/offline_to_online.html#OfflineToOnlineTrainer)
 
-A SAC trainer for the offline-pretrain -> online-finetune transition.
+Train from offline replay before optional online fine-tuning.
 
 See also `OfflineToOnlineTrainerConfig`
 for the Hydra configuration counterpart.
 
-Builds on [`SACTrainer`](torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer), swapping the
-plain replay buffer for an [`OfflineToOnlineReplayBuffer`](torchrl.data.OfflineToOnlineReplayBuffer.html#torchrl.data.OfflineToOnlineReplayBuffer).
-Each collected batch is routed to the online buffer while optimization
-samples a mixed batch whose offline fraction is linearly annealed to zero
-over `anneal_frames` frames - warm-starting the policy on offline data
-and smoothly handing it over to its own online experience. All other SAC
-behaviour (target-net updates, weight sync, logging) is inherited.
+Builds on [`SACTrainer`](torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer) target updates,
+collector weight synchronization and logging. Offline updates precede online
+collection within the standard Trainer lifecycle. With a mixed buffer,
+online collection anneals the offline sampling fraction over `anneal_frames`.
 
 Parameters:
 
-- **collector** ([*BaseCollector*](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector)) - the data collector for online interactions.
-- **total_frames** (*int*) - total number of frames to collect.
-- **frame_skip** (*int*) - frames skipped between policy updates.
-- **optim_steps_per_batch** (*int*) - optimization steps per collected batch.
-- **loss_module** ([*LossModule*](torchrl.objectives.LossModule.html#torchrl.objectives.LossModule)) - the SAC loss module.
-- **replay_buffer** ([*OfflineToOnlineReplayBuffer*](torchrl.data.OfflineToOnlineReplayBuffer.html#torchrl.data.OfflineToOnlineReplayBuffer)) - the offline-to-online buffer.
+- **collector** ([*BaseCollector*](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector)*or**callable**,**optional*) - online collector or a
+factory called after offline training, unless loss initialization
+requires environment metadata first. Defaults to `None`.
+- **total_frames** (*int*) - online frames to collect. Defaults to zero.
+- **frame_skip** (*int*) - frames skipped between policy updates. Defaults to one.
+- **optim_steps_per_batch** (*int*) - updates per collected batch. Defaults to one.
+- **loss_module** ([*LossModule*](torchrl.objectives.LossModule.html#torchrl.objectives.LossModule)) - actor-critic objective with an `actor_network`.
+- **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*or*[*OfflineToOnlineReplayBuffer*](torchrl.data.OfflineToOnlineReplayBuffer.html#torchrl.data.OfflineToOnlineReplayBuffer)) - regular
+replay storage or independently sampled offline and online buffers.
 
 Keyword Arguments:
 
@@ -280479,6 +280777,16 @@ Keyword Arguments:
 decays to 0. Defaults to `total_frames`; pass `<= 0` to keep the
 fraction fixed.
 - **batch_size** (*int**,**optional*) - replay-buffer sampling batch size.
+- **offline_steps** (*int*) - gradient updates before online collection (default zero).
+- **device** ([*device*](torchrl.data.Binary.html#torchrl.data.Binary.device)*,**optional*) - device for sampled training batches.
+- **compile_loss** (*bool*) - compile the loss module, retaining its checkpoint keys.
+
+A regular replay buffer retains offline and online transitions together. A
+mixed offline-to-online buffer instead controls their sampling fractions.
+The collector may be omitted for offline-only training or supplied as a
+factory, created when collection or environment metadata requires it.
+Losses are logged by update count
+during pretraining and by collected frames during online training.
 
 See [`SACTrainer`](torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer) for the remaining
 keyword arguments.
@@ -280486,6 +280794,14 @@ keyword arguments.
 Note
 
 Experimental/prototype feature; the API may change.
+
+*property*checkpoint_step*: int*
+
+Use update counts across both phases when pretraining is configured.
+
+*property*completed_steps*: int*
+
+Number of completed offline and online updates.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -280549,6 +280865,10 @@ request_stop(*reason: str | None = None*) → None
 
 Signal that training should stop at the next loop boundary.
 
+shutdown() → None[[source]](../../_modules/torchrl/trainers/algorithms/offline_to_online.html#OfflineToOnlineTrainer.shutdown)
+
+Release the online collector, if it was initialized.
+
 stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
 
 Stop training cleanly when the process receives a termination signal.
@@ -280570,6 +280890,10 @@ Examples
 >>> with trainer.stop_on_signal(): 
 ... trainer.train()
 ```
+
+update() → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/trainers/algorithms/offline_to_online.html#OfflineToOnlineTrainer.update)
+
+Run one replay update through the standard optimization hooks.
 
 ---
 
@@ -280659,6 +280983,10 @@ fields are omitted. Legacy reward and terminal metric aliases are
 emitted only in minimal mode. In async mode, reward summaries use
 replay samples; episode and terminal metrics require a collected
 batch and are omitted. Default: `"standard"`.
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -280776,6 +281104,10 @@ Note
 
 This trainer requires a configurable environment setup. See the
 `configs` module for configuration options.
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -280989,6 +281321,10 @@ Note
 This trainer requires a configurable environment setup. See the
 `configs` module for configuration options.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
 Evaluate the configured loss through the active execution boundary.
@@ -281167,6 +281503,10 @@ This is an experimental/prototype feature. The API may change in future versions
 SAC is particularly effective for continuous control tasks and environments where
 exploration is crucial due to its entropy regularization.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
 Evaluate the configured loss through the active execution boundary.
@@ -281313,6 +281653,10 @@ Note
 
 This is an experimental/prototype feature. The API may change in future versions.
 TD3 is particularly effective for continuous control tasks.
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
 
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
@@ -282576,6 +282920,14 @@ Every kwarg accepted by `DQNLoss.__init__` is exposed as a field here.
 
 ---
 
+# torchrl.trainers.algorithms.configs.objectives.FQLLossConfig
+
+*class*torchrl.trainers.algorithms.configs.objectives.FQLLossConfig(*_partial_: bool = False*, *flow_policy: Any = None*, *actor_network: Any = None*, *qvalue_network: Any = None*, *num_qvalue_nets: int = 2*, *alpha: float = 10.0*, *q_aggregation: str = 'mean'*, *normalize_q_loss: bool = False*, *reduction: str = 'mean'*, *gamma: float = 0.99*, *_target_: str = 'torchrl.trainers.algorithms.configs.objectives.make_fql_loss'*, *_convert_: str = 'object'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/objectives.html#FQLLossConfig)
+
+Hydra configuration for [`FQLLoss`](torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss).
+
+---
+
 # torchrl.trainers.algorithms.configs.objectives.GAEConfig
 
 *class*torchrl.trainers.algorithms.configs.objectives.GAEConfig(*_partial_: bool = False*, *gamma: float | None = None*, *lmbda: float | None = None*, *value_network: Any = None*, *average_gae: bool = False*, *differentiable: bool = False*, *vectorized: bool | None = None*, *skip_existing: bool | None = None*, *advantage_key: str | None = None*, *value_target_key: str | None = None*, *value_key: str | None = None*, *shifted: bool = False*, *device: Any = None*, *time_dim: int | None = None*, *auto_reset_env: bool = False*, *deactivate_vmap: bool = False*, *value_chunk_size: int | None = None*, *num_chunks: int | None = None*, *num_chunk: int | None = None*, *value_chunk_dim: int = 0*, *shifted_budget: int = 1*, *group_key: Any = None*, *valid_key: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.objectives._make_gae'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/objectives.html#GAEConfig)
@@ -282729,6 +283081,17 @@ Every kwarg accepted by `DQNTrainer.__init__` is exposed as a field here.
 
 ---
 
+# torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig
+
+*class*torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig(*loss_module: Any*, *optimizer: Any*, *replay_buffer: Any*, *target_net_updater: Any*, *offline_steps: int*, *collector: Any = None*, *total_frames: int = 0*, *device: str | None = None*, *batch_size: int | None = None*, *compile_loss: bool = False*, *logger: Any = None*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = False*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *save_trainer_file: Any = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *hooks: list[Any] | None = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers.make_fql_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#FQLTrainerConfig)
+
+Hydra configuration for [`FQLTrainer`](torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer).
+
+Optimizer and target updater configurations should be partials: they receive
+the instantiated loss parameters and loss module, respectively.
+
+---
+
 # torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig
 
 *class*torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *qvalue_network: Any = None*, *value_network: Any = None*, *target_net_updater: Any = None*, *async_collection: bool = False*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_iql_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#IQLTrainerConfig)
@@ -282741,7 +283104,7 @@ Every kwarg accepted by `IQLTrainer.__init__` is exposed as a field here.
 
 # torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig
 
-*class*torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *target_net_updater: Any = None*, *async_collection: bool = False*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *learner_backend: str = 'local'*, *learner_backend_options: dict[str, Any] | None = None*, *learner_poll_interval: float = 0.05*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward_sum'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_offline_to_online_trainer'*, *anneal_frames: int | None = None*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#OfflineToOnlineTrainerConfig)
+*class*torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *target_net_updater: Any = None*, *async_collection: bool = False*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *learner_backend: str = 'local'*, *learner_backend_options: dict[str, Any] | None = None*, *learner_poll_interval: float = 0.05*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward_sum'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_offline_to_online_trainer'*, *anneal_frames: int | None = None*, *offline_steps: int = 0*, *device: str | None = None*, *compile_loss: bool = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#OfflineToOnlineTrainerConfig)
 
 Hydra configuration for [`OfflineToOnlineTrainer`](torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer).
 
@@ -290762,6 +291125,8 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [IQLLoss](generated/torchrl.objectives.IQLLoss.html)
 - [DiscreteIQLLoss](generated/torchrl.objectives.DiscreteIQLLoss.html)
 - [TD3BCLoss](generated/torchrl.objectives.TD3BCLoss.html)
+- [FQLLoss](generated/torchrl.objectives.FQLLoss.html)
+- [Flow Q-learning](objectives_offline.html#flow-q-learning)
 - [Multi-Agent Objectives](objectives_multiagent.html)
 
 - [MAPPO and IPPO](objectives_multiagent.html#mappo-and-ippo)
@@ -290927,6 +291292,33 @@ Loss modules for offline reinforcement learning.
 | [`IQLLoss`](generated/torchrl.objectives.IQLLoss.html#torchrl.objectives.IQLLoss)(*args, **kwargs) | TorchRL implementation of the IQL loss. |
 | [`DiscreteIQLLoss`](generated/torchrl.objectives.DiscreteIQLLoss.html#torchrl.objectives.DiscreteIQLLoss)(*args, **kwargs) | TorchRL implementation of the discrete IQL loss. |
 | [`TD3BCLoss`](generated/torchrl.objectives.TD3BCLoss.html#torchrl.objectives.TD3BCLoss)(*args, **kwargs) | TD3+BC Loss Module. |
+| [`FQLLoss`](generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss)(*args, **kwargs) | Flow Q-learning for normalized continuous actions. |
+
+## Flow Q-learning
+
+[`FQLLoss`](generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss) trains a [`FlowMatchingPolicy`](generated/torchrl.modules.FlowMatchingPolicy.html#torchrl.modules.FlowMatchingPolicy), a
+[`OneStepPolicy`](generated/torchrl.modules.OneStepPolicy.html#torchrl.modules.OneStepPolicy), and an ensemble of TensorDict critics.
+Use normalized actions in `[-1, 1]` for both replay data and policies.
+
+`loss_flow` fits the behavior velocity along straight paths from Gaussian
+noise to dataset actions. `loss_actor` combines raw student-to-teacher
+distillation with the negative mean Q value of clipped student actions.
+`loss_qvalue` fits the Bellman target using the current student and target
+critics. Each objective updates only its own network parameters.
+
+The default TD0 estimator bootstraps truncations and masks true terminations.
+Set the discount with `loss.make_value_estimator(gamma=0.99)` and configure
+the critic target update with `SoftUpdate(loss, tau=0.005)`. No target actor
+is used. Sum the three loss entries, backpropagate once, step the optimizer,
+then call the updater, following the standard TorchRL training sequence.
+
+Observation inputs follow the policies' and critics' `in_keys`, including
+nested keys. Wrap either policy in a [`TensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential)
+to prepend an encoder that reads multiple observation keys. Each policy's
+encoder receives gradients only from its own objective.
+
+Inference passes the one-step policy directly to TorchRL collectors.
+Exploration remains stochastic at evaluation, as in the reference implementation.
 
 ---
 
@@ -292993,6 +293385,7 @@ trainer.train()
 
 - [Trainer and hooks](trainers_basics.html#trainer-and-hooks)
 - [Algorithm-specific trainers](trainers_basics.html#algorithm-specific-trainers)
+- [Offline and online FQL](trainers_basics.html#offline-and-online-fql)
 - [PPO from an environment](trainers_basics.html#ppo-from-an-environment)
 - [Builders](trainers_basics.html#builders)
 - [Utils](trainers_basics.html#utils)
@@ -293087,13 +293480,32 @@ minimal mode.
 | [`PPOTrainer`](generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer)(*args, **kwargs) | PPO (Proximal Policy Optimization) trainer implementation. |
 | [`ReinforceTrainer`](generated/torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer)(*args, **kwargs) | REINFORCE (policy gradient with baseline) trainer implementation. |
 | [`SACTrainer`](generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer)(*args, **kwargs) | A trainer class for Soft Actor-Critic (SAC) algorithm. |
-| [`OfflineToOnlineTrainer`](generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer)(*args, **kwargs) | A SAC trainer for the offline-pretrain -> online-finetune transition. |
+| [`OfflineToOnlineTrainer`](generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer)(*args, **kwargs) | Train from offline replay before optional online fine-tuning. |
 | [`DQNTrainer`](generated/torchrl.trainers.algorithms.DQNTrainer.html#torchrl.trainers.algorithms.DQNTrainer)(*args, **kwargs) | A trainer class for Deep Q-Network (DQN) algorithm. |
 | [`DDPGTrainer`](generated/torchrl.trainers.algorithms.DDPGTrainer.html#torchrl.trainers.algorithms.DDPGTrainer)(*args, **kwargs) | A trainer class for Deep Deterministic Policy Gradient (DDPG) algorithm. |
 | [`IQLTrainer`](generated/torchrl.trainers.algorithms.IQLTrainer.html#torchrl.trainers.algorithms.IQLTrainer)(*args, **kwargs) | A trainer class for Implicit Q-Learning (IQL) algorithm. |
+| [`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer)(*args, **kwargs) | Train FQL with shared offline-to-online replay and Trainer lifecycle hooks. |
 | [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer)(*args, **kwargs) | A trainer class for Conservative Q-Learning (CQL) algorithm. |
 | [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer)(*args, **kwargs) | A trainer class for Twin Delayed DDPG (TD3) algorithm. |
 | [`GRPOTrainer`](generated/torchrl.trainers.algorithms.GRPOTrainer.html#torchrl.trainers.algorithms.GRPOTrainer)(*args, **kwargs) | A trainer for LLM alignment using GRPO (or compatible) objectives. |
+
+## Offline and online FQL
+
+[`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer) uses [`OfflineToOnlineTrainer`](generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer) replay hooks and the
+standard Trainer lifecycle. Supply a preloaded replay buffer and
+`offline_steps` for offline training. An optional collector factory and
+`total_frames` add online fine-tuning; the factory is called after pretraining.
+An empty replay buffer is supported when `offline_steps=0`.
+
+Use `logger`, `checkpoint` and `checkpoint_rotation` as with other
+trainers. When pretraining is configured, checkpoint intervals and rotation
+filenames use optimization steps across both phases. `load_from_file` restores
+the completed budgets, optimizer, replay and target updater before training
+continues. `compile_loss=True` preserves the loss module's checkpoint keys.
+
+Target networks use the standard post-optimizer update. This differs from the
+reference FQL implementation's pre-optimizer EMA; learning equivalence requires
+a matched training comparison.
 
 ## PPO from an environment
 

@@ -40,13 +40,32 @@ minimal mode.
 | [`PPOTrainer`](generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer)(*args, **kwargs) | PPO (Proximal Policy Optimization) trainer implementation. |
 | [`ReinforceTrainer`](generated/torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer)(*args, **kwargs) | REINFORCE (policy gradient with baseline) trainer implementation. |
 | [`SACTrainer`](generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer)(*args, **kwargs) | A trainer class for Soft Actor-Critic (SAC) algorithm. |
-| [`OfflineToOnlineTrainer`](generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer)(*args, **kwargs) | A SAC trainer for the offline-pretrain -> online-finetune transition. |
+| [`OfflineToOnlineTrainer`](generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer)(*args, **kwargs) | Train from offline replay before optional online fine-tuning. |
 | [`DQNTrainer`](generated/torchrl.trainers.algorithms.DQNTrainer.html#torchrl.trainers.algorithms.DQNTrainer)(*args, **kwargs) | A trainer class for Deep Q-Network (DQN) algorithm. |
 | [`DDPGTrainer`](generated/torchrl.trainers.algorithms.DDPGTrainer.html#torchrl.trainers.algorithms.DDPGTrainer)(*args, **kwargs) | A trainer class for Deep Deterministic Policy Gradient (DDPG) algorithm. |
 | [`IQLTrainer`](generated/torchrl.trainers.algorithms.IQLTrainer.html#torchrl.trainers.algorithms.IQLTrainer)(*args, **kwargs) | A trainer class for Implicit Q-Learning (IQL) algorithm. |
+| [`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer)(*args, **kwargs) | Train FQL with shared offline-to-online replay and Trainer lifecycle hooks. |
 | [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer)(*args, **kwargs) | A trainer class for Conservative Q-Learning (CQL) algorithm. |
 | [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer)(*args, **kwargs) | A trainer class for Twin Delayed DDPG (TD3) algorithm. |
 | [`GRPOTrainer`](generated/torchrl.trainers.algorithms.GRPOTrainer.html#torchrl.trainers.algorithms.GRPOTrainer)(*args, **kwargs) | A trainer for LLM alignment using GRPO (or compatible) objectives. |
+
+## Offline and online FQL
+
+[`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer) uses [`OfflineToOnlineTrainer`](generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer) replay hooks and the
+standard Trainer lifecycle. Supply a preloaded replay buffer and
+`offline_steps` for offline training. An optional collector factory and
+`total_frames` add online fine-tuning; the factory is called after pretraining.
+An empty replay buffer is supported when `offline_steps=0`.
+
+Use `logger`, `checkpoint` and `checkpoint_rotation` as with other
+trainers. When pretraining is configured, checkpoint intervals and rotation
+filenames use optimization steps across both phases. `load_from_file` restores
+the completed budgets, optimizer, replay and target updater before training
+continues. `compile_loss=True` preserves the loss module's checkpoint keys.
+
+Target networks use the standard post-optimizer update. This differs from the
+reference FQL implementation's pre-optimizer EMA; learning equivalence requires
+a matched training comparison.
 
 ## PPO from an environment
 

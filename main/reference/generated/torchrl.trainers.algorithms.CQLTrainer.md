@@ -49,6 +49,10 @@ This is an experimental/prototype feature. The API may change in future versions
 CQL is designed for offline RL but also works online. The conservative penalty
 prevents overestimation of Q-values for unseen actions.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
 Evaluate the configured loss through the active execution boundary.

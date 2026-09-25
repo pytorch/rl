@@ -29,6 +29,10 @@ Note
 This trainer requires a configurable environment setup. See the
 `configs` module for configuration options.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
 
 Evaluate the configured loss through the active execution boundary.

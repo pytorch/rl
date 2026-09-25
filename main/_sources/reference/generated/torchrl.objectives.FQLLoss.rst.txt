@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+FQLLoss
+=======
+
+.. autoclass:: FQLLoss
+    :members:

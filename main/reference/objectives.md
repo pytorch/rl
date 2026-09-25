@@ -74,6 +74,8 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [IQLLoss](generated/torchrl.objectives.IQLLoss.html)
 - [DiscreteIQLLoss](generated/torchrl.objectives.DiscreteIQLLoss.html)
 - [TD3BCLoss](generated/torchrl.objectives.TD3BCLoss.html)
+- [FQLLoss](generated/torchrl.objectives.FQLLoss.html)
+- [Flow Q-learning](objectives_offline.html#flow-q-learning)
 - [Multi-Agent Objectives](objectives_multiagent.html)
 
 - [MAPPO and IPPO](objectives_multiagent.html#mappo-and-ippo)

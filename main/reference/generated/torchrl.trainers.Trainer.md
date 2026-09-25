@@ -81,6 +81,10 @@ Defaults to `"local"`.
 - **learner_poll_interval** (*float*) - Remote replay polling interval. Defaults
 to `0.05` seconds.
 
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
 compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...][[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.compute_loss)
 
 Evaluate the configured loss through the active execution boundary.

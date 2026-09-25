@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: FQLTrainerConfig

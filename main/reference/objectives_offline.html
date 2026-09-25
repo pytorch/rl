@@ -2087,6 +2087,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.IQLLoss.html">IQLLoss</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DiscreteIQLLoss.html">DiscreteIQLLoss</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.TD3BCLoss.html">TD3BCLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.FQLLoss.html">FQLLoss</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="objectives_multiagent.html">Multi-Agent Objectives</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2198,6 +2199,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DQNTrainer.html">DQNTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DDPGTrainer.html">DDPGTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.IQLTrainer.html">IQLTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.FQLTrainer.html">FQLTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.CQLTrainer.html">CQLTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.TD3Trainer.html">TD3Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.GRPOTrainer.html">GRPOTrainer</a></li>
@@ -2424,6 +2426,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.HookConfig.html">torchrl.trainers.algorithms.configs.hooks.HookConfig</a></li>
@@ -2443,6 +2446,7 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DQNLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.IQLLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.FQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.FQLLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.CQLLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html">torchrl.trainers.algorithms.configs.objectives.TD3LossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.GAEConfig.html">torchrl.trainers.algorithms.configs.objectives.GAEConfig</a></li>
@@ -2631,9 +2635,34 @@ document.write(`
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.TD3BCLoss.html#torchrl.objectives.TD3BCLoss" title="torchrl.objectives.TD3BCLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TD3BCLoss</span></code></a>(*args, **kwargs)</p></td>
 <td><p>TD3+BC Loss Module.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss" title="torchrl.objectives.FQLLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FQLLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Flow Q-learning for normalized continuous actions.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
+<section id="flow-q-learning">
+<h2>Flow Q-learning<a class="headerlink" href="#flow-q-learning" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="generated/torchrl.objectives.FQLLoss.html#torchrl.objectives.FQLLoss" title="torchrl.objectives.FQLLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">FQLLoss</span></code></a> trains a <a class="reference internal" href="generated/torchrl.modules.FlowMatchingPolicy.html#torchrl.modules.FlowMatchingPolicy" title="torchrl.modules.FlowMatchingPolicy"><code class="xref py py-class docutils literal notranslate"><span class="pre">FlowMatchingPolicy</span></code></a>, a
+<a class="reference internal" href="generated/torchrl.modules.OneStepPolicy.html#torchrl.modules.OneStepPolicy" title="torchrl.modules.OneStepPolicy"><code class="xref py py-class docutils literal notranslate"><span class="pre">OneStepPolicy</span></code></a>, and an ensemble of TensorDict critics.
+Use normalized actions in <code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1]</span></code> for both replay data and policies.</p>
+<p><code class="docutils literal notranslate"><span class="pre">loss_flow</span></code> fits the behavior velocity along straight paths from Gaussian
+noise to dataset actions. <code class="docutils literal notranslate"><span class="pre">loss_actor</span></code> combines raw student-to-teacher
+distillation with the negative mean Q value of clipped student actions.
+<code class="docutils literal notranslate"><span class="pre">loss_qvalue</span></code> fits the Bellman target using the current student and target
+critics. Each objective updates only its own network parameters.</p>
+<p>The default TD0 estimator bootstraps truncations and masks true terminations.
+Set the discount with <code class="docutils literal notranslate"><span class="pre">loss.make_value_estimator(gamma=0.99)</span></code> and configure
+the critic target update with <code class="docutils literal notranslate"><span class="pre">SoftUpdate(loss,</span> <span class="pre">tau=0.005)</span></code>. No target actor
+is used. Sum the three loss entries, backpropagate once, step the optimizer,
+then call the updater, following the standard TorchRL training sequence.</p>
+<p>Observation inputs follow the policies’ and critics’ <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>, including
+nested keys. Wrap either policy in a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>
+to prepend an encoder that reads multiple observation keys. Each policy’s
+encoder receives gradients only from its own objective.</p>
+<p>Inference passes the one-step policy directly to TorchRL collectors.
+Exploration remains stochastic at evaluation, as in the reference implementation.</p>
+</section>
 </section>
 
 
@@ -2744,6 +2773,18 @@ document.write(`
               
                 <div class="bd-sidebar-secondary bd-toc">
 <div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#flow-q-learning">Flow Q-learning</a></li>
+</ul>
+  </nav></div>
     
        <div class="sidebar-secondary-item">
 
@@ -2994,7 +3035,7 @@ document.write(`
        "headline": "Offline RL Methods",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/objectives_offline.html",
-       "articleBody": "Offline RL Methods# Loss modules for offline reinforcement learning. CQLLoss(*args, **kwargs) TorchRL implementation of the continuous CQL loss. DiscreteCQLLoss(*args, **kwargs) TorchRL implementation of the discrete CQL loss. IQLLoss(*args, **kwargs) TorchRL implementation of the IQL loss. DiscreteIQLLoss(*args, **kwargs) TorchRL implementation of the discrete IQL loss. TD3BCLoss(*args, **kwargs) TD3+BC Loss Module.",
+       "articleBody": "Offline RL Methods# Loss modules for offline reinforcement learning. CQLLoss(*args, **kwargs) TorchRL implementation of the continuous CQL loss. DiscreteCQLLoss(*args, **kwargs) TorchRL implementation of the discrete CQL loss. IQLLoss(*args, **kwargs) TorchRL implementation of the IQL loss. DiscreteIQLLoss(*args, **kwargs) TorchRL implementation of the discrete IQL loss. TD3BCLoss(*args, **kwargs) TD3+BC Loss Module. FQLLoss(*args, **kwargs) Flow Q-learning for normalized continuous actions. Flow Q-learning# FQLLoss trains a FlowMatchingPolicy, a OneStepPolicy, and an ensemble of TensorDict critics. Use normalized actions in [-1, 1] for both replay data and policies. loss_flow fits the behavior velocity along straight paths from Gaussian noise to dataset actions. loss_actor combines raw student-to-teacher distillation with the negative mean Q value of clipped student actions. loss_qvalue fits the Bellman target using the current student and target critics. Each objective updates only its own network parameters. The default TD0 estimator bootstraps truncations and masks true terminations. Set the discount with loss.make_value_estimator(gamma=0.99) and configure the critic target update with SoftUpdate(loss, tau=0.005). No target actor is used. Sum the three loss entries, backpropagate once, step the optimizer, then call the updater, following the standard TorchRL training sequence. Observation inputs follow the policies\u2019 and critics\u2019 in_keys, including nested keys. Wrap either policy in a TensorDictSequential to prepend an encoder that reads multiple observation keys. Each policy\u2019s encoder receives gradients only from its own objective. Inference passes the one-step policy directly to TorchRL collectors. Exploration remains stochastic at evaluation, as in the reference implementation.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
