@@ -2,6 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""Building blocks of the FQL recipe.
+
+``make_data_and_envs`` loads an OGBench dataset into a replay buffer and builds
+the training and evaluation environments, ``make_agent`` assembles the flow
+policy, one-step student, twin critics, :class:`~torchrl.objectives.FQLLoss`
+and target updater, and ``evaluate`` scores the student on complete episodes.
+"""
 from __future__ import annotations
 
 import importlib.util
@@ -46,6 +53,8 @@ REPLAY_KEYS = [
 
 
 class SuccessReader(default_info_dict_reader):
+    """Copy OGBench's ``info["success"]`` flag into the tensordict for evaluation."""
+
     def __call__(self, info, tensordict):
         return tensordict.set(
             "success", torch.tensor(info.get("success", 0.0), dtype=torch.float32)
@@ -53,6 +62,7 @@ class SuccessReader(default_info_dict_reader):
 
 
 def wrap_environment(raw_env, cfg):
+    """Wrap a Gymnasium env with action scaling, float32 observations and a step cap."""
     env = GymWrapper(raw_env, device="cpu")
     if cfg.dataset.name:
         env.set_info_dict_reader(SuccessReader(["success"]))
@@ -66,6 +76,11 @@ def wrap_environment(raw_env, cfg):
 
 
 def make_data_and_envs(cfg):
+    """Return a replay buffer holding the offline data, a training env and an eval env.
+
+    Without ``cfg.dataset.name``, a random rollout of ``cfg.dataset.random_frames``
+    steps on ``cfg.env.name`` stands in for the dataset, for smoke tests only.
+    """
     if cfg.dataset.name:
         if not _has_ogbench:
             raise ImportError("Install ogbench to load an OGBench dataset.")
@@ -125,6 +140,8 @@ def make_data_and_envs(cfg):
 
 
 def make_network(in_features, out_features, cfg, device, layer_norm=False):
+    """Build an MLP initialized and normalized like the reference FQL networks."""
+
     def activation():
         # FQL puts normalization after GELU; MLP's norm_class puts it before.
         return (
@@ -150,6 +167,7 @@ def make_network(in_features, out_features, cfg, device, layer_norm=False):
 
 
 def make_agent(cfg, env, device):
+    """Return the student policy, the FQL loss and its target updater."""
     obs_dim = env.observation_spec["observation"].shape[-1]
     action_dim = env.action_spec.shape[-1]
     flow = FlowMatchingPolicy(
