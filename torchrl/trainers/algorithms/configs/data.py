@@ -387,7 +387,7 @@ class StorageEnsembleConfig(StorageConfig):
 
     _target_: str = "torchrl.trainers.algorithms.configs.data._make_storage_ensemble"
     storages: list[Any] = MISSING
-    transforms: list[Any] = MISSING
+    transforms: list[Any] | None = None
 
 
 @dataclass

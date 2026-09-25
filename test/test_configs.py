@@ -1229,7 +1229,6 @@ class TestDataConfigs:
 
         cfg = StorageEnsembleConfig(
             storages=[ListStorageConfig(max_size=100), ListStorageConfig(max_size=200)],
-            transforms=[None, None],
         )
         storage = instantiate(cfg)
         assert isinstance(storage, StorageEnsemble)
