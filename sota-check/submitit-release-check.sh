@@ -56,6 +56,7 @@ scripts=(
     run_iql_offline.sh
     run_iql_online.sh
     run_iql_discrete.sh
+    run_multiagent_coma.sh
     run_multiagent_iddpg.sh
     run_multiagent_ippo.sh
     run_multiagent_iql.sh
