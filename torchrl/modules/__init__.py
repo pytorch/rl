@@ -225,7 +225,6 @@ __all__ = [
     "MaskedOneHotCategorical",
     "MultiAgentConvNet",
     "MultiAgentMLP",
-    "LLMMaskedCategorical",
     "MultiAgentNetBase",
     "MultiStepActorWrapper",
     "NoisyLazyLinear",
