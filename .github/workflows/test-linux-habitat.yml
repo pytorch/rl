@@ -28,9 +28,9 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.12xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-45-167-a10g-4
       repository: pytorch/rl
       docker-image: "nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04"
       gpu-arch-type: cuda

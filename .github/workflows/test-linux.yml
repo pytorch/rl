@@ -29,9 +29,9 @@ jobs:
       matrix:
         python_version: ["3.10", "3.14"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.4xlarge
+      runner: mt-l-x86iavx512-16-128
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       timeout: 90
@@ -53,9 +53,9 @@ jobs:
         python_version: ["3.10", "3.13", "3.14"]
         shard: ["bulk", "collectors", "mp"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.12xlarge
+      runner: mt-l-x86iavx512-48-384
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       timeout: 120
@@ -91,9 +91,9 @@ jobs:
         python_version: ["3.11", "3.12"]
         shard: ["bulk", "collectors", "mp"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.12xlarge
+      runner: mt-l-x86iavx512-48-384
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       timeout: 120
@@ -129,9 +129,9 @@ jobs:
         # Shard 3: all other tests
         shard: ["1", "2", "3"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
@@ -173,9 +173,9 @@ jobs:
         python_version: ["3.12"]
         cuda_arch_version: ["13.0"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
@@ -222,9 +222,9 @@ jobs:
         # serial shards; see linux_olddeps/scripts_gym_0_13/run_test.sh.
         shard: ["transforms", "quarantine", "remainder"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04"
       gpu-arch-type: cuda
@@ -265,9 +265,9 @@ jobs:
         python_version: ["3.12"]
         cuda_arch_version: ["13.0"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
@@ -306,9 +306,9 @@ jobs:
         python_version: ["3.12"]
         cuda_arch_version: ["13.0"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
@@ -343,9 +343,9 @@ jobs:
         # Test sharding: split tests into 3 parallel jobs for faster execution
         shard: ["1", "2", "3"]
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
@@ -389,9 +389,9 @@ jobs:
         python_version: ["3.12"] # "3.9", "3.10", "3.11"
         cuda_arch_version: ["13.0"] # "11.6", "11.7"
       fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
