@@ -21,6 +21,7 @@ from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, Con
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
+from torchrl.trainers.algorithms.fql import FQLTrainer
 from torchrl.trainers.algorithms.grpo import GRPOTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
@@ -44,6 +45,59 @@ class TrainerConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for trainer configurations."""
+
+
+@dataclass
+class FQLTrainerConfig(TrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.FQLTrainer`.
+
+    Optimizer and target updater configurations should be partials: they receive
+    the instantiated loss parameters and loss module, respectively.
+    """
+
+    loss_module: Any
+    optimizer: Any
+    replay_buffer: Any
+    target_net_updater: Any
+    offline_steps: int
+    collector: Any = None
+    total_frames: int = 0
+    device: str | None = None
+    batch_size: int | None = None
+    compile_loss: bool = False
+    logger: Any = None
+    clip_grad_norm: bool = True
+    clip_norm: float | None = None
+    progress_bar: bool = False
+    seed: int | None = None
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    save_trainer_file: Any = None
+    checkpoint: Any = None
+    checkpoint_rotation: Any = None
+    checkpoint_metadata: Any = None
+    log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    hooks: list[Any] | None = None
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers.make_fql_trainer"
+
+
+def make_fql_trainer(
+    *, loss_module, optimizer, target_net_updater, hooks=None, **kwargs
+) -> FQLTrainer:
+    """Connect FQL optimizer and target updater partials to their shared loss."""
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        optimizer = optimizer(params=loss_module.parameters())
+    if not isinstance(target_net_updater, TargetNetUpdater):
+        target_net_updater = target_net_updater(loss_module)
+    trainer = FQLTrainer(
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_net_updater=target_net_updater,
+        **kwargs,
+    )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 def _register_trainer_hooks(trainer: Any, hooks: list[Any] | None) -> None:

@@ -107,3 +107,15 @@ WANDB_MODE=disabled python main.py --seed=0 \
 Record source revisions, versions, hardware and commands with the learning
 curves. Short smoke runs establish execution correctness; learning performance
 must be measured separately.
+
+## Trainer API
+
+`FQLTrainer` extends `OfflineToOnlineTrainer` and reuses its replay, optimizer,
+target-update and training hooks. `trainer.update()` performs one replay update;
+`trainer.train()` runs offline pretraining followed by optional online collection.
+Pass a collector factory to create the collector after pretraining.
+
+The Trainer accepts TorchRL loggers and native checkpoints. Structured Hydra
+configurations are registered as `trainer/fql` and `loss/fql`. Optimizer and
+target-updater configurations are partials bound to the shared loss instance.
+The recipe's `matmul_precision` option defaults to `high`.

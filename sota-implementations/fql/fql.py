@@ -21,7 +21,7 @@ from torchrl.checkpoint import (
 )
 from torchrl.collectors import Collector
 from torchrl.record.loggers import get_logger
-from torchrl.trainers.algorithms import OfflineToOnlineTrainer
+from torchrl.trainers.algorithms import FQLTrainer
 from utils import evaluate, make_agent, make_data_and_envs
 
 
@@ -32,6 +32,7 @@ def main(cfg: DictConfig) -> None:
         resume_path = resolve_checkpoint_path(to_absolute_path(cfg.resume))
         cfg = resume_config(cfg, resume_path)
     torch.set_num_threads(cfg.num_threads)
+    torch.set_float32_matmul_precision(cfg.matmul_precision)
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
     device = torch.device(cfg.device)
@@ -69,7 +70,7 @@ def main(cfg: DictConfig) -> None:
         if cfg.optim.online_steps
         else None
     )
-    trainer = OfflineToOnlineTrainer(
+    trainer = FQLTrainer(
         loss_module=loss_module,
         optimizer=optimizer,
         replay_buffer=replay,
@@ -80,7 +81,6 @@ def main(cfg: DictConfig) -> None:
         device=device,
         compile_loss=cfg.optim.compile_loss,
         logger=logger,
-        enable_logging=False,
         auto_log_optim_steps=False,
         progress_bar=False,
         checkpoint=Checkpoint(config=OmegaConf.to_container(cfg, resolve=False)),

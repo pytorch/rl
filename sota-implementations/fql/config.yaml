@@ -1,6 +1,7 @@
 seed: 0
 device: cuda
 num_threads: 1
+matmul_precision: high
 log_interval: 1000
 resume: null
 

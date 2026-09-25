@@ -129,7 +129,9 @@ class BrowserTransform(SimpleToolTransform):
         self.browser = None
         self.context = None
         self.page = None
-        self.loop = asyncio.get_event_loop()
+        # Own a loop: asyncio.get_event_loop() raises when the thread has no current
+        # loop (any worker thread, and the main thread too on Python 3.14).
+        self.loop = asyncio.new_event_loop()
 
         super().__init__(
             tools={"browser": self._execute_browser_action},
@@ -272,6 +274,7 @@ class BrowserTransform(SimpleToolTransform):
     def __del__(self):
         """Ensure browser is closed on deletion."""
         self.close()
+        self.loop.close()
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
