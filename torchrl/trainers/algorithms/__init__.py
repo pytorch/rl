@@ -14,6 +14,7 @@ from .dreamer_v3 import (
     DreamerV3Optimizer,
     DreamerV3UpdateRatio,
 )
+from .fql import FQLTrainer
 from .grpo import GRPOTrainer
 from .iql import IQLTrainer
 from .offline_to_online import OfflineToOnlineTrainer
@@ -31,6 +32,7 @@ __all__ = [
     "DreamerV3OptimizationStepper",
     "DreamerV3Optimizer",
     "DreamerV3UpdateRatio",
+    "FQLTrainer",
     "GRPOTrainer",
     "IQLTrainer",
     "OfflineToOnlineTrainer",
