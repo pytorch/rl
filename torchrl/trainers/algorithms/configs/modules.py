@@ -23,9 +23,11 @@ from torchrl.modules import (
     RSSMStateEstimatorV3,
     SimplicialNormalization,
     TanhModule,
+    TdMpc2QEnsemble,
     ValueOperator,
     WorldModel,
 )
+from torchrl.modules.models.tdmpc2 import _TdMpc2PolicyPrior
 from torchrl.trainers.algorithms.configs.common import (
     _normalize_hydra_key,
     _normalize_hydra_keys,
@@ -667,6 +669,234 @@ def _make_tdmpc2_world_model(
     if shared:
         world_model = world_model.share_memory()
     return world_model
+
+
+@dataclass
+class TdMpc2QEnsembleConfig(ModelConfig):
+    """Configuration for a TD-MPC2 Q-function ensemble.
+
+    The resulting
+    :class:`~torchrl.modules.TdMpc2QEnsemble` maps a latent
+    state and action to distributional Q-function logits. Its :meth:`forward`
+    method writes all ensemble logits, while
+    :meth:`~torchrl.modules.TdMpc2QEnsemble.reduce` decodes two randomly
+    selected Q-functions and writes a reduced value.
+
+    Args:
+        latent_dim: Size of the latent state input.
+        action_dim: Number of action dimensions.
+        mlp_dim: Width of each hidden layer in every Q-function.
+        num_q: Number of Q-functions in the ensemble.
+        num_bins: Number of categorical bins for the Q-function output. Must be
+            greater than 1.
+        vmin: Minimum value of the symlog-space categorical support.
+        vmax: Maximum value of the symlog-space categorical support.
+        dropout: Dropout probability applied in the Q-functions.
+        q_value_key: TensorDict key written by the ensemble reduction.
+        device: Device on which to construct the Q-functions.
+
+    Example:
+        >>> import torch
+        >>> from hydra.utils import instantiate
+        >>> from tensordict import TensorDict
+        >>> from torchrl.trainers.algorithms.configs import TdMpc2QEnsembleConfig
+        >>> cfg = TdMpc2QEnsembleConfig(latent_dim=8, action_dim=2, mlp_dim=16)
+        >>> q_ensemble = instantiate(cfg)
+        >>> data = TensorDict(
+        ...     {"latent": torch.randn(3, 8), "action": torch.randn(3, 2)},
+        ...     batch_size=[3],
+        ... )
+        >>> q_ensemble(data)["q_logits"].shape
+        torch.Size([3, 5, 101])
+
+    .. seealso:: :class:`~torchrl.modules.TdMpc2QEnsemble`
+    """
+
+    latent_dim: int = MISSING
+    action_dim: int = MISSING
+    mlp_dim: int = 512
+    num_q: int = 5
+    num_bins: int = 101
+    vmin: float = -10.0
+    vmax: float = 10.0
+    dropout: float = 0.01
+    q_value_key: Any = "q_value"
+    device: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_tdmpc2_q_ensemble"
+    )
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.in_keys is None:
+            self.in_keys = ["latent", "action"]
+        if self.out_keys is None:
+            self.out_keys = ["q_logits"]
+
+
+def _make_tdmpc2_q_ensemble(
+    *,
+    latent_dim: int,
+    action_dim: int,
+    mlp_dim: int = 512,
+    num_q: int = 5,
+    num_bins: int = 101,
+    vmin: float = -10.0,
+    vmax: float = 10.0,
+    dropout: float = 0.01,
+    q_value_key: Any = "q_value",
+    device: Any = None,
+    in_keys: Any = None,
+    out_keys: Any = None,
+    shared: bool = False,
+) -> TdMpc2QEnsemble:
+    """Build the TD-MPC2 Q-function ensemble."""
+    if latent_dim <= 0 or action_dim <= 0 or mlp_dim <= 0:
+        raise ValueError("latent_dim, action_dim, and mlp_dim must be positive")
+    if num_bins <= 1:
+        raise ValueError("num_bins must be greater than 1")
+    if not 0 <= dropout <= 1:
+        raise ValueError("dropout must be in the interval [0, 1]")
+
+    if in_keys is None:
+        in_keys = ["latent", "action"]
+    if out_keys is None:
+        out_keys = ["q_logits"]
+    in_keys = _normalize_hydra_keys(in_keys)
+    out_keys = _normalize_hydra_keys(out_keys)
+    q_value_key = _normalize_hydra_key(q_value_key)
+
+    q_networks = [
+        _make_tdmpc2_mlp(
+            in_features=latent_dim + action_dim,
+            out_features=num_bins,
+            depth=2,
+            num_cells=mlp_dim,
+            dropout=dropout,
+            device=device,
+        )
+        for _ in range(num_q)
+    ]
+    with torch.no_grad():
+        for q_network in q_networks:
+            q_network[-1].weight.zero_()
+    q_ensemble = TdMpc2QEnsemble(
+        q_networks,
+        num_bins=num_bins,
+        vmin=vmin,
+        vmax=vmax,
+        in_keys=in_keys,
+        out_keys=out_keys,
+        q_value_key=q_value_key,
+    )
+    if shared:
+        q_ensemble = q_ensemble.share_memory()
+    return q_ensemble
+
+
+@dataclass
+class TdMpc2PolicyPriorConfig(ModelConfig):
+    """Configuration for a TD-MPC2 policy prior.
+
+    The policy prior maps a latent state to a sampled action and the
+    distribution statistics used by the TD-MPC2 objective. By default, the
+    module reads ``"latent"`` and writes ``"action"``, ``"mean"`,
+    ``"log_std"``, ``"entropy"``, and ``"scaled_entropy"``.
+
+    Example:
+        >>> import torch
+        >>> from hydra.utils import instantiate
+        >>> from tensordict import TensorDict
+        >>> from torchrl.trainers.algorithms.configs import TdMpc2PolicyPriorConfig
+        >>> cfg = TdMpc2PolicyPriorConfig(latent_dim=8, action_dim=2, mlp_dim=16)
+        >>> policy = instantiate(cfg)
+        >>> td = TensorDict({"latent": torch.randn(3, 8)}, batch_size=[3])
+        >>> assert policy(td)["action"].shape == (3, 2)
+    """
+
+    latent_dim: int = MISSING
+    action_dim: int = MISSING
+    mlp_dim: int = 512
+    log_std_min: float = -10.0
+    log_std_max: float = 2.0
+    device: Any = None
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.modules._make_tdmpc2_policy_prior"
+    )
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.in_keys is None:
+            self.in_keys = ["latent"]
+        if self.out_keys is None:
+            self.out_keys = [
+                "action",
+                "mean",
+                "log_std",
+                "entropy",
+                "scaled_entropy",
+            ]
+
+
+def _make_tdmpc2_policy_prior(
+    *,
+    latent_dim: int,
+    action_dim: int,
+    mlp_dim: int = 512,
+    log_std_min: float = -10.0,
+    log_std_max: float = 2.0,
+    device: Any = None,
+    in_keys: Any = None,
+    out_keys: Any = None,
+    shared: bool = False,
+) -> TensorDictModule:
+    """Build a TD-MPC2 policy prior module."""
+    if latent_dim <= 0 or action_dim <= 0 or mlp_dim <= 0:
+        raise ValueError("latent_dim, action_dim, and mlp_dim must be positive")
+    if log_std_max <= log_std_min:
+        raise ValueError("log_std_max must be greater than log_std_min")
+
+    if in_keys is None:
+        in_keys = ["latent"]
+    if out_keys is None:
+        out_keys = [
+            "action",
+            "mean",
+            "log_std",
+            "entropy",
+            "scaled_entropy",
+        ]
+
+    in_keys = _normalize_hydra_keys(in_keys)
+    out_keys = _normalize_hydra_keys(out_keys)
+    if len(in_keys) != 1:
+        raise ValueError("TdMpc2PolicyPrior requires exactly one input key")
+    if len(out_keys) != 5:
+        raise ValueError(
+            "TdMpc2PolicyPrior requires five output keys: action, mean, "
+            "log_std, entropy, and scaled_entropy"
+        )
+
+    network = _make_tdmpc2_mlp(
+        in_features=latent_dim,
+        out_features=2 * action_dim,
+        depth=2,
+        num_cells=mlp_dim,
+        device=device,
+    )
+    policy_prior = TensorDictModule(
+        _TdMpc2PolicyPrior(
+            network,
+            log_std_min=log_std_min,
+            log_std_max=log_std_max,
+            device=device,
+        ),
+        in_keys=in_keys,
+        out_keys=out_keys,
+    )
+    if shared:
+        policy_prior = policy_prior.share_memory()
+    return policy_prior
 
 
 @dataclass
