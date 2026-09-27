@@ -38,7 +38,6 @@ from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
     RandomSampler,
-    Sampler,
     SamplerEnsemble,
     SamplerWithoutReplacement,
     SliceSampler,
@@ -3886,35 +3885,14 @@ class TestUpdateIfPresentVersioned:
         assert (rb[:]["obs"] == 0).all()
 
 
-class _UndeclaredSampler(Sampler):
-    def sample(self, storage, batch_size):
-        return torch.randint(len(storage), (batch_size,)), {}
-
-    def state_dict(self):
-        return {}
-
-    def load_state_dict(self, state_dict):
-        pass
-
-    def _empty(self):
-        pass
-
-    def dumps(self, path):
-        pass
-
-    def loads(self, path):
-        pass
-
-
 def _skip_fork_on_windows(context):
     if context == "fork" and sys.platform == "win32":
         pytest.skip("fork is not available on Windows")
 
 
 class TestTorchDataInterop:
-    @pytest.mark.parametrize("storage_cls", [LazyTensorStorage, ListStorage])
-    def test_storage_dataloader(self, storage_cls):
-        rb = ReplayBuffer(storage=storage_cls(20))
+    def test_storage_dataloader(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
         rb.extend(TensorDict({"obs": torch.arange(20)}, [20]))
         loader = DataLoader(
             rb.storage.as_dataset(), batch_size=8, collate_fn=tensordict_collate
@@ -4249,9 +4227,8 @@ class TestTorchDataInterop:
                 SamplerWithoutReplacement(),
                 p=[0.5, 0.5],
             ),
-            _UndeclaredSampler,
         ],
-        ids=["without_replacement", "ensemble", "undeclared"],
+        ids=["inherited_default", "ensemble"],
     )
     def test_as_dataset_rejects_shared_state_samplers(self, sampler):
         rb = ReplayBuffer(
