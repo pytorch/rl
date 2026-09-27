@@ -453,16 +453,17 @@ DataLoader workers. Each worker holds a copy of the buffer, so this fits
 memory-mapped or dataset-backed storages whose sample path is expensive, such
 as video decoding. The storage content is shared rather than copied: workers
 see rows written after they start, and a row written while a worker reads it
-can come back partially updated. ``num_batches`` is split between workers, buffer
-prefetching is disabled in workers because the DataLoader prefetches, and
-buffers built with a ``generator`` are reseeded once per worker from the
+can come back partially updated. ``num_batches`` is split between workers,
+buffer prefetching is disabled in workers because the DataLoader prefetches,
+and buffers built with a ``generator`` are reseeded once per worker from the
 worker seed, so seeding the DataLoader (``torch.manual_seed`` or
 ``DataLoader(generator=...)``) makes worker sampling reproducible. Samplers
 whose :attr:`~torchrl.data.replay_buffers.Sampler.requires_shared_state` is
 ``True``, every sampler except those that declare their draws stateless such
 as :class:`~torchrl.data.replay_buffers.RandomSampler` and
 :class:`~torchrl.data.replay_buffers.SliceSampler`, are rejected when
-``num_workers > 0``.
+``num_workers > 0``, and so is a :class:`~torchrl.data.RateLimitedReplayBuffer`
+that has not been shared with :meth:`~torchrl.data.ReplayBuffer.share`.
 On a static dataset, give a :class:`~torchrl.data.replay_buffers.SliceSampler`
 ``cache_values=True`` and keep the workers persistent so trajectory boundaries
 are scanned once per worker rather than once per batch:

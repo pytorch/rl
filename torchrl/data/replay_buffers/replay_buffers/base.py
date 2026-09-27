@@ -2844,9 +2844,15 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         state["_prefetch"] = prefetch
         return state
 
+    @property
+    def _requires_shared_state(self) -> bool:
+        return False
+
     def _reset_worker_state(self) -> None:
         self._replay_lock = threading.RLock()
         self._futures_lock = threading.RLock()
+        if not self.shared:
+            self._readiness_condition = threading.Condition()
         self._prefetch = False
         self._prefetch_queue = collections.deque()
         self._pending_update_futures = collections.deque()

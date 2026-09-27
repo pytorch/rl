@@ -83,6 +83,10 @@ class RateLimitedReplayBuffer(ReplayBuffer):
             raise ValueError("samples_per_insert must be a finite positive number.")
         return samples_per_insert
 
+    @property
+    def _requires_shared_state(self) -> bool:
+        return not self.shared
+
     def share(self, shared: bool = True) -> RateLimitedReplayBuffer:
         reserved_samples = self._counter_value(
             getattr(self, "_reserved_sample_count_value", 0)

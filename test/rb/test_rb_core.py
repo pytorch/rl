@@ -4221,6 +4221,24 @@ class TestTorchDataInterop:
         values = torch.cat(list(loader))
         assert (values.sort().values == torch.arange(20)).all()
 
+    def test_as_dataset_rate_limited_buffer_requires_share(self):
+        rb = RateLimitedReplayBuffer(
+            storage=LazyTensorStorage(1000), batch_size=10, samples_per_insert=1.0
+        )
+        rb.extend(torch.arange(100))
+        with pytest.raises(RuntimeError, match="cannot share"):
+            pickle.dumps(rb.as_dataset())
+        rb.share(True)
+        loader = DataLoader(
+            rb.as_dataset(num_batches=5),
+            batch_size=None,
+            num_workers=2,
+            collate_fn=tensordict_collate,
+            timeout=120,
+        )
+        assert sum(batch.numel() for batch in loader) == 50
+        assert rb.stats()["samples_returned"] == 50
+
     @pytest.mark.parametrize(
         "sampler",
         [

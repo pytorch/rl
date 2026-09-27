@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from torch.utils.data._utils.worker import WorkerInfo
 
     from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
-    from torchrl.data.replay_buffers.samplers import Sampler
     from torchrl.data.replay_buffers.storages import Storage
 
 __all__ = ["ReplayBufferDataset", "StorageDataset", "tensordict_collate"]
@@ -151,7 +150,7 @@ class StorageDataset(Dataset):
     def __len__(self) -> int:
         return len(self.storage)
 
-    def __getitem__(self, index: int) -> Any:
+    def __getitem__(self, index: int | list[int]) -> Any:
         self._check_worker()
         return self.storage[index]
 
@@ -173,17 +172,22 @@ class ReplayBufferDataset(IterableDataset):
     processes. Each worker holds its own copy of the buffer, so the sampler and
     the transforms run in the worker and ``num_batches`` is split between
     workers. The storage content is shared rather than copied and workers
-    observe later writes as described in :class:`StorageDataset`. Buffer
-    prefetching is disabled in workers and prefetched batches are never
+    observe later writes as described in :class:`StorageDataset`.
+
+    Buffer prefetching is disabled in workers and prefetched batches are never
     serialized to them, the DataLoader prefetches instead. A buffer built with
-    a :class:`torch.Generator` is reseeded once per worker from the worker seed, so sampling in workers is
-    reproducible when the DataLoader is seeded (``torch.manual_seed`` or
-    ``DataLoader(generator=...)``). Samplers whose
+    a :class:`torch.Generator` is reseeded once per worker from the worker
+    seed, so sampling in workers is reproducible when the DataLoader is seeded
+    (``torch.manual_seed`` or ``DataLoader(generator=...)``).
+
+    Samplers whose
     :attr:`~torchrl.data.replay_buffers.Sampler.requires_shared_state` is
     ``True``, which is every sampler except those that declare their draws
     stateless such as :class:`~torchrl.data.replay_buffers.RandomSampler` and
     :class:`~torchrl.data.replay_buffers.SliceSampler`, are rejected when
-    workers are used.
+    workers are used. So is a :class:`~torchrl.data.RateLimitedReplayBuffer`
+    that has not been shared with :meth:`~torchrl.data.ReplayBuffer.share`,
+    since each worker would otherwise spend its own copy of the sample budget.
 
     Args:
         replay_buffer (ReplayBuffer): the buffer to sample from. Its
@@ -238,7 +242,7 @@ class ReplayBufferDataset(IterableDataset):
 
     def __getstate__(self) -> dict[str, Any]:
         replay_buffer = self.replay_buffer
-        self._check_sampler(replay_buffer.sampler)
+        self._check_shared_state(replay_buffer)
         return {
             **self.__dict__,
             "replay_buffer": (
@@ -253,12 +257,19 @@ class ReplayBufferDataset(IterableDataset):
         replay_buffer.__setstate__(buffer_state)
         self.__dict__.update(state, replay_buffer=replay_buffer)
 
-    def _check_sampler(self, sampler: Sampler) -> None:
+    def _check_shared_state(self, replay_buffer: ReplayBuffer) -> None:
+        sampler = replay_buffer.sampler
         if sampler.requires_shared_state:
             raise RuntimeError(
                 f"{type(sampler).__name__} keeps sampling state that DataLoader "
                 "workers cannot share. Use num_workers=0 or a sampler without "
                 "cross-process state."
+            )
+        if replay_buffer._requires_shared_state:
+            raise RuntimeError(
+                f"{type(replay_buffer).__name__} keeps sampling state that "
+                "DataLoader workers cannot share unless the buffer is shared. "
+                "Call share() on the buffer or use num_workers=0."
             )
 
     def _setup_worker(self) -> WorkerInfo | None:
@@ -266,7 +277,7 @@ class ReplayBufferDataset(IterableDataset):
         if worker is None:
             return None
         replay_buffer = self.replay_buffer
-        self._check_sampler(replay_buffer.sampler)
+        self._check_shared_state(replay_buffer)
         _check_fork_safe(replay_buffer.storage)
         replay_buffer._reset_worker_state()
         rng = replay_buffer._rng
