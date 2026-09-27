@@ -16,11 +16,16 @@ import warnings
 from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
+from functools import partial
+from operator import attrgetter
 from os import path, walk
 from time import sleep
+from unittest.mock import MagicMock
 
 import pytest
 import torch
+from hydra.core.config_store import ConfigStore
+from hydra.utils import instantiate
 from torch import nn
 
 _has_tb = importlib.util.find_spec("tensorboard") is not None
@@ -31,9 +36,13 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
+    TensorDictSequential,
 )
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
+from torchrl.collectors import BaseCollector, Collector
 from torchrl.data import (
+    Bounded,
+    Composite,
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
@@ -41,13 +50,34 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
+from torchrl.envs import Compose, GymEnv, RenameTransform, SerialEnv, TransformedEnv
 from torchrl.envs.libs.gym import _has_gym
-from torchrl.modules import TanhNormal
-from torchrl.objectives import ClipPPOLoss, HardUpdate, LossModule, SoftUpdate
+from torchrl.modules import (
+    FlowMatchingPolicy,
+    GRUModule,
+    MLP,
+    OneStepPolicy,
+    ProbabilisticActor,
+    TanhNormal,
+    ValueOperator,
+)
+from torchrl.objectives import (
+    ClipPPOLoss,
+    CQLLoss,
+    FQLLoss,
+    HardUpdate,
+    LossModule,
+    SACLoss,
+    SoftUpdate,
+)
+from torchrl.record.loggers.common import PrefixLogger
 from torchrl.testing import PONG_VERSIONED
-from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+from torchrl.trainers import EvaluatorHook, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
+from torchrl.trainers.algorithms import FQLTrainer
 from torchrl.trainers.algorithms.a2c import A2CTrainer
+from torchrl.trainers.algorithms.configs import FQLLossConfig, FQLTrainerConfig
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
@@ -140,8 +170,107 @@ class MockingIterableCollector(MockingCollector):
         self.shutdown_calls += 1
 
 
+class ActionSpecCollector(MockingCollector):
+    def __init__(self, source_policy, action_spec):
+        super().__init__(source_policy)
+        self.action_spec = action_spec
+        self.action_spec_queries = 0
+
+    def getattr_env(self, name):
+        assert name == "full_action_spec_unbatched"
+        self.action_spec_queries += 1
+        return Composite(action=self.action_spec)
+
+
 class MockingLossModule(nn.Module):
     pass
+
+
+class TestEntropyTrainerActionSpec:
+    @staticmethod
+    def _make_loss(loss_cls, *, target_entropy, actor_has_spec):
+        action_spec = Bounded(-torch.ones(2), torch.ones(2), (2,))
+        actor_module = TensorDictModule(
+            nn.Sequential(nn.Linear(3, 4), NormalParamExtractor()),
+            in_keys=["observation"],
+            out_keys=["loc", "scale"],
+        )
+        actor = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            spec=action_spec if actor_has_spec else None,
+        )
+
+        class QValue(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(5, 1)
+
+            def forward(self, observation, action):
+                return self.linear(torch.cat([observation, action], -1))
+
+        qvalue = ValueOperator(QValue(), in_keys=["observation", "action"])
+        loss = loss_cls(actor, qvalue, target_entropy=target_entropy)
+        return loss, action_spec
+
+    @staticmethod
+    def _make_trainer(trainer_cls, loss, collector):
+        with pytest.warns(UserWarning, match="experimental/prototype"):
+            return trainer_cls(
+                collector=collector,
+                total_frames=1,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss,
+                optimizer=None,
+                target_net_updater=SoftUpdate(loss, eps=0.99),
+                progress_bar=False,
+                enable_logging=False,
+            )
+
+    @pytest.mark.parametrize(
+        "trainer_cls,loss_cls", [(SACTrainer, SACLoss), (CQLTrainer, CQLLoss)]
+    )
+    @pytest.mark.parametrize(
+        "target_entropy,actor_has_spec,expected_target_entropy",
+        [(0.0, False, 0.0), ("auto", True, -2.0)],
+    )
+    def test_resolved_target_entropy_does_not_require_collector_env(
+        self,
+        trainer_cls,
+        loss_cls,
+        target_entropy,
+        actor_has_spec,
+        expected_target_entropy,
+    ):
+        loss, _ = self._make_loss(
+            loss_cls,
+            target_entropy=target_entropy,
+            actor_has_spec=actor_has_spec,
+        )
+        collector = MockingCollector(source_policy=loss.actor_network)
+
+        trainer = self._make_trainer(trainer_cls, loss, collector)
+
+        torch.testing.assert_close(
+            trainer.loss_module.target_entropy,
+            torch.tensor(expected_target_entropy),
+        )
+
+    def test_sac_uses_collector_spec_when_target_entropy_cannot_be_resolved(self):
+        loss, action_spec = self._make_loss(
+            SACLoss, target_entropy="auto", actor_has_spec=False
+        )
+        collector = ActionSpecCollector(loss.actor_network, action_spec)
+
+        trainer = self._make_trainer(SACTrainer, loss, collector)
+
+        torch.testing.assert_close(
+            trainer.loss_module.target_entropy, torch.tensor(-2.0)
+        )
+        assert collector.action_spec_queries == 1
 
 
 class MockingLogger:
@@ -1257,19 +1386,21 @@ class TestOptimizer:
 class TestLogReward:
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
-    def test_log_reward(self, logname, pbar):
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.int64])
+    def test_log_reward(self, logname, pbar, dtype):
         trainer = mocking_trainer()
         trainer.collected_frames = 0
 
         log_reward = LogScalar(REWARD_KEY, logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
-        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.arange(3, dtype=dtype)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
         else:
             assert logname not in trainer._pbar_str
         assert trainer._log_dict[logname][-1] == 1
+        assert trainer._log_dict[f"{logname}_std"][-1] == 1
 
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
@@ -1431,7 +1562,8 @@ def test_masking():
 
 
 class TestSubSampler:
-    def test_subsampler(self):
+    @pytest.mark.parametrize("batch_shape", [(2,), (2, 1), (1, 2, 1)])
+    def test_subsampler(self, batch_shape):
         torch.manual_seed(0)
         trainer = mocking_trainer()
 
@@ -1452,9 +1584,13 @@ class TestSubSampler:
             [2, 10],
         )
 
+        td = td.reshape(*batch_shape, 10)
         td_out = trainer._process_optim_batch_hook(td)
         assert td_out.shape == torch.Size([batch_size // sub_traj_len, sub_traj_len])
         assert (td_out.get(key1) == td_out.get(key2)).all()
+        # Every sampled window advances in time within a single trajectory.
+        assert (td_out[key1].diff(dim=-1) == 1).all()
+        assert (td_out[key1] // 10 == td_out[key1][..., :1] // 10).all()
 
     def test_subsampler_state_dict(self):
         trainer = mocking_trainer()
@@ -1889,6 +2025,21 @@ class TestOptimizationStepper:
         assert stepper.calls == 1
         assert loss_module.forward_calls == 0
 
+    def test_per_call_optimization_overrides_do_not_change_configuration(self):
+        stepper = _CountingStepper()
+        trainer = self._make_trainer(
+            loss_module=_CountingLossModule(),
+            optimization_stepper=stepper,
+        )
+        trainer.num_epochs = 2
+        td = TensorDict({"x": torch.randn(3)}, [])
+
+        trainer.optim_steps(td, optim_steps_per_batch=3, num_epochs=1)
+
+        assert stepper.calls == 3
+        assert trainer.optim_steps_per_batch == 1
+        assert trainer.num_epochs == 2
+
     def test_stepper_checkpoint_roundtrip(self, tmp_path):
         """Stepper state survives save/load via Trainer checkpointing."""
         os.environ["CKPT_BACKEND"] = "torch"
@@ -2205,6 +2356,161 @@ class TestLRSchedulerHook:
         assert optimizer.param_groups[0]["lr"] == 0.5
 
 
+class TestPPOFromEnv:
+    @pytest.mark.parametrize("recurrent", [False, True])
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_training_and_checkpoint_resume(self, recurrent, nested, tmp_path):
+        torch.manual_seed(0)
+        obs_key = ("agent", "observation") if nested else "observation"
+        action_key = ("agent", "command") if nested else "action"
+        value_key = ("agent", "value") if nested else "state_value"
+
+        def build(total_frames):
+            env = SerialEnv(2, ContinuousActionVecMockEnv)
+            if nested:
+                env = TransformedEnv(
+                    env,
+                    Compose(
+                        RenameTransform(
+                            in_keys=["observation", "reward", "done", "terminated"],
+                            out_keys=[
+                                ("agent", key)
+                                for key in (
+                                    "observation",
+                                    "reward",
+                                    "done",
+                                    "terminated",
+                                )
+                            ],
+                        ),
+                        RenameTransform(
+                            in_keys=[],
+                            out_keys=[],
+                            in_keys_inv=["action"],
+                            out_keys_inv=[action_key],
+                        ),
+                    ),
+                )
+            obs_dim = env.observation_spec[obs_key].shape[-1]
+            action_dim = env.full_action_spec[action_key].shape[-1]
+            modules = []
+            if recurrent and nested:
+                modules.append(
+                    RenameTransform(
+                        in_keys=[("agent", "is_init")], out_keys=["is_init"]
+                    )
+                )
+            if recurrent:
+                modules.append(
+                    GRUModule(
+                        input_size=obs_dim,
+                        hidden_size=8,
+                        in_keys=[obs_key, "hidden", "is_init"],
+                        out_keys=["features", ("next", "hidden")],
+                    )
+                )
+            modules.append(
+                TensorDictModule(
+                    nn.Sequential(
+                        nn.Linear(8 if recurrent else obs_dim, 2 * action_dim),
+                        NormalParamExtractor(),
+                    ),
+                    in_keys=["features" if recurrent else obs_key],
+                    out_keys=["loc", "scale"],
+                )
+            )
+            actor = ProbabilisticActor(
+                TensorDictSequential(*modules),
+                in_keys=["loc", "scale"],
+                out_keys=[action_key],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            )
+            critic = TensorDictModule(
+                nn.Linear(obs_dim, 1), in_keys=[obs_key], out_keys=[value_key]
+            )
+            trainer = PPOTrainer.from_env(
+                env,
+                actor=actor,
+                critic=critic,
+                value_key=value_key,
+                total_frames=total_frames,
+                frames_per_batch=32,
+                minibatch_size=16,
+                sub_traj_len=4 if recurrent else None,
+                num_epochs=2,
+                progress_bar=False,
+                loss_kwargs={"entropy_coeff": 0.01},
+                checkpoint=Checkpoint(),
+                save_trainer_file=tmp_path / "trainer",
+            )
+            return trainer, actor, critic
+
+        trainer, actor, critic = build(32)
+        if recurrent:
+            assert not trainer._modules["value_estimator"].value_estimator.shifted
+        actor_before = [p.detach().clone() for p in actor.parameters()]
+        critic_before = [p.detach().clone() for p in critic.parameters()]
+        trainer.train()
+        assert any(
+            not torch.equal(x, y) for x, y in zip(actor_before, actor.parameters())
+        )
+        assert any(
+            not torch.equal(x, y) for x, y in zip(critic_before, critic.parameters())
+        )
+        if recurrent:
+            # The GRU participates in the actor update, not just its output head.
+            assert not torch.equal(actor_before[0], next(actor.parameters()))
+        assert all(torch.isfinite(p).all() for p in actor.parameters())
+
+        restored, restored_actor, _ = build(64)
+        restored.load_from_file(tmp_path / "trainer")
+        before_resume = [p.detach().clone() for p in restored_actor.parameters()]
+        for expected, actual in zip(actor.parameters(), before_resume):
+            torch.testing.assert_close(expected, actual)
+        restored.train()
+        assert restored.collected_frames == 64
+        assert any(
+            not torch.equal(x, y)
+            for x, y in zip(before_resume, restored_actor.parameters())
+        )
+
+    def test_sub_traj_len_rejected_on_unbatched_env(self):
+        # Without a batch dim the collector returns 1-D batches and
+        # BatchSubSampler would fall back to shuffling transitions, silently
+        # breaking recurrent-mode GAE. Reject before constructing the trainer.
+        env = ContinuousActionVecMockEnv()
+        assert env.batch_dims == 0
+        actor = ProbabilisticActor(
+            TensorDictModule(
+                nn.Sequential(
+                    nn.Linear(env.observation_spec["observation"].shape[-1], 8),
+                    NormalParamExtractor(),
+                ),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+        )
+        critic = TensorDictModule(
+            nn.Linear(env.observation_spec["observation"].shape[-1], 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        with pytest.raises(ValueError, match="sub_traj_len requires a batched"):
+            PPOTrainer.from_env(
+                env,
+                actor=actor,
+                critic=critic,
+                total_frames=64,
+                frames_per_batch=32,
+                minibatch_size=16,
+                sub_traj_len=4,
+            )
+
+
 class TestOnPolicyTargetNetUpdater:
     # OnPolicyTrainer(target_net_updater=...) must step the updater after every
     # optimizer step: this is what keeps the proximal policy of a
@@ -2457,6 +2763,169 @@ class TestSetupShutdownHooks:
         assert collector.shutdown_calls == 1
 
 
+class _HookEvaluator:
+    def __init__(self, *, auto_complete=False, wait_error=None, shutdown_error=None):
+        self.auto_complete = auto_complete
+        self.wait_error = wait_error
+        self.shutdown_error = shutdown_error
+        self.pending = False
+        self.triggers = []
+        self.results = []
+        self.shutdown_calls = 0
+        self.wait_timeout = None
+
+    def trigger_eval(self, weights, step):
+        self.triggers.append((step, weights.clone()))
+        self.pending = True
+        if self.auto_complete:
+            self.complete()
+        return True
+
+    def complete(self):
+        step = self.triggers[-1][0]
+        self.pending = False
+        self.results.append({"eval/reward": float(step), "eval/step": step})
+
+    def poll(self):
+        if self.results:
+            return self.results.pop(0)
+        return None
+
+    def wait(self, timeout=None):
+        self.wait_timeout = timeout
+        if self.wait_error is not None:
+            raise self.wait_error
+        if self.pending:
+            self.complete()
+        return self.poll()
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+        if self.shutdown_error is not None:
+            raise self.shutdown_error
+
+
+class _HookLogger:
+    def __init__(self):
+        self.metrics = []
+        self.videos = []
+
+    def log_metrics(self, metrics, step):
+        self.metrics.append((step, dict(metrics)))
+
+    def log_video(self, name, video, step):
+        self.videos.append((name, video, step))
+
+
+class TestEvaluatorHook:
+    def test_cadence_coalescing_logging_and_no_duplicate_final(self):
+        evaluator = _HookEvaluator(auto_complete=True)
+        logger = _HookLogger()
+        trainer = mocking_trainer(optimizer=None, logger=logger, with_policy=True)
+        hook = EvaluatorHook(
+            evaluator, every_frames=10, run_at_start=True, run_at_end=True
+        )
+        hook.register(trainer)
+
+        trainer._setup_hook()
+        for frames in (5, 10, 35):
+            trainer.collected_frames = frames
+            trainer._post_steps_hook()
+        trainer._shutdown_hook()
+
+        assert [step for step, _ in evaluator.triggers] == [0, 10, 35]
+        assert hook._next_due_frame == 40
+        assert [step for step, _ in logger.metrics] == [0, 10, 35]
+        assert all(
+            set(metrics) == {"evaluation/reward", "evaluation/step"}
+            for _, metrics in logger.metrics
+        )
+        assert evaluator.shutdown_calls == 1
+
+    def test_busy_intervals_coalesce_to_latest_policy(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+        trainer.collected_frames = 25
+        trainer._post_steps_hook()
+        assert [step for step, _ in evaluator.triggers] == [10]
+        assert hook._next_due_frame == 10
+
+        evaluator.complete()
+        trainer.collected_frames = 30
+        trainer._post_steps_hook()
+        assert [step for step, _ in evaluator.triggers] == [10, 30]
+        assert hook._next_due_frame == 20
+
+    def test_final_evaluation_uses_latest_callable_policy(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(
+            evaluator,
+            every_frames=10,
+            policy=attrgetter("loss_module.actor_network"),
+        )
+        hook.register(trainer)
+
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+        with torch.no_grad():
+            trainer.loss_module.actor_network.weight.fill_(3)
+        trainer.collected_frames = 15
+        trainer._shutdown_hook()
+
+        assert [step for step, _ in evaluator.triggers] == [10, 15]
+        torch.testing.assert_close(
+            evaluator.triggers[-1][1]["weight"],
+            torch.full_like(evaluator.triggers[-1][1]["weight"], 3),
+        )
+
+    def test_resume_keeps_only_completed_schedule_state(self):
+        evaluator = _HookEvaluator()
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+
+        state = hook.state_dict()
+        assert state == {"next_due_frame": 10, "last_completed_frame": None}
+        evaluator.complete()
+        trainer.collected_frames = 15
+        trainer._post_steps_hook()
+        assert hook.state_dict() == {
+            "next_due_frame": 20,
+            "last_completed_frame": 10,
+        }
+
+        restored_evaluator = _HookEvaluator(auto_complete=True)
+        restored_trainer = mocking_trainer(optimizer=None, with_policy=True)
+        restored = EvaluatorHook(restored_evaluator, every_frames=10)
+        restored.register(restored_trainer)
+        restored.load_state_dict(state)
+        restored_trainer.collected_frames = 15
+        restored_trainer._setup_hook()
+
+        assert [step for step, _ in restored_evaluator.triggers] == [15]
+
+    def test_shutdown_cleans_up_when_wait_fails(self):
+        evaluator = _HookEvaluator(wait_error=RuntimeError("evaluation failed"))
+        trainer = mocking_trainer(optimizer=None, with_policy=True)
+        hook = EvaluatorHook(evaluator, every_frames=10)
+        hook.register(trainer)
+        trainer.collected_frames = 10
+        trainer._post_steps_hook()
+
+        with pytest.raises(RuntimeError, match="evaluation failed"):
+            trainer._shutdown_hook()
+        assert evaluator.wait_timeout == 60.0
+        assert evaluator.shutdown_calls == 1
+
+
 class TestEarlyStopping:
     @pytest.mark.parametrize(
         "monitor,values,hook_kwargs,expected_stops,expected_reason",
@@ -2580,6 +3049,252 @@ class _RecordingLogger:
         if isinstance(value, torch.Tensor):
             value = value.item()
         self.records.setdefault(name, []).append((step, value))
+
+    def log_metrics(self, metrics, step=None, **kwargs):
+        for name, value in metrics.items():
+            self.log_scalar(name, value, step)
+        return metrics
+
+    def with_prefix(self, prefix):
+        return PrefixLogger(self, prefix)
+
+
+class TestOnPolicyTelemetry:
+    @staticmethod
+    def _make_trainer(
+        *,
+        telemetry="standard",
+        collector=None,
+        log_rewards=True,
+        replay_buffer=None,
+        async_collection=False,
+    ):
+        torch.manual_seed(0)
+        actor = ProbabilisticTensorDictSequential(
+            TensorDictModule(
+                nn.Sequential(nn.Linear(3, 8), NormalParamExtractor()),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            ),
+        )
+        critic = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["observation"], out_keys=["state_value"]
+        )
+        loss_module = ClipPPOLoss(actor, critic, entropy_bonus=False)
+        logger = _RecordingLogger()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            trainer = PPOTrainer(
+                collector=collector or MockingCollector(),
+                total_frames=8,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss_module,
+                optimizer=torch.optim.SGD(loss_module.parameters(), lr=0.1),
+                logger=logger,
+                replay_buffer=replay_buffer,
+                async_collection=async_collection,
+                num_epochs=1,
+                add_gae=False,
+                progress_bar=False,
+                log_interval=0,
+                log_rewards=log_rewards,
+                log_actions=False,
+                done_key=("agents", "done"),
+                terminated_key=("agents", "terminated"),
+                reward_key=("agents", "reward"),
+                episode_reward_key=("agents", "reward"),
+                telemetry=telemetry,
+            )
+        return trainer, loss_module, logger
+
+    @staticmethod
+    def _batch(loss_module):
+        done = torch.zeros(8, 1, dtype=torch.bool)
+        done[[3, 7]] = True
+        terminated = torch.zeros_like(done)
+        terminated[3] = True
+        truncated = torch.zeros_like(done)
+        truncated[7] = True
+        is_init = torch.zeros_like(done)
+        is_init[[0, 4]] = True
+        return TensorDict(
+            {
+                "observation": torch.randn(8, 3),
+                "action": torch.rand(8, 4) * 1.8 - 0.9,
+                loss_module.tensor_keys.sample_log_prob: torch.randn(8),
+                "advantage": torch.randn(8, 1),
+                "value_target": torch.randn(8, 1),
+                "is_init": is_init,
+                ("collector", "traj_ids"): torch.zeros(8, dtype=torch.long),
+                ("next", "agents", "reward"): torch.arange(1.0, 9.0).view(8, 1),
+                ("next", "agents", "done"): done,
+                ("next", "agents", "terminated"): terminated,
+                ("next", "agents", "truncated"): truncated,
+            },
+            [8],
+        )
+
+    def test_standard_telemetry_for_finite_ppo_update_with_nested_keys(self):
+        trainer, loss_module, logger = self._make_trainer()
+        trainer.optimizer.add_param_group(
+            {"params": [nn.Parameter(torch.zeros(()))], "lr": 0.2}
+        )
+        batch = self._batch(loss_module)
+
+        trainer._setup_hook()
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+        trainer.optim_steps(batch)
+
+        expected = {
+            "training/frames/collected",
+            "training/frames/batch",
+            "training/episodes/completed",
+            "training/terminals/done_rate",
+            "training/terminals/terminated_rate",
+            "training/terminals/truncated_rate",
+            "training/rewards/min",
+            "training/rewards/mean",
+            "training/rewards/std",
+            "training/rewards/max",
+            "training/episodes/return/mean",
+            "training/episodes/length/mean",
+            "training/optimizer/learning_rate",
+            "training/optimizer/learning_rate/group_0",
+            "training/optimizer/learning_rate/group_1",
+            "training/optimizer/gradient_norm",
+            "training/throughput/collection_frames_per_second",
+            "training/throughput/optimizer_updates_per_second",
+        }
+        assert expected <= logger.records.keys()
+        assert not {
+            "done_percentage",
+            "r_training",
+            "r_training_std",
+            "r_max",
+            "r_total",
+        }.intersection(logger.records)
+        for name in expected:
+            assert torch.isfinite(torch.as_tensor(logger.records[name][-1][1]))
+        assert logger.records["training/episodes/completed"][-1][1] == 2
+        assert logger.records["training/episodes/return/mean"][-1][1] == 18.0
+        assert logger.records["training/episodes/length/mean"][-1][1] == 4.0
+        assert logger.records["training/rewards/mean"][-1][1] == 4.5
+        assert logger.records["training/optimizer/learning_rate"][-1][1] == 0.1
+        assert logger.records["training/optimizer/learning_rate/group_1"][-1][1] == 0.2
+
+    @pytest.mark.parametrize("log_rewards", [False, True])
+    def test_async_rewards_from_masked_replay_sample(self, log_rewards):
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SamplerWithoutReplacement(),
+            batch_size=8,
+        )
+        trainer, loss_module, logger = self._make_trainer(
+            async_collection=True,
+            replay_buffer=replay_buffer,
+            log_rewards=log_rewards,
+        )
+        batch = self._batch(loss_module)
+        batch["collector", "mask"] = torch.arange(8) < 4
+        batch["next", "agents", "reward"][4:] = 999
+        replay_buffer.extend(batch)
+
+        trainer._setup_hook()
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(None)
+        trainer.optim_steps(None)
+
+        rewards = {
+            key: values[-1][1]
+            for key, values in logger.records.items()
+            if key.startswith("training/rewards/")
+        }
+        assert rewards == (
+            {
+                "training/rewards/min": 1.0,
+                "training/rewards/mean": 2.5,
+                "training/rewards/std": pytest.approx(1.25**0.5),
+                "training/rewards/max": 4.0,
+            }
+            if log_rewards
+            else {}
+        )
+        assert not {
+            "done_percentage",
+            "r_training",
+            "r_training_std",
+            "r_max",
+            "r_total",
+        }.intersection(logger.records)
+        assert not any(
+            key.startswith(("training/episodes/", "training/terminals/"))
+            for key in logger.records
+        )
+
+    @pytest.mark.parametrize("log_rewards", [False, True])
+    def test_minimal_avoids_standard_collection_work(self, log_rewards):
+        class FailingStatsCollector(MockingCollector):
+            def stats(self):
+                raise AssertionError("minimal telemetry must not query stats")
+
+        trainer, loss_module, logger = self._make_trainer(
+            telemetry="minimal",
+            collector=FailingStatsCollector(),
+            log_rewards=log_rewards,
+        )
+        batch = self._batch(loss_module).exclude(
+            ("collector", "traj_ids"),
+            ("next", "agents", "terminated"),
+            ("next", "agents", "truncated"),
+        )
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+
+        expected = {"done_percentage"}
+        if log_rewards:
+            expected.update({"r_training", "r_training_std", "r_max", "r_total"})
+            assert logger.records["r_training"][-1][1] == 4.5
+        assert logger.records.keys() == expected
+        assert not hasattr(trainer, "_standard_telemetry")
+        assert not any(key.startswith("training/") for key in trainer._log_dict)
+
+    def test_standard_logs_runtime_stats_and_omits_unavailable_batch_metrics(self):
+        class StatsCollector(MockingCollector):
+            def stats(self):
+                return {"frames": 4}
+
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(16),
+            sampler=SamplerWithoutReplacement(),
+        )
+        replay_buffer.extend(TensorDict({"value": torch.ones(4, 1)}, [4]))
+        trainer, loss_module, logger = self._make_trainer(
+            collector=StatsCollector(),
+            log_rewards=False,
+            replay_buffer=replay_buffer,
+        )
+        batch = self._batch(loss_module).exclude(
+            ("collector", "traj_ids"),
+            ("next", "agents", "reward"),
+            ("next", "agents", "terminated"),
+            ("next", "agents", "truncated"),
+        )
+        trainer.collected_frames = batch.numel()
+        trainer._pre_steps_log_hook(batch)
+
+        assert "training/collector/frames" in logger.records
+        assert logger.records["training/replay/size"][-1][1] == 4
+        assert logger.records["training/replay/capacity"][-1][1] == 16
+        assert not any("rewards/" in key for key in logger.records)
+        assert not any("episodes/return" in key for key in logger.records)
 
 
 class _CountingWeightSender:
@@ -2874,3 +3589,433 @@ class TestGRPOTrainer:
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+
+
+def make_fql_loss(device="cpu", action_dim=2):
+    loss = FQLLoss(
+        FlowMatchingPolicy(
+            MLP(4 + action_dim, action_dim, num_cells=[8], device=device),
+            action_dim,
+            num_steps=2,
+        ),
+        OneStepPolicy(
+            MLP(3 + action_dim, action_dim, num_cells=[8], device=device), action_dim
+        ),
+        [
+            ValueOperator(
+                MLP(3 + action_dim, 1, num_cells=[8], device=device),
+                in_keys=["observation", "action"],
+            )
+            for _ in range(2)
+        ],
+    )
+    loss.make_value_estimator(gamma=0.9)
+    return loss
+
+
+def make_fql_replay(action_dim=2):
+    batch = TensorDict(
+        {
+            "observation": torch.randn(8, 3),
+            "action": torch.randn(8, action_dim).tanh(),
+            ("next", "observation"): torch.randn(8, 3),
+            ("next", "reward"): torch.randn(8, 1),
+            ("next", "done"): torch.zeros(8, 1, dtype=torch.bool),
+            ("next", "terminated"): torch.zeros(8, 1, dtype=torch.bool),
+            ("next", "truncated"): torch.zeros(8, 1, dtype=torch.bool),
+        },
+        [8],
+    )
+    replay = TensorDictReplayBuffer(storage=LazyTensorStorage(16), batch_size=4)
+    replay.extend(batch)
+    return replay
+
+
+def make_fql_trainer(
+    device="cpu",
+    action_dim=2,
+    updater=None,
+    replay_buffer=None,
+    offline_steps=3,
+    **kwargs,
+):
+    loss = make_fql_loss(device, action_dim)
+    if updater is None:
+        updater = partial(SoftUpdate, tau=0.1)
+    return FQLTrainer(
+        loss_module=loss,
+        optimizer=torch.optim.Adam(loss.parameters(), lr=1e-3),
+        replay_buffer=make_fql_replay(action_dim)
+        if replay_buffer is None
+        else replay_buffer,
+        target_net_updater=updater(loss),
+        offline_steps=offline_steps,
+        device=device,
+        **kwargs,
+    )
+
+
+@pytest.fixture
+def fql_matmul_precision():
+    previous = torch.get_float32_matmul_precision()
+    torch.set_float32_matmul_precision("highest")
+    try:
+        yield
+    finally:
+        torch.set_float32_matmul_precision(previous)
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is unavailable"
+                ),
+            ],
+        ),
+    ],
+)
+@pytest.mark.parametrize("compile_loss", [False, True])
+def test_fql_update_matches_recipe(
+    device, compile_loss, monkeypatch, fql_matmul_precision
+):
+    torch.manual_seed(0)
+    if compile_loss:
+        monkeypatch.setattr(torch, "randn_like", lambda x: torch.full_like(x, 0.2))
+        monkeypatch.setattr(torch, "rand_like", lambda x: torch.full_like(x, 0.3))
+        monkeypatch.setattr(torch.Tensor, "normal_", lambda x: x.fill_(0.2))
+    trainer = make_fql_trainer(
+        device=device, compile_loss=compile_loss, auto_log_optim_steps=False
+    )
+    reference = make_fql_loss(device)
+    reference.load_state_dict(trainer.loss_module.state_dict())
+    optimizer = torch.optim.Adam(reference.parameters(), lr=1e-3)
+    updater = SoftUpdate(reference, tau=0.1)
+    for seed in range(3):
+        torch.manual_seed(seed)
+        expected = reference(trainer.replay_buffer.sample().to(device))
+        optimizer.zero_grad(set_to_none=True)
+        sum(expected[key] for key in reference.out_keys).backward()
+        optimizer.step()
+        updater.step()
+        torch.manual_seed(seed)
+        actual = trainer.update()
+        torch.testing.assert_close(
+            actual.select(*reference.out_keys), expected.select(*reference.out_keys)
+        )
+        torch.testing.assert_close(
+            trainer.optimizer.state_dict(), optimizer.state_dict()
+        )
+        for key, value in reference.state_dict().items():
+            torch.testing.assert_close(trainer.loss_module.state_dict()[key], value)
+    assert trainer.completed_steps == 3
+    assert all(not value.requires_grad for value in actual.values())
+    assert not trainer._log_dict
+
+
+def test_fql_offline_lifecycle():
+    trainer = make_fql_trainer()
+    events = []
+    trainer.register_op("setup", lambda: events.append("setup"))
+    trainer.register_op("shutdown", lambda: events.append("shutdown"))
+    trainer.register_op(
+        "post_optim_complete_log", lambda step, losses: events.append(step)
+    )
+    trainer.train()
+    assert events == ["setup", 1, 2, 3, "shutdown"]
+    assert trainer.collected_frames == 0
+    assert len(trainer.replay_buffer) == 8
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_fql_online_retains_dataset_and_syncs(lazy):
+    collector = MagicMock(spec=BaseCollector)
+    collector.init_random_frames = 0
+    trainer = make_fql_trainer(collector=collector, total_frames=2)
+    original = trainer.replay_buffer.storage[:8].clone()
+    transition = original[:1].clone().exclude("index")
+    transition["observation"] += 10
+    transition["policy_aux"] = torch.ones(1, 2)
+    collector.__iter__.return_value = iter([transition, transition])
+    collector.update_policy_weights_.side_effect = lambda policy: syncs.append(
+        trainer.completed_steps
+    )
+    syncs = []
+
+    def make_collector():
+        assert trainer.completed_steps == 3
+        return collector
+
+    if lazy:
+        trainer.collector.collector = None
+        trainer.collector.factory = make_collector
+    trainer.train()
+    assert trainer.completed_steps == 5
+    assert trainer.collected_frames == 2
+    assert syncs == [3, 4, 5]
+    assert len(trainer.replay_buffer) == 10
+    torch.testing.assert_close(trainer.replay_buffer.storage[:8], original)
+    torch.testing.assert_close(
+        trainer.replay_buffer.storage[8:10]["observation"],
+        transition["observation"].expand(2, 3),
+    )
+    collector.shutdown.assert_called_once()
+
+
+def test_fql_shutdown_on_failure():
+    trainer = make_fql_trainer()
+    stopped = []
+    trainer.register_op("shutdown", lambda: stopped.append(True))
+
+    def fail(step, losses):
+        raise RuntimeError("evaluation failed")
+
+    trainer.register_op("post_optim_complete_log", fail)
+    with pytest.raises(RuntimeError, match="evaluation failed"):
+        trainer.train()
+    assert stopped == [True]
+
+
+@pytest.mark.parametrize("critic_list", [False, True])
+def test_fql_hydra_configs(critic_list):
+    original = make_fql_loss()
+    loss = instantiate(
+        FQLLossConfig(gamma=0.95, alpha=4),
+        flow_policy=original.flow_policy,
+        actor_network=original.actor_network,
+        qvalue_network=(
+            [deepcopy(original.qvalue_network) for _ in range(2)]
+            if critic_list
+            else original.qvalue_network
+        ),
+    )
+    assert loss.alpha == 4
+    assert loss.value_estimator.gamma == pytest.approx(0.95)
+    trainer = instantiate(
+        FQLTrainerConfig(
+            loss_module=None,
+            optimizer={"_target_": "torch.optim.Adam", "_partial_": True, "lr": 1e-3},
+            replay_buffer=None,
+            target_net_updater={
+                "_target_": "torchrl.objectives.SoftUpdate",
+                "_partial_": True,
+                "tau": 0.1,
+            },
+            offline_steps=2,
+        ),
+        loss_module=loss,
+        replay_buffer=make_fql_replay(),
+    )
+    trainer.train()
+    assert trainer.completed_steps == 2
+    optimizer_params = trainer.optimizer.param_groups[0]["params"]
+    assert {id(p) for p in optimizer_params} == {id(p) for p in loss.parameters()}
+    store = ConfigStore.instance()
+    assert store.load("loss/fql.yaml").node._target_ == FQLLossConfig()._target_
+    assert "fql.yaml" in store.list("trainer")
+
+
+@pytest.mark.parametrize("offline_steps,total_frames", [(-1, 0), (0, -1)])
+def test_fql_negative_budget(offline_steps, total_frames):
+    trainer = make_fql_trainer()
+    with pytest.raises(ValueError, match="nonnegative"):
+        FQLTrainer(
+            loss_module=trainer.loss_module,
+            optimizer=trainer.optimizer,
+            replay_buffer=trainer.replay_buffer,
+            target_net_updater=trainer.target_net_updater,
+            offline_steps=offline_steps,
+            total_frames=total_frames,
+        )
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+@pytest.mark.parametrize("offline_steps", [0, 3])
+def test_fql_zero_online_budget_does_not_collect(lazy, offline_steps):
+    collector = MagicMock(spec=BaseCollector)
+    collector.init_random_frames = 0
+    factory = MagicMock(return_value=collector)
+    trainer = make_fql_trainer(
+        collector=factory if lazy else collector, offline_steps=offline_steps
+    )
+    trainer.train()
+    collector.__iter__.assert_not_called()
+    factory.assert_not_called()
+    assert trainer.completed_steps == offline_steps
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_fql_shutdown_without_collector(lazy):
+    factory = MagicMock()
+    trainer = make_fql_trainer(collector=factory if lazy else None)
+    trainer.shutdown()
+    trainer.train()
+    trainer.shutdown()
+    factory.assert_not_called()
+
+
+def test_fql_online_shutdown_on_failure():
+    collector = MagicMock(spec=BaseCollector)
+    collector.init_random_frames = 0
+    trainer = make_fql_trainer(collector=collector, total_frames=1)
+    collector.__iter__.return_value = iter([trainer.replay_buffer.storage[:1].clone()])
+
+    def fail(step, losses):
+        if step > trainer.offline_steps:
+            raise RuntimeError("evaluation failed")
+
+    trainer.register_op("post_optim_complete_log", fail)
+    with pytest.raises(RuntimeError, match="evaluation failed"):
+        trainer.train()
+    collector.shutdown.assert_called_once()
+
+
+def test_fql_offline_state_roundtrip():
+    trainer = make_fql_trainer()
+    trainer.update()
+    restored = make_fql_trainer()
+    restored.load_state_dict(trainer.state_dict())
+    assert restored.collector.collector is None
+    assert restored.completed_steps == 1
+    torch.testing.assert_close(
+        restored.loss_module.state_dict(), trainer.loss_module.state_dict()
+    )
+    torch.testing.assert_close(
+        restored.optimizer.state_dict(), trainer.optimizer.state_dict()
+    )
+    restored.train()
+    assert restored.completed_steps == 3
+
+
+@pytest.mark.parametrize("valid", [0, 2])
+def test_fql_online_ignores_padding(valid):
+    collector = MagicMock(spec=BaseCollector)
+    collector.init_random_frames = 0
+    trainer = make_fql_trainer(collector=collector, total_frames=2)
+    batch = trainer.replay_buffer.storage[:3].clone()
+    batch["collector", "mask"] = torch.arange(3) < valid
+    batch["observation"][valid:] = 777
+    collector.__iter__.return_value = iter([batch])
+    trainer.train()
+    assert trainer.collected_frames == valid
+    assert trainer.completed_steps == 3 + bool(valid)
+    assert len(trainer.replay_buffer) == 8 + valid
+    assert not (trainer.replay_buffer.storage[:]["observation"] == 777).any()
+
+
+def test_fql_online_syncs_independent_policy():
+    pytest.importorskip("gymnasium")
+    trainer = make_fql_trainer(action_dim=1)
+    learner_policy = trainer.loss_module.actor_network
+    collector_policy = deepcopy(learner_policy)
+    initial_policy = deepcopy(learner_policy.state_dict())
+    trainer.collector.collector = Collector(
+        GymEnv("Pendulum-v1"),
+        collector_policy,
+        frames_per_batch=1,
+        total_frames=1,
+        auto_register_policy_transforms=True,
+    )
+    trainer.total_frames = 1
+    trainer.train()
+    assert any(
+        not torch.equal(value, initial_policy[key])
+        for key, value in learner_policy.state_dict().items()
+    )
+    torch.testing.assert_close(
+        collector_policy.state_dict(), learner_policy.state_dict()
+    )
+
+
+def test_fql_online_state_roundtrip():
+    collector = MagicMock(spec=BaseCollector)
+    collector.init_random_frames = 0
+    collector.state_dict.return_value = {"frames": 1}
+    trainer = make_fql_trainer(collector=lambda: collector, total_frames=1)
+    transition = trainer.replay_buffer.storage[:1].clone()
+    transition["observation"] += 10
+    collector.__iter__.return_value = iter([transition])
+    trainer.train()
+
+    restored_collector = MagicMock(spec=BaseCollector)
+    restored_collector.init_random_frames = 0
+    factory = MagicMock(return_value=restored_collector)
+    restored = make_fql_trainer(collector=factory, total_frames=2)
+    restored.load_state_dict(trainer.state_dict())
+    factory.assert_called_once_with()
+    restored_collector.load_state_dict.assert_called_once_with({"frames": 1})
+    assert restored.completed_steps == 4
+    assert restored.collected_frames == 1
+    torch.testing.assert_close(
+        restored.replay_buffer.storage[:], trainer.replay_buffer.storage[:]
+    )
+    restored_collector.__iter__.return_value = iter([transition])
+    restored.train()
+    factory.assert_called_once_with()
+    assert restored.completed_steps == 5
+    assert restored.collected_frames == 2
+    assert len(restored.replay_buffer) == 10
+
+
+def test_fql_target_updater_state_roundtrip():
+    updater = partial(HardUpdate, value_network_update_interval=3)
+    trainer = make_fql_trainer(updater=updater)
+    trainer.update()
+    restored = make_fql_trainer(updater=updater)
+    restored.load_state_dict(trainer.state_dict())
+    assert restored.target_net_updater.counter == trainer.target_net_updater.counter
+
+
+def test_fql_empty_replay_online():
+    replay = TensorDictReplayBuffer(storage=LazyTensorStorage(16), batch_size=4)
+    collector = MagicMock(spec=BaseCollector)
+    collector.init_random_frames = 0
+    collector.__iter__.return_value = iter([make_fql_replay().storage[:4].clone()])
+    trainer = make_fql_trainer(
+        replay_buffer=replay, offline_steps=0, collector=collector, total_frames=4
+    )
+    assert len(replay) == 0
+    trainer.train()
+    assert len(replay) == 4
+    assert trainer.completed_steps == 1
+
+
+def test_fql_logger_checkpoint(tmp_path):
+    logger = MagicMock()
+    checkpoint = Checkpoint()
+    trainer = make_fql_trainer(
+        logger=logger,
+        log_interval=1,
+        checkpoint=checkpoint,
+        save_trainer_file=tmp_path / "fql",
+        save_trainer_interval=2,
+    )
+    trainer.train()
+    assert {call.kwargs["step"] for call in logger.log_scalar.call_args_list} == {
+        1,
+        2,
+        3,
+    }
+    restored = make_fql_trainer(checkpoint=Checkpoint())
+    restored.load_from_file(tmp_path / "fql")
+    assert restored.completed_steps == 3
+    torch.testing.assert_close(
+        restored.loss_module.state_dict(), trainer.loss_module.state_dict()
+    )
+
+
+def test_fql_config_constructor_parity():
+    from dataclasses import fields
+
+    config = {field.name: field for field in fields(FQLTrainerConfig)}
+    for name, parameter in inspect.signature(FQLTrainer).parameters.items():
+        assert name in config
+        if parameter.default is not inspect.Parameter.empty:
+            assert config[name].default == parameter.default
+    assert FQLTrainer.train is Trainer.train
+    assert issubclass(FQLTrainer, OfflineToOnlineTrainer)

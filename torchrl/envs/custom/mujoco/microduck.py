@@ -38,6 +38,8 @@ Reward
 
 Termination
     A physical fall (low base height or tilted torso) or a non-finite state.
+    The same per-environment signal is exposed as the boolean ``fallen``
+    observation for controller-state resets.
 """
 
 from __future__ import annotations
@@ -394,6 +396,12 @@ class MicroDuckTask:
         tensor(4.)
         >>> task.params["tracking_std"], task.warm_start_fraction
         (tensor(0.2000), tensor(0.5000))
+
+    .. seealso::
+        :class:`MicroDuckEnv` consumes an ordered library of these rows;
+        :class:`MicroDuckTaskSampler` chooses a row at reset; and
+        :class:`~torchrl.modules.tensordict_module.zoo.MicroDuckSkills`
+        preserves the library alongside a trained skill policy.
     """
 
     command_low: torch.Tensor
@@ -426,8 +434,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     (14), joint velocity (14), the sine, cosine and ramp of the gait clock
     (3), and the previous action (14). The command and the index of the env's
     task in the library are also exposed under the ``command`` and ``task_id``
-    keys; task parameters are not in the observation, and an embedding of the
-    id stands for them.
+    keys; the boolean ``fallen`` observation reports physical failure for
+    per-agent controller resets. Task parameters are not in the observation,
+    and an embedding of the id stands for them.
 
     The env holds a library of :class:`MicroDuckTask` rows in :attr:`tasks`
     (``env.tasks.name`` lists their labels).
@@ -445,6 +454,8 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     :meth:`register_reward` adds terms and :attr:`REWARD_TERMS` lists them.
     Foot contacts and heights come from :meth:`foot_contacts` and
     :meth:`foot_heights`, so the gait terms work on every backend.
+    :meth:`trajectory_metrics` turns complete evaluator trajectories into the
+    standard tracking, survival, pose, hopping and displacement summaries.
 
     MuJoCo stores free-joint linear velocity in the world frame and angular
     velocity in the body frame; the task rotates the linear velocity into the
@@ -591,6 +602,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         >>> task = MicroDuckEnv.tracking_task(0.2, reward_weights={"heading": 1.0}, heading_std=0.5)
         >>> env = MicroDuckEnv(download=True, tasks=task)  # doctest: +SKIP
 
+    .. seealso::
+        :class:`MicroDuckTask` represents one locomotion objective;
+        :class:`MicroDuckTaskSampler` controls task selection at reset; and
+        :class:`MicroDuckSkillEnv` promotes compatible joint-level dynamics to
+        a high-level environment whose actions select trained skills.
+
     Reference:
         Pollen Robotics, MicroDuck (https://github.com/pollen-robotics/microduck)
         and its mjlab training environments
@@ -670,6 +687,10 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         "head_yaw",
         "yaw_rate",
         "height_gain",
+        "position_x",
+        "position_y",
+        "time",
+        "heading",
         "body_velocity_x",
         "body_velocity_y",
         "body_velocity_z",
@@ -771,6 +792,137 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
             shape=(self.num_envs,),
             device=self.device,
         )
+
+    @classmethod
+    def trajectory_metrics(
+        cls, trajectories: TensorDictBase, *, jumping: bool = False
+    ) -> dict[str, float]:
+        """Summarize a padded batch of complete MicroDuck trajectories.
+
+        This callback can be passed directly to
+        :class:`~torchrl.collectors.Evaluator`. Means are taken over valid
+        transitions, while survival, extrema, displacement and heading rates
+        are computed per complete episode. Optional pose and position metrics
+        are included when the environment was built with ``diagnostics=True``.
+
+        Args:
+            trajectories (TensorDictBase): trajectory batch with a time
+                dimension and a boolean ``("collector", "mask")`` validity
+                mask.
+
+        Keyword Args:
+            jumping (bool, optional): use airborne time as ``task_score``
+                instead of command tracking. Defaults to ``False``.
+
+        Returns:
+            Dictionary of scalar evaluation metrics.
+
+        Examples:
+            >>> from functools import partial
+            >>> from torchrl.collectors import Evaluator
+            >>> from torchrl.envs import MicroDuckEnv
+            >>> evaluator = Evaluator(  # doctest: +SKIP
+            ...     env, policy, num_trajectories=4, max_steps=500,
+            ...     metrics_fn=partial(MicroDuckEnv.trajectory_metrics, jumping=True),
+            ... )
+        """
+        mask = trajectories["collector", "mask"]
+        lengths = mask.sum(-1)
+        velocity_start = cls.BODY_VELOCITY_START
+        velocity = trajectories["next", "observation"][
+            ..., velocity_start : velocity_start + 2
+        ]
+        command = trajectories["command"]
+        error = (velocity - command).norm(dim=-1)
+        velocity_score = 1 - (error / command.norm(dim=-1).clamp_min(0.1)).clamp(
+            max=1.0
+        )
+        if ("next", "diagnostic_left_foot_contact") in trajectories.keys(True):
+            airborne = (
+                (trajectories["next", "diagnostic_left_foot_contact"][..., 0] < 0.5)
+                & (trajectories["next", "diagnostic_right_foot_contact"][..., 0] < 0.5)
+            ).float()
+        else:
+            airborne = torch.zeros_like(error)
+        score = airborne if jumping else velocity_score
+        episode_score = (score * mask).sum(-1) / lengths
+        last = trajectories["next", "terminated"][..., 0].gather(
+            -1, (lengths - 1).unsqueeze(-1)
+        )
+        metrics = {
+            "tracking_error": float(error[mask].mean()),
+            "forward_speed": float(velocity[..., 0][mask].mean()),
+            "lateral_speed": float(velocity[..., 1][mask].mean()),
+            "airborne_fraction": float(airborne[mask].mean()),
+            "survival_rate": float((~last).float().mean()),
+            "episode_length_min": float(lengths.min()),
+            "task_score": float(score[mask].mean()),
+            "task_score_min": float(episode_score.min()),
+        }
+        if ("next", "diagnostic_head_pitch") in trajectories.keys(True):
+            for name in ("head_pitch", "head_yaw", "yaw_rate"):
+                values = trajectories["next", f"diagnostic_{name}"][..., 0]
+                metrics[name] = float(values[mask].mean())
+                metrics[f"{name}_abs"] = float(values[mask].abs().mean())
+                if name != "yaw_rate":
+                    metrics[f"{name}_abs_p95"] = float(
+                        values[mask].abs().quantile(0.95)
+                    )
+            height = trajectories["next", "diagnostic_height_gain"][..., 0]
+            metrics["hop_height_max"] = float(
+                height.masked_fill(~mask, -torch.inf).amax(-1).mean()
+            )
+            metrics["planar_speed"] = float(velocity.norm(dim=-1)[mask].mean())
+            pairs = mask[..., 1:] & mask[..., :-1]
+            takeoffs = (airborne[..., 1:] > airborne[..., :-1]) & pairs
+            landings = (airborne[..., 1:] < airborne[..., :-1]) & pairs
+            metrics["takeoffs_per_episode"] = float(takeoffs.sum(-1).float().mean())
+            metrics["landings_per_episode"] = float(landings.sum(-1).float().mean())
+            metrics["hopping_episode_fraction"] = float(
+                ((takeoffs.sum(-1) >= 2) & (landings.sum(-1) >= 2)).float().mean()
+            )
+        if ("next", "diagnostic_position_x") in trajectories.keys(True):
+            displacement = []
+            offsets = []
+            for name in ("position_x", "position_y", "time"):
+                values = trajectories["next", f"diagnostic_{name}"][..., 0]
+                if name != "time":
+                    offsets.append(values - values[..., :1])
+                else:
+                    intervals = (values[..., 1:] - values[..., :-1]).clamp_min(1e-6)
+                displacement.append(
+                    values.gather(-1, (lengths - 1).unsqueeze(-1)).squeeze(-1)
+                    - values[..., 0]
+                )
+            elapsed = displacement[2].clamp_min(1e-6)
+            drift = torch.stack(displacement[:2], -1).norm(dim=-1) / elapsed
+            metrics["drift_speed"] = float(drift.mean())
+            metrics["drift_speed_max"] = float(drift.max())
+            distance = torch.stack(offsets, -1).norm(dim=-1).masked_fill(~mask, 0)
+            metrics["displacement_max"] = float(distance.max())
+            heading = trajectories["next", "diagnostic_heading"][..., 0]
+            delta = heading[..., 1:] - heading[..., :-1]
+            delta = torch.atan2(delta.sin(), delta.cos())
+            delta = delta * (mask[..., 1:] & mask[..., :-1])
+            heading_rate = delta.sum(-1) / elapsed
+            metrics["heading_rate"] = float(heading_rate.mean())
+            metrics["heading_rate_min"] = float(heading_rate.min())
+            metrics["heading_rate_max"] = float(heading_rate.max())
+            position = torch.stack(offsets, -1)
+            ground_velocity = (
+                position[..., 1:, :] - position[..., :-1, :]
+            ) / intervals[..., None]
+            midpoint = heading[..., :-1] + 0.5 * delta
+            vx, vy = ground_velocity.unbind(-1)
+            pairs = mask[..., 1:] & mask[..., :-1]
+            count = pairs.sum().clamp_min(1)
+            metrics["ground_forward_speed"] = float(
+                (vx * midpoint.cos() + vy * midpoint.sin())[pairs].sum() / count
+            )
+            metrics["ground_lateral_speed"] = float(
+                (-vx * midpoint.sin() + vy * midpoint.cos())[pairs].sum() / count
+            )
+        return metrics
 
     # ------------------------------------------------------------------
     # Tasks: library, presets and reward registry
@@ -878,11 +1030,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         Used as a decorator on a function ``(features, params) -> Tensor`` of
         shape ``(num_envs,)``. ``features`` is the step's feature TensorDict
         with entries ``body_velocity`` (body frame, ``(num_envs, 3)``),
+        ``world_velocity`` (world frame, ``(num_envs, 3)``),
         ``angular_velocity`` (3), ``upright`` (cosine of the tilt), ``base_height``,
         ``standing_height``, ``joint_error`` (14), ``joint_velocity`` (14),
         ``action`` (14), ``previous_action`` (14), ``contacts`` (bool, 2),
         ``foot_heights`` (2), ``head_pitch`` (gaze pitch above the horizontal,
-        radians), ``head_yaw`` (gaze yaw relative to the body, radians),
+        radians), ``head_yaw`` (gaze yaw relative to the trunk, radians),
         ``touchdown_air_time`` (2), ``gait_phase``
         (radians), ``command`` (2) and ``fallen`` (bool). ``params`` is the
         per-env TensorDict of task parameters, each of shape ``(num_envs,)``.
@@ -1140,8 +1293,20 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         )
 
     @classmethod
-    def jump_task(cls, *, weight: float = 1.0, **overrides: Any) -> MicroDuckTask:
-        """Hop in place under a zero command.
+    def jump_task(
+        cls, speed: float = 0.0, *, weight: float = 1.0, **overrides: Any
+    ) -> MicroDuckTask:
+        """Hop in place or track a forward hopping speed.
+
+        Args:
+            speed (float, optional): Forward speed in m/s. Defaults to zero
+                (hop in place). A nonzero speed disables the stationary drift
+                penalty and uses velocity tracking alongside the hop terms.
+            weight (float, optional): Relative task sampling weight. Defaults
+                to 1.0. Set to 3.0 to sample hopping three times as often as a
+                task with unit weight.
+            **overrides: Task fields and reward parameters forwarded to
+                :meth:`make_task`.
 
         Three terms shape the hop, in the order a policy discovers it.
         ``hop_rhythm`` (weight 1) pays, linearly up to the
@@ -1173,18 +1338,18 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 "jump": cls.JUMP_WEIGHT,
                 "launch": cls.LAUNCH_WEIGHT,
                 "hop_rhythm": cls.HOP_RHYTHM_WEIGHT,
-                "drift": cls.DRIFT_WEIGHT,
+                "drift": cls.DRIFT_WEIGHT if speed == 0.0 else 0.0,
                 "lin_vel_z": 0.0,
             }
         )
         reward_weights.update(overrides.pop("reward_weights", None) or {})
         return cls.make_task(
-            (0.0, 0.0),
-            (0.0, 0.0),
+            (float(speed), 0.0),
+            (float(speed), 0.0),
             weight=weight,
             reward_weights=reward_weights,
             **{
-                "name": "jump",
+                "name": "jump" if speed == 0.0 else f"jump{float(speed):+.2f}",
                 "pose_std": cls.POSE_STD_MOVING,
                 "gait_frequency_hz": cls.HOP_FREQUENCY_HZ,
                 **overrides,
@@ -1326,10 +1491,15 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         the IMU to the beak tip is tilted down by 41 degrees in the robot's
         head frame and must not be used as a forward direction.
         """
-        return self._head_angles(self._backend.qpos)[0]
+        return self._head_angles()[0]
 
-    def _head_angles(self, qpos: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        gaze = -self._backend.site_rotations([self._head_site_id])[:, 0, :, 2]
+    def _head_angles(
+        self, qpos: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        rotations = self._backend.site_rotations([self._head_site_id], qpos=qpos)
+        gaze = -rotations[:, 0, :, 2]
+        if qpos is None:
+            qpos = self._backend.qpos
         pitch = torch.atan2(gaze[..., 2], gaze[..., :2].norm(dim=-1))
         forward = _body_forward_vector(qpos[..., 3:7].to(gaze.dtype))
         yaw = torch.atan2(
@@ -1360,6 +1530,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 dtype=torch.long,
                 device=self.device,
             ),
+            fallen=Binary(
+                n=1,
+                shape=(self.num_envs, 1),
+                dtype=torch.bool,
+                device=self.device,
+            ),
             shape=(self.num_envs,),
             device=self.device,
         )
@@ -1383,6 +1559,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         observation = super()._build_obs_dict(state)
         observation["command"] = self._command.clone()
         observation["task_id"] = self._task_id.unsqueeze(-1).clone()
+        observation["fallen"] = self._fallen(
+            state["qpos"].to(self.dtype), state["qvel"].to(self.dtype)
+        ).unsqueeze(-1)
         if self.diagnostics:
             observation.update(self._diagnostics(state, self._observation_action))
         return observation
@@ -1613,14 +1792,24 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
         normalized action that led to it; the contact bookkeeping is the
         env's current one. See :meth:`register_reward` for the entries.
         """
+        return self._reward_features(state, action, state_is_current=False)
+
+    def _reward_features(
+        self,
+        state: TensorDictBase,
+        action: torch.Tensor,
+        *,
+        state_is_current: bool,
+    ) -> TensorDictBase:
         qpos = state["qpos"].to(self.dtype)
         qvel = state["qvel"].to(self.dtype)
         quaternion = qpos[..., 3:7]
         phase, _ = self._gait_clock()
-        head_pitch, head_yaw = self._head_angles(qpos)
+        head_pitch, head_yaw = self._head_angles(None if state_is_current else qpos)
         return TensorDict(
             {
                 "body_velocity": _body_frame_linear_velocity(quaternion, qvel[..., :3]),
+                "world_velocity": qvel[..., :3],
                 "angular_velocity": qvel[..., 3:6],
                 "upright": (-_projected_gravity(quaternion)[..., 2]).clamp(-1.0, 1.0),
                 "base_height": qpos[..., 2],
@@ -1695,6 +1884,12 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
                 "diagnostic_head_yaw": head_yaw.unsqueeze(-1),
                 "diagnostic_yaw_rate": qvel[..., 5:6],
                 "diagnostic_height_gain": qpos[..., 2:3] - self._target_height,
+                "diagnostic_position_x": qpos[..., 0:1],
+                "diagnostic_position_y": qpos[..., 1:2],
+                "diagnostic_time": self._backend.time.unsqueeze(-1),
+                "diagnostic_heading": torch.atan2(
+                    2 * (w * z + x * y), 1 - 2 * (y.square() + z.square())
+                ).unsqueeze(-1),
                 "diagnostic_body_velocity_x": body_velocity[..., 0:1],
                 "diagnostic_body_velocity_y": body_velocity[..., 1:2],
                 "diagnostic_body_velocity_z": body_velocity[..., 2:3],
@@ -1733,7 +1928,9 @@ class MicroDuckEnv(MujocoEnv, metaclass=_MicroDuckMeta):
     ) -> torch.Tensor:
         del state
         self._update_gait_state()
-        terms = self._reward_terms(self.reward_features(next_state, action))
+        terms = self._reward_terms(
+            self._reward_features(next_state, action, state_is_current=True)
+        )
         return (terms * self._task.reward_weights).sum(dim=-1, keepdim=True)
 
     def _compute_done(
@@ -1984,10 +2181,10 @@ def _joint_velocity(features: TensorDictBase, params: TensorDictBase) -> torch.T
 
 @MicroDuckEnv.register_reward("drift", weight=0.0, drift_speed_scale=0.3)
 def _drift(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
-    # Planar speed as a fraction of ``drift_speed_scale``, clipped at one: a
+    # World-horizontal speed as a fraction of ``drift_speed_scale``, clipped at one: a
     # linear penalty that keeps paying where the tracking Gaussian has
     # saturated, for tasks that must stay in place.
-    speed = features["body_velocity"][..., :2].norm(dim=-1)
+    speed = features["world_velocity"][..., :2].norm(dim=-1)
     return (speed / params["drift_speed_scale"]).clamp(max=1.0)
 
 
@@ -2001,7 +2198,7 @@ def _hop_rhythm(features: TensorDictBase, params: TensorDictBase) -> torch.Tenso
     # every bit of crouch-and-extend motion on the beat.
     beat = features["gait_phase"].cos().sign()
     fraction = (
-        features["body_velocity"][..., 2] * beat / params["hop_velocity_amplitude"]
+        features["world_velocity"][..., 2] * beat / params["hop_velocity_amplitude"]
     )
     return fraction.clamp(-1.0, 1.0) * _gait_gate(features)
 
@@ -2014,7 +2211,7 @@ def _launch(features: TensorDictBase, params: TensorDictBase) -> torch.Tensor:
     # amplitude so a faster extension keeps paying up to take-off speed.
     planted = features["contacts"].all(dim=-1).to(features["upright"].dtype)
     upward = (
-        features["body_velocity"][..., 2] / params["launch_velocity_scale"]
+        features["world_velocity"][..., 2] / params["launch_velocity_scale"]
     ).clamp(0.0, 1.0)
     return upward * planted * _gait_gate(features)
 
@@ -2083,6 +2280,12 @@ class MicroDuckTaskSampler(Transform):
 
         >>> MicroDuckTaskSampler.fixed([1, 2, 0, 2]).sample(torch.Size([4]))[:, 0]
         tensor([1, 2, 0, 2])
+
+    .. seealso::
+        :class:`MicroDuckTask` defines one row of the sampled library;
+        :class:`MicroDuckEnv` consumes the selected task id; and
+        :class:`MicroDuckSkillController` uses the same ordered library to
+        interpret high-level skill decisions.
     """
 
     def __init__(

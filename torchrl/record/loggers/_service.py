@@ -5,12 +5,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from tensordict import TensorDictBase
 from torch import Tensor
 
-from torchrl.record.loggers.common import _make_metrics_safe
+from torchrl.record.loggers.common import _make_metrics_safe, PrefixLogger
+
+if TYPE_CHECKING:
+    from typing import Self
 
 
 class _LoggerClient:
@@ -36,6 +39,12 @@ class _LoggerClient:
     ) -> None:
         """Log a scalar and wait for service-side completion."""
         self._submit("log_scalar", (name, value), {"step": step, **kwargs}, wait=True)
+
+    def with_prefix(self, prefix: str) -> Self | PrefixLogger[Self]:
+        """Return a namespaced view over this logger client."""
+        if prefix == "":
+            return self
+        return PrefixLogger(self, prefix)
 
     def log_video(
         self, name: str, video: Tensor, step: int | None = None, **kwargs

@@ -300,9 +300,11 @@ Available Transforms
     MeanActionSelector
     ModuleTransform
     MultiAction
+    ClosedLoopMultiAction
     NextObservationDelta
     NextStateReconstructor
     PolicyAgeFilter
+    PolicyVersion
     NoopResetEnv
     ObservationNorm
     ObservationTransform

@@ -15,6 +15,10 @@ the concrete logger method has run, propagate service-side errors immediately,
 and preserve custom ``log_*`` return values. Bounded transport queues provide
 backpressure when several clients log concurrently.
 
+Use :meth:`Logger.with_prefix` to create composable views that place metrics
+and media under a shared namespace without changing hyperparameter keys. The
+view delegates lifecycle and checkpoint state to the same underlying logger.
+
 .. code-block:: python
 
     from torchrl.record import CSVLogger
@@ -27,6 +31,10 @@ backpressure when several clients log concurrently.
     )
     worker_logger = logger.client()
     worker_logger.log_scalar("loss", 1.0, step=0)
+    training = logger.with_prefix("training")
+    evaluation = logger.with_prefix("evaluation")
+    training.log_scalar("loss", 0.5, step=10)
+    evaluation.log_scalar("reward", 12.0, step=10)
     logger.flush()  # Flush buffers owned by the concrete logging SDK.
     logger.shutdown()
 
@@ -35,6 +43,7 @@ backpressure when several clients log concurrently.
     :template: rl_template_fun.rst
 
     Logger
+    PrefixLogger
     ProcessLogger
     RayLogger
     csv.CSVLogger

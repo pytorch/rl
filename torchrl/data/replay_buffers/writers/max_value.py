@@ -224,14 +224,14 @@ class TensorDictMaxValueWriter(Writer):
     def _write_count(self):
         _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
-            _write_count = self._write_count_value = mp.Value("i", 0)
+            _write_count = self._write_count_value = mp.Value("q", 0)
         return _write_count.value
 
     @_write_count.setter
     def _write_count(self, value):
         _write_count = getattr(self, "_write_count_value", None)
         if _write_count is None:
-            _write_count = self._write_count_value = mp.Value("i", 0)
+            _write_count = self._write_count_value = mp.Value("q", 0)
         _write_count.value = value
 
     def add(self, data: Any) -> int | torch.Tensor:
@@ -316,7 +316,7 @@ class TensorDictMaxValueWriter(Writer):
     def __setstate__(self, state):
         write_count = state.pop("write_count__context", None)
         if write_count is not None:
-            state["_write_count_value"] = mp.Value("i", write_count)
+            state["_write_count_value"] = mp.Value("q", write_count)
         self.__dict__.update(state)
 
     def dumps(self, path):

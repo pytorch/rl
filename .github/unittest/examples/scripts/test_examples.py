@@ -105,6 +105,15 @@ RUNNABLE_EXAMPLES = (
         "examples/distributed/ray_dqn_trainer.py",
     ),
     ExampleSpec(
+        "ray-wandb-monitor",
+        "examples/ray_wandb_monitor.py",
+        env={
+            "WANDB_MODE": "offline",
+            "WANDB_DIR": "{tmp_path}",
+            "RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO": "0",
+        },
+    ),
+    ExampleSpec(
         "env-compile-step-reset",
         "examples/envs/benchmark_compile_step_and_maybe_reset.py",
         (
@@ -125,6 +134,16 @@ RUNNABLE_EXAMPLES = (
     ),
     ExampleSpec("env-gym-conversion", "examples/envs/gym_conversion_examples.py"),
     ExampleSpec("llm-tool-service", "examples/llm/tool_service_example.py"),
+    ExampleSpec(
+        "menagerie-ppo",
+        "examples/menagerie/ppo.py",
+        (
+            "--task=hold_pose",
+            "--robot=universal_robots_ur5e",
+            "--smoke",
+            "--ckpt={tmp_path}/menagerie_ppo.ckpt",
+        ),
+    ),
     ExampleSpec(
         "mujoco-cube-bowl",
         "examples/mujoco_macros/cube_bowl_macros.py",

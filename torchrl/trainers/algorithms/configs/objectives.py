@@ -14,6 +14,7 @@ from torchrl.objectives import (
     CQLLoss,
     DDPGLoss,
     DQNLoss,
+    FQLLoss,
     IQLLoss,
     KLPENPPOLoss,
     PPOLoss,
@@ -40,6 +41,30 @@ class LossConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for loss configurations."""
+
+
+@dataclass
+class FQLLossConfig(LossConfig):
+    """Hydra configuration for :class:`~torchrl.objectives.FQLLoss`."""
+
+    flow_policy: Any = None
+    actor_network: Any = None
+    qvalue_network: Any = None
+    num_qvalue_nets: int = 2
+    alpha: float = 10.0
+    q_aggregation: str = "mean"
+    normalize_q_loss: bool = False
+    reduction: str = "mean"
+    gamma: float = 0.99
+    _target_: str = "torchrl.trainers.algorithms.configs.objectives.make_fql_loss"
+    _convert_: str = "object"
+
+
+def make_fql_loss(*, gamma=0.99, **kwargs) -> FQLLoss:
+    """Build FQL and configure its TD target discount."""
+    loss = FQLLoss(**kwargs)
+    loss.make_value_estimator(gamma=gamma)
+    return loss
 
 
 @dataclass
@@ -413,20 +438,26 @@ class HardUpdateConfig(TargetNetUpdaterConfig):
 
 def _make_gae(*args, **kwargs) -> GAE:
     group_key = _normalize_hydra_key(kwargs.pop("group_key", None))
-    return GAE(*args, group_key=group_key, **kwargs)
+    valid_key = _normalize_hydra_key(kwargs.pop("valid_key", None))
+    gae = GAE(*args, group_key=group_key, **kwargs)
+    if valid_key is not None:
+        gae.set_keys(valid=valid_key)
+    return gae
 
 
 @dataclass
 class GAEConfig(LossConfig):
     """Hydra configuration for :class:`~torchrl.objectives.value.GAE`.
 
-    Every kwarg accepted by ``GAE.__init__`` is exposed as a field here.
+    Every kwarg accepted by ``GAE.__init__`` is exposed as a field here. The
+    ``valid_key`` field is applied through
+    :meth:`~torchrl.objectives.value.GAE.set_keys` by the factory.
     """
 
     gamma: float | None = None
     lmbda: float | None = None
     value_network: Any = None
-    average_gae: bool = True
+    average_gae: bool = False
     differentiable: bool = False
     vectorized: bool | None = None
     skip_existing: bool | None = None
@@ -444,6 +475,7 @@ class GAEConfig(LossConfig):
     value_chunk_dim: int = 0
     shifted_budget: int = 1
     group_key: Any = None
+    valid_key: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_gae"
     _partial_: bool = False
 

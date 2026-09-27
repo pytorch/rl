@@ -23,7 +23,12 @@ from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.utils import (
+    _CollectorProgress,
+    _NON_NN_POLICY_WEIGHTS,
+    _validate_replay_write_mode,
+    split_trajectories,
+)
 from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -315,6 +320,13 @@ class RayCollector(BaseCollector):
             See :class:`~torchrl.collectors.BaseCollector` for the full
             description of the completeness guarantee and storage contract.
             Defaults to ``None``.
+        replay_write_mode (``"rollout"``, ``"trajectory"``, optional): Selects
+            fixed-frame rollout writes or flat complete-trajectory writes to
+            the replay service. Passed through to every remote collector.
+            Defaults to ``None``.
+        trajs_per_write (int, optional): Number of completed trajectories to
+            group in each replay-buffer ``extend`` call in trajectory mode.
+            Defaults to ``None``.
 
     Examples:
         >>> from torch import nn
@@ -384,6 +396,8 @@ class RayCollector(BaseCollector):
         use_env_creator: bool = False,
         no_cuda_sync: bool | None = None,
         trajs_per_batch: int | None = None,
+        trajs_per_write: int | None = None,
+        replay_write_mode: Literal["rollout", "trajectory"] | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     ):
@@ -401,6 +415,13 @@ class RayCollector(BaseCollector):
 
         if collector_kwargs is None:
             collector_kwargs = {}
+        self.replay_write_mode = _validate_replay_write_mode(
+            replay_write_mode,
+            has_replay_buffer=replay_buffer is not None,
+            trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
+        )
+        self._trajectory_writes_in_workers = self.replay_write_mode == "trajectory"
         if pre_collect_hook is not None:
             if isinstance(collector_kwargs, dict):
                 collector_kwargs.setdefault("pre_collect_hook", pre_collect_hook)
@@ -432,6 +453,18 @@ class RayCollector(BaseCollector):
             else:
                 for ck in collector_kwargs:
                     ck.setdefault("trajs_per_batch", trajs_per_batch)
+        if trajs_per_write is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("trajs_per_write", trajs_per_write)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("trajs_per_write", trajs_per_write)
+        if replay_write_mode is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("replay_write_mode", replay_write_mode)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("replay_write_mode", replay_write_mode)
 
         # Make sure input parameters are consistent
         def check_consistency_with_num_collectors(param, param_name, num_collectors):
@@ -986,6 +1019,12 @@ class RayCollector(BaseCollector):
             other_params = dict(other_params)  # Make a copy to avoid mutating original
             other_params["worker_idx"] = i
 
+            # Read-only stats must remain reachable while the default actor
+            # queue is busy collecting. Keep state-changing calls serialized.
+            remote_config = dict(remote_config)
+            concurrency_groups = dict(remote_config.get("concurrency_groups") or {})
+            concurrency_groups.setdefault("_torchrl_stats", 1)
+            remote_config["concurrency_groups"] = concurrency_groups
             cls = self.collector_class.as_remote(remote_config).remote
             worker_policy = policy[i] if isinstance(policy, Sequence) else policy
             collector = self._make_collector(
@@ -1071,18 +1110,19 @@ class RayCollector(BaseCollector):
         """Returns a cheap, serializable snapshot of the collector's progress.
 
         See :meth:`~torchrl.collectors.BaseCollector.stats` for the general
-        contract. Worker snapshots are requested from all remote collectors
-        concurrently, one RPC per worker bounded by ``timeout``; a worker
-        whose request fails or does not reply in time is counted as dead and
-        skipped. Note that, unlike multiprocessing collectors, every call
-        (including ``workers="aggregate"``) contacts each remote collector to
-        derive ``"workers_alive"`` and ``"worker_frames"``.
+        contract. Worker snapshots use a dedicated actor concurrency group,
+        so they do not queue behind collection. They are requested from all
+        remote collectors concurrently, one RPC per worker bounded by
+        ``timeout``; a worker whose request fails or does not reply in time
+        is counted as dead and skipped. Unlike multiprocessing collectors,
+        every call (including ``workers="aggregate"``) contacts each remote
+        collector to derive ``"workers_alive"`` and ``"worker_frames"``.
 
         Args:
             workers (str, optional): controls the worker view. With
                 ``"aggregate"`` (default), the snapshot contains the
-                coordinator counters plus ``"worker_frames"``, the sum of the
-                frame counters reported by the remote collectors. With
+                coordinator counters plus ``"worker_frames"`` and sums of the
+                progress counters reported by the remote collectors. With
                 ``"per_worker"``, each remote snapshot is namespaced as
                 ``"worker_<idx>/<metric>"`` instead. ``"both"`` returns the
                 union. ``"workers"`` and ``"workers_alive"`` are always
@@ -1113,7 +1153,10 @@ class RayCollector(BaseCollector):
                 stats["completed"] = bool(self.collected_frames >= self.total_frames)
         remote_collectors = self.remote_collectors
         stats["workers"] = len(remote_collectors)
-        futures = [collector.stats.remote() for collector in remote_collectors]
+        futures = [
+            collector.stats.options(concurrency_group="_torchrl_stats").remote()
+            for collector in remote_collectors
+        ]
         ready = set()
         if futures:
             ready_list, _ = ray.wait(futures, num_returns=len(futures), timeout=timeout)
@@ -1138,6 +1181,14 @@ class RayCollector(BaseCollector):
             ]
             if worker_frames:
                 stats["worker_frames"] = int(sum(worker_frames))
+            for key in _CollectorProgress._KEYS:
+                values = [
+                    snapshot[key]
+                    for snapshot in per_worker
+                    if snapshot is not None and key in snapshot
+                ]
+                if values:
+                    stats[key] = int(sum(values))
         if workers in ("per_worker", "both"):
             for idx, snapshot in enumerate(per_worker):
                 if snapshot is None:

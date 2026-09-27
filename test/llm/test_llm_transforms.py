@@ -9,6 +9,7 @@ import argparse
 import importlib.util
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import torch
@@ -18,6 +19,7 @@ from torch import nn
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms import (
+    BrowserTransform,
     ExecuteToolsInOrder,
     IncrementalTokenizer,
     JSONCallParser,
@@ -29,7 +31,11 @@ from torchrl.envs.llm.transforms import (
     ToolRegistry,
     XMLBlockParser,
 )
-from torchrl.envs.transforms import Tokenizer as EnvTokenizer, TransformedEnv
+from torchrl.envs.transforms import (
+    PolicyVersion as EnvPolicyVersion,
+    Tokenizer as EnvTokenizer,
+    TransformedEnv,
+)
 from torchrl.testing.mocking_classes import CountingEnv
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -106,6 +112,24 @@ class TestToolRegistry:
         registry = ToolRegistry()
         with pytest.raises(KeyError, match="Unknown tool: nonexistent"):
             registry.get("nonexistent")
+
+
+class TestBrowserTransform:
+    def test_no_current_event_loop(self):
+        # A worker thread has no current event loop (neither does the main thread
+        # on Python 3.14), so building and calling the transform must not need one.
+        def navigate_blocked_domain():
+            transform = BrowserTransform(allowed_domains=["example.com"])
+            return transform.tools["browser"](
+                action="navigate", url="https://pytorch.org"
+            )
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            result = pool.submit(navigate_blocked_domain).result()
+        assert result == {
+            "success": False,
+            "error": "Domain not allowed. Must be one of: ['example.com']",
+        }
 
 
 class TestXMLBlockParser:
@@ -815,6 +839,9 @@ class TestTokenizer:
 
 
 class TestPolicyVersion:
+    def test_compatibility_alias(self):
+        assert PolicyVersion is EnvPolicyVersion
+
     def test_int_version_dtype_and_device(self):
         """Integer policy version must stay int64 and follow the tensordict device.
 

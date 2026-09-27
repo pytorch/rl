@@ -4,7 +4,7 @@ import queue
 from collections.abc import Callable
 from functools import partial
 from multiprocessing import connection, queues
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -33,7 +33,28 @@ from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
 
 
-def _main_async_collector(
+def _main_async_collector(*args, **kwargs) -> None:
+    """Run a collector worker and clean up expected parent-side disconnects."""
+    inner_collector_ref = []
+    try:
+        _main_async_collector_impl(
+            *args, _inner_collector_ref=inner_collector_ref, **kwargs
+        )
+    except (EOFError, BrokenPipeError, KeyboardInterrupt):
+        # The parent owns the worker lifecycle. Its pipe disappearing, or a
+        # process-group interrupt reaching the child, is a normal shutdown path.
+        pass
+    finally:
+        if inner_collector_ref:
+            try:
+                inner_collector_ref[0].shutdown()
+            except Exception:
+                # Cleanup must not mask an exception raised by collection or
+                # turn a parent-initiated shutdown into a child traceback.
+                pass
+
+
+def _main_async_collector_impl(
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
     create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],  # noqa: F821
@@ -67,12 +88,15 @@ def _main_async_collector(
     init_random_frames: int | None = None,
     trajs_per_batch: int | None = None,
     trajs_per_write: int | None = None,
+    replay_write_mode: Literal["rollout", "trajectory"] | None = None,
     init_fn: Callable[[], None] | None = None,
     auto_register_policy_transforms: bool | None = None,
     track_policy_version: bool = False,
     pre_collect_hook: Callable[[], None] | None = None,
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     compact_obs: bool = False,
+    _inner_collector_ref: list[BaseCollector] | None = None,
+    collector_progress=None,
 ) -> None:
     # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
     # Runs before any CUDA/torchrl work in the child process.
@@ -101,12 +125,19 @@ def _main_async_collector(
         init_random_frames if init_random_frames is not None else 0
     )
     try:
-        # When trajs_per_batch is set, _iter_by_trajectories() handles RB writes
-        # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
-        # it detects the RB. When trajs_per_batch is None, keep existing behavior.
-        collector_class._ignore_rb = extend_buffer if trajs_per_batch is None else False
+        # In trajectory mode, _iter_by_trajectories() handles replay writes.
+        # Set _ignore_rb=False so the inner collector detects the buffer.
+        trajectory_writes = replay_write_mode == "trajectory" or (
+            replay_write_mode is None and trajs_per_batch is not None
+        )
+        collector_class._ignore_rb = extend_buffer if not trajectory_writes else False
         runner_handles_replay_buffer = replay_buffer is not None and bool(
             collector_class._ignore_rb
+        )
+        replay_write_kwargs = (
+            {"replay_write_mode": replay_write_mode}
+            if replay_write_mode is not None
+            else {}
         )
         inner_collector = collector_class(
             create_env_fn,
@@ -151,7 +182,11 @@ def _main_async_collector(
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
             compact_obs=compact_obs,
+            _collector_progress=collector_progress,
+            **replay_write_kwargs,
         )
+        if _inner_collector_ref is not None:
+            _inner_collector_ref.append(inner_collector)
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
         if weight_sync_schemes:
@@ -346,6 +381,7 @@ def _main_async_collector(
                         next_data, replay_buffer
                     )
                     replay_buffer.extend(next_data)
+                    inner_collector._record_replay_write(next_data.numel())
 
                 if run_free:
                     continue
@@ -514,6 +550,8 @@ def _main_async_collector(
                     stop()
             del collected_tensordict, data, next_data, data_in
             inner_collector.shutdown()
+            if _inner_collector_ref is not None:
+                _inner_collector_ref.clear()
             del inner_collector, dc_iter
             pipe_child.send("closed")
             if verbose:

@@ -111,6 +111,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     DreamerV3ImageEncoderConfig,
     DreamerV3MLPConfig,
     DreamerV3SeededPolicyConfig,
+    LowLevelControllerConfig,
     MLPConfig,
     ModelConfig,
     QMixerNetworkConfig,
@@ -118,6 +119,8 @@ from torchrl.trainers.algorithms.configs.modules import (
     RSSMStateEstimatorV3Config,
     TanhModuleConfig,
     TanhNormalModelConfig,
+    TdMpc2MLPConfig,
+    TdMpc2WorldModelConfig,
     TensorDictModuleConfig,
     TensorDictSequentialConfig,
     ValueModelConfig,
@@ -129,6 +132,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     DDPGLossConfig,
     DQNLossConfig,
     DreamerV3LossConfig,
+    FQLLossConfig,
     GAEConfig,
     HardUpdateConfig,
     IQLLossConfig,
@@ -146,6 +150,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     CQLTrainerConfig,
     DDPGTrainerConfig,
     DQNTrainerConfig,
+    FQLTrainerConfig,
     GRPOTrainerConfig,
     IQLTrainerConfig,
     OfflineToOnlineTrainerConfig,
@@ -167,6 +172,7 @@ from torchrl.trainers.algorithms.configs.transforms import (
     CatTensorsConfig,
     CenterCropConfig,
     ClipTransformConfig,
+    ClosedLoopMultiActionConfig,
     ComposeConfig,
     ConditionalPolicySwitchConfig,
     ConditionalSkipConfig,
@@ -325,6 +331,9 @@ __all__ = [
     "DreamerV3SeededPolicyConfig",
     "RSSMStateEstimatorV3Config",
     "MLPConfig",
+    "LowLevelControllerConfig",
+    "TdMpc2MLPConfig",
+    "TdMpc2WorldModelConfig",
     "ModelConfig",
     "TanhModuleConfig",
     "TanhNormalModelConfig",
@@ -368,6 +377,7 @@ __all__ = [
     "LastActionConfig",
     "LineariseRewardsConfig",
     "ModuleTransformConfig",
+    "ClosedLoopMultiActionConfig",
     "MultiActionConfig",
     "MultiStepTransformConfig",
     "NoopResetEnvConfig",
@@ -433,6 +443,7 @@ __all__ = [
     "DDPGLossConfig",
     "DQNLossConfig",
     "DreamerV3LossConfig",
+    "FQLLossConfig",
     "IQLLossConfig",
     "LossConfig",
     "PPOLossConfig",
@@ -448,6 +459,7 @@ __all__ = [
     "CQLTrainerConfig",
     "DDPGTrainerConfig",
     "DQNTrainerConfig",
+    "FQLTrainerConfig",
     "IQLTrainerConfig",
     "OfflineToOnlineTrainerConfig",
     "OnPolicyTrainerConfig",
@@ -547,6 +559,7 @@ def _register_configs():
 
     # Network configs
     cs.store(group="network", name="mlp", node=MLPConfig)
+    cs.store(group="network", name="tdmpc2_mlp", node=TdMpc2MLPConfig)
     cs.store(group="network", name="dreamer_v3_mlp", node=DreamerV3MLPConfig)
     cs.store(
         group="network",
@@ -584,6 +597,7 @@ def _register_configs():
     cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
     cs.store(group="model", name="value", node=ValueModelConfig)
     cs.store(group="model", name="qvalue", node=QValueModelConfig)
+    cs.store(group="model", name="tdmpc2_world_model", node=TdMpc2WorldModelConfig)
 
     # Exploration configs
     cs.store(
@@ -661,6 +675,12 @@ def _register_configs():
     cs.store(group="transform", name="module", node=ModuleTransformConfig)
     cs.store(group="transform", name="conditional_skip", node=ConditionalSkipConfig)
     cs.store(group="transform", name="multi_action", node=MultiActionConfig)
+    cs.store(
+        group="transform",
+        name="closed_loop_multi_action",
+        node=ClosedLoopMultiActionConfig,
+    )
+    cs.store(group="model", name="low_level_controller", node=LowLevelControllerConfig)
     cs.store(group="transform", name="timer", node=TimerConfig)
     cs.store(
         group="transform",
@@ -697,6 +717,7 @@ def _register_configs():
     cs.store(group="loss", name="ddpg", node=DDPGLossConfig)
     cs.store(group="loss", name="dqn", node=DQNLossConfig)
     cs.store(group="loss", name="dreamer_v3", node=DreamerV3LossConfig)
+    cs.store(group="loss", name="fql", node=FQLLossConfig)
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="mixer", node=QMixerLossConfig)
@@ -772,6 +793,7 @@ def _register_configs():
     cs.store(group="trainer", name="cql", node=CQLTrainerConfig)
     cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
+    cs.store(group="trainer", name="fql", node=FQLTrainerConfig)
     cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
     cs.store(
         group="trainer",

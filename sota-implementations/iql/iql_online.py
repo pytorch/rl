@@ -11,6 +11,7 @@ It works across Gym and MuJoCo over a variety of tasks.
 The helper functions are coded in the utils.py associated with this script.
 
 """
+
 from __future__ import annotations
 
 import warnings
@@ -58,6 +59,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -179,12 +183,15 @@ def main(cfg: DictConfig):  # noqa: F821
         ]
 
         # Logging
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(
-                ExplorationType.DETERMINISTIC
-            ), torch.no_grad(), timeit("evaluating"):
+            with (
+                set_exploration_type(ExplorationType.DETERMINISTIC),
+                torch.no_grad(),
+                timeit("evaluating"),
+            ):
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
                     model[0],
@@ -193,25 +200,30 @@ def main(cfg: DictConfig):  # noqa: F821
                 )
                 eval_env.apply(dump_video)
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                metrics_to_log["eval/reward"] = eval_reward
+                evaluation_metrics["reward"] = eval_reward
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][
                 tensordict["next", "done"]
             ]
-            metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+            training_metrics["reward"] = episode_rewards.mean().item()
+            training_metrics["episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = loss_info["loss_qvalue"]
-            metrics_to_log["train/actor_loss"] = loss_info["loss_actor"]
-            metrics_to_log["train/value_loss"] = loss_info["loss_value"]
-            metrics_to_log["train/entropy"] = loss_info.get("entropy")
+            training_metrics["q_loss"] = loss_info["loss_qvalue"]
+            training_metrics["actor_loss"] = loss_info["loss_actor"]
+            training_metrics["value_loss"] = loss_info["loss_value"]
+            training_metrics["entropy"] = loss_info.get("entropy")
 
         if logger is not None:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            log_metrics(logger, metrics_to_log, collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                log_metrics(training_logger, training_metrics, collected_frames)
+            if evaluation_metrics:
+                log_metrics(evaluation_logger, evaluation_metrics, collected_frames)
+            if timing_metrics:
+                log_metrics(timing_logger, timing_metrics, collected_frames)
 
     collector.shutdown()
 

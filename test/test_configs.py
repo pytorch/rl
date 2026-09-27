@@ -27,7 +27,12 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.checkpoint import Checkpoint
-from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
+from torchrl.collectors import (
+    AsyncCollector,
+    BaseCollector,
+    MultiAsyncCollector,
+    MultiSyncCollector,
+)
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     TensorDictReplayBuffer,
@@ -71,6 +76,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.record.loggers import (
     trackio as trackio_logger_module,
@@ -78,7 +84,7 @@ from torchrl.record.loggers import (
 )
 from torchrl.record.loggers.trackio import TrackioLogger
 from torchrl.record.loggers.wandb import WandbLogger
-from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
 from torchrl.trainers import Trainer
 from torchrl.trainers.trainers import CountFramesLog
 
@@ -203,6 +209,11 @@ _CONFIG_PARITY_UNRESOLVED = {
     "TanhNormalModelConfig": "_make_tanh_normal_model composes a TensorDictModule "
     "and a ProbabilisticTensorDictModule into a ProbabilisticTensorDictSequential; "
     "there is no single wrapped class whose __init__ the Config fields mirror.",
+    "TdMpc2MLPConfig": "_make_tdmpc2_mlp fixes the TorchRL MLP architecture and "
+    "initialization to the TDMPC2-specific MLP kwargs; the remaining MLP kwargs "
+    "are intentionally not configurable.",
+    "TdMpc2WorldModelConfig": "The composite factory uses high-level architecture "
+    "and key fields that do not correspond to WorldModel.__init__ parameters.",
     "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
     "the torch versions TorchRL currently supports.",
 }
@@ -213,7 +224,12 @@ _CONFIG_PARITY_SIGNATURE_OVERRIDES = {
 
 _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
     {
+        "CatTensorsConfig",
         "CollectorConfig",
+        "ClosedLoopMultiActionConfig",
+        "InitTrackerConfig",
+        "LowLevelControllerConfig",
+        "MultiActionConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
     }
@@ -261,7 +277,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "SamplerEnsembleConfig",
         "SelectTransformConfig",
         "SignTransformConfig",
-        "SliceSamplerConfig",
         "SliceSamplerWithoutReplacementConfig",
         "SqueezeTransformConfig",
         "StackConfig",
@@ -1027,6 +1042,24 @@ class TestDataConfigs:
         assert isinstance(sampler, SliceSampler)
         assert sampler.num_slices == 10
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_slice_sampler_structured_config_instantiation(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.data import SliceSamplerConfig
+
+        sampler = instantiate(
+            SliceSamplerConfig(
+                num_slices=2,
+                output_layout="batch_time",
+                slice_end_key=("metadata", "slice_end"),
+                time_dim_name="sequence",
+            )
+        )
+
+        assert sampler.output_layout == "batch_time"
+        assert sampler.slice_end_key == ("metadata", "slice_end")
+        assert sampler.time_dim_name == "sequence"
+
     def test_streaming_slice_sampler_config(self):
         """Test StreamingSliceSamplerConfig."""
         from torchrl.trainers.algorithms.configs.data import StreamingSliceSamplerConfig
@@ -1259,6 +1292,47 @@ class TestDataConfigs:
 class TestModuleConfigs:
     """Test cases for modules.py configuration classes."""
 
+    @pytest.mark.skipif(not _configs_available, reason="Hydra is not installed")
+    def test_controller_deployment_from_config(self):
+        policy = TensorDictModule(
+            torch.nn.Identity(),
+            in_keys=[("decision", "command")],
+            out_keys=[("motor", "output")],
+        )
+        controller = instantiate_config(
+            algorithm_configs.LowLevelControllerConfig(
+                state_key=["state", "low"],
+                policy_action_key=["motor", "output"],
+                decision_spec={
+                    "_target_": "torchrl.data.Composite",
+                    "decision": {
+                        "_target_": "torchrl.data.Composite",
+                        "command": {
+                            "_target_": "torchrl.data.Bounded",
+                            "low": 0,
+                            "high": 1,
+                            "shape": [1],
+                        },
+                    },
+                },
+            ),
+            policy=policy,
+        )
+        env = instantiate_config(
+            algorithm_configs.ClosedLoopMultiActionConfig(
+                steps=2,
+                _target_="torchrl.envs.transforms.ClosedLoopMultiAction.from_env",
+            ),
+            env=CountingEnv(),
+            controller=controller,
+        )
+        td = env.reset().set(("decision", "command"), torch.ones(1))
+        transition = env.step(td)
+        assert transition["next", "observation"].item() == 2
+        assert not transition["next", "state", "low", "is_init"].any()
+        assert env.action_key == ("decision", "command")
+        env.close()
+
     def test_network_config(self):
         """Test basic NetworkConfig."""
         from torchrl.trainers.algorithms.configs.modules import NetworkConfig
@@ -1304,6 +1378,110 @@ class TestModuleConfigs:
         mlp(torch.randn(10, 10))
         # Note: instantiate() has issues with string class names for MLP
         # This is a known limitation - the MLP constructor expects actual classes
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_mlp_config(self):
+        """Test TdMpc2MLPConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs import TdMpc2MLPConfig
+
+        cfg = TdMpc2MLPConfig(
+            in_features=10,
+            out_features=5,
+            depth=2,
+            num_cells=32,
+            device="cpu",
+        )
+        network = instantiate(cfg)
+
+        assert isinstance(network, MLP)
+        assert isinstance(network[-2], torch.nn.Mish)
+        assert isinstance(network[-1], torch.nn.Linear)
+        assert network(torch.randn(3, 10)).shape == (3, 5)
+        assert all(parameter.device.type == "cpu" for parameter in network.parameters())
+
+        registered = ConfigStore.instance().load("network/tdmpc2_mlp.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+        configured = instantiate(
+            TdMpc2MLPConfig(
+                in_features=10,
+                out_features=8,
+                depth=2,
+                num_cells=16,
+                dropout=0.1,
+                output_activation={
+                    "_target_": "torch.nn.Tanh",
+                },
+                device="cpu",
+            )
+        )
+        assert isinstance(configured, MLP)
+        assert isinstance(configured[-1], torch.nn.Tanh)
+        assert [
+            module.p for module in configured if isinstance(module, torch.nn.Dropout)
+        ] == [0.1, 0.0]
+        assert configured(torch.randn(3, 10)).shape == (3, 8)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_world_model_config(self):
+        """Test TdMpc2WorldModelConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.modules import WorldModel
+        from torchrl.trainers.algorithms.configs import TdMpc2WorldModelConfig
+
+        cfg = TdMpc2WorldModelConfig(
+            observation_dim=7,
+            action_dim=3,
+            latent_dim=16,
+            encoder_dim=11,
+            encoder_depth=1,
+            mlp_dim=13,
+            simnorm_dim=4,
+            num_bins=5,
+            observation_key=["agent", "observation"],
+            action_key=["agent", "action"],
+            latent_key=["agent", "latent"],
+            reward_logits_key=["agent", "reward_logits"],
+        )
+        world_model = instantiate(cfg)
+
+        assert isinstance(world_model, WorldModel)
+        assert world_model.encoder.in_keys == [("agent", "observation")]
+        assert world_model.encoder.out_keys == [("agent", "latent")]
+        assert world_model.dynamics.in_keys == [
+            ("agent", "latent"),
+            ("agent", "action"),
+        ]
+        assert world_model.dynamics.out_keys == [("next", "agent", "latent")]
+        assert world_model.reward_head.in_keys == [
+            ("agent", "latent"),
+            ("agent", "action"),
+        ]
+        assert world_model.reward_head.out_keys == [("next", "agent", "reward_logits")]
+
+        batch_shape = torch.Size((2, 3))
+        td = TensorDict(
+            {
+                ("agent", "observation"): torch.randn(*batch_shape, 7),
+                ("agent", "action"): torch.randn(*batch_shape, 3),
+            },
+            batch_size=batch_shape,
+        )
+        out = world_model(td)
+
+        assert out["agent", "latent"].shape == (*batch_shape, 16)
+        assert out["next", "agent", "latent"].shape == (*batch_shape, 16)
+        assert out["next", "agent", "reward_logits"].shape == (
+            *batch_shape,
+            5,
+        )
+        assert torch.count_nonzero(out["next", "agent", "reward_logits"]) == 0
+
+        registered = ConfigStore.instance().load("model/tdmpc2_world_model.yaml")
+        assert registered.node["_target_"] == cfg._target_
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     @pytest.mark.parametrize(("out_features", "expected_features"), [(4, 4), (None, 8)])
@@ -1832,7 +2010,6 @@ class TestCollectorsConfig:
 
         # Define cfg_cls and kwargs based on collector type
         if collector == "async":
-
             cfg_cls = AsyncCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
@@ -1984,11 +2161,27 @@ class TestLossConfigs:
             lmbda=0.95,
             value_chunk_dim=1,
             group_key=["metadata", "task_id"],
+            valid_key=["collector", "mask"],
         )
         module = instantiate(cfg)
         assert isinstance(module, GAE)
         assert module.value_chunk_dim == 1
         assert module.group_key == ("metadata", "task_id")
+        assert module.tensor_keys.valid == ("collector", "mask")
+
+    def test_gae_config_average_gae_default_matches_gae(self):
+        from hydra.utils import instantiate
+
+        from torchrl.objectives.value import GAE
+        from torchrl.trainers.algorithms.configs.objectives import GAEConfig
+
+        gae = GAE(gamma=0.99, lmbda=0.95, value_network=None)
+        assert gae.average_gae is False
+        assert GAEConfig().average_gae is False
+        module = instantiate(GAEConfig(gamma=0.99, lmbda=0.95))
+        assert isinstance(module, GAE)
+        assert module.average_gae is False
+        assert module.average_gae is gae.average_gae
 
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
@@ -2333,14 +2526,16 @@ class TestLoggerConfigs:
         assert cfg.wandb_kwargs == {"entity": "unit-test"}
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_wandb_logger_config_instantiation(self, monkeypatch):
+    def test_wandb_logger_config_instantiation(self, monkeypatch, tmp_path):
         """Test WandbLoggerConfig instantiation."""
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.logging import WandbLoggerConfig
 
         init_kwargs = {}
+        log_dir = tmp_path / "wandb_logs" / "nested"
 
         def init(**kwargs):
+            assert log_dir.is_dir()
             init_kwargs.update(kwargs)
             return argparse.Namespace(config={})
 
@@ -2350,14 +2545,14 @@ class TestLoggerConfigs:
         cfg = WandbLoggerConfig(
             exp_name="test",
             project="torchrl",
-            log_dir="wandb_logs",
+            log_dir=str(log_dir),
             wandb_kwargs={"entity": "unit-test"},
         )
         logger = instantiate(cfg)
         assert isinstance(logger, WandbLogger)
         assert init_kwargs["name"] == "test"
         assert init_kwargs["project"] == "torchrl"
-        assert init_kwargs["dir"] == "wandb_logs"
+        assert init_kwargs["dir"] == str(log_dir)
         assert init_kwargs["entity"] == "unit-test"
 
     def test_trackio_logger_config(self):
@@ -2620,6 +2815,53 @@ class TestTrainerConfigs:
         )
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
+        assert cfg.telemetry == "standard"
+
+    def test_ppo_telemetry_config_and_factory_parity(self):
+        from omegaconf import OmegaConf
+        from torchrl.trainers.algorithms.configs.trainers import (
+            _make_onpolicy_trainer,
+            PPOTrainerConfig,
+        )
+
+        config = PPOTrainerConfig(
+            collector=None,
+            total_frames=100,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+        config = OmegaConf.merge(
+            OmegaConf.structured(config), OmegaConf.create({"telemetry": "minimal"})
+        )
+        assert config.telemetry == "minimal"
+
+        collector = MagicMock(spec=BaseCollector)
+        loss_module = MagicMock(spec=LossModule)
+        loss_module.critic_network = torch.nn.Linear(1, 1)
+        parameter = torch.nn.Parameter(torch.ones(()))
+        optimizer = torch.optim.SGD([parameter], lr=0.1)
+
+        class CapturingTrainer:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        trainer = _make_onpolicy_trainer(
+            CapturingTrainer,
+            collector=collector,
+            total_frames=100,
+            optim_steps_per_batch=1,
+            loss_module=loss_module,
+            optimizer=optimizer,
+            logger=None,
+            replay_buffer=None,
+            add_gae=False,
+            telemetry=config.telemetry,
+        )
+        assert trainer.kwargs["telemetry"] == "minimal"
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_a2c_trainer_config(self):
@@ -4967,13 +5209,38 @@ class TestWeightUpdaterConfigs:
 )
 class TestTransformConfigs:
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_init_tracker_config(self):
-        from hydra.utils import instantiate
-        from torchrl.trainers.algorithms.configs.transforms import InitTrackerConfig
+    @pytest.mark.parametrize(
+        "kwargs, init_key",
+        [({}, "is_init"), ({"init_key": "is_test_init"}, "is_test_init")],
+    )
+    def test_init_tracker_config(self, kwargs, init_key):
+        transform = instantiate_config(algorithm_configs.InitTrackerConfig(**kwargs))
+        env = TransformedEnv(ContinuousActionVecMockEnv(), transform)
+        rollout = env.rollout(3)
+        env.close()
+        assert rollout[0][init_key].all()
+        assert not rollout["next", init_key].any()
 
-        cfg = InitTrackerConfig(init_key="is_test_init")
-        assert cfg.init_key == "is_test_init"
-        instantiate(cfg)
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_cat_tensors_config(self):
+        from hydra.utils import instantiate
+        from torchrl.envs.transforms import CatTensors
+        from torchrl.trainers.algorithms.configs.transforms import CatTensorsConfig
+
+        transform = instantiate(
+            CatTensorsConfig(in_keys=["position", "velocity"], out_key="observation")
+        )
+        assert isinstance(transform, CatTensors)
+
+        td = TensorDict(
+            {
+                "position": torch.ones(2, 2),
+                "velocity": torch.ones(2, 1),
+            },
+            batch_size=[2],
+        )
+        transformed = transform(td)
+        assert transformed["observation"].shape == (2, 3)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_last_action_config(self):

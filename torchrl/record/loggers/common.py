@@ -10,7 +10,7 @@ import importlib.util
 import os
 from collections.abc import Mapping, Sequence
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, Generic, TYPE_CHECKING, TypeVar
 
 import torch
 from tensordict import TensorDictBase
@@ -25,7 +25,10 @@ if TYPE_CHECKING:
     from typing import Self
 
 
-__all__ = ["Logger"]
+__all__ = ["Logger", "PrefixLogger"]
+
+
+LoggerT = TypeVar("LoggerT")
 
 
 def _write_video(filename, video_array, **kwargs):
@@ -278,6 +281,23 @@ class Logger(metaclass=_RayServiceMetaClass):
         """Return ``self`` for the zero-overhead direct backend."""
         return self
 
+    def with_prefix(self, prefix: str) -> Self | PrefixLogger[Self]:
+        """Return a logger view that prefixes metric and media names.
+
+        An empty prefix returns this logger unchanged. Leading and trailing
+        separators are ignored; a prefix containing only separators is
+        rejected.
+
+        Args:
+            prefix: Namespace to prepend to logged names.
+
+        Returns:
+            This logger for an empty prefix, otherwise a namespaced view.
+        """
+        if prefix == "":
+            return self
+        return PrefixLogger(self, prefix)
+
     @property
     def service_backend(self) -> str:
         """The canonical deployment backend for this logger."""
@@ -391,3 +411,126 @@ class Logger(metaclass=_RayServiceMetaClass):
         for name, value in safe_metrics.items():
             self.log_scalar(name, value, step=step)
         return safe_metrics
+
+
+class PrefixLogger(Generic[LoggerT]):
+    """A namespaced view over an existing logger.
+
+    Metric, video, histogram, and string names are prefixed consistently while
+    hyperparameter keys are forwarded unchanged. Chained views compose their
+    prefixes, and lifecycle, state, and experiment access remain owned by the
+    wrapped logger. A view over an owning :class:`Logger` is accepted wherever
+    a ``Logger`` instance is required; a view over a service client retains the
+    client's restricted capabilities.
+
+    Args:
+        logger: Logger or logger service client to wrap.
+        prefix: Non-empty namespace to prepend to logged names. Leading and
+            trailing ``/`` characters are ignored.
+
+    Examples:
+        >>> from torchrl.record.loggers import CSVLogger
+        >>> logger = CSVLogger(exp_name="run", log_dir="/tmp")
+        >>> training = logger.with_prefix("training")
+        >>> training.log_scalar("loss", 1.0, step=0)
+        >>> logger.close()
+    """
+
+    def __init__(self, logger: LoggerT, prefix: str):
+        if not isinstance(prefix, str):
+            raise TypeError(f"prefix must be a string, got {type(prefix).__name__}.")
+        normalized = prefix.strip("/")
+        if not normalized:
+            raise ValueError(
+                "prefix must contain at least one character other than '/'."
+            )
+        if isinstance(logger, PrefixLogger):
+            normalized = f"{logger.prefix}/{normalized}"
+            logger = logger._logger
+        self._logger = logger
+        if isinstance(logger, Logger):
+            self._logger_cls = getattr(logger, "_service_cls", type(logger))
+        self.prefix = normalized
+
+    def _prefix_name(self, name: str) -> str:
+        return f"{self.prefix}/{name.lstrip('/')}"
+
+    def with_prefix(self, prefix: str) -> PrefixLogger[LoggerT]:
+        """Return a view with ``prefix`` appended to this namespace."""
+        if prefix == "":
+            return self
+        return PrefixLogger(self, prefix)
+
+    def log_scalar(
+        self,
+        name: str,
+        value: float,
+        step: int | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Log a scalar under this namespace."""
+        self._logger.log_scalar(self._prefix_name(name), value, step=step, **kwargs)
+
+    def log_video(
+        self,
+        name: str,
+        video: Tensor,
+        step: int | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Log a video under this namespace."""
+        self._logger.log_video(self._prefix_name(name), video, step=step, **kwargs)
+
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
+        """Log hyperparameters without changing their keys."""
+        self._logger.log_hparams(cfg)
+
+    def log_histogram(self, name: str, data: Sequence, **kwargs: Any) -> None:
+        """Log a histogram under this namespace."""
+        self._logger.log_histogram(self._prefix_name(name), data, **kwargs)
+
+    def log_str(
+        self,
+        name: str,
+        value: str,
+        step: int | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Log a string under this namespace."""
+        self._logger.log_str(self._prefix_name(name), value, step=step, **kwargs)
+
+    def log_metrics(
+        self,
+        metrics: dict[str, Any] | TensorDictBase,
+        step: int | None = None,
+        *,
+        keys_sep: str = "/",
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Log a batch of metrics under this namespace."""
+        safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
+        prefixed_metrics = {
+            self._prefix_name(name): value for name, value in safe_metrics.items()
+        }
+        return self._logger.log_metrics(
+            prefixed_metrics, step=step, keys_sep=keys_sep, **kwargs
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        wrapped = object.__getattribute__(self, "_logger")
+        attribute = getattr(wrapped, name)
+        if name not in ("client", "start"):
+            return attribute
+
+        def preserve_view(*args, **kwargs):
+            logger = attribute(*args, **kwargs)
+            if logger is None:
+                return None
+            if logger is object.__getattribute__(self, "_logger"):
+                return self
+            return PrefixLogger(logger, self.prefix)
+
+        return preserve_view
+
+    def __repr__(self) -> str:
+        return f"PrefixLogger(prefix={self.prefix!r}, logger={self._logger!r})"

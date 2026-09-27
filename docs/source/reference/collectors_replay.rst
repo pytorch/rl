@@ -80,17 +80,16 @@ will work:
 .. important::
 
     The ``ndim=2`` and ``ndim=3`` examples above apply to **fixed-frame
-    batches** (the default, without ``trajs_per_batch``).  When
-    ``trajs_per_batch`` is set, each trajectory is written to the buffer as a
+    batches** (the default ``replay_write_mode="rollout"`` behavior).  With
+    ``replay_write_mode="trajectory"``, each trajectory is written as a
     **flat 1-D sequence** of variable length.  A storage with ``ndim >= 2``
     expects a fixed second dimension that variable-length trajectories cannot
-    satisfy.  Always use the default ``ndim=1`` when combining
-    ``trajs_per_batch`` with a replay buffer.
+    satisfy.  Always use the default ``ndim=1`` for trajectory writes.
 
 .. _collectors_replay_trajs:
 
-Complete trajectory collection with ``trajs_per_batch``
--------------------------------------------------------
+Complete-trajectory replay writes
+---------------------------------
 
 When using ``Collector(num_collectors=N)`` with fixed-frame batches (the
 concrete result is :class:`~torchrl.collectors.MultiSyncCollector` or
@@ -101,15 +100,18 @@ come from **different workers and different episodes** without an intervening
 so it may draw slices that straddle unrelated trajectories — silently
 corrupting the training data.
 
-Setting ``trajs_per_batch`` on the collector solves this.  Each worker
-assembles **complete trajectories** (episodes whose last step carries
+Setting ``replay_write_mode="trajectory"`` solves this.  Each worker assembles
+**complete trajectories** (episodes whose last step carries
 ``("next", "done") == True``) before writing them to the buffer as flat 1-D
 sequences — no padding, no artificial boundaries.  Every trajectory in the
 buffer is guaranteed to be a genuine episode segment, making it directly
 compatible with :class:`~torchrl.data.replay_buffers.SliceSampler`.
 
-``trajs_per_batch`` is not tied to replay buffers or multi-process
-collection: on any collector — including the single-process
+For compatibility, leaving ``replay_write_mode=None`` while combining a replay
+buffer with ``trajs_per_batch`` retains the same complete-trajectory write
+behavior. New code should select the write mode explicitly. This leaves
+``trajs_per_batch`` with one independent role: on any collector — including the
+single-process
 :class:`~torchrl.collectors.Collector` — setting it (without a
 ``replay_buffer``) switches the iterator from fixed-frame batches to batches
 of exactly that many **complete trajectories**, zero-padded along time with
@@ -184,7 +186,8 @@ lengths vary a lot or frames are large (images, token sequences):
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=500_000,
-        trajs_per_batch=8,   # each worker writes complete trajectories
+        replay_write_mode="trajectory",
+        trajs_per_write=8,   # optional grouping per replay extend
         sync=True,
     )
     for _ in collector:          # yields None (data goes straight to rb)
@@ -206,7 +209,7 @@ concurrently, use :meth:`~torchrl.collectors.BaseCollector.start`:
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,
-        trajs_per_batch=8,
+        replay_write_mode="trajectory",
         sync=False,
     )
     collector.start()           # workers fill rb in background threads/processes
@@ -221,8 +224,7 @@ This pattern fully decouples data collection from training and is the
 recommended way to maximise inference throughput on multi-core machines or
 GPU-accelerated environments.
 
-**Direct collectors** also support ``trajs_per_batch`` with the same
-replay-buffer semantics:
+**Direct collectors** support the same replay-buffer write mode:
 
 .. code-block:: python
 
@@ -232,14 +234,15 @@ replay-buffer semantics:
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,
-        trajs_per_batch=8,
+        replay_write_mode="trajectory",
     )
     collector.start()
     # ...
 
 .. warning::
 
-    Without ``trajs_per_batch``, a multi-process collector writes fixed-frame
+    Without ``replay_write_mode="trajectory"``, a multi-process collector
+    writes fixed-frame
     batches from each worker.  If the buffer uses a
     :class:`~torchrl.data.replay_buffers.SliceSampler`, the sampler will reconstruct episode
     boundaries from ``done`` signals, but worker batch boundaries are invisible
@@ -251,13 +254,15 @@ replay-buffer semantics:
     prevents cross-episode slices but introduces artificial truncations that
     value estimators must handle correctly.
 
-    ``trajs_per_batch`` is the recommended solution: it guarantees clean
-    episode boundaries in the buffer without artificial truncations.
+    ``replay_write_mode="trajectory"`` is the recommended solution: it
+    guarantees clean episode boundaries in the buffer without artificial
+    truncations.
 
 .. seealso::
 
-    - :class:`~torchrl.collectors.BaseCollector` for the full ``trajs_per_batch``
-      API, completeness guarantee, and batched-environment behaviour.
+    - :class:`~torchrl.collectors.BaseCollector` for the full
+      ``replay_write_mode`` API, completeness guarantee, and
+      batched-environment behaviour.
     - :class:`~torchrl.data.replay_buffers.SliceSampler` for configuring sub-sequence sampling
       from the buffer.
     - :ref:`Trajectory boundaries <ref_traj_boundaries>` for the contract the

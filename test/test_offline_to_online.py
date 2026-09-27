@@ -480,6 +480,79 @@ class _StubTrainer:
 
 
 class TestOfflineToOnlineReplayBufferHook:
+    def test_mixed_replay_aligns_transformed_offline_keys(self):
+        from torchrl.envs import RenameTransform
+        from torchrl.trainers.algorithms.offline_to_online import (
+            OfflineToOnlineReplayBufferHook,
+        )
+
+        offline = ReplayBuffer(storage=LazyTensorStorage(4))
+        batch = _make_online_data(4)
+        batch["observation"].zero_()
+        offline.extend(batch.rename_key_("observation", "raw_observation"))
+        offline.append_transform(
+            RenameTransform(in_keys=["raw_observation"], out_keys=["observation"])
+        )
+        replay = OfflineToOnlineReplayBuffer(
+            offline_dataset=offline,
+            online_capacity=4,
+            offline_fraction=0.5,
+            batch_size=4,
+        )
+        hook = OfflineToOnlineReplayBufferHook(replay)
+        online = _make_online_data(4)
+        online["observation"].fill_(1)
+        rng = torch.get_rng_state()
+        hook.extend(online)
+        torch.testing.assert_close(torch.get_rng_state(), rng)
+        assert "raw_observation" in offline.storage[0].keys()
+        sample = hook.sample(None)
+        assert "raw_observation" not in sample.keys()
+        torch.testing.assert_close(sample["observation"][:2], torch.zeros(2, 4))
+        torch.testing.assert_close(sample["observation"][2:], torch.ones(2, 4))
+
+    @pytest.mark.parametrize("preloaded", [False, True])
+    @pytest.mark.parametrize("transformed", [False, True])
+    def test_regular_replay_schema_is_deferred(self, preloaded, transformed):
+        from torchrl.envs import RenameTransform
+        from torchrl.trainers.algorithms.offline_to_online import (
+            OfflineToOnlineReplayBufferHook,
+        )
+
+        def make_replay():
+            return ReplayBuffer(
+                storage=LazyTensorStorage(16),
+                batch_size=2,
+                transform=RenameTransform(
+                    in_keys=["raw_observation"],
+                    out_keys=["observation"],
+                    in_keys_inv=["raw_observation"],
+                    out_keys_inv=["observation"],
+                )
+                if transformed
+                else None,
+            )
+
+        replay = make_replay()
+        batch = _make_online_data(2)
+        if preloaded:
+            replay.extend(batch)
+        rng = torch.get_rng_state()
+        hook = OfflineToOnlineReplayBufferHook(replay)
+        assert hook.extend(None) is None
+        hook.extend(batch)
+        hook.extend(batch.clone().set("policy_aux", torch.ones(2, 1)))
+        torch.testing.assert_close(torch.get_rng_state(), rng)
+        assert len(replay) == 4 + 2 * preloaded
+        assert "policy_aux" not in hook.sample(None).keys()
+        assert ("raw_observation" in replay.storage[0].keys()) == transformed
+        torch.testing.assert_close(replay[:2], batch)
+
+        restored = make_replay()
+        OfflineToOnlineReplayBufferHook(restored).load_state_dict(hook.state_dict())
+        torch.testing.assert_close(restored.storage[:], replay.storage[:])
+        torch.testing.assert_close(restored[:2], batch)
+
     def test_extend_uses_collector_mask(self):
         from torchrl.trainers.algorithms.offline_to_online import (
             OfflineToOnlineReplayBufferHook,
@@ -565,11 +638,176 @@ class TestOfflineToOnlineAnnealHook:
 
 
 class TestOfflineToOnlineTrainer:
-    def test_requires_offline_to_online_buffer(self):
+    @pytest.mark.parametrize("target_entropy", ["auto", -1.0])
+    def test_lazy_collector_supplies_required_action_spec(self, target_entropy):
+        from unittest.mock import MagicMock
+
+        from tensordict.nn import NormalParamExtractor, TensorDictModule
+        from torchrl.collectors import Collector
+        from torchrl.data import Bounded, Composite
+        from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
+        from torchrl.objectives import SACLoss, SoftUpdate
+        from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
+
+        actor = ProbabilisticActor(
+            TensorDictModule(
+                torch.nn.Sequential(torch.nn.Linear(3, 4), NormalParamExtractor()),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+        )
+        loss = SACLoss(
+            actor,
+            ValueOperator(MLP(5, 1, num_cells=[8]), in_keys=["observation", "action"]),
+            target_entropy=target_entropy,
+        )
+        collector = MagicMock(spec=Collector)
+        collector.getattr_env.return_value = Composite(action=Bounded(-1, 1, (2,)))
+        factory = MagicMock(return_value=collector)
+        trainer = OfflineToOnlineTrainer(
+            collector=factory,
+            loss_module=loss,
+            replay_buffer=ReplayBuffer(storage=LazyTensorStorage(4)),
+            target_net_updater=SoftUpdate(loss, tau=0.1),
+            enable_logging=False,
+        )
+        if target_entropy == "auto":
+            assert loss.target_entropy == -2
+            factory.assert_called_once_with()
+            collector.getattr_env.assert_called_once_with("full_action_spec_unbatched")
+        else:
+            factory.assert_not_called()
+        trainer.shutdown()
+
+    def test_lazy_collector_restores_pending_seed(self, tmp_path):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from torchrl.checkpoint import Checkpoint
+        from torchrl.collectors import BaseCollector
+        from torchrl.trainers.algorithms.offline_to_online import (
+            OfflinePretrainingCollector,
+        )
+
+        trainer = SimpleNamespace(
+            completed_steps=0,
+            offline_steps=0,
+            _stop_training=False,
+            collected_frames=0,
+            total_frames=1,
+            save_trainer=MagicMock(),
+            loss_module=SimpleNamespace(actor_network=torch.nn.Linear(1, 1)),
+        )
+        collector = MagicMock(spec=BaseCollector)
+        collector.__iter__.return_value = iter(())
+        source_factory = MagicMock()
+        source = OfflinePretrainingCollector(trainer, source_factory)
+        source.set_seed(23, static_seed=True)
+        factory = MagicMock(return_value=collector)
+        restored = OfflinePretrainingCollector(trainer, factory)
+        checkpoint = Checkpoint()
+        checkpoint.register("collector", source)
+        checkpoint.save(tmp_path / "pending")
+        checkpoint = Checkpoint()
+        checkpoint.register("collector", restored)
+        checkpoint.load(tmp_path / "pending")
+        factory.assert_not_called()
+        assert list(restored) == []
+        collector.set_seed.assert_called_once_with(23, static_seed=True)
+        factory.assert_called_once_with()
+        source_factory.assert_not_called()
+
+    @pytest.mark.parametrize("preloaded", [False, True])
+    @pytest.mark.parametrize("save_interval", [1, 2])
+    @pytest.mark.parametrize("stop_step", [None, 2])
+    def test_offline_updates_and_checkpoint_rotation(
+        self, tmp_path, preloaded, save_interval, stop_step
+    ):
+        from torchrl.checkpoint import Checkpoint, CheckpointRotation
+        from torchrl.modules import (
+            FlowMatchingPolicy,
+            MLP,
+            OneStepPolicy,
+            ValueOperator,
+        )
+        from torchrl.objectives import FQLLoss, SoftUpdate
+        from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
+
+        saved_steps = []
+
+        def metadata(trainer):
+            saved_steps.append(trainer.completed_steps)
+            return {}
+
+        def make_trainer(offline_steps):
+            loss = FQLLoss(
+                FlowMatchingPolicy(MLP(6, 2, num_cells=[8]), 2, num_steps=2),
+                OneStepPolicy(MLP(5, 2, num_cells=[8]), 2),
+                ValueOperator(
+                    MLP(5, 1, num_cells=[8]), in_keys=["observation", "action"]
+                ),
+            )
+            replay = ReplayBuffer(storage=LazyTensorStorage(16), batch_size=4)
+            batch = _make_online_data(8, obs_dim=3)
+            batch["next", "observation"] = torch.randn(8, 3)
+            batch["next", "done"] = torch.zeros(8, 1, dtype=torch.bool)
+            batch["next", "terminated"] = torch.zeros(8, 1, dtype=torch.bool)
+            if preloaded:
+                replay.extend(batch)
+            trainer = OfflineToOnlineTrainer(
+                loss_module=loss,
+                optimizer=torch.optim.Adam(loss.parameters(), lr=1e-3),
+                replay_buffer=replay,
+                target_net_updater=SoftUpdate(loss, tau=0.1),
+                offline_steps=offline_steps,
+                checkpoint=Checkpoint(),
+                checkpoint_rotation=CheckpointRotation(tmp_path, keep_last=2),
+                checkpoint_metadata=metadata,
+                save_trainer_interval=save_interval,
+                enable_logging=False,
+                progress_bar=False,
+            )
+            if not preloaded:
+                replay.extend(batch)
+            return trainer
+
+        trainer = make_trainer(3)
+
+        def stop_early(step, losses):
+            if step == stop_step:
+                trainer.request_stop()
+
+        trainer.register_op("post_optim_complete_log", stop_early)
+        trainer.train()
+        completed = stop_step or 3
+        expected_steps = list(range(save_interval, completed, save_interval)) + [
+            completed
+        ]
+        assert saved_steps == expected_steps
+        assert trainer.completed_steps == completed
+        assert trainer.collected_frames == 0
+        assert [
+            Checkpoint.manifest(path)["metadata"]["optim_steps"]
+            for path in trainer.checkpoint_rotation.checkpoints()
+        ] == expected_steps[-2:]
+        restored = make_trainer(4)
+        restored.load_from_file(tmp_path)
+        torch.testing.assert_close(
+            restored.loss_module.state_dict(), trainer.loss_module.state_dict()
+        )
+        restored.train()
+        assert restored.completed_steps == 4
+        assert saved_steps == expected_steps + [
+            step for step in range(completed + 1, 4) if step % save_interval == 0
+        ] + [4]
+
+    def test_online_requires_collector(self):
         from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 
         plain = ReplayBuffer(storage=LazyTensorStorage(100))
-        with pytest.raises(TypeError, match="OfflineToOnlineReplayBuffer"):
+        with pytest.raises(ValueError, match="Online training requires a collector"):
             OfflineToOnlineTrainer(
                 collector=None,
                 total_frames=1,

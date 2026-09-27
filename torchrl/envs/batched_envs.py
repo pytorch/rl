@@ -1272,6 +1272,18 @@ class BatchedEnvBase(EnvBase):
     input_spec = lazy_property(EnvBase.input_spec)
     output_spec = lazy_property(EnvBase.output_spec)
 
+    def _step_worker_mask(self, mask: torch.Tensor) -> torch.Tensor:
+        # Selecting with the full [workers, *worker_batch] mask would flatten
+        # worker batch dimensions before the actions reach their environment.
+        mask = mask.reshape(self.num_workers, -1)
+        if not (mask == mask[:, :1]).all():
+            raise ValueError(
+                "A batched environment's _step mask must select whole workers. "
+                "Place the partial-step transform inside each worker to select "
+                "individual entries of its batch."
+            )
+        return mask[:, 0]
+
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
         if not self._use_buffers:
@@ -1745,7 +1757,7 @@ class SerialEnv(BatchedEnvBase):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
-            partial_steps = partial_steps.view(tensordict.shape)
+            partial_steps = self._step_worker_mask(partial_steps)
             tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
             tensordict_in = tensordict
@@ -2724,7 +2736,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
-            partial_steps = partial_steps.view(tensordict.shape)
+            partial_steps = self._step_worker_mask(partial_steps)
             tensordict = tensordict[partial_steps]
             workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
         else:
@@ -2839,7 +2851,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         if partial_steps is not None and partial_steps.all():
             partial_steps = None
         if partial_steps is not None:
-            partial_steps = partial_steps.view(tensordict.shape)
+            partial_steps = self._step_worker_mask(partial_steps)
             workers_range = partial_steps.nonzero(as_tuple=True)[0].tolist()
             shared_tensordict_parent = TensorDict.lazy_stack(
                 [self.shared_tensordicts[i] for i in workers_range]

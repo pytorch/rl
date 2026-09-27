@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 import tensordict
 import torch
-
 from tensordict import lazy_stack, MetaData, TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
@@ -20,6 +19,11 @@ from torchrl.data.llm.history import _CHAT_TEMPLATES
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
+from torchrl.objectives.llm import (
+    reward_model_loss,
+    RewardModelLoss,
+    RewardModelLossOutput,
+)
 from torchrl.objectives.llm.distillation import (
     _distillation_loss,
     DistillationLoss,
@@ -28,6 +32,7 @@ from torchrl.objectives.llm.distillation import (
 )
 from torchrl.objectives.llm.grpo import (
     CISPOLoss,
+    DAPO,
     GRPOLoss,
     GRPOLossOutput,
     MCAdvantage,
@@ -1444,6 +1449,156 @@ class TestDistillation:
         assert torch.isfinite(loss_vals.loss_distill)
 
 
+class TestGRPOLossRefactorBehavior:
+    """Regression tests covering the _kl_to_ref refactor and the DAPO bug fix.
+
+    Each test is written so that it *fails* if the specific bug it covers is
+    reintroduced, by asserting externally observable behavior rather than
+    implementation details.
+    """
+
+    def test_set_keys_ref_log_probs_is_respected_by_kl_to_ref(self):
+        """When a custom ref_log_probs key is configured but absent from the input,
+        _kl_to_ref must raise KeyError naming the missing key rather than silently
+        falling back to the hardcoded default key.
+
+        Before the fix, forward() pre-fetched ref_log_probs and passed the result
+        (None when the configured key is absent) to _kl_to_ref.  _kl_to_ref then
+        fell back to its default key parameter ("next", "ref_log_probs") and silently
+        read data the user never intended — producing a loss with no diagnostic.
+
+        After the fix, _kl_to_ref fetches using the configured key directly and
+        raises KeyError immediately when it is absent.
+
+        Setup: data stored under the DEFAULT key ("next", "ref_log_probs", "full")
+        only; custom_key is intentionally absent.  Old code: reads default key
+        silently, no error.  New code: raises KeyError naming custom_key.
+        """
+        policy = _FixedLogProbPolicy()
+        ref_lp = torch.log(torch.tensor([0.5]))
+
+        data = _policy_loss_data(
+            current_log_prob=ref_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+        # Populate the DEFAULT key so old code would silently read from it.
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+        # The custom key below is intentionally ABSENT from data.
+        custom_key = ("my_custom_ref", "log_probs")
+
+        loss_fn = GRPOLoss(
+            policy,
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=0.1,
+        )
+        loss_fn.set_keys(ref_log_probs=custom_key)
+
+        # Old code: silently reads ("next", "ref_log_probs") — no error raised.
+        # New code: configured key is absent → KeyError naming custom_key.
+        with pytest.raises(KeyError, match="my_custom_ref"):
+            loss_fn(data)
+
+    def test_kl_to_ref_single_token_sequence(self):
+        """_kl_to_ref must not crash for single-token sequences (T == 1).
+
+        Before the fix an unconditional squeeze(-1) on a ref_log_prob of shape
+        [B, 1] collapsed the time axis to [B].  expand_as_right then received
+        mask of shape [B, 1] and ref_log_prob of shape [B] and raised:
+
+            RuntimeError: expand_as_right requires the destination tensor to have
+            less dimensions than the input tensor
+
+        The fix makes the squeeze conditional on ref having an extra trailing
+        dimension relative to cur_log_prob.  This test will raise RuntimeError
+        (not pass) if the unconditional squeeze is reintroduced.
+        """
+        cur_lp = torch.log(torch.tensor([0.5]))
+        ref_lp = cur_lp.clone()  # cur == ref => KL = 0
+
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+        # Shape [1, 1]: batch=1, T=1 — the shape that exposed the squeeze bug.
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=1.0,
+        )
+        # Must not raise RuntimeError; cur == ref => KL penalty is 0.
+        out = loss_fn(data)
+        torch.testing.assert_close(out.kl_to_ref, torch.tensor(0.0))
+
+    def test_kl_to_ref_hand_calculated_value(self):
+        """Verify the KL formula (k3 estimator) is computed correctly end-to-end.
+
+        This exercises the full path through forward() -> _kl_to_ref() with a
+        precisely known ref_log_prob, so any regression in how ref_log_prob is
+        fetched or used would produce a different numeric result.
+        """
+        cur_lp = torch.log(torch.tensor([0.5]))  # log(0.5) = -0.693...
+        ref_lp = torch.log(torch.tensor([0.25]))  # log(0.25) = -1.386...
+        # k3 KL estimator: (exp(ref - cur) - 1) - (ref - cur)
+        diff = ref_lp - cur_lp  # log(0.25) - log(0.5) = log(0.5) = -0.693...
+        expected_kl = (diff.expm1() - diff).mean()  # (0.5 - 1) - (-0.693) = 0.193...
+
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=cur_lp.tolist(),
+            advantage=[1.0],
+        )
+        data[("next", "ref_log_probs", "full")] = ref_lp.unsqueeze(-1)
+
+        kl_coeff = 0.5
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            kl_to_ref_coeff=kl_coeff,
+        )
+        out = loss_fn(data)
+
+        torch.testing.assert_close(out.kl_to_ref, expected_kl)
+        torch.testing.assert_close(out.loss_kl_to_ref, kl_coeff * expected_kl)
+
+    def test_dapo_can_be_instantiated_with_actor_network(self):
+        """Before the fix, DAPO.__init__ took tensordict as its first positional
+        argument (a copy-paste of _kl_to_ref body). Calling
+        DAPO(actor_network, clip_epsilon=...) raised TypeError because 'clip_epsilon'
+        was not in the bogus __init__ signature.
+
+        This test will fail (TypeError) if the bogus __init__ is reintroduced.
+        It further verifies that the resulting loss is numerically identical to
+        GRPOLoss with the same asymmetric epsilon, confirming that DAPO actually
+        runs its inherited _compute_policy_objective correctly.
+        """
+        cur_lp = torch.log(torch.tensor([1.25]))  # ratio > 1, within clip range
+        data = _policy_loss_data(
+            current_log_prob=cur_lp.tolist(),
+            sample_log_prob=[0.0],
+            advantage=[1.0],
+        )
+
+        # Both DAPO and GRPOLoss share _compute_policy_objective; with the same
+        # asymmetric epsilon the numeric output must be identical.
+        eps = (0.20, 0.28)
+        dapo_out = DAPO(_FixedLogProbPolicy(), clip_epsilon=eps, entropy_bonus=False)(
+            data
+        )
+        grpo_out = GRPOLoss(
+            _FixedLogProbPolicy(), clip_epsilon=eps, entropy_bonus=False
+        )(data)
+
+        torch.testing.assert_close(dapo_out.loss_objective, grpo_out.loss_objective)
+        torch.testing.assert_close(dapo_out.clip_fraction, grpo_out.clip_fraction)
+
+
 @pytest.mark.slow
 @pytest.mark.integration
 class TestGRPOLossIntegration:
@@ -1559,6 +1714,200 @@ class TestGRPOLossIntegration:
         assert result is not None
         assert hasattr(result, "loss_objective")
         assert torch.isfinite(result.loss_objective)
+
+
+class _Scorer(torch.nn.Module):
+    """A tiny, dependency-free score network mapping tokens to a scalar score."""
+
+    def __init__(self, vocab_size: int = 128, embed_dim: int = 8):
+        super().__init__()
+        self.embed = torch.nn.Embedding(vocab_size, embed_dim)
+        self.head = torch.nn.Linear(embed_dim, 1)
+
+    def forward(self, input_ids, attention_mask):
+        hidden = self.embed(input_ids).float()
+        mask = attention_mask.unsqueeze(-1)
+        pooled = (hidden * mask).sum(-2) / mask.sum(-2).clamp_min(1)
+        return self.head(pooled)
+
+
+class TestRewardModel:
+    """Tests for the model-agnostic Bradley-Terry :class:`RewardModelLoss`."""
+
+    vocab_size = 128
+    seq_len = 16
+    batch_size = 4
+
+    def _score_network(self):
+        return TensorDictModule(
+            _Scorer(self.vocab_size),
+            in_keys=["input_ids", "attention_mask"],
+            out_keys=["score"],
+        )
+
+    def _make_data(self, chosen_key="chosen", rejected_key="rejected"):
+        def _response():
+            attention_mask = torch.ones(self.batch_size, self.seq_len, dtype=torch.bool)
+            attention_mask[:, -4:] = False
+            return TensorDict(
+                input_ids=torch.randint(
+                    0, self.vocab_size, (self.batch_size, self.seq_len)
+                ),
+                attention_mask=attention_mask,
+                batch_size=[self.batch_size],
+            )
+
+        return TensorDict(
+            {
+                chosen_key: _response(),
+                rejected_key: _response(),
+            },
+            batch_size=[self.batch_size],
+        )
+
+    def test_reward_model_loss_fn_matches_formula(self):
+        """The bare loss helper matches -log_sigmoid(chosen - rejected)."""
+        chosen = torch.randn(8)
+        rejected = torch.randn(8)
+        expected = -torch.nn.functional.logsigmoid(chosen - rejected)
+        torch.testing.assert_close(
+            reward_model_loss(chosen, rejected, "none"), expected
+        )
+        torch.testing.assert_close(
+            reward_model_loss(chosen, rejected, "mean"), expected.mean()
+        )
+        torch.testing.assert_close(
+            reward_model_loss(chosen, rejected, "sum"), expected.sum()
+        )
+
+    def test_invalid_reduction_raises_during_initialization(self):
+        with pytest.raises(ValueError, match="Invalid reduction"):
+            RewardModelLoss(
+                score_network=self._score_network(),
+                reduction="invalid",
+            )
+
+    def test_forward_output_type_and_backward(self):
+        loss_fn = RewardModelLoss(score_network=self._score_network())
+        out = loss_fn(self._make_data())
+        assert isinstance(out, RewardModelLossOutput)
+        assert out.loss_reward_model.shape == ()
+        assert torch.isfinite(out.loss_reward_model)
+        assert out.loss_center is None
+        # accuracy is a detached metric in [0, 1]
+        assert 0.0 <= out.accuracy.item() <= 1.0
+        assert not out.accuracy.requires_grad
+        # gradients flow to the score network
+        out.loss_reward_model.backward()
+        grads = [
+            p.grad for p in loss_fn.score_network.parameters() if p.grad is not None
+        ]
+        assert grads, "expected gradients to flow into the score network"
+
+    @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
+    def test_reduction(self, reduction):
+        loss_fn = RewardModelLoss(
+            score_network=self._score_network(), reduction=reduction
+        )
+        out = loss_fn(self._make_data())
+        if reduction == "none":
+            assert out.loss_reward_model.shape == (self.batch_size,)
+        else:
+            assert out.loss_reward_model.shape == ()
+
+    def test_precomputed_scores_no_network(self):
+        """With score_network=None the scores are read directly from the inputs."""
+        loss_fn = RewardModelLoss(score_network=None)
+        chosen = torch.randn(self.batch_size)
+        rejected = torch.randn(self.batch_size)
+        td = TensorDict(
+            {
+                "chosen": TensorDict(score=chosen, batch_size=[self.batch_size]),
+                "rejected": TensorDict(score=rejected, batch_size=[self.batch_size]),
+            },
+            batch_size=[self.batch_size],
+        )
+        out = loss_fn(td)
+        expected = -torch.nn.functional.logsigmoid(chosen - rejected).mean()
+        torch.testing.assert_close(out.loss_reward_model, expected)
+        expected_acc = (chosen > rejected).float().mean()
+        torch.testing.assert_close(out.accuracy, expected_acc)
+
+    def test_center_coeff(self):
+        loss_fn = RewardModelLoss(score_network=self._score_network(), center_coeff=0.1)
+        out = loss_fn(self._make_data())
+        assert out.loss_center is not None
+        assert out.loss_center.requires_grad
+        # total differentiable loss is the sum of the loss_ terms
+        (out.loss_reward_model + out.loss_center).backward()
+
+    def test_negative_center_coeff_raises(self):
+        """A negative coefficient would reward score blow-up instead of penalizing it."""
+        with pytest.raises(ValueError, match="center_coeff"):
+            RewardModelLoss(score_network=self._score_network(), center_coeff=-1.0)
+
+    def test_forward_does_not_modify_input(self):
+        """The score network runs on a shallow clone, leaving the caller's data intact."""
+        loss_fn = RewardModelLoss(score_network=self._score_network())
+        data = self._make_data()
+        keys_before = set(data.keys(True, True))
+        loss_fn(data)
+        assert set(data.keys(True, True)) == keys_before
+        assert "score" not in data["chosen"].keys()
+        assert "score" not in data["rejected"].keys()
+
+    def test_nested_keys(self):
+        """Exercise NestedKey inputs via set_keys (CLAUDE.md requirement)."""
+        loss_fn = RewardModelLoss(score_network=self._score_network())
+        loss_fn.set_keys(chosen=("data", "chosen"), rejected=("data", "rejected"))
+        inner = self._make_data()
+        td = TensorDict({"data": inner}, batch_size=[self.batch_size])
+        out = loss_fn(td)
+        assert torch.isfinite(out.loss_reward_model)
+        assert ("data", "chosen") in loss_fn.in_keys
+
+    def test_nested_score_key(self):
+        """A custom precomputed-score key does not alter a network's output key."""
+        score_network = self._score_network()
+        loss_fn = RewardModelLoss(score_network=score_network)
+        loss_fn.set_keys(score=("metrics", "score"))
+        assert score_network.out_keys == ["score"]
+        out = loss_fn(self._make_data())
+        assert torch.isfinite(out.loss_reward_model)
+
+    def test_nested_precomputed_score_key(self):
+        """Exercise NestedKey score lookup via set_keys for precomputed scores."""
+        loss_fn = RewardModelLoss(score_network=None)
+        loss_fn.set_keys(score=("metrics", "score"))
+        chosen = torch.randn(self.batch_size)
+        rejected = torch.randn(self.batch_size)
+        td = TensorDict(
+            {
+                "chosen": TensorDict(
+                    {"metrics": TensorDict(score=chosen, batch_size=[self.batch_size])},
+                    batch_size=[self.batch_size],
+                ),
+                "rejected": TensorDict(
+                    {
+                        "metrics": TensorDict(
+                            score=rejected, batch_size=[self.batch_size]
+                        )
+                    },
+                    batch_size=[self.batch_size],
+                ),
+            },
+            batch_size=[self.batch_size],
+        )
+        out = loss_fn(td)
+        expected = -torch.nn.functional.logsigmoid(chosen - rejected).mean()
+        torch.testing.assert_close(out.loss_reward_model, expected)
+
+    def test_missing_key_raises(self):
+        loss_fn = RewardModelLoss(score_network=self._score_network())
+        td = self._make_data()
+        del td["rejected"]
+        with pytest.raises(KeyError):
+            loss_fn(td)
 
 
 if __name__ == "__main__":

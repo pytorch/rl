@@ -14,6 +14,7 @@ from ._primitive import (
 from .gym_transforms import EndOfLifeTransform
 from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
+from .policy_version import PolicyVersion
 from .r3m import R3MTransform
 from .ray_service import RayTransform
 from .rb_transforms import MultiStepTransform, NextStateReconstructor, PolicyAgeFilter
@@ -33,6 +34,7 @@ from .transforms import (
     CatTensors,
     CenterCrop,
     ClipTransform,
+    ClosedLoopMultiAction,
     Compose,
     ConditionalPolicySwitch,
     ConditionalSkip,
@@ -180,10 +182,12 @@ __all__ = [
     "MeanActionSelector",
     "ModuleTransform",
     "MultiAction",
+    "ClosedLoopMultiAction",
     "MultiStepTransform",
     "NextObservationDelta",
     "NextStateReconstructor",
     "PolicyAgeFilter",
+    "PolicyVersion",
     "NoopResetEnv",
     "ObservationNorm",
     "ObservationTransform",

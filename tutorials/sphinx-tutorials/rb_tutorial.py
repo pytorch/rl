@@ -967,16 +967,16 @@ assert selected[0].length == 5
 #   episode boundaries, and why this multi-process case is the one
 #   configuration where the markers alone are not enough.
 #
-# The recommended solution is ``trajs_per_batch``, which makes each worker
-# write only **complete trajectories** to the buffer — see
+# The recommended solution is ``replay_write_mode="trajectory"``, which makes
+# each worker write only **complete trajectories** to the buffer — see
 # :ref:`the dedicated collector + replay buffer section <collectors_replay_trajs>`
 # for full examples and discussion.
 #
 # .. important::
 #
-#     When using ``trajs_per_batch``, always use a **flat 1-D storage**
+#     When using trajectory replay writes, always use a **flat 1-D storage**
 #     (the default ``ndim=1``).  Although batched environments normally call
-#     for ``ndim=2``, ``trajs_per_batch`` disassembles batches and writes
+#     for ``ndim=2``, trajectory mode disassembles batches and writes
 #     each trajectory as a variable-length 1-D sequence.  A storage with
 #     ``ndim >= 2`` expects a fixed second dimension that variable-length
 #     trajectories cannot fill.

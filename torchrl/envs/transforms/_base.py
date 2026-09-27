@@ -1346,6 +1346,8 @@ but got an object of type {type(transform)}."""
                     partial_steps = partial_steps.view(tensordict_batch_size)
                     tensordict_in_save = tensordict_in[~partial_steps]
                     tensordict_in = tensordict_in[partial_steps]
+                    if next_preset is not None:
+                        next_preset = next_preset[partial_steps]
             else:
                 if not partial_steps.any():
                     next_tensordict = self._skip_tensordict(tensordict_in)
@@ -1362,14 +1364,15 @@ but got an object of type {type(transform)}."""
                 tensordict_batch_size = self.batch_size
 
         if next_tensordict is None:
+            inverse_next = tensordict_in.get("next", None)
             next_tensordict = self.base_env._step(tensordict_in)
-            if next_preset is not None:
-                # tensordict could already have a "next" key
-                # this could be done more efficiently by not excluding but just passing
-                # the necessary keys
-                next_tensordict.update(
-                    next_preset.exclude(*next_tensordict.keys(True, True))
-                )
+            # Inverse transforms can produce a newer recurrent state. Merge it
+            # before primers run, retaining precedence for native env outputs.
+            for preset in (inverse_next, next_preset):
+                if preset is not None:
+                    next_tensordict.update(
+                        preset.exclude(*next_tensordict.keys(True, True))
+                    )
             self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
             # we want the input entries to remain unchanged
             next_tensordict = self.transform._step(tensordict_in, next_tensordict)

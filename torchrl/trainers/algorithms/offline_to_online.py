@@ -7,16 +7,18 @@ from __future__ import annotations
 
 import pathlib
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
+from torchrl.data import ReplayBuffer
 from torchrl.data.replay_buffers.offline_to_online import OfflineToOnlineReplayBuffer
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
@@ -51,10 +53,10 @@ class OfflineToOnlineReplayBufferHook(TrainerHookBase):
 
     def __init__(
         self,
-        replay_buffer: OfflineToOnlineReplayBuffer,
+        replay_buffer: ReplayBuffer | OfflineToOnlineReplayBuffer,
         *,
         batch_size: int | None = None,
-        device=None,
+        device: DEVICE_TYPING | None = None,
         align_to_offline_keys: bool = True,
     ) -> None:
         self.replay_buffer = replay_buffer
@@ -63,23 +65,28 @@ class OfflineToOnlineReplayBufferHook(TrainerHookBase):
         self.align_to_offline_keys = align_to_offline_keys
         self._offline_keys = None
 
-    def _aligned_keys(self) -> list | None:
+    def aligned_keys(self) -> list | None:
         if not self.align_to_offline_keys:
             return None
         if self._offline_keys is None:
-            offline = self.replay_buffer.offline_buffer
+            mixed = isinstance(self.replay_buffer, OfflineToOnlineReplayBuffer)
+            offline = self.replay_buffer.offline_buffer if mixed else self.replay_buffer
             if not len(offline):
                 return None
-            probe = offline.sample(1)
-            self._offline_keys = list(probe.keys(include_nested=True, leaves_only=True))
+            probe = offline[0]
+            self._offline_keys = [
+                key for key in probe.keys(True, True) if key != "index"
+            ]
         return self._offline_keys
 
-    def extend(self, batch: TensorDictBase) -> TensorDictBase:
+    def extend(self, batch: TensorDictBase | None) -> TensorDictBase | None:
+        if batch is None:
+            return None
         if ("collector", "mask") in batch.keys(True):
             batch = batch[batch.get(("collector", "mask"))]
         else:
             batch = batch.reshape(-1)
-        keys = self._aligned_keys()
+        keys = self.aligned_keys()
         if keys is not None:
             batch = batch.select(*keys, strict=False)
         elif "collector" in batch.keys():
@@ -93,6 +100,8 @@ class OfflineToOnlineReplayBufferHook(TrainerHookBase):
         return sample.to(self.device) if self.device is not None else sample
 
     def state_dict(self) -> dict:
+        if not isinstance(self.replay_buffer, OfflineToOnlineReplayBuffer):
+            return self.replay_buffer.state_dict()
         return {
             "online_buffer": self.replay_buffer.online_buffer.state_dict(),
             "offline_fraction": self.replay_buffer._offline_fraction,
@@ -100,6 +109,9 @@ class OfflineToOnlineReplayBufferHook(TrainerHookBase):
         }
 
     def load_state_dict(self, state_dict: dict) -> None:
+        if not isinstance(self.replay_buffer, OfflineToOnlineReplayBuffer):
+            self.replay_buffer.load_state_dict(state_dict)
+            return
         self.replay_buffer.online_buffer.load_state_dict(state_dict["online_buffer"])
         self.replay_buffer._offline_fraction = state_dict.get(
             "offline_fraction", self.replay_buffer._offline_fraction
@@ -147,33 +159,128 @@ class OfflineToOnlineAnnealHook(TrainerHookBase):
         trainer.register_module(name, self)
 
 
+class OfflinePretrainingCollector:
+    """Run offline updates before online collection, deferring collector creation."""
+
+    def __init__(
+        self,
+        trainer: OfflineToOnlineTrainer,
+        collector: BaseCollector | Callable[[], BaseCollector] | None,
+    ) -> None:
+        self.trainer = trainer
+        self.collector = collector if isinstance(collector, BaseCollector) else None
+        self.factory = collector if self.collector is None else None
+        self.seed = None
+
+    @property
+    def init_random_frames(self) -> int:
+        return self.collector.init_random_frames
+
+    def __iter__(self) -> Iterator[TensorDictBase]:
+        trainer = self.trainer
+        while (
+            trainer.completed_steps < trainer.offline_steps
+            and not trainer._stop_training
+        ):
+            trainer.update()
+            if (
+                trainer.completed_steps < trainer.offline_steps
+                and not trainer._stop_training
+                and trainer.completed_steps % max(trainer.save_trainer_interval, 1) == 0
+            ):
+                trainer.save_trainer(force_save=True)
+        trainer.save_trainer(force_save=True)
+        if trainer._stop_training or trainer.collected_frames >= trainer.total_frames:
+            return
+        collector = self.get_collector()
+        collector.update_policy_weights_(
+            TensorDict.from_module(trainer.loss_module.actor_network)
+        )
+        for batch in collector:
+            if ("collector", "mask") in batch.keys(True):
+                batch = batch[batch["collector", "mask"]]
+            if batch.batch_size.numel():
+                yield batch
+
+    def get_collector(self) -> BaseCollector:
+        """Create the collector when collection or environment metadata requires it."""
+        if self.collector is None:
+            self.collector = self.factory()
+            if self.seed is not None:
+                seed, kwargs = self.seed
+                self.collector.set_seed(seed, **kwargs)
+        return self.collector
+
+    def update_policy_weights_(self, weights: TensorDictBase | None = None) -> None:
+        if self.collector is not None:
+            if weights is None:
+                weights = TensorDict.from_module(self.trainer.loss_module.actor_network)
+            self.collector.update_policy_weights_(weights)
+
+    def set_seed(self, seed: int, **kwargs) -> int:
+        if self.collector is not None:
+            return self.collector.set_seed(seed, **kwargs)
+        self.seed = seed, kwargs
+        return seed
+
+    def getattr_env(self, name: str) -> Any:
+        return self.get_collector().getattr_env(name)
+
+    def shutdown(self) -> None:
+        if self.collector is not None:
+            self.collector.shutdown()
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "collector": self.collector.state_dict()
+            if self.collector is not None
+            else None,
+            "seed": self.seed,
+        }
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        self.seed = state.get("seed", self.seed)
+        if state["collector"] is not None:
+            self.get_collector().load_state_dict(state["collector"])
+
+
 class OfflineToOnlineTrainer(SACTrainer):
-    """A SAC trainer for the offline-pretrain -> online-finetune transition.
+    """Train from offline replay before optional online fine-tuning.
 
     See also :class:`~torchrl.trainers.algorithms.configs.OfflineToOnlineTrainerConfig`
     for the Hydra configuration counterpart.
 
-    Builds on :class:`~torchrl.trainers.algorithms.SACTrainer`, swapping the
-    plain replay buffer for an :class:`~torchrl.data.OfflineToOnlineReplayBuffer`.
-    Each collected batch is routed to the online buffer while optimization
-    samples a mixed batch whose offline fraction is linearly annealed to zero
-    over ``anneal_frames`` frames -- warm-starting the policy on offline data
-    and smoothly handing it over to its own online experience. All other SAC
-    behaviour (target-net updates, weight sync, logging) is inherited.
+    Builds on :class:`~torchrl.trainers.algorithms.SACTrainer` target updates,
+    collector weight synchronization and logging. Offline updates precede online
+    collection within the standard Trainer lifecycle. With a mixed buffer,
+    online collection anneals the offline sampling fraction over ``anneal_frames``.
 
     Args:
-        collector (BaseCollector): the data collector for online interactions.
-        total_frames (int): total number of frames to collect.
-        frame_skip (int): frames skipped between policy updates.
-        optim_steps_per_batch (int): optimization steps per collected batch.
-        loss_module (LossModule): the SAC loss module.
-        replay_buffer (OfflineToOnlineReplayBuffer): the offline-to-online buffer.
+        collector (BaseCollector or callable, optional): online collector or a
+            factory called after offline training, unless loss initialization
+            requires environment metadata first. Defaults to ``None``.
+        total_frames (int): online frames to collect. Defaults to zero.
+        frame_skip (int): frames skipped between policy updates. Defaults to one.
+        optim_steps_per_batch (int): updates per collected batch. Defaults to one.
+        loss_module (LossModule): actor-critic objective with an ``actor_network``.
+        replay_buffer (ReplayBuffer or OfflineToOnlineReplayBuffer): regular
+            replay storage or independently sampled offline and online buffers.
 
     Keyword Args:
         anneal_frames (int, optional): frames over which ``offline_fraction``
             decays to 0. Defaults to ``total_frames``; pass ``<= 0`` to keep the
             fraction fixed.
         batch_size (int, optional): replay-buffer sampling batch size.
+        offline_steps (int): gradient updates before online collection (default zero).
+        device (device, optional): device for sampled training batches.
+        compile_loss (bool): compile the loss module, retaining its checkpoint keys.
+
+    A regular replay buffer retains offline and online transitions together. A
+    mixed offline-to-online buffer instead controls their sampling fractions.
+    The collector may be omitted for offline-only training or supplied as a
+    factory, created when collection or environment metadata requires it.
+    Losses are logged by update count
+    during pretraining and by collected frames during online training.
 
     See :class:`~torchrl.trainers.algorithms.SACTrainer` for the remaining
     keyword arguments.
@@ -184,12 +291,15 @@ class OfflineToOnlineTrainer(SACTrainer):
     def __init__(
         self,
         *,
-        collector: BaseCollector,
-        total_frames: int,
-        frame_skip: int,
-        optim_steps_per_batch: int,
+        collector: BaseCollector | Callable[[], BaseCollector] | None = None,
+        total_frames: int = 0,
+        frame_skip: int = 1,
+        optim_steps_per_batch: int = 1,
         loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
-        replay_buffer: OfflineToOnlineReplayBuffer,
+        replay_buffer: ReplayBuffer | OfflineToOnlineReplayBuffer,
+        offline_steps: int = 0,
+        device: DEVICE_TYPING | None = None,
+        compile_loss: bool = False,
         anneal_frames: int | None = None,
         batch_size: int | None = None,
         optimizer: optim.Optimizer | None = None,
@@ -219,19 +329,22 @@ class OfflineToOnlineTrainer(SACTrainer):
         action_key: NestedKey = "action",
         observation_key: NestedKey = "observation",
     ) -> None:
-        if not isinstance(replay_buffer, OfflineToOnlineReplayBuffer):
-            raise TypeError(
-                "OfflineToOnlineTrainer requires an OfflineToOnlineReplayBuffer, "
-                f"got {type(replay_buffer).__name__}."
-            )
+        if offline_steps < 0 or total_frames < 0:
+            raise ValueError("Training budgets must be nonnegative.")
+        if total_frames and collector is None:
+            raise ValueError("Online training requires a collector.")
+        self.offline_steps = offline_steps
+        if (
+            offline_steps
+            or total_frames == 0
+            or not isinstance(collector, BaseCollector)
+        ):
+            collector = OfflinePretrainingCollector(self, collector)
         if async_collection:
             raise ValueError(
                 "OfflineToOnlineTrainer does not support async_collection."
             )
 
-        # Let SACTrainer wire up everything except the replay buffer (its
-        # ReplayBufferTrainer assumes a sampler/priority API the offline-to-online
-        # buffer does not expose); we register our own RB + annealing hooks below.
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -270,12 +383,54 @@ class OfflineToOnlineTrainer(SACTrainer):
         self.replay_buffer = replay_buffer
         self.anneal_frames = total_frames if anneal_frames is None else anneal_frames
 
-        device = getattr(replay_buffer.online_buffer.storage, "device", "cpu")
+        if device is None and isinstance(replay_buffer, OfflineToOnlineReplayBuffer):
+            device = getattr(replay_buffer.online_buffer.storage, "device", "cpu")
+        self.device = device
+        self.batch_size = batch_size
         OfflineToOnlineReplayBufferHook(
             replay_buffer, batch_size=batch_size, device=device
         ).register(self)
 
-        if self.anneal_frames > 0:
+        if (
+            isinstance(replay_buffer, OfflineToOnlineReplayBuffer)
+            and self.anneal_frames > 0
+        ):
             OfflineToOnlineAnnealHook(self, replay_buffer, self.anneal_frames).register(
                 self
             )
+
+        self.register_module("target_net_updater", target_net_updater)
+        self.register_op("post_optim_complete_log", self.record_update)
+        if compile_loss:
+            self.loss_module.compile(fullgraph=True)
+
+    @property
+    def completed_steps(self) -> int:
+        """Number of completed offline and online updates."""
+        return self._optim_count
+
+    @property
+    def checkpoint_step(self) -> int:
+        """Use update counts across both phases when pretraining is configured."""
+        return self.completed_steps if self.offline_steps else super().checkpoint_step
+
+    def record_update(self, step: int, losses: TensorDictBase) -> None:
+        self.metrics = losses.detach()
+        if (
+            self.auto_log_optim_steps
+            and self.collected_frames == 0
+            and self.logger is not None
+        ):
+            if step % max(self._log_interval, 1) == 0:
+                for key, value in self.metrics.items():
+                    if value.ndim == 0:
+                        self.logger.log_scalar(key, value.item(), step=step)
+
+    def update(self) -> TensorDictBase:
+        """Run one replay update through the standard optimization hooks."""
+        self.optim_steps(None, optim_steps_per_batch=1)
+        return self.metrics
+
+    def shutdown(self) -> None:
+        """Release the online collector, if it was initialized."""
+        self.collector.shutdown()

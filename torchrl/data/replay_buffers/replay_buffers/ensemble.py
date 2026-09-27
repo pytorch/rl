@@ -433,6 +433,7 @@ class ReplayBufferEnsemble(ReplayBuffer):
         )
         if local_generations is not None:
             metadata.set("index_generation", local_generations)
+        self._notify_replay_state_change()
         return metadata
 
     def add(self, data: TensorDictBase) -> TensorDictBase:
@@ -730,25 +731,34 @@ class ReplayBufferEnsemble(ReplayBuffer):
         if not self.initialized:
             return {
                 "size": 0,
+                "storage_size": 0,
+                "sampleable_size": 0,
                 "write_count": 0,
+                "sample_calls": self._counter_value(self._sample_call_count_value),
+                "samples_returned": self._counter_value(self._sampled_item_count_value),
                 "prefetch_queue_size": 0,
                 "initialized": False,
                 "num_buffers": len(self._init_storage._storages),
             }
         with self._replay_lock:
-            size = sum(len(storage) for storage in self._storage._storages)
+            storage_size = sum(len(storage) for storage in self._storage._storages)
+            sampleable_size = sum(len(member) for member in self._rbs)
             capacity = sum(storage.max_size for storage in self._storage._storages)
             write_count = sum(
                 getattr(writer, "_write_count", 0) for writer in self._writer._writers
             )
             prefetch_queue_size = len(self._prefetch_queue)
         return {
-            "size": int(size),
+            "size": int(sampleable_size),
+            "storage_size": int(storage_size),
+            "sampleable_size": int(sampleable_size),
             "write_count": int(write_count),
+            "sample_calls": self._counter_value(self._sample_call_count_value),
+            "samples_returned": self._counter_value(self._sampled_item_count_value),
             "prefetch_queue_size": int(prefetch_queue_size),
             "initialized": True,
             "capacity": int(capacity),
-            "utilization": float(size) / capacity if capacity else 0.0,
+            "utilization": float(storage_size) / capacity if capacity else 0.0,
             "num_buffers": len(self._storage._storages),
         }
 

@@ -25,7 +25,6 @@ deprecated alias and will be removed in TorchRL v0.17.
     KLComputation
     KLRewardTransform
     MCPToolTransform
-    PolicyVersion
     PythonExecutorService
     PythonInterpreter
     RayDataLoadingPrimer

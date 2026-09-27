@@ -25,7 +25,7 @@ observation, action, reward and termination definitions. A task is data:
 in body-frame m/s, the warm start and joint reset noise, the gait clock
 frequency, one weight per reward term, the term parameters, a sampling
 `weight` and a `name`. The presets `MicroDuckEnv.tracking_task(speed)`, `standing_task()`,
-`speed_range_task(low, high)`, `sidestep_task(speed)`, `turning_task(rate)` and `jump_task()` fill
+`speed_range_task(low, high)`, `sidestep_task(speed)`, `turning_task(rate)` and `jump_task(speed=0.0)` fill
 every field and take overrides by name (`reward_weights={"tracking": 4.0}`,
 `tracking_std=0.2`, `warm_start_fraction=0.5`). The env takes a library, one
 task, a list or a `torch.stack` of tasks, and every env of the batch holds one
@@ -373,3 +373,35 @@ its BAM actuator model, observations, rewards, curricula and randomization
 intact, through `MJLabWrapper(log_extras=True)` so mjlab's episode metrics are
 logged alongside the PPO losses. It requires a CUDA GPU and the pinned
 `microduck_rl` environment; see the module docstring for the `uv run` command.
+
+### Nine-skill prior
+
+The training recipe retains standing, four walking directions and forward hopping
+at indices 0-5, then appends left turning, right turning and hopping in place.
+Each hopping task is sampled three times as often as each other task.
+`head_level` uses the head IMU frame's forward axis and penalizes gaze pitch
+relative to the horizon and yaw relative to the trunk. The IMU-to-beak line
+is not the forward axis: it points about 41 degrees down inside the head.
+
+To initialize from the released six-skill checkpoint and train only the prior:
+
+```bash
+python -m examples.microduck.train_skills \
+  --init-from /path/to/released-six-skill-walker.ckpt \
+  --low-level-only --num-envs 16 --low-level-frames 12000000 \
+  --evaluation-episodes 32 --seed 20260913 --output-dir nine-skills
+```
+
+The existing task embeddings are copied unchanged; turns start from standing,
+and in-place hopping starts from the existing hopping embedding. Optimizer
+state is fresh. Evaluation uses a separate seed and reports per-skill head
+angles, yaw rate, airborne fraction, takeoffs, landings, height and survival.
+A high airborne fraction alone does not establish controlled hopping.
+The hop rhythm and launch rewards measure world-vertical velocity, while the
+stationary drift penalty measures world-horizontal velocity. Using the tilted
+body frame would reward horizontal travel as a launch and penalize a vertical
+hop as drift.
+
+Always load the ordered task library and action scale from the checkpoint.
+Existing navigation and football policies remain paired with their original
+walker revisions; replacing the walker alone does not retrain their selectors.

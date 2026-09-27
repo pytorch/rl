@@ -21,6 +21,7 @@ from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, Con
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
+from torchrl.trainers.algorithms.fql import FQLTrainer
 from torchrl.trainers.algorithms.grpo import GRPOTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
@@ -31,9 +32,11 @@ from torchrl.trainers.algorithms.td3 import TD3Trainer
 
 if TYPE_CHECKING:
     _LearnerBackend = Literal["local", "ray"]
+    _Telemetry = Literal["minimal", "standard"]
 else:
     # OmegaConf structured configs do not support Literal on all supported versions.
     _LearnerBackend = str
+    _Telemetry = str
 
 
 @dataclass
@@ -42,6 +45,59 @@ class TrainerConfig(ConfigBase):
 
     def __post_init__(self) -> None:
         """Post-initialization hook for trainer configurations."""
+
+
+@dataclass
+class FQLTrainerConfig(TrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.FQLTrainer`.
+
+    Optimizer and target updater configurations should be partials: they receive
+    the instantiated loss parameters and loss module, respectively.
+    """
+
+    loss_module: Any
+    optimizer: Any
+    replay_buffer: Any
+    target_net_updater: Any
+    offline_steps: int
+    collector: Any = None
+    total_frames: int = 0
+    device: str | None = None
+    batch_size: int | None = None
+    compile_loss: bool = False
+    logger: Any = None
+    clip_grad_norm: bool = True
+    clip_norm: float | None = None
+    progress_bar: bool = False
+    seed: int | None = None
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    save_trainer_file: Any = None
+    checkpoint: Any = None
+    checkpoint_rotation: Any = None
+    checkpoint_metadata: Any = None
+    log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    hooks: list[Any] | None = None
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers.make_fql_trainer"
+
+
+def make_fql_trainer(
+    *, loss_module, optimizer, target_net_updater, hooks=None, **kwargs
+) -> FQLTrainer:
+    """Connect FQL optimizer and target updater partials to their shared loss."""
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        optimizer = optimizer(params=loss_module.parameters())
+    if not isinstance(target_net_updater, TargetNetUpdater):
+        target_net_updater = target_net_updater(loss_module)
+    trainer = FQLTrainer(
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_net_updater=target_net_updater,
+        **kwargs,
+    )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 def _register_trainer_hooks(trainer: Any, hooks: list[Any] | None) -> None:
@@ -257,6 +313,9 @@ class OfflineToOnlineTrainerConfig(SACTrainerConfig):
     """
 
     anneal_frames: int | None = None
+    offline_steps: int = 0
+    device: str | None = None
+    compile_loss: bool = False
 
     _target_: str = (
         "torchrl.trainers.algorithms.configs.trainers."
@@ -302,6 +361,9 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
     auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
     batch_size = kwargs.pop("batch_size", None)
     anneal_frames = kwargs.pop("anneal_frames", None)
+    offline_steps = kwargs.pop("offline_steps", 0)
+    device = kwargs.pop("device", None)
+    compile_loss = kwargs.pop("compile_loss", False)
     enable_logging = kwargs.pop("enable_logging", True)
     log_rewards = kwargs.pop("log_rewards", True)
     log_actions = kwargs.pop("log_actions", True)
@@ -322,7 +384,11 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
     if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
 
-    if not isinstance(collector, BaseCollector):
+    if (
+        collector is not None
+        and not isinstance(collector, BaseCollector)
+        and not offline_steps
+    ):
         collector = collector()
 
     if not isinstance(loss_module, LossModule):
@@ -340,8 +406,14 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
         optimizer = optimizer(params=loss_module.parameters())
 
     # Quick instance checks
-    if not isinstance(collector, BaseCollector):
-        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
+    if (
+        collector is not None
+        and not isinstance(collector, BaseCollector)
+        and not callable(collector)
+    ):
+        raise ValueError(
+            f"collector must be a BaseCollector or factory, got {type(collector)}"
+        )
     if not isinstance(loss_module, LossModule):
         raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
     if not isinstance(optimizer, torch.optim.Optimizer):
@@ -359,6 +431,9 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
         loss_module=loss_module,
         replay_buffer=replay_buffer,
         anneal_frames=anneal_frames,
+        offline_steps=offline_steps,
+        device=device,
+        compile_loss=compile_loss,
         batch_size=batch_size,
         optimizer=optimizer,
         logger=logger,
@@ -453,6 +528,9 @@ class OnPolicyTrainerConfig(TrainerConfig):
         episode_reward_key: Episode reward key used for cumulative reward logging. Default: "reward".
         action_key: Action key used by losses and logging. Default: "action".
         observation_key: Observation key used for logging. Default: "observation".
+        telemetry: Diagnostic telemetry level. ``"minimal"`` preserves the
+            legacy metric set and overhead; ``"standard"`` adds namespaced
+            training diagnostics. Default: ``"standard"``.
         hooks: List of :class:`~torchrl.trainers.TrainerHookBase` instances to
             register on the trainer after construction.
     """
@@ -499,6 +577,7 @@ class OnPolicyTrainerConfig(TrainerConfig):
     episode_reward_key: Any = "reward"
     action_key: Any = "action"
     observation_key: Any = "observation"
+    telemetry: _Telemetry = "standard"
     hooks: list[Any] | None = None
     checkpoint: Any = None
     checkpoint_rotation: Any = None
@@ -590,6 +669,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
     log_rewards = kwargs.pop("log_rewards", True)
     log_actions = kwargs.pop("log_actions", True)
     log_observations = kwargs.pop("log_observations", False)
+    telemetry = kwargs.pop("telemetry", "standard")
     done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
     terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
     reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
@@ -706,6 +786,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
         episode_reward_key=episode_reward_key,
         action_key=action_key,
         observation_key=observation_key,
+        telemetry=telemetry,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer

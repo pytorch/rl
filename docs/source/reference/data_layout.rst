@@ -191,8 +191,10 @@ truncated-only episode ends). Which API to reach for:
      - :func:`~torchrl.data.find_start_stop_traj`
    * - Sampling contiguous trajectory slices from a buffer
      - :class:`~torchrl.data.replay_buffers.SliceSampler` (and variants)
-   * - Collecting only complete trajectories in the first place
+   * - Yielding only complete trajectory batches
      - ``trajs_per_batch`` (see :ref:`collectors_replay_trajs`)
+   * - Writing only complete trajectories to replay
+     - ``replay_write_mode="trajectory"`` (see :ref:`collectors_replay_trajs`)
 
 The replay buffer ``ndim`` arg and why it doesn't multi-process well
 --------------------------------------------------------------------
@@ -320,7 +322,7 @@ becomes irrelevant: each row of the 1-D storage is a self-contained
 episode segment, and any slice sampled from it is correct by construction.
 
 This is what passing the buffer directly to the collector and setting
-``trajs_per_batch`` does:
+``replay_write_mode="trajectory"`` does:
 
 .. code-block:: python
 
@@ -339,7 +341,8 @@ This is what passing the buffer directly to the collector and setting
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,
-        trajs_per_batch=8,    # each worker writes COMPLETE trajectories only
+        replay_write_mode="trajectory",
+        trajs_per_write=8,    # optional grouping per replay extend
         sync=False,
     )
     collector.start()
@@ -361,9 +364,9 @@ How the buffer is actually populated when ``replay_buffer=`` is passed:
   ``ndim >= 2`` shared storages unsafe (see
   :ref:`data-layout-storage-ndim`).
 
-What ``trajs_per_batch`` adds is a guarantee on the *contents* of each
-extend: with ``trajs_per_batch=N``, every ``rb.extend`` call commits one
-or more **complete trajectories** (last step has
+Trajectory write mode adds a guarantee on the *contents* of each extend:
+every ``rb.extend`` call commits one or more **complete trajectories** (last
+step has
 ``("next", "done") == True``). The buffer never sees a partial episode,
 so even when worker A's flush interleaves with worker B's, the resulting
 storage is just a concatenation of complete episodes. No intra-episode
@@ -377,8 +380,10 @@ provides a lighter mitigation by inserting an artificial ``truncated``
 at every batch boundary — see
 :ref:`collectors_replay_trajs` for the trade-offs.
 
-See :ref:`collectors_replay_trajs` for the full ``trajs_per_batch`` API
-and the synchronous-iteration pattern.
+See :ref:`collectors_replay_trajs` for the full ``replay_write_mode`` API and
+the synchronous-iteration pattern. The legacy combination of
+``replay_buffer`` and ``trajs_per_batch`` continues to select trajectory
+writes when ``replay_write_mode`` is left as ``None``.
 
 SliceSampler: variable-length contiguous slices
 -----------------------------------------------
@@ -386,18 +391,19 @@ SliceSampler: variable-length contiguous slices
 .. _data-layout-slice-sampler:
 
 :class:`~torchrl.data.replay_buffers.SliceSampler` consumes a flat 1-D
-buffer and emits **a flat 1-D batch of concatenated slices**. It does not
-reshape to ``[num_slices, slice_len]``; it concatenates slices end-to-end
-along the only batch dim and writes ``is_init=True`` at the first step of
-each slice (OR-ed with any pre-existing ``is_init`` from
-:class:`~torchrl.envs.transforms.InitTracker`).
+buffer and can emit either the historical flat batch of concatenated slices
+or an explicit ``[num_slices, time]`` batch. The flat layout remains the
+default. Set ``output_layout="batch_time"`` when the downstream policy or
+value estimator should receive the temporal structure directly.
 
 Defaults that match the recommended layout:
 
-* ``strict_length=False`` — short trajectories are kept and produce
-  shorter slices; the resulting batch can be smaller than
-  ``num_slices * slice_len``. *This is a feature, not a defect.*
-* ``pad_output=False`` (default) — no padding, no ``mask`` key.
+* ``strict_length=False`` — short trajectories are kept. Flat output can be
+  smaller than ``num_slices * slice_len`` and emits a once-per-sampler
+  warning when this happens. Structured output pads each row to the requested
+  time length and emits ``("collector", "mask")``.
+* ``pad_output=False`` (default) — flat output is not padded. Structured
+  non-strict output pads independently of this legacy option.
 * ``traj_key`` not specified — the sampler probes the storage on the
   first sample call and prefers ``("collector", "traj_ids")`` over
   ``"episode"``, falling back to reconstructing trajectory boundaries
@@ -415,24 +421,41 @@ manually-reshaped ``[num_slices, slice_len]`` call would produce.
     from torchrl.data.replay_buffers import SliceSampler
     from torchrl.modules import set_recurrent_mode
 
-    sampler = SliceSampler(num_slices=4, slice_len=32, strict_length=False)
+    sampler = SliceSampler(
+        num_slices=4,
+        strict_length=False,
+        output_layout="batch_time",
+    )
     rb = TensorDictReplayBuffer(storage=LazyTensorStorage(100_000),
                                 sampler=sampler, batch_size=128)
     # ... extend rb from a collector ...
-    sample = rb.sample()              # shape [<= 128]
+    sample = rb.sample()              # shape [4, 32], names [None, "time"]
     with set_recurrent_mode("recurrent"):
-        out = recurrent_policy(sample)  # consumes the flat sample directly
+        out = recurrent_policy(sample)
+
+Structured output preserves the environment's ``done``, ``terminated`` and
+``truncated`` values. It marks the final real transition in every sampled row
+under ``("collector", "slice_end")`` instead. To stop GAE recursion at the
+sampled-slice boundary while preserving bootstrap semantics, OR that marker
+into the configured ``done`` field and leave ``terminated`` unchanged. The
+padding mask separately excludes duplicated rows:
+
+.. code-block:: python
+
+    sample["next", "done"] = (
+        sample["next", "done"] | sample["collector", "slice_end"]
+    )
+    advantage.set_keys(valid=("collector", "mask"))
 
 .. _data-layout-padded-discouraged:
 
-``pad_output=True`` is available as an escape hatch for code that
+For legacy flat consumers, ``pad_output=True`` is available as an escape hatch for code that
 genuinely cannot accept a ragged batch (a custom op that requires a fixed
 time dimension before a manual reshape, for instance). It pads short
 slices by *duplicating their last real timestep* and emits a 1-D bool
 ``("collector", "mask")`` of length ``B * T`` flagging real vs padded
 positions. **This is discouraged for new code.** All TorchRL-provided
-primitives consume the unpadded layout natively, so padding is pure
-overhead and adds a key the caller has to remember to honour everywhere.
+primitives consume the unpadded flat layout or the structured layout natively.
 
 Auto-discoverability for recurrent policies
 -------------------------------------------

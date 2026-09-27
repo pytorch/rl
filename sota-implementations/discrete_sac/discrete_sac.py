@@ -27,7 +27,6 @@ from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     dump_video,
-    log_metrics,
     make_collector,
     make_environment,
     make_loss_module,
@@ -62,6 +61,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "group": cfg.logger.group_name,
             },
         )
+        training_logger = logger.with_prefix("training")
+        evaluation_logger = logger.with_prefix("evaluation")
+        timing_logger = logger.with_prefix("timing")
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -197,27 +199,30 @@ def main(cfg: DictConfig):  # noqa: F821
         )
         episode_rewards = collected_data["next", "episode_reward"][episode_end]
 
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         if len(episode_rewards) > 0:
             episode_length = collected_data["next", "step_count"][episode_end]
-            metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+            training_metrics["reward"] = episode_rewards.mean().item()
+            training_metrics["episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
 
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
-            metrics_to_log["train/a_loss"] = tds["loss_actor"]
-            metrics_to_log["train/alpha_loss"] = tds["loss_alpha"]
+            training_metrics["q_loss"] = tds["loss_qvalue"]
+            training_metrics["a_loss"] = tds["loss_actor"]
+            training_metrics["alpha_loss"] = tds["loss_alpha"]
 
         # Evaluation
         prev_test_frame = ((i - 1) * frames_per_batch) // eval_iter
         cur_test_frame = (i * frames_per_batch) // eval_iter
         final = current_frames >= collector.total_frames
         if (i >= 1 and (prev_test_frame < cur_test_frame)) or final:
-            with set_exploration_type(
-                ExplorationType.DETERMINISTIC
-            ), torch.no_grad(), timeit("eval"):
+            with (
+                set_exploration_type(ExplorationType.DETERMINISTIC),
+                torch.no_grad(),
+                timeit("eval"),
+            ):
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
                     model[0],
@@ -226,11 +231,16 @@ def main(cfg: DictConfig):  # noqa: F821
                 )
                 eval_env.apply(dump_video)
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                metrics_to_log["eval/reward"] = eval_reward
+                evaluation_metrics["reward"] = eval_reward
         if logger is not None:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            log_metrics(logger, metrics_to_log, collected_frames)
+            if training_metrics:
+                training_logger.log_metrics(training_metrics, collected_frames)
+            if evaluation_metrics:
+                evaluation_logger.log_metrics(evaluation_metrics, collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if timing_metrics:
+                timing_logger.log_metrics(timing_metrics, collected_frames)
 
     collector.shutdown()
     if not eval_env.is_closed:

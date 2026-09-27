@@ -10,6 +10,7 @@ It supports state environments like gym and gymnasium.
 
 The helper functions are coded in the utils.py associated with this script.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -56,6 +57,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 "project": cfg.logger.project_name,
             },
         )
+    training_logger = logger.with_prefix("training") if logger else None
+    evaluation_logger = logger.with_prefix("evaluation") if logger else None
+    timing_logger = logger.with_prefix("timing") if logger else None
 
     # Set seeds
     torch.manual_seed(cfg.env.seed)
@@ -185,13 +189,15 @@ def main(cfg: DictConfig):  # noqa: F821
         )
         episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
-        metrics_to_log = {}
+        training_metrics = {}
+        evaluation_metrics = {}
         # Evaluation
         with timeit("eval"):
             if collected_frames % eval_iter < frames_per_batch:
-                with set_exploration_type(
-                    ExplorationType.DETERMINISTIC
-                ), torch.no_grad():
+                with (
+                    set_exploration_type(ExplorationType.DETERMINISTIC),
+                    torch.no_grad(),
+                ):
                     eval_rollout = eval_env.rollout(
                         eval_rollout_steps,
                         model,
@@ -199,26 +205,31 @@ def main(cfg: DictConfig):  # noqa: F821
                         break_when_any_done=True,
                     )
                     eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                    metrics_to_log["eval/reward"] = eval_reward
+                    evaluation_metrics["reward"] = eval_reward
 
         # Logging
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][episode_end]
-            metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+            training_metrics["reward"] = episode_rewards.mean().item()
+            training_metrics["episode_length"] = episode_length.sum().item() / len(
                 episode_length
             )
-            metrics_to_log["train/epsilon"] = explore_policy[1].eps
+            training_metrics["epsilon"] = explore_policy[1].eps
 
         if collected_frames >= init_random_frames:
             tds = torch.stack(tds, dim=0).mean()
-            metrics_to_log["train/q_loss"] = tds["loss_qvalue"]
-            metrics_to_log["train/cql_loss"] = tds["loss_cql"]
+            training_metrics["q_loss"] = tds["loss_qvalue"]
+            training_metrics["cql_loss"] = tds["loss_cql"]
 
         if logger is not None:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            log_metrics(logger, metrics_to_log, collected_frames)
+            timing_metrics = timeit.todict()
+            timing_metrics["speed"] = pbar.format_dict["rate"]
+            if training_metrics:
+                log_metrics(training_logger, training_metrics, collected_frames)
+            if evaluation_metrics:
+                log_metrics(evaluation_logger, evaluation_metrics, collected_frames)
+            if timing_metrics:
+                log_metrics(timing_logger, timing_metrics, collected_frames)
 
     collector.shutdown()
 

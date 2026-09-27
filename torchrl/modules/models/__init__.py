@@ -21,6 +21,7 @@ from .exploration import (
     NoisyLinear,
     reset_noise,
 )
+from .flow import FlowMatchingModel, OneStepModel
 from .gp import GPWorldModel
 from .llm import GPT2RewardModel
 from .model_based import (
@@ -63,6 +64,7 @@ from .multiagent import (
     VDNMixer,
 )
 from .rbf_controller import RBFController
+from .tdmpc2 import SimplicialNormalization
 from .utils import Squeeze2dLayer, SqueezeLayer
 
 
@@ -96,6 +98,8 @@ __all__ = [
     "DTActor",
     "DuelingCnnDQNet",
     "DuelingMlpDQNet",
+    "FlowMatchingModel",
+    "OneStepModel",
     "GPT2RewardModel",
     "GPWorldModel",
     "MLP",
@@ -119,6 +123,7 @@ __all__ = [
     "Squeeze2dLayer",
     "SqueezeLayer",
     "SymExpTwoHot",
+    "SimplicialNormalization",
     "VDNMixer",
     "reset_noise",
 ]

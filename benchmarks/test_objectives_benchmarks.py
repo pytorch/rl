@@ -56,6 +56,7 @@ from torchrl.objectives.value.functional import (
     vec_td1_return_estimate,
     vec_td_lambda_return_estimate,
 )
+from torchrl.trainers.algorithms import PPOTrainer
 
 TORCH_VERSION = torch.__version__
 FULLGRAPH = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse(
@@ -1183,6 +1184,67 @@ def test_ppo_speed(
         )
     else:
         benchmark(loss, td)
+
+
+@pytest.mark.parametrize("telemetry", ["minimal", "standard"])
+def test_ppo_telemetry_overhead(benchmark, telemetry, batch=128, time_steps=10):
+    class BenchmarkCollector:
+        init_random_frames = 0
+
+        def update_policy_weights_(self, policy=None):
+            pass
+
+        def shutdown(self):
+            pass
+
+        def stats(self):
+            return {"frames": batch * time_steps, "batches": 1}
+
+    class BenchmarkLoss(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.actor_network = torch.nn.Linear(1, 1)
+
+        def forward(self, data):
+            return TensorDict({"loss": self.actor_network.weight.sum()}, [])
+
+    done = torch.zeros(batch, time_steps, 1, dtype=torch.bool)
+    done[:, -1] = True
+    is_init = torch.zeros_like(done)
+    is_init[:, 0] = True
+    data = TensorDict(
+        {
+            "is_init": is_init,
+            ("collector", "traj_ids"): torch.arange(batch)
+            .unsqueeze(-1)
+            .expand(batch, time_steps),
+            ("next", "reward"): torch.randn(batch, time_steps, 1),
+            ("next", "done"): done,
+            ("next", "terminated"): done,
+        },
+        [batch, time_steps],
+        names=[None, "time"],
+    )
+    with pytest.warns(UserWarning, match="experimental/prototype"):
+        trainer = PPOTrainer(
+            collector=BenchmarkCollector(),
+            total_frames=data.numel(),
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=BenchmarkLoss(),
+            optimizer=None,
+            progress_bar=False,
+            add_gae=False,
+            log_actions=False,
+            telemetry=telemetry,
+        )
+    trainer.collected_frames = data.numel()
+    benchmark.pedantic(
+        trainer._pre_steps_log_hook,
+        args=(data,),
+        iterations=5,
+        rounds=20,
+    )
 
 
 @pytest.mark.parametrize("backward", [None, "backward"])

@@ -48,6 +48,7 @@ fi
 # mujoco>=3.8 removed the mjENBL_MULTICCD enum that mujoco-torch 0.2.0 references.
 pip install mujoco==3.7.0 mujoco-mjx==3.7.0 'jax[cuda12]>=0.7.0,<0.11' --progress-bar off
 pip install mujoco-torch==0.2.0 --no-deps --progress-bar off
+pip install mujoco-menagerie --progress-bar off
 
 # install tensordict
 pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
@@ -60,4 +61,4 @@ python -m pip install -e . --no-build-isolation
 
 # smoke test
 python -c "import torchrl"
-python -c "import mujoco; import mujoco.mjx; import mujoco_torch; print('mujoco', mujoco.__version__, 'mujoco-torch ok')"
+python -c "import mujoco; import mujoco.mjx; import mujoco_torch; import mujoco_menagerie; print('mujoco', mujoco.__version__, 'mujoco-torch ok', 'mujoco-menagerie', mujoco_menagerie.__version__)"

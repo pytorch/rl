@@ -68,11 +68,11 @@ Policy Version Tracking
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 LLM Collectors also allow to track the version of the policy, which is useful for some use cases.
-This is done by adding a :class:`~torchrl.envs.llm.transforms.PolicyVersion` transform to the environment, which is
+This is done by adding a :class:`~torchrl.envs.transforms.PolicyVersion` transform to the environment, which is
 then incremented by the collector after each weight update. To do this, one either provides the stateful version of the
 transform, or a boolean to the collector constructor.
 
-    >>> from torchrl.envs.llm.transforms import PolicyVersion
+    >>> from torchrl.envs.transforms import PolicyVersion
     >>> from torchrl.collectors.llm import LLMCollector
     >>> from torchrl.weight_update.llm import VLLMWeightSyncScheme, get_model_metadata
     >>> env = make_env() # place your code here
@@ -170,7 +170,7 @@ Transforms are the main way to extend ChatEnv with specific capabilities:
   execution, :class:`~torchrl.envs.llm.transforms.MCPToolTransform` for general tool calling.
 - **Data loading**: :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` for loading prompts from datasets
 - **Thinking prompts**: :class:`~torchrl.envs.llm.transforms.AddThinkingPrompt` for chain-of-thought reasoning
-- **Policy tracking**: :class:`~torchrl.envs.llm.transforms.PolicyVersion` for version control
+- **Policy tracking**: :class:`~torchrl.envs.transforms.PolicyVersion` for version control
 - **Step counting**: Built-in step tracking and reset management using :class:`~torchrl.envs.transforms.StepCounter`.
 
 Integration with LLM Wrappers
@@ -498,7 +498,6 @@ By following these design principles, reward transforms can be effectively integ
     KLComputation
     KLRewardTransform
     MCPToolTransform
-    PolicyVersion
     PythonExecutorService
     PythonInterpreter
     RayDataLoadingPrimer
@@ -543,6 +542,19 @@ SFT
 
     SFTLoss
     SFTLossOutput
+
+Reward Model Training
+~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.objectives.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    reward_model_loss
+    RewardModelLoss
+    RewardModelLossOutput
 
 Distillation
 ~~~~~~~~~~~~

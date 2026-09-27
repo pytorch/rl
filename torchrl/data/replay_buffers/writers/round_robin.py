@@ -423,7 +423,7 @@ class RoundRobinWriter(Writer):
         _write_count = getattr(self, "_write_count_value", None)
         if not self._compilable:
             if _write_count is None:
-                _write_count = self._write_count_value = mp.Value("i", 0)
+                _write_count = self._write_count_value = mp.Value("q", 0)
             return _write_count.value
         else:
             if _write_count is None:
@@ -435,7 +435,7 @@ class RoundRobinWriter(Writer):
         if not self._compilable:
             _write_count = getattr(self, "_write_count_value", None)
             if _write_count is None:
-                _write_count = self._write_count_value = mp.Value("i", 0)
+                _write_count = self._write_count_value = mp.Value("q", 0)
             _write_count.value = value
         else:
             self._write_count_value = value
@@ -462,7 +462,7 @@ class RoundRobinWriter(Writer):
             state["_cursor_value"] = _cursor_value
         if write_count is not None:
             if not state["_compilable"]:
-                _write_count_value = mp.Value("i", write_count)
+                _write_count_value = mp.Value("q", write_count)
             else:
                 _write_count_value = write_count
             state["_write_count_value"] = _write_count_value
