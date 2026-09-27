@@ -27,6 +27,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _select_action_value,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
@@ -1261,14 +1262,7 @@ class DiscreteCQLLoss(LossModule):
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
 
-        if self.action_space == "categorical":
-            if action.shape != pred_val.shape:
-                # unsqueeze the action if it lacks on trailing singleton dim
-                action = action.unsqueeze(-1)
-            pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
-        else:
-            action = action.to(torch.float)
-            pred_val_index = (pred_val * action).sum(-1)
+        pred_val_index = _select_action_value(self.action_space, action, pred_val)
 
         # calculate target value
         target_value = self.value_estimator.value_estimate(
@@ -1344,13 +1338,9 @@ class DiscreteCQLLoss(LossModule):
         current_action = tensordict.get(self.tensor_keys.action)
 
         logsumexp = torch.logsumexp(qvalues, dim=-1, keepdim=True)
-        if self.action_space == "categorical":
-            if current_action.shape != qvalues.shape:
-                # unsqueeze the action if it lacks on trailing singleton dim
-                current_action = current_action.unsqueeze(-1)
-            q_a = qvalues.gather(-1, current_action)
-        else:
-            q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
+        q_a = _select_action_value(
+            self.action_space, current_action, qvalues, keepdim=True
+        )
 
         loss_cql = (logsumexp - q_a).squeeze(-1)
         loss_cql = self._reduce_loss(loss_cql, tensordict=tensordict)
