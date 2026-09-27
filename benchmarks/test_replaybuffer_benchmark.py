@@ -429,6 +429,27 @@ def test_replay_buffer_dataset_workers(benchmark, num_workers):
     benchmark.pedantic(next, args=(iterator,), warmup_rounds=8, rounds=64)
 
 
+@pytest.mark.parametrize("adapter", [True, False], ids=["as_dataset", "storage"])
+def test_storage_dataset_fetch(benchmark, adapter):
+    rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(10_000))
+    rb.extend(
+        TensorDict(
+            {"obs": torch.randn(10_000, 64), "action": torch.randn(10_000, 8)},
+            batch_size=[10_000],
+        )
+    )
+    dataset = rb.storage.as_dataset() if adapter else rb.storage
+    loader = DataLoader(
+        dataset, batch_size=256, shuffle=True, collate_fn=tensordict_collate
+    )
+
+    def epoch_batch():
+        for batch in loader:
+            return batch
+
+    benchmark.pedantic(epoch_batch, warmup_rounds=2, rounds=16)
+
+
 def _skip_or_fail_unavailable(message):
     if os.getenv("TORCHRL_BENCHMARK_DEVICE") in {"CPU", "GPU"}:
         pytest.fail(message)

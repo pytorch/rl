@@ -24,6 +24,7 @@ TorchRL provides various storage backends for replay buffers, each optimized for
     NestedStorageCheckpointer
     Storage
     StorageCheckpointerBase
+    StorageDataset
     StorageEnsemble
     StorageEnsembleCheckpointer
     TensorStorage
@@ -42,8 +43,9 @@ for improved node failure recovery.
 Storages as torch datasets
 --------------------------
 
-Every storage is a :class:`torch.utils.data.Dataset`: a
-:class:`torch.utils.data.DataLoader` reads it with any torch sampler and
+:meth:`~torchrl.data.replay_buffers.Storage.as_dataset` returns a map-style
+:class:`torch.utils.data.Dataset`, a :class:`StorageDataset`, that a
+:class:`torch.utils.data.DataLoader` reads with any torch sampler and
 worker processes, fetching each index batch with a single
 :meth:`~torchrl.data.replay_buffers.Storage.get` call. Pass
 :func:`~torchrl.data.tensordict_collate` as ``collate_fn``, read

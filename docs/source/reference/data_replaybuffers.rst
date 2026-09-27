@@ -354,18 +354,20 @@ are rejected explicitly.
 Reading buffers with ``torch.utils.data``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Storages are :class:`torch.utils.data.Dataset` instances and
+:meth:`~torchrl.data.replay_buffers.Storage.as_dataset` wraps a storage in a
+map-style :class:`torch.utils.data.Dataset` and
 :meth:`~torchrl.data.ReplayBuffer.as_dataset` wraps a buffer in a
 :class:`torch.utils.data.IterableDataset`, so a
 :class:`torch.utils.data.DataLoader` can own the parallelism of the sample
 path. Pass :func:`~torchrl.data.tensordict_collate` as ``collate_fn``: the
 default torch collation does not handle tensordicts.
 
-A storage reads like any map-style dataset. Torch samplers pick the indices
-and every index batch is fetched with a single storage read. The collate
-function also stacks lists of samples, lazily when their shapes differ, so
-storages compose with :class:`torch.utils.data.ConcatDataset` and per-item
-storages such as :class:`~torchrl.data.replay_buffers.ListStorage`:
+A storage dataset reads like any map-style dataset. Torch samplers pick the
+indices and every index batch is fetched with a single storage read. The
+collate function also stacks lists of samples, lazily when their shapes
+differ, so storage datasets compose with
+:class:`torch.utils.data.ConcatDataset` and per-item storages such as
+:class:`~torchrl.data.replay_buffers.ListStorage`:
 
     >>> import torch
     >>> from tensordict import TensorDict
@@ -373,14 +375,16 @@ storages such as :class:`~torchrl.data.replay_buffers.ListStorage`:
     >>> from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
     >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
     >>> _ = rb.extend(TensorDict({"obs": torch.arange(100)}, [100]))
-    >>> loader = DataLoader(rb.storage, batch_size=4, shuffle=True, collate_fn=tensordict_collate)
+    >>> loader = DataLoader(rb.storage.as_dataset(), batch_size=4, shuffle=True, collate_fn=tensordict_collate)
     >>> next(iter(loader))["obs"].shape
     torch.Size([4])
 
 A buffer dataset keeps the TorchRL sampler and transforms and runs them in the
 DataLoader workers. Each worker holds a copy of the buffer, so this fits
 memory-mapped or dataset-backed storages whose sample path is expensive, such
-as video decoding. ``num_batches`` is split between workers, buffer
+as video decoding. The storage content is shared rather than copied: workers
+see rows written after they start, and a row written while a worker reads it
+can come back partially updated. ``num_batches`` is split between workers, buffer
 prefetching is disabled in workers because the DataLoader prefetches, and
 buffers built with a ``generator`` are reseeded once per worker from the
 worker seed, so seeding the DataLoader (``torch.manual_seed`` or

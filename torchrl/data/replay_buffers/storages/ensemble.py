@@ -65,6 +65,13 @@ class StorageEnsemble(Storage):
         for storage in self._storages:
             storage._rng = value
 
+    def _share_memory_(self) -> None:
+        for storage in self._storages:
+            storage._share_memory_()
+
+    def _fork_safe(self) -> bool:
+        return all(storage._fork_safe() for storage in self._storages)
+
     def extend(self, value):
         raise RuntimeError
 
@@ -112,7 +119,7 @@ class StorageEnsemble(Storage):
 
     _INDEX_ERROR = "Expected an index of type torch.Tensor, range, np.ndarray, int, slice or ellipsis, got {} instead."
 
-    def __getitems__(self, index):
+    def as_dataset(self):
         raise NotImplementedError(
             "StorageEnsemble cannot be read as a flat torch dataset. Read its "
             "member storages instead."

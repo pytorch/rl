@@ -16,6 +16,7 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import deepcopy
+from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any
 
@@ -2607,6 +2608,13 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         return ReplayBufferDataset(self, num_batches=num_batches)
 
     def _state_without_prefetch(self) -> dict[str, Any]:
+        """The pickled state of the buffer without its prefetched batches.
+
+        A copy of the buffer in another process must not inherit the queue:
+        this process still consumes those batches, and their clones would be
+        temporaries whose shared-memory descriptors are released before a
+        spawned child starts.
+        """
         with self._futures_lock:
             prefetch = self._prefetch
             self._prefetch = False
@@ -2628,6 +2636,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     @_maybe_delay_init
     def __getstate__(self) -> dict[str, Any]:
+        if self._prefetch and get_spawning_popen() is not None:
+            return self._state_without_prefetch()
         with self._capture_prefetch_state() as prefetch_state:
             state = self.__dict__.copy()
             if getattr(self, "_rng", None) is not None:

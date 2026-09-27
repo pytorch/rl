@@ -38,6 +38,7 @@ from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
     RandomSampler,
+    Sampler,
     SamplerEnsemble,
     SamplerWithoutReplacement,
     SliceSampler,
@@ -218,10 +219,8 @@ def _sample_in_child(rb, queue):
     queue.put(rb.sample().tolist())
 
 
-class _SlowListStorage(ListStorage):
-    def get(self, index):
-        time.sleep(1.0)
-        return super().get(index)
+def _sample_batches_in_child(rb, queue):
+    queue.put([rb.sample().tolist() for _ in range(3)])
 
 
 class _SlowGetStorage(LazyTensorStorage):
@@ -246,6 +245,27 @@ class TestRNG:
             assert queue.get(timeout=120) == rb.sample().tolist()
         finally:
             process.join()
+
+    def test_prefetch_queue_is_not_copied_to_spawned_process(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(1000),
+            batch_size=8,
+            prefetch=3,
+            generator=torch.Generator().manual_seed(0),
+        )
+        rb.extend(torch.arange(1000))
+        rb.sample()
+        ctx = mp.get_context("spawn")
+        queue = ctx.Queue()
+        process = ctx.Process(target=_sample_batches_in_child, args=(rb, queue))
+        process.start()
+        try:
+            child = queue.get(timeout=120)
+        finally:
+            process.join()
+        queued = [rb.sample().tolist() for _ in range(3)]
+        assert len(child) == 3
+        assert child != queued
 
     def test_rb_rng(self):
         state = torch.random.get_rng_state()
@@ -3628,17 +3648,83 @@ class TestUpdateIfPresentVersioned:
         assert (rb[:]["obs"] == 0).all()
 
 
+class _UndeclaredSampler(Sampler):
+    def sample(self, storage, batch_size):
+        return torch.randint(len(storage), (batch_size,)), {}
+
+    def state_dict(self):
+        return {}
+
+    def load_state_dict(self, state_dict):
+        pass
+
+    def _empty(self):
+        pass
+
+    def dumps(self, path):
+        pass
+
+    def loads(self, path):
+        pass
+
+
+def _skip_fork_on_windows(context):
+    if context == "fork" and sys.platform == "win32":
+        pytest.skip("fork is not available on Windows")
+
+
 class TestTorchDataInterop:
     @pytest.mark.parametrize("storage_cls", [LazyTensorStorage, ListStorage])
     def test_storage_dataloader(self, storage_cls):
         rb = ReplayBuffer(storage=storage_cls(20))
         rb.extend(TensorDict({"obs": torch.arange(20)}, [20]))
-        loader = DataLoader(rb.storage, batch_size=8, collate_fn=tensordict_collate)
+        loader = DataLoader(
+            rb.storage.as_dataset(), batch_size=8, collate_fn=tensordict_collate
+        )
         batches = list(loader)
         assert [batch.shape for batch in batches] == [(8,), (8,), (4,)]
         assert (
             torch.cat([batch["obs"] for batch in batches]) == torch.arange(20)
         ).all()
+
+    def test_storage_dataloader_without_adapter_reads_items(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb.extend(TensorDict({"obs": torch.arange(20)}, [20]))
+        lengths = []
+
+        def collate(items):
+            lengths.append(len(items))
+            return torch.stack([item["obs"] for item in items])
+
+        loader = DataLoader(rb.storage, batch_size=8, collate_fn=collate)
+        assert (torch.cat(list(loader)) == torch.arange(20)).all()
+        assert lengths == [8, 8, 4]
+
+    @pytest.mark.parametrize("context", ["fork", "spawn"])
+    def test_storage_dataloader_workers(self, context):
+        _skip_fork_on_windows(context)
+        rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        rb.extend(
+            TensorDict(
+                {"obs": torch.arange(100), ("nested", "obs"): torch.arange(100)},
+                [100],
+            )
+        )
+        rb.append_transform(lambda data: data)
+        loader = DataLoader(
+            rb.storage.as_dataset(),
+            batch_size=7,
+            shuffle=True,
+            num_workers=2,
+            collate_fn=tensordict_collate,
+            multiprocessing_context=context,
+            timeout=120,
+        )
+        batches = list(loader)
+        obs = torch.cat([batch["obs"] for batch in batches])
+        nested = torch.cat([batch["nested", "obs"] for batch in batches])
+        assert (obs.sort().values == torch.arange(100)).all()
+        assert (nested == obs).all()
 
     def test_storage_dataloader_ragged_list_storage(self):
         rb = ReplayBuffer(storage=ListStorage(10))
@@ -3648,7 +3734,9 @@ class TestTorchDataInterop:
                 TensorDict({"x": torch.ones(3)}, [3]),
             ]
         )
-        loader = DataLoader(rb.storage, batch_size=2, collate_fn=tensordict_collate)
+        loader = DataLoader(
+            rb.storage.as_dataset(), batch_size=2, collate_fn=tensordict_collate
+        )
         batch = next(iter(loader))
         assert batch.shape[0] == 2
         assert batch[0]["x"].shape == (2,)
@@ -3657,7 +3745,9 @@ class TestTorchDataInterop:
     def test_storage_dataloader_tuple_batches(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(10))
         rb.extend((torch.arange(10), torch.arange(10, 20)))
-        loader = DataLoader(rb.storage, batch_size=3, collate_fn=tensordict_collate)
+        loader = DataLoader(
+            rb.storage.as_dataset(), batch_size=3, collate_fn=tensordict_collate
+        )
         first, second = next(iter(loader))
         assert (first == torch.arange(3)).all()
         assert (second == torch.arange(10, 13)).all()
@@ -3667,26 +3757,35 @@ class TestTorchDataInterop:
         for rb in buffers:
             rb.extend(TensorDict({"obs": torch.arange(10)}, [10]))
         storage = ReplayBufferEnsemble(*buffers).storage
-        loader = DataLoader(storage, batch_size=2, collate_fn=tensordict_collate)
         with pytest.raises(NotImplementedError, match="flat"):
-            next(iter(loader))
+            storage.as_dataset()
 
     def test_storage_dataloader_flattens_ndim(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(20, ndim=2))
         rb.extend(TensorDict({"obs": torch.arange(20).view(4, 5)}, [4, 5]))
         with pytest.raises(RuntimeError, match="flatten"):
-            next(
-                iter(
-                    DataLoader(rb.storage, batch_size=8, collate_fn=tensordict_collate)
-                )
-            )
+            rb.storage.as_dataset()
         loader = DataLoader(
-            rb.storage.flatten(), batch_size=8, collate_fn=tensordict_collate
+            rb.storage.flatten().as_dataset(),
+            batch_size=8,
+            collate_fn=tensordict_collate,
         )
         batches = list(loader)
         assert [batch.shape for batch in batches] == [(8,), (8,), (4,)]
         values = torch.cat([batch["obs"] for batch in batches])
         assert (values.sort().values == torch.arange(20)).all()
+
+    def test_storage_dataloader_concat(self):
+        buffers = [ReplayBuffer(storage=LazyTensorStorage(10)) for _ in range(2)]
+        for offset, rb in enumerate(buffers):
+            rb.extend(TensorDict({"obs": torch.arange(10) + 10 * offset}, [10]))
+        dataset = ConcatDataset([rb.storage.as_dataset() for rb in buffers])
+        loader = DataLoader(dataset, batch_size=8, collate_fn=tensordict_collate)
+        batches = list(loader)
+        assert [batch.shape for batch in batches] == [(8,), (8,), (4,)]
+        assert (
+            torch.cat([batch["obs"] for batch in batches]) == torch.arange(20)
+        ).all()
 
     def test_as_dataset_matches_iteration(self):
         def make_rb():
@@ -3708,11 +3807,13 @@ class TestTorchDataInterop:
         assert len(batches) == 3
         for batch, reference in zip(batches, expected):
             assert (batch == reference).all()
+        with pytest.raises(RuntimeError, match="batch_size"):
+            ReplayBuffer(storage=LazyTensorStorage(20)).as_dataset()
 
     @pytest.mark.parametrize("context", ["fork", "spawn"])
-    def test_as_dataset_workers(self, context):
-        if context == "fork" and sys.platform == "win32":
-            pytest.skip("fork is not available on Windows")
+    @pytest.mark.parametrize("num_batches", [1, 5])
+    def test_as_dataset_workers(self, context, num_batches):
+        _skip_fork_on_windows(context)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(100),
             sampler=SliceSampler(num_slices=2, traj_key="episode"),
@@ -3725,7 +3826,7 @@ class TestTorchDataInterop:
         )
         rb.append_transform(RenameTransform(["obs"], ["renamed"], create_copy=True))
         loader = DataLoader(
-            rb.as_dataset(num_batches=5),
+            rb.as_dataset(num_batches=num_batches),
             batch_size=None,
             num_workers=2,
             collate_fn=tensordict_collate,
@@ -3733,7 +3834,7 @@ class TestTorchDataInterop:
             timeout=120,
         )
         batches = list(loader)
-        assert len(batches) == 5
+        assert len(batches) == num_batches
         for batch in batches:
             assert batch.shape == (8,)
             assert (batch["renamed"] == batch["obs"]).all()
@@ -3741,46 +3842,73 @@ class TestTorchDataInterop:
             assert (episodes == episodes[:, :1]).all()
 
     def test_as_dataset_reseeds_workers(self):
-        rb = ReplayBuffer(
-            storage=LazyTensorStorage(1000),
-            batch_size=8,
-            generator=torch.Generator().manual_seed(0),
-        )
-        rb.extend(torch.arange(1000))
-        loader = DataLoader(
-            rb.as_dataset(num_batches=4),
-            batch_size=None,
-            num_workers=2,
-            collate_fn=tensordict_collate,
-            timeout=120,
-        )
-        batches = [tuple(batch.tolist()) for batch in loader]
-        assert len(batches) == 4
+        def sample_epochs(num_workers, num_epochs):
+            torch.manual_seed(0)
+            rb = ReplayBuffer(
+                storage=LazyTensorStorage(1000),
+                batch_size=8,
+                generator=torch.Generator().manual_seed(0),
+            )
+            rb.extend(torch.arange(1000))
+            loader = DataLoader(
+                rb.as_dataset(num_batches=4),
+                batch_size=None,
+                num_workers=num_workers,
+                persistent_workers=True,
+                collate_fn=tensordict_collate,
+                timeout=120,
+            )
+            return [
+                [tuple(batch.tolist()) for batch in loader] for _ in range(num_epochs)
+            ]
+
+        (batches,) = sample_epochs(num_workers=2, num_epochs=1)
         assert len(set(batches)) == 4
+        assert sample_epochs(num_workers=2, num_epochs=1) == [batches]
+        first, second = sample_epochs(num_workers=1, num_epochs=2)
+        assert first != second
+
+    @pytest.mark.parametrize("context", ["fork", "spawn"])
+    def test_as_dataset_workers_read_parent_writes(self, context):
+        _skip_fork_on_windows(context)
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(1000), batch_size=64)
+        rb.extend(TensorDict({"obs": torch.full((10,), -1)}, [10]))
         loader = DataLoader(
-            rb.as_dataset(num_batches=2),
+            rb.as_dataset(num_batches=20),
             batch_size=None,
             num_workers=1,
             persistent_workers=True,
             collate_fn=tensordict_collate,
+            multiprocessing_context=context,
             timeout=120,
         )
-        epochs = [[tuple(batch.tolist()) for batch in loader] for _ in range(2)]
-        assert epochs[0] != epochs[1]
-
-    def test_storage_dataloader_concat(self):
-        buffers = [ReplayBuffer(storage=LazyTensorStorage(10)) for _ in range(2)]
-        for offset, rb in enumerate(buffers):
-            rb.extend(TensorDict({"obs": torch.arange(10) + 10 * offset}, [10]))
-        dataset = ConcatDataset([rb.storage for rb in buffers])
-        loader = DataLoader(dataset, batch_size=8, collate_fn=tensordict_collate)
+        list(loader)
+        rb.extend(TensorDict({"obs": torch.arange(500)}, [500]))
         batches = list(loader)
-        assert [batch.shape for batch in batches] == [(8,), (8,), (4,)]
-        assert (
-            torch.cat([batch["obs"] for batch in batches]) == torch.arange(20)
-        ).all()
+        index = torch.cat([batch["index"] for batch in batches])
+        obs = torch.cat([batch["obs"] for batch in batches])
+        assert (index >= 10).any()
+        assert (obs == rb.storage[index]["obs"]).all()
 
-    def test_as_dataset_pickles_without_prefetched_batches(self):
+    def test_as_dataset_rejects_stale_fork_copy(self):
+        _skip_fork_on_windows("fork")
+        rb = ReplayBuffer(storage=LazyTensorStorage(100), batch_size=8)
+        dataset = rb.as_dataset(num_batches=2)
+        rb.extend(torch.arange(100))
+        loader = DataLoader(
+            dataset,
+            batch_size=None,
+            num_workers=1,
+            collate_fn=tensordict_collate,
+            multiprocessing_context="fork",
+            timeout=120,
+        )
+        with pytest.raises(RuntimeError, match="stale rows"):
+            list(loader)
+
+    @pytest.mark.parametrize("context", ["fork", "spawn"])
+    def test_as_dataset_workers_drop_prefetched_batches(self, context):
+        _skip_fork_on_windows(context)
         rb = ReplayBuffer(
             storage=LazyTensorStorage(1000),
             batch_size=8,
@@ -3789,16 +3917,22 @@ class TestTorchDataInterop:
         )
         rb.extend(torch.arange(1000))
         rb.sample()
-        copied = pickle.loads(pickle.dumps(rb.as_dataset(num_batches=3)))
-        fresh = [batch.tolist() for batch in copied]
-        queued = [rb.sample().tolist() for _ in range(3)]
-        assert len(fresh) == 3
-        assert fresh != queued
+        loader = DataLoader(
+            rb.as_dataset(num_batches=6),
+            batch_size=None,
+            num_workers=2,
+            collate_fn=tensordict_collate,
+            multiprocessing_context=context,
+            timeout=120,
+        )
+        batches = [tuple(batch.tolist()) for batch in loader]
+        queued = {tuple(rb.sample().tolist()) for _ in range(3)}
+        assert len(set(batches)) == 6
+        assert not queued & set(batches)
 
     def test_as_dataset_forks_during_prefetch(self):
-        if sys.platform == "win32":
-            pytest.skip("fork is not available on Windows")
-        rb = ReplayBuffer(storage=_SlowListStorage(100), batch_size=8, prefetch=2)
+        _skip_fork_on_windows("fork")
+        rb = ReplayBuffer(storage=_SlowGetStorage(100), batch_size=8, prefetch=2)
         rb.extend(torch.arange(100))
         rb.sample()
         loader = DataLoader(
@@ -3812,8 +3946,7 @@ class TestTorchDataInterop:
         assert len(list(loader)) == 2
 
     def test_as_dataset_forks_during_async_update(self):
-        if sys.platform == "win32":
-            pytest.skip("fork is not available on Windows")
+        _skip_fork_on_windows("fork")
         rb = TensorDictReplayBuffer(
             storage=_SlowGetStorage(100),
             writer=TensorDictRoundRobinWriter(track_generations=True),
@@ -3837,27 +3970,7 @@ class TestTorchDataInterop:
         )
         assert len(list(loader)) == 2
 
-    def test_as_dataset_workers_drop_prefetched_batches(self):
-        rb = ReplayBuffer(
-            storage=LazyTensorStorage(1000),
-            batch_size=8,
-            prefetch=3,
-            generator=torch.Generator().manual_seed(0),
-        )
-        rb.extend(torch.arange(1000))
-        rb.sample()
-        loader = DataLoader(
-            rb.as_dataset(num_batches=6),
-            batch_size=None,
-            num_workers=2,
-            collate_fn=tensordict_collate,
-            timeout=120,
-        )
-        batches = [tuple(batch.tolist()) for batch in loader]
-        assert len(batches) == 6
-        assert len(set(batches)) == 6
-
-    def test_as_dataset_rejects_shared_state_samplers(self):
+    def test_as_dataset_shared_state_sampler_without_workers(self):
         rb = ReplayBuffer(
             storage=LazyTensorStorage(20),
             sampler=SamplerWithoutReplacement(),
@@ -3867,7 +3980,28 @@ class TestTorchDataInterop:
         loader = DataLoader(
             rb.as_dataset(), batch_size=None, collate_fn=tensordict_collate
         )
-        assert len(list(loader)) == 4
+        values = torch.cat(list(loader))
+        assert (values.sort().values == torch.arange(20)).all()
+
+    @pytest.mark.parametrize(
+        "sampler",
+        [
+            SamplerWithoutReplacement,
+            functools.partial(
+                SamplerEnsemble,
+                RandomSampler(),
+                SamplerWithoutReplacement(),
+                p=[0.5, 0.5],
+            ),
+            _UndeclaredSampler,
+        ],
+        ids=["without_replacement", "ensemble", "undeclared"],
+    )
+    def test_as_dataset_rejects_shared_state_samplers(self, sampler):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20), sampler=sampler(), batch_size=5
+        )
+        rb.extend(torch.arange(20))
         loader = DataLoader(
             rb.as_dataset(),
             batch_size=None,
@@ -3879,14 +4013,6 @@ class TestTorchDataInterop:
             list(loader)
         with pytest.raises(RuntimeError, match="cannot share"):
             pickle.dumps(rb.as_dataset())
-        assert SamplerEnsemble(
-            RandomSampler(), SamplerWithoutReplacement(), p=[0.5, 0.5]
-        ).requires_shared_state
-        assert not SamplerEnsemble(
-            RandomSampler(), RandomSampler(), p=[0.5, 0.5]
-        ).requires_shared_state
-        with pytest.raises(RuntimeError, match="batch_size"):
-            ReplayBuffer(storage=LazyTensorStorage(20)).as_dataset()
 
 
 if __name__ == "__main__":

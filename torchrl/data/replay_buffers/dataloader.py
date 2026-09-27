@@ -10,29 +10,30 @@ from typing import Any, TYPE_CHECKING
 
 import torch
 from tensordict import is_tensor_collection, LazyStackedTensorDict
-from torch.utils.data import get_worker_info, IterableDataset
+from torch.utils.data import Dataset, get_worker_info, IterableDataset
 from torch.utils.data._utils.collate import default_collate
-
-from torchrl.data.replay_buffers.samplers import Sampler
 
 if TYPE_CHECKING:
     from torch.utils.data._utils.worker import WorkerInfo
 
     from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+    from torchrl.data.replay_buffers.samplers import Sampler
+    from torchrl.data.replay_buffers.storages import Storage
 
-__all__ = ["ReplayBufferDataset", "tensordict_collate"]
+__all__ = ["ReplayBufferDataset", "StorageDataset", "tensordict_collate"]
 
 
 def tensordict_collate(batch: Any) -> Any:
     """Collate function for a :class:`torch.utils.data.DataLoader` reading TorchRL storages or buffers.
 
     A batch that is already a tensor, a tensor collection or a tuple of them,
-    as fetched from a storage or yielded by :class:`ReplayBufferDataset`, is
-    returned unchanged. A list of samples, as produced by per-item storages or
-    by composing storages with :class:`torch.utils.data.ConcatDataset`, is
-    stacked: tensor collections lazily when their shapes differ, tensors
-    densely, and mappings or tuples element-wise. The default torch collation
-    iterates a tensordict over its batch dimension and cannot be used.
+    as fetched by :class:`StorageDataset` or yielded by
+    :class:`ReplayBufferDataset`, is returned unchanged. A list of samples, as
+    produced by per-item storages or by composing datasets with
+    :class:`torch.utils.data.ConcatDataset`, is stacked: tensor collections
+    lazily when their shapes differ, tensors densely, and mappings or tuples
+    element-wise. The default torch collation iterates a tensordict over its
+    batch dimension and cannot be used.
 
     Args:
         batch (Tensor, TensorDictBase or list): the fetched batch.
@@ -45,7 +46,10 @@ def tensordict_collate(batch: Any) -> Any:
         >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
         >>> _ = rb.extend(TensorDict({"obs": torch.arange(100)}, [100]))
         >>> loader = DataLoader(
-        ...     rb.storage, batch_size=4, shuffle=True, collate_fn=tensordict_collate
+        ...     rb.storage.as_dataset(),
+        ...     batch_size=4,
+        ...     shuffle=True,
+        ...     collate_fn=tensordict_collate,
         ... )
         >>> next(iter(loader))["obs"].shape
         torch.Size([4])
@@ -64,6 +68,101 @@ def tensordict_collate(batch: Any) -> Any:
     return default_collate(batch)
 
 
+def _check_fork_safe(storage: Storage) -> None:
+    if not storage._fork_safe():
+        raise RuntimeError(
+            f"This DataLoader worker was forked with a private copy of a "
+            f"{type(storage).__name__} allocated after the dataset was created, "
+            "and would read stale rows. Create the dataset once the storage "
+            "holds data, or use a LazyMemmapStorage or the spawn start method."
+        )
+
+
+class StorageDataset(Dataset):
+    """A map-style :class:`torch.utils.data.Dataset` reading a TorchRL storage.
+
+    The dataset has one item per storage entry and a
+    :class:`torch.utils.data.DataLoader` reads it with any torch sampler and
+    worker processes. ``__getitems__`` fetches an index batch with a single
+    :meth:`~torchrl.data.replay_buffers.Storage.get` call, so the loader
+    receives one batch rather than a list of items: pass
+    :func:`tensordict_collate` as ``collate_fn``, which returns such batches
+    unchanged and stacks lists of items. Storages with more than one dimension
+    are read through :meth:`~torchrl.data.replay_buffers.Storage.flatten`.
+    Reading the storage directly with a DataLoader, without this adapter,
+    fetches items one by one and passes the list to the collate function.
+
+    DataLoader workers read the storage content live: creating the dataset
+    moves a CPU tensor storage to shared memory and memory-mapped storages are
+    read through their files, so rows written after the workers start are
+    visible to them under every start method. Reads are not synchronized with
+    writes, and a row written while a worker reads it can come back partially
+    updated. A :class:`~torchrl.data.replay_buffers.ListStorage` cannot be
+    sent to spawned workers and forked workers read a snapshot of it. Only the
+    storage is sent to the workers, not the buffers attached to it.
+
+    Args:
+        storage (Storage): the storage to read. Must be one-dimensional.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torch.utils.data import DataLoader
+        >>> from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
+        >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        >>> _ = rb.extend(TensorDict({"obs": torch.arange(100)}, [100]))
+        >>> dataset = rb.storage.as_dataset()
+        >>> len(dataset)
+        100
+        >>> loader = DataLoader(
+        ...     dataset, batch_size=4, shuffle=True, collate_fn=tensordict_collate
+        ... )
+        >>> next(iter(loader))["obs"].shape
+        torch.Size([4])
+    """
+
+    def __init__(self, storage: Storage) -> None:
+        if storage.ndim > 1:
+            raise RuntimeError(
+                f"A {type(storage).__name__} with ndim={storage.ndim} is not a "
+                "flat dataset. Read storage.flatten().as_dataset() instead."
+            )
+        storage._share_memory_()
+        self.storage = storage
+        self._worker_checked = False
+
+    def __getstate__(self) -> dict[str, Any]:
+        storage = self.storage
+        storage_state = storage.__getstate__()
+        storage_state["_attached_entities_list"] = []
+        return {**self.__dict__, "storage": (type(storage), storage_state)}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        storage_cls, storage_state = state.pop("storage")
+        storage = storage_cls.__new__(storage_cls)
+        storage.__setstate__(storage_state)
+        self.__dict__.update(state, storage=storage)
+
+    def _check_worker(self) -> None:
+        if not self._worker_checked and get_worker_info() is not None:
+            _check_fork_safe(self.storage)
+            self._worker_checked = True
+
+    def __len__(self) -> int:
+        return len(self.storage)
+
+    def __getitem__(self, index: int) -> Any:
+        self._check_worker()
+        return self.storage[index]
+
+    def __getitems__(self, indices: list[int]) -> Any:
+        self._check_worker()
+        return self.storage.get(indices)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(storage={self.storage!r})"
+
+
 class ReplayBufferDataset(IterableDataset):
     """A :class:`torch.utils.data.IterableDataset` streaming batches from a replay buffer.
 
@@ -73,10 +172,11 @@ class ReplayBufferDataset(IterableDataset):
     ``batch_size=None`` and :func:`tensordict_collate` to sample in worker
     processes. Each worker holds its own copy of the buffer, so the sampler and
     the transforms run in the worker and ``num_batches`` is split between
-    workers. Buffer prefetching is disabled in workers and prefetched batches
-    are never serialized to them, the DataLoader prefetches instead. A buffer
-    built with a :class:`torch.Generator` is
-    reseeded once per worker from the worker seed, so sampling in workers is
+    workers. The storage content is shared rather than copied and workers
+    observe later writes as described in :class:`StorageDataset`. Buffer
+    prefetching is disabled in workers and prefetched batches are never
+    serialized to them, the DataLoader prefetches instead. A buffer built with
+    a :class:`torch.Generator` is reseeded once per worker from the worker seed, so sampling in workers is
     reproducible when the DataLoader is seeded (``torch.manual_seed`` or
     ``DataLoader(generator=...)``). Samplers whose
     :attr:`~torchrl.data.replay_buffers.Sampler.requires_shared_state` is
@@ -131,6 +231,7 @@ class ReplayBufferDataset(IterableDataset):
     def __init__(
         self, replay_buffer: ReplayBuffer, *, num_batches: int | None = None
     ) -> None:
+        replay_buffer.storage._share_memory_()
         self.replay_buffer = replay_buffer
         self.num_batches = num_batches
         self._worker_seed = None
@@ -166,6 +267,7 @@ class ReplayBufferDataset(IterableDataset):
             return None
         replay_buffer = self.replay_buffer
         self._check_sampler(replay_buffer.sampler)
+        _check_fork_safe(replay_buffer.storage)
         replay_buffer._reset_worker_state()
         rng = replay_buffer._rng
         if rng is not None and self._worker_seed != worker.seed:
