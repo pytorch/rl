@@ -419,7 +419,10 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         self.post_collect_hook = hook
 
-    def stats(self) -> dict[str, int | float | bool]:
+    def stats(
+        self,
+        workers: Literal["aggregate", "per_worker", "both"] = "aggregate",
+    ) -> dict[str, int | float | bool]:
         """Returns a cheap, serializable snapshot of the collector's progress.
 
         The snapshot only contains scalar counters and gauges: it never
@@ -457,8 +460,17 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         entries but start the gauge at zero because collector checkpoints do
         not serialize the environment state or partial trajectory payloads.
 
-        Multi-worker collectors extend this signature with a ``workers``
-        argument controlling aggregate versus per-worker views.
+        Args:
+            workers (str, optional): controls the worker view. With
+                ``"aggregate"`` (default), only coordinator-side counters are
+                reported and no worker communication happens. With ``"per_worker"``
+                or ``"both"``, each worker is queried and its snapshot is
+                namespaced as ``"worker_<idx>/<metric>"``. For multi-worker
+                collectors, ``"workers"`` and ``"workers_alive"`` are always
+                reported. Per-worker queries share the control channel and must
+                not race with concurrent weight updates or other control calls.
+                Ray collectors retain their transport-specific timeout and
+                remote aggregation behavior.
 
         Examples:
             >>> from torchrl.collectors import Collector
@@ -476,36 +488,58 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             10
             20
         """
-        stats: dict[str, int | float | bool] = {}
-        progress = getattr(self, "_collector_progress", None)
-        if progress is not None:
-            stats.update(
-                progress.snapshot(
-                    None
-                    if getattr(self, "_collector_progress_aggregate", False)
-                    else getattr(self, "_collector_progress_worker_idx", 0)
-                )
+        if workers not in ("aggregate", "per_worker", "both"):
+            raise ValueError(
+                f"workers must be one of 'aggregate', 'per_worker' or 'both', got {workers!r}."
             )
-        frames = getattr(self, "_frames", None)
-        if frames is not None:
-            stats["frames"] = int(frames)
-        iters = getattr(self, "_iter", None)
-        if iters is not None:
-            stats["batches"] = int(iters) + 1
-        total_frames = getattr(self, "total_frames", None)
-        if isinstance(total_frames, int) and total_frames >= 0:
-            stats["total_frames"] = total_frames
+
+        stats: dict[str, int | float | bool] = {}
+        if workers in ("aggregate", "both"):
+            progress = getattr(self, "_collector_progress", None)
+            if progress is not None:
+                stats.update(
+                    progress.snapshot(
+                        None
+                        if getattr(self, "_collector_progress_aggregate", False)
+                        else getattr(self, "_collector_progress_worker_idx", 0)
+                    )
+                )
+            frames = getattr(self, "_frames", None)
             if frames is not None:
-                stats["completed"] = bool(frames >= total_frames)
-        requested = getattr(self, "requested_frames_per_batch", None)
-        if isinstance(requested, int):
-            stats["requested_frames_per_batch"] = requested
-        try:
-            version = self.policy_version
-        except (AttributeError, RuntimeError):
-            version = None
-        if isinstance(version, int):
-            stats["policy_version"] = version
+                stats["frames"] = int(frames)
+            iters = getattr(self, "_iter", None)
+            if iters is not None:
+                stats["batches"] = int(iters) + 1
+            total_frames = getattr(self, "total_frames", None)
+            if isinstance(total_frames, int) and total_frames >= 0:
+                stats["total_frames"] = total_frames
+                if frames is not None:
+                    stats["completed"] = bool(frames >= total_frames)
+            requested = getattr(
+                self,
+                "requested_frames_per_batch",
+                getattr(self, "frames_per_batch", None),
+            )
+            if isinstance(requested, int):
+                stats["requested_frames_per_batch"] = requested
+            try:
+                version = self.policy_version
+            except (AttributeError, RuntimeError):
+                version = None
+            if isinstance(version, int):
+                stats["policy_version"] = version
+
+        if hasattr(self, "procs"):
+            stats["workers"] = int(self.num_workers)
+            if self.procs:
+                stats["workers_alive"] = sum(
+                    int(proc.is_alive()) for proc in self.procs
+                )
+            if workers in ("per_worker", "both"):
+                for idx, worker_stats in enumerate(self.map_fn("stats")):
+                    for key, value in worker_stats.items():
+                        stats[f"worker_{idx}/{key}"] = value
+
         return stats
 
     def _record_stepped_frames(self, frames: int) -> None:

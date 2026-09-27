@@ -31,6 +31,7 @@ from torchrl.objectives.dreamer_v3 import (
     two_hot_decode,
     two_hot_encode,
 )
+from torchrl.objectives.fql import FQLLoss
 from torchrl.objectives.gail import GAILLoss
 from torchrl.objectives.iql import DiscreteIQLLoss, IQLLoss
 from torchrl.objectives.multiagent import IPPOLoss, MAPPOLoss, QMixerLoss
@@ -63,6 +64,7 @@ __all__ = [
     "ACTLoss",
     "BCLoss",
     "CQLLoss",
+    "FQLLoss",
     "DiffusionBCLoss",
     "ClipPPOLoss",
     "CrossQLoss",

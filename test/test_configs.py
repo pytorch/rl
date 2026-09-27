@@ -209,6 +209,11 @@ _CONFIG_PARITY_UNRESOLVED = {
     "TanhNormalModelConfig": "_make_tanh_normal_model composes a TensorDictModule "
     "and a ProbabilisticTensorDictModule into a ProbabilisticTensorDictSequential; "
     "there is no single wrapped class whose __init__ the Config fields mirror.",
+    "TdMpc2MLPConfig": "_make_tdmpc2_mlp fixes the TorchRL MLP architecture and "
+    "initialization to the TDMPC2-specific MLP kwargs; the remaining MLP kwargs "
+    "are intentionally not configurable.",
+    "TdMpc2WorldModelConfig": "The composite factory uses high-level architecture "
+    "and key fields that do not correspond to WorldModel.__init__ parameters.",
     "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
     "the torch versions TorchRL currently supports.",
 }
@@ -1375,6 +1380,110 @@ class TestModuleConfigs:
         # This is a known limitation - the MLP constructor expects actual classes
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_mlp_config(self):
+        """Test TdMpc2MLPConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs import TdMpc2MLPConfig
+
+        cfg = TdMpc2MLPConfig(
+            in_features=10,
+            out_features=5,
+            depth=2,
+            num_cells=32,
+            device="cpu",
+        )
+        network = instantiate(cfg)
+
+        assert isinstance(network, MLP)
+        assert isinstance(network[-2], torch.nn.Mish)
+        assert isinstance(network[-1], torch.nn.Linear)
+        assert network(torch.randn(3, 10)).shape == (3, 5)
+        assert all(parameter.device.type == "cpu" for parameter in network.parameters())
+
+        registered = ConfigStore.instance().load("network/tdmpc2_mlp.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+        configured = instantiate(
+            TdMpc2MLPConfig(
+                in_features=10,
+                out_features=8,
+                depth=2,
+                num_cells=16,
+                dropout=0.1,
+                output_activation={
+                    "_target_": "torch.nn.Tanh",
+                },
+                device="cpu",
+            )
+        )
+        assert isinstance(configured, MLP)
+        assert isinstance(configured[-1], torch.nn.Tanh)
+        assert [
+            module.p for module in configured if isinstance(module, torch.nn.Dropout)
+        ] == [0.1, 0.0]
+        assert configured(torch.randn(3, 10)).shape == (3, 8)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_world_model_config(self):
+        """Test TdMpc2WorldModelConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.modules import WorldModel
+        from torchrl.trainers.algorithms.configs import TdMpc2WorldModelConfig
+
+        cfg = TdMpc2WorldModelConfig(
+            observation_dim=7,
+            action_dim=3,
+            latent_dim=16,
+            encoder_dim=11,
+            encoder_depth=1,
+            mlp_dim=13,
+            simnorm_dim=4,
+            num_bins=5,
+            observation_key=["agent", "observation"],
+            action_key=["agent", "action"],
+            latent_key=["agent", "latent"],
+            reward_logits_key=["agent", "reward_logits"],
+        )
+        world_model = instantiate(cfg)
+
+        assert isinstance(world_model, WorldModel)
+        assert world_model.encoder.in_keys == [("agent", "observation")]
+        assert world_model.encoder.out_keys == [("agent", "latent")]
+        assert world_model.dynamics.in_keys == [
+            ("agent", "latent"),
+            ("agent", "action"),
+        ]
+        assert world_model.dynamics.out_keys == [("next", "agent", "latent")]
+        assert world_model.reward_head.in_keys == [
+            ("agent", "latent"),
+            ("agent", "action"),
+        ]
+        assert world_model.reward_head.out_keys == [("next", "agent", "reward_logits")]
+
+        batch_shape = torch.Size((2, 3))
+        td = TensorDict(
+            {
+                ("agent", "observation"): torch.randn(*batch_shape, 7),
+                ("agent", "action"): torch.randn(*batch_shape, 3),
+            },
+            batch_size=batch_shape,
+        )
+        out = world_model(td)
+
+        assert out["agent", "latent"].shape == (*batch_shape, 16)
+        assert out["next", "agent", "latent"].shape == (*batch_shape, 16)
+        assert out["next", "agent", "reward_logits"].shape == (
+            *batch_shape,
+            5,
+        )
+        assert torch.count_nonzero(out["next", "agent", "reward_logits"]) == 0
+
+        registered = ConfigStore.instance().load("model/tdmpc2_world_model.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     @pytest.mark.parametrize(("out_features", "expected_features"), [(4, 4), (None, 8)])
     def test_dreamer_v3_mlp_config(self, out_features, expected_features):
         """Test DreamerV3MLPConfig."""
@@ -1901,7 +2010,6 @@ class TestCollectorsConfig:
 
         # Define cfg_cls and kwargs based on collector type
         if collector == "async":
-
             cfg_cls = AsyncCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
@@ -2060,6 +2168,20 @@ class TestLossConfigs:
         assert module.value_chunk_dim == 1
         assert module.group_key == ("metadata", "task_id")
         assert module.tensor_keys.valid == ("collector", "mask")
+
+    def test_gae_config_average_gae_default_matches_gae(self):
+        from hydra.utils import instantiate
+
+        from torchrl.objectives.value import GAE
+        from torchrl.trainers.algorithms.configs.objectives import GAEConfig
+
+        gae = GAE(gamma=0.99, lmbda=0.95, value_network=None)
+        assert gae.average_gae is False
+        assert GAEConfig().average_gae is False
+        module = instantiate(GAEConfig(gamma=0.99, lmbda=0.95))
+        assert isinstance(module, GAE)
+        assert module.average_gae is False
+        assert module.average_gae is gae.average_gae
 
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")

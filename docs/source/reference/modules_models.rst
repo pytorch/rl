@@ -1,5 +1,18 @@
 .. currentmodule:: torchrl.modules
 
+Flow models
+===========
+
+Tensor-only implementations underlying :class:`FlowMatchingPolicy` and
+:class:`OneStepPolicy`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    FlowMatchingModel
+    OneStepModel
+
 Robot Learning
 ==============
 
@@ -40,6 +53,7 @@ For an overview of how the DreamerV3 components fit together, see
     DreamerV3MLP
     DreamerV3ImageEncoder
     DreamerV3ImageDecoder
+    SimplicialNormalization
 
 PILCO
 -----

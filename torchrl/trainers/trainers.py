@@ -1134,7 +1134,7 @@ class Trainer:
             if self.checkpoint_rotation is not None:
                 self.checkpoint_rotation.save(
                     checkpoint,
-                    step=self.collected_frames,
+                    step=self.checkpoint_step,
                     metadata=self._checkpoint_manifest_metadata(),
                 )
             else:
@@ -1216,8 +1216,13 @@ class Trainer:
         )
         return metadata
 
+    @property
+    def checkpoint_step(self) -> int:
+        """Progress used for checkpoint intervals and rotation filenames."""
+        return self.collected_frames
+
     def _save_interval_elapsed(self) -> bool:
-        return (self.collected_frames - self._last_save) > self.save_trainer_interval
+        return (self.checkpoint_step - self._last_save) > self.save_trainer_interval
 
     def _save_due(self, force_save: bool = False) -> bool:
         """Whether a destination is configured and a save is due now."""
@@ -1229,7 +1234,7 @@ class Trainer:
         if not self._has_checkpoint_destination():
             return
         if self._save_interval_elapsed():
-            self._last_save = self.collected_frames
+            self._last_save = self.checkpoint_step
         elif not force_save:
             return
         self._save_trainer()

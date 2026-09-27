@@ -3189,6 +3189,32 @@ def test_prioritized_slice_sampler_episodes(device):
     assert preferred.float().mean() > 0.95
 
 
+@pytest.mark.parametrize("as_tensor", [False, True])
+def test_parameter_scheduler_state_dict(as_tensor, tmp_path):
+    beta = torch.tensor(0.5) if as_tensor else 0.5
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=0.6, beta=beta, storage=ListStorage(max_size=10)
+    )
+    scheduler = StepScheduler(
+        rb, param_name="beta", gamma=0.1, mode="additive", max_value=1.0
+    )
+    scheduler.step()
+    scheduler.step()
+    # used to fail with "cannot pickle 'module' object" because of the backend entry
+    torch.save(scheduler.state_dict(), tmp_path / "scheduler.pt")
+    rb2 = TensorDictPrioritizedReplayBuffer(
+        alpha=0.6, beta=beta, storage=ListStorage(max_size=10)
+    )
+    scheduler2 = StepScheduler(
+        rb2, param_name="beta", gamma=0.1, mode="additive", max_value=1.0
+    )
+    scheduler2.load_state_dict(
+        torch.load(tmp_path / "scheduler.pt", weights_only=False)
+    )
+    assert scheduler2._step_cnt == 2
+    assert scheduler2.backend is (torch if as_tensor else np)
+
+
 @pytest.mark.parametrize("alpha", [0.6, torch.tensor(1.0)])
 @pytest.mark.parametrize("beta", [0.7, torch.tensor(0.1)])
 @pytest.mark.parametrize("gamma", [0.1])
@@ -3262,6 +3288,35 @@ def test_prioritized_parameter_scheduler(
         )
         rb.sample(20)
         scheduler.step()
+
+
+@pytest.mark.parametrize("as_tensor", [False, True])
+@pytest.mark.parametrize(
+    "param_name,init_value,gamma,bound,expected",
+    [
+        ("alpha", 0.5, -0.2, "min_value", [0.3, 0.1, 0.0, 0.0]),
+        ("beta", 0.0, 0.2, "max_value", [0.0, 0.0, 0.0, 0.0]),
+    ],
+)
+def test_parameter_scheduler_zero_bound(
+    as_tensor, param_name, init_value, gamma, bound, expected
+):
+    # A bound of 0 must clip the parameter and not be mistaken for the None default
+    if as_tensor:
+        init_value = torch.tensor(init_value)
+    rb = TensorDictPrioritizedReplayBuffer(
+        alpha=init_value, beta=init_value, storage=ListStorage(max_size=10)
+    )
+    scheduler = StepScheduler(
+        rb, param_name=param_name, gamma=gamma, mode="additive", **{bound: 0}
+    )
+    for expected_value in expected:
+        scheduler.step()
+        value = getattr(rb.sampler, param_name)
+        assert torch.is_tensor(value) == as_tensor
+        torch.testing.assert_close(
+            torch.as_tensor(value).float(), torch.tensor(expected_value)
+        )
 
 
 class TestFindStartStopTraj:

@@ -7,6 +7,7 @@ We provide examples to train the following algorithms:
 - [Decision Transformers](../sota-implementations/decision_transformer)
 - [Discrete SAC](discrete_sac/discrete_sac.py)
 - [Dreamer](../sota-implementations/dreamer)
+- [FQL](fql/)
 - [IQL](iql/)
 - [Impala](impala/)
 - [PPO](../sota-implementations/ppo/)

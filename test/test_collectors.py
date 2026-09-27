@@ -16,6 +16,7 @@ import sys
 import time
 import traceback
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -25,6 +26,7 @@ import pytest
 import torch
 import torchrl.collectors._multi_base
 import torchrl.collectors._runner
+import torchrl.collectors.distributed.generic as distributed_generic
 from packaging import version
 from pyvers import implement_for
 from tensordict import (
@@ -876,6 +878,82 @@ class TestCollectorGeneric:
                 )
         assert result is sentinel
         assert target.call_args.kwargs["sync"] is False
+
+    def test_submitit_delayed_forwards_worker_configuration(self):
+        policy = object()
+        policy_factory = object()
+        weight_sync_schemes = {"policy": object()}
+        collector_kwargs = {"device": None}
+        collector = Mock(
+            env_constructors=[ContinuousActionVecMockEnv],
+            num_workers=1,
+            num_workers_per_collector=1,
+            backend="gloo",
+            collector_class=Collector,
+            policy=policy,
+            policy_factory=[policy_factory],
+            collector_kwargs=[collector_kwargs],
+            _sync=False,
+            _frames_per_batch_corrected=7,
+            _weight_sync_schemes=weight_sync_schemes,
+        )
+        scattered_objects = None
+
+        def capture_scatter(output_list, objects, src):
+            nonlocal scattered_objects
+            assert output_list == [None]
+            assert src == 0
+            scattered_objects = objects
+
+        with patch.object(
+            distributed_generic.torch.distributed,
+            "scatter_object_list",
+            side_effect=capture_scatter,
+        ):
+            DistributedCollector._init_worker_dist_submitit_delayed(collector)
+
+        collector._init_master_dist.assert_called_once_with(2, "gloo")
+        payload = scattered_objects[1]
+        assert payload["policy_factory"] is policy_factory
+        assert payload["weight_sync_schemes"] is weight_sync_schemes
+
+        store = object()
+
+        def replay_scatter(output_list, objects, src):
+            assert objects == [None, None]
+            assert src == 0
+            output_list[0] = payload
+
+        with (
+            patch.object(distributed_generic, "_node_init_dist", return_value=store),
+            patch.object(
+                distributed_generic.torch.distributed,
+                "scatter_object_list",
+                side_effect=replay_scatter,
+            ),
+            patch.object(distributed_generic, "_run_collector") as run_collector,
+        ):
+            distributed_generic._distributed_init_delayed(
+                rank=1,
+                backend="gloo",
+                rank0_ip="127.0.0.1",
+                tcpport=29500,
+                world_size=2,
+            )
+
+        run_collector.assert_called_once_with(
+            _store=store,
+            sync=False,
+            collector_class=Collector,
+            num_workers=1,
+            env_make=payload["env_make"],
+            policy=policy,
+            policy_factory=policy_factory,
+            frames_per_batch=7,
+            collector_kwargs=collector_kwargs,
+            weight_sync_schemes=weight_sync_schemes,
+            verbose=False,
+        )
 
     def test_explicit_direct_backend_overrides_context(self):
         with service_backend("ray"):
@@ -6291,6 +6369,51 @@ class TestCollectorStats:
             per_worker = collector.stats(workers="per_worker")
             assert "frames" not in per_worker
             assert "worker_0/frames" in per_worker
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="requires ray.")
+    def test_ray_stats_during_collection(self, tmp_path):
+        entered = tmp_path / "entered"
+        release = tmp_path / "release"
+
+        class GatedEnv(ContinuousActionVecMockEnv):
+            def _step(self, tensordict):
+                entered.touch()
+                deadline = time.monotonic() + 30
+                while not release.exists():
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Collection gate was not released.")
+                    time.sleep(0.01)
+                return super()._step(tensordict)
+
+        probe = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(probe.action_spec)
+        probe.close()
+        collector = RayCollector(
+            GatedEnv,
+            policy=policy,
+            frames_per_batch=16,
+            total_frames=16,
+            num_collectors=1,
+            ray_init_config={"num_cpus": 1, "include_dashboard": False},
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+        )
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                collecting = executor.submit(next, iter(collector))
+                try:
+                    deadline = time.monotonic() + 30
+                    while not entered.exists():
+                        assert time.monotonic() < deadline
+                        time.sleep(0.01)
+                    stats = collector.stats(workers="both", timeout=1.0)
+                    assert stats["workers_alive"] == 1
+                    assert stats["worker_0/frames"] == 0
+                    assert not collecting.done()
+                finally:
+                    release.touch()
+                assert collecting.result(timeout=30).numel() == 16
         finally:
             collector.shutdown()
 
