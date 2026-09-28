@@ -43,6 +43,8 @@ class RandomSampler(Sampler):
 
     """
 
+    requires_shared_state = False
+
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         if len(storage) == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)

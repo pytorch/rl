@@ -109,6 +109,10 @@ class PromptGroupSampler(Sampler):
         8
     """
 
+    @property
+    def requires_shared_state(self) -> bool:
+        return self.strategy == "recency"
+
     def __init__(
         self,
         *,

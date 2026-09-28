@@ -13,6 +13,7 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .dataloader import ReplayBufferDataset, StorageDataset, tensordict_collate
 from .her import HERReplayBuffer, HindsightStrategy
 from .offline_to_online import OfflineToOnlineReplayBuffer, prefill_replay_buffer
 from .query import (
@@ -104,6 +105,7 @@ __all__ = [
     "SampleUnit",
     "Sequence",
     "Transition",
+    "ReplayBufferDataset",
     "ReplayBufferEnsemble",
     "TensorDictPrioritizedReplayBuffer",
     "TensorDictReplayBuffer",
@@ -124,9 +126,11 @@ __all__ = [
     "LazyTensorStorage",
     "ListStorage",
     "Storage",
+    "StorageDataset",
     "StorageEnsemble",
     "StoreStorage",
     "TensorStorage",
+    "tensordict_collate",
     "DEFAULT_DONE_KEYS",
     "find_start_stop_traj",
     "Flat2TED",

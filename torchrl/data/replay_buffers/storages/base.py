@@ -13,6 +13,7 @@ from typing import Any
 import torch
 
 from torchrl.data.replay_buffers.checkpointers import StorageCheckpointerBase
+from torchrl.data.replay_buffers.dataloader import StorageDataset
 
 try:
     from torch.compiler import disable as compile_disable, is_compiling
@@ -25,6 +26,11 @@ class Storage:
 
     Every storage must have a set, get and __len__ methods implemented.
     Get and set should support integers as well as list of integers.
+
+    :meth:`as_dataset` wraps a storage in a map-style
+    :class:`torch.utils.data.Dataset` that a :class:`torch.utils.data.DataLoader`
+    reads with any torch sampler, fetching every index batch through a single
+    :meth:`get` call.
 
     The storage does not need to have a definite size, but if it does one should
     make sure that it is compatible with the buffer size.
@@ -206,6 +212,34 @@ class Storage:
 
     def __getitem__(self, item):
         return self.get(item)
+
+    def as_dataset(self) -> StorageDataset:
+        """Returns a map-style :class:`torch.utils.data.Dataset` reading this storage.
+
+        See :class:`~torchrl.data.StorageDataset` for the batched fetch and
+        collation contract. Multi-dimensional storages are read through
+        :meth:`flatten`.
+
+        Examples:
+            >>> import torch
+            >>> from torch.utils.data import DataLoader
+            >>> from torchrl.data import LazyTensorStorage, ReplayBuffer, tensordict_collate
+            >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
+            >>> _ = rb.extend(torch.arange(100))
+            >>> loader = DataLoader(
+            ...     rb.storage.as_dataset(), batch_size=4, shuffle=True, collate_fn=tensordict_collate
+            ... )
+            >>> next(iter(loader)).shape
+            torch.Size([4])
+        """
+        return StorageDataset(self)
+
+    def _share_memory_(self) -> None:
+        """Places the content where processes forked from this one read its later writes."""
+
+    def _fork_safe(self) -> bool:
+        """Whether a forked copy of this storage reads rows that match its length."""
+        return True
 
     def __setitem__(self, index, value):
         """Sets values in the storage without updating the cursor or length."""
