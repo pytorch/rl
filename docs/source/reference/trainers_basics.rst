@@ -58,9 +58,29 @@ minimal mode.
     DQNTrainer
     DDPGTrainer
     IQLTrainer
+    FQLTrainer
     CQLTrainer
     TD3Trainer
     GRPOTrainer
+
+Offline and online FQL
+----------------------
+
+:class:`FQLTrainer` uses :class:`OfflineToOnlineTrainer` replay hooks and the
+standard Trainer lifecycle. Supply a preloaded replay buffer and
+``offline_steps`` for offline training. An optional collector factory and
+``total_frames`` add online fine-tuning; the factory is called after pretraining.
+An empty replay buffer is supported when ``offline_steps=0``.
+
+Use ``logger``, ``checkpoint`` and ``checkpoint_rotation`` as with other
+trainers. When pretraining is configured, checkpoint intervals and rotation
+filenames use optimization steps across both phases. ``load_from_file`` restores
+the completed budgets, optimizer, replay and target updater before training
+continues. ``compile_loss=True`` preserves the loss module's checkpoint keys.
+
+Target networks use the standard post-optimizer update. This differs from the
+reference FQL implementation's pre-optimizer EMA; learning equivalence requires
+a matched training comparison.
 
 PPO from an environment
 -----------------------

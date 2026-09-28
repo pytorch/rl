@@ -2,14 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
 import os
 import subprocess
+import sys
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
+from omegaconf import OmegaConf
 from tensordict import TensorDict
 from tensordict.nn import composite_lp_aggregate
+from torchrl.checkpoint import Checkpoint, resolve_checkpoint_path
 
 # Check that we're using the new behavior
 assert (
@@ -17,6 +23,14 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "fql": """python sota-implementations/fql/fql.py \
+  device=cpu dataset.name=null dataset.random_frames=64 \
+  env.max_episode_steps=20 \
+  optim.offline_steps=10 optim.online_steps=12 optim.batch_size=16 \
+  network.width=32 network.depth=2 network.num_steps=3 \
+  evaluation.interval=10 evaluation.episodes=1 log_interval=1 \
+  hydra.run.dir=$SOTA_LOG_DIR/fql
+""",
     "dqn_trainer_resume": """python sota-implementations/dqn_trainer/train.py \
   collector.total_frames=2000 \
   collector.frames_per_batch=1000 \
@@ -537,25 +551,180 @@ def test_commands(algo, monkeypatch, tmp_path):
     if dataset_id is not None:
         monkeypatch.setenv("HOME", str(tmp_path))
         _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
-    if algo in {"ppo_mujoco", "sac"}:
+    if algo in {"ppo_mujoco", "sac", "fql"}:
         monkeypatch.setenv("SOTA_LOG_DIR", str(tmp_path))
     run_command(commands[algo])
-    if algo in {"ppo_mujoco", "sac"}:
+    if algo in {"ppo_mujoco", "sac", "fql"}:
         scalar_roots = list(tmp_path.rglob("scalars"))
         assert len(scalar_roots) == 1
         scalar_names = {
             path.relative_to(scalar_roots[0]).as_posix()
             for path in scalar_roots[0].rglob("*.csv")
         }
-        expected_training_metric = (
-            "training/loss_objective.csv"
-            if algo == "ppo_mujoco"
-            else "training/q_loss.csv"
-        )
+        expected_training_metric = {
+            "ppo_mujoco": "training/loss_objective.csv",
+            "sac": "training/q_loss.csv",
+            "fql": "training/loss_actor.csv",
+        }[algo]
         assert expected_training_metric in scalar_names
-        assert "evaluation/reward.csv" in scalar_names
+        expected_evaluation_metric = "return" if algo == "fql" else "reward"
+        assert f"evaluation/{expected_evaluation_metric}.csv" in scalar_names
         assert scalar_names
         assert all(
             name.startswith(("training/", "evaluation/", "timing/"))
             for name in scalar_names
         )
+
+
+@pytest.fixture
+def fql_recipe():
+    directory = Path(__file__).resolve().parents[4] / "sota-implementations" / "fql"
+    spec = importlib.util.spec_from_file_location(
+        "fql_recipe_utils", directory / "utils.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return directory, module
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=pytest.mark.gpu)])
+def test_fql_evaluation(fql_recipe, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA unavailable")
+    directory, recipe = fql_recipe
+    cfg = OmegaConf.load(directory / "config.yaml")
+    cfg.device = device
+    cfg.dataset.name = None
+    cfg.dataset.random_frames = 8
+    cfg.env.max_episode_steps = 4
+    cfg.evaluation.episodes = 2
+    cfg.network.width = 8
+    cfg.network.depth = 1
+    _, env, eval_env = recipe.make_data_and_envs(cfg)
+    policy, _, _ = recipe.make_agent(cfg, env, torch.device(device))
+    try:
+        eval_env.set_seed(12)
+        cpu_state = torch.get_rng_state()
+        cuda_state = torch.cuda.get_rng_state() if device == "cuda" else None
+        expected = torch.stack(
+            [
+                eval_env.rollout(4, policy, auto_cast_to_device=True)[
+                    "next", "reward"
+                ].sum()
+                for _ in range(2)
+            ]
+        ).mean()
+        eval_env.set_seed(12)
+        torch.set_rng_state(cpu_state)
+        if cuda_state is not None:
+            torch.cuda.set_rng_state(cuda_state)
+        metrics = recipe.evaluate(policy, eval_env, cfg)
+        torch.testing.assert_close(metrics["evaluation/return"], expected)
+        assert torch.equal(torch.get_rng_state(), cpu_state)
+        if cuda_state is not None:
+            assert torch.equal(torch.cuda.get_rng_state(), cuda_state)
+        stop = SimpleNamespace(requested=False)
+
+        def request_stop(module, args, result):
+            stop.requested = True
+
+        handle = policy.register_forward_hook(request_stop)
+        try:
+            assert not recipe.evaluate(policy, eval_env, cfg, stop=stop).keys()
+        finally:
+            handle.remove()
+    finally:
+        env.close()
+        eval_env.close()
+
+
+def fql_command(directory, output, *overrides):
+    return [
+        sys.executable,
+        str(directory / "fql.py"),
+        "device=cpu",
+        "dataset.name=null",
+        "dataset.random_frames=16",
+        "network.width=8",
+        "network.depth=1",
+        "optim.batch_size=4",
+        "optim.offline_steps=3",
+        "evaluation.interval=3",
+        "evaluation.episodes=1",
+        "env.max_episode_steps=2",
+        "log_interval=1",
+        f"hydra.run.dir={output}",
+        *overrides,
+    ]
+
+
+def test_fql_checkpoint_resume(fql_recipe, tmp_path):
+    directory, _ = fql_recipe
+    uninterrupted, resumed = tmp_path / "full", tmp_path / "resumed"
+    for output, overrides in (
+        (uninterrupted, ()),
+        (resumed, ("optim.offline_steps=1",)),
+        (resumed, (f"resume={resumed / 'checkpoints'}",)),
+    ):
+        result = subprocess.run(
+            fql_command(directory, output, *overrides),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+    full_path = resolve_checkpoint_path(uninterrupted / "checkpoints")
+    resumed_path = resolve_checkpoint_path(resumed / "checkpoints")
+    for path in (full_path, resumed_path):
+        assert Checkpoint.manifest(path)["metadata"]["optim_steps"] == 3
+        optimizer = Checkpoint.read_component(path, "optimizer")
+        assert {int(state["step"]) for state in optimizer["state"].values()} == {3}
+    full_weights = TensorDict(Checkpoint.read_component(full_path, "loss_module"), [])
+    resumed_weights = TensorDict(
+        Checkpoint.read_component(resumed_path, "loss_module"), []
+    )
+    torch.testing.assert_close(full_weights, resumed_weights, rtol=0, atol=0)
+    steps = [
+        int(line.split(",")[0])
+        for line in (resumed / "fql/scalars/training/loss_actor.csv")
+        .read_text()
+        .splitlines()
+    ]
+    assert steps == [1, 2, 3]
+
+
+def test_fql_interruption_checkpoint(fql_recipe, tmp_path):
+    directory, _ = fql_recipe
+    output = tmp_path / "interrupted"
+    with (tmp_path / "recipe.log").open("w") as log:
+        process = subprocess.Popen(
+            fql_command(directory, output, "optim.offline_steps=100000"),
+            stdout=log,
+            stderr=log,
+        )
+        try:
+            scalar = output / "fql/scalars/training/loss_actor.csv"
+            deadline = time.monotonic() + 30
+            while not scalar.exists():
+                assert process.poll() is None, (tmp_path / "recipe.log").read_text()
+                assert time.monotonic() < deadline, "Training produced no scalar logs"
+                time.sleep(0.05)
+            process.terminate()
+            assert process.wait(timeout=30) == 130, (
+                tmp_path / "recipe.log"
+            ).read_text()
+            checkpoint = resolve_checkpoint_path(output / "checkpoints")
+            step = Checkpoint.manifest(checkpoint)["metadata"]["optim_steps"]
+            assert 0 < step < 100000
+            optimizer = Checkpoint.read_component(checkpoint, "optimizer")
+            assert {int(state["step"]) for state in optimizer["state"].values()} == {
+                step
+            }
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, *sys.argv[1:]]))

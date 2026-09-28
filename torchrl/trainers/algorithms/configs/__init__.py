@@ -132,6 +132,7 @@ from torchrl.trainers.algorithms.configs.objectives import (
     DDPGLossConfig,
     DQNLossConfig,
     DreamerV3LossConfig,
+    FQLLossConfig,
     GAEConfig,
     HardUpdateConfig,
     IQLLossConfig,
@@ -149,6 +150,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     CQLTrainerConfig,
     DDPGTrainerConfig,
     DQNTrainerConfig,
+    FQLTrainerConfig,
     GRPOTrainerConfig,
     IQLTrainerConfig,
     OfflineToOnlineTrainerConfig,
@@ -441,6 +443,7 @@ __all__ = [
     "DDPGLossConfig",
     "DQNLossConfig",
     "DreamerV3LossConfig",
+    "FQLLossConfig",
     "IQLLossConfig",
     "LossConfig",
     "PPOLossConfig",
@@ -456,6 +459,7 @@ __all__ = [
     "CQLTrainerConfig",
     "DDPGTrainerConfig",
     "DQNTrainerConfig",
+    "FQLTrainerConfig",
     "IQLTrainerConfig",
     "OfflineToOnlineTrainerConfig",
     "OnPolicyTrainerConfig",
@@ -713,6 +717,7 @@ def _register_configs():
     cs.store(group="loss", name="ddpg", node=DDPGLossConfig)
     cs.store(group="loss", name="dqn", node=DQNLossConfig)
     cs.store(group="loss", name="dreamer_v3", node=DreamerV3LossConfig)
+    cs.store(group="loss", name="fql", node=FQLLossConfig)
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="mixer", node=QMixerLossConfig)
@@ -788,6 +793,7 @@ def _register_configs():
     cs.store(group="trainer", name="cql", node=CQLTrainerConfig)
     cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
+    cs.store(group="trainer", name="fql", node=FQLTrainerConfig)
     cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
     cs.store(
         group="trainer",

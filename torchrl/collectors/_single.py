@@ -1707,6 +1707,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         super().update_policy_weights_(
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
+        mark_weight_update(getattr(self, "_policy_w_state_dict", None))
 
         # Bump the local PolicyVersion transform (if track_policy_version is on).
         # This is the canonical bump point for the leaf collector — it covers:
@@ -1747,7 +1748,6 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             and self._policy_w_state_dict is not None
         ):
             TensorDict.from_module(self._policy_w_state_dict).data.update_(weights.data)
-            mark_weight_update(self._policy_w_state_dict)
             return
         raise RuntimeError("Collector has no mutable local policy weight target.")
 
@@ -2474,6 +2474,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             self._policy_w_state_dict.load_state_dict(
                 state_dict["policy_state_dict"], **kwargs
             )
+            mark_weight_update(self._policy_w_state_dict)
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
         self._flush_trajectory_assembly()
