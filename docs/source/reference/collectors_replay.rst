@@ -27,33 +27,47 @@ be a sufficient preprocessing step before populating the storage:
     >>> for data in collector:
     ...     memory.extend(data)
 
+.. warning::
+
+    Flatten with ``reshape(-1)`` only when sampling **independent
+    transitions**. It is incompatible with
+    :class:`~torchrl.data.replay_buffers.SliceSampler`. A batched or
+    :class:`~torchrl.envs.ParallelEnv` collector yields ``[num_envs, T]``.
+    Calling ``replay_buffer.extend(data.reshape(-1))`` — especially when
+    ``T=1`` — interleaves environments so the sampler reports
+    ``length range: 1 - 1``. Keep the ``[num_envs, T]`` batch and pass
+    ``ndim=2`` to the storage, as in the examples below. ``T`` on each
+    ``extend`` must be at least the requested slice length when
+    ``strict_length=True``.
+
 If trajectory slices have to be collected, the recommended way to achieve this is to create
 a multidimensional buffer and sample using the :class:`~torchrl.data.replay_buffers.SliceSampler`
 sampler class. One must ensure that the data passed to the buffer is properly shaped, with the
-``time`` and ``batch`` dimensions clearly separated. In practice, the following configurations
+``time`` and ``batch`` dimensions clearly separated: **do not**
+``reshape(-1)``. In practice, the following configurations
 will work:
 
     >>> # Single environment: no need for a multi-dimensional buffer
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
+    ...     sampler=SliceSampler(num_slices=4, traj_key=("collector", "traj_ids"))
     ... )
     >>> collector = Collector(env, policy, frames_per_batch=N, total_frames=-1)
     >>> for data in collector:
     ...     memory.extend(data)
-    >>> # Batched environments: a multi-dim buffer is required
+    >>> # Batched / ParallelEnv: keep [num_envs, T] and set ndim=2
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=2),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
+    ...     sampler=SliceSampler(num_slices=4, traj_key=("collector", "traj_ids"))
     ... )
     >>> env = ParallelEnv(4, make_env)
     >>> collector = Collector(env, policy, frames_per_batch=N, total_frames=-1)
     >>> for data in collector:
-    ...     memory.extend(data)
+    ...     memory.extend(data)  # data.shape == [num_envs, T]; do not reshape(-1)
     >>> # Synchronous process collection behaves like ParallelEnv if cat_results="stack"
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=2),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
+    ...     sampler=SliceSampler(num_slices=4, traj_key=("collector", "traj_ids"))
     ... )
     >>> collector = Collector(make_env, policy,
     ...     num_collectors=4,
@@ -66,7 +80,7 @@ will work:
     >>> # Process collection + parallel env: adapt ndim for both batch dimensions
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=3),
-    ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
+    ...     sampler=SliceSampler(num_slices=4, traj_key=("collector", "traj_ids"))
     ... )
     >>> collector = Collector(lambda: ParallelEnv(2, make_env), policy,
     ...     num_collectors=4,

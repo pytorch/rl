@@ -788,6 +788,59 @@ class TestSamplers:
         else:
             raise AssertionError
 
+    def test_slice_sampler_parallel_env_flatten_vs_ndim(self):
+        # Collector batches are [num_envs, T]. Flattening each [N, 1] step
+        # with reshape(-1) interleaves environments so SliceSampler only
+        # sees length-1 trajectories (issue #3194). Keeping [N, T] with
+        # ndim=2 storage samples consecutive steps from one env.
+        torch.manual_seed(0)
+        num_envs, t, slice_len = 4, 8, 4
+        obs = torch.arange(t).unsqueeze(0).expand(num_envs, t) + 100 * torch.arange(
+            num_envs
+        ).unsqueeze(1)
+        traj_ids = torch.arange(num_envs).unsqueeze(1).expand(num_envs, t)
+        done = torch.zeros(num_envs, t, 1, dtype=torch.bool)
+        done[:, -1] = True
+        data = TensorDict(
+            {
+                "obs": obs,
+                ("collector", "traj_ids"): traj_ids,
+                ("next", "done"): done,
+            },
+            [num_envs, t],
+        )
+
+        rb_ok = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(64, ndim=2),
+            sampler=SliceSampler(
+                slice_len=slice_len,
+                traj_key=("collector", "traj_ids"),
+                strict_length=True,
+            ),
+            batch_size=slice_len * 2,
+        )
+        rb_ok.extend(data)
+        sample = rb_ok.sample().reshape(2, slice_len)
+        sampled_traj = sample["collector", "traj_ids"]
+        assert (sampled_traj == sampled_traj[:, :1]).all()
+        assert (sample["obs"][:, 1:] == sample["obs"][:, :-1] + 1).all()
+        env_id = sample["obs"] // 100
+        assert (env_id == env_id[:, :1]).all()
+
+        rb_flat = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(64),
+            sampler=SliceSampler(
+                slice_len=slice_len,
+                traj_key=("collector", "traj_ids"),
+                strict_length=True,
+            ),
+            batch_size=slice_len * 2,
+        )
+        for t_idx in range(t):
+            rb_flat.extend(data[:, t_idx : t_idx + 1].reshape(-1))
+        with pytest.raises(RuntimeError, match="sufficient length"):
+            rb_flat.sample()
+
     def test_slice_sampler_errors(self):
         device = "cpu"
         batch_size, num_slices = 100, 20
