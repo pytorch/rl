@@ -96,6 +96,8 @@ try:
         ActivationConfig,
         DreamerV3MLPConfig,
         LayerConfig,
+        MLPConfig,
+        QValueModelConfig,
     )
 
     _configs_available = True
@@ -103,6 +105,7 @@ except ImportError:
     _configs_available = False
     instantiate_config = None
     ActivationConfig = DreamerV3MLPConfig = LayerConfig = None
+    MLPConfig = QValueModelConfig = None
 
 
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
@@ -1888,12 +1891,6 @@ class TestModuleConfigs:
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_qvalue_model_config_respects_action_spec_shape(self):
-        from hydra.utils import instantiate
-        from torchrl.trainers.algorithms.configs.modules import (
-            MLPConfig,
-            QValueModelConfig,
-        )
-
         network = MLPConfig(in_features=3, out_features=4, depth=0)
         action_spec = {
             "_target_": "torchrl.data.Categorical",
@@ -1902,11 +1899,13 @@ class TestModuleConfigs:
         }
         observation = torch.randn(5, 3)
 
-        strict_actor = instantiate(QValueModelConfig(network=network, spec=action_spec))
+        strict_actor = instantiate_config(
+            QValueModelConfig(network=network, spec=action_spec)
+        )
         with pytest.raises(RuntimeError, match="does not match expected shape"):
             strict_actor(TensorDict({"observation": observation.clone()}, [5]))
 
-        actor = instantiate(
+        actor = instantiate_config(
             QValueModelConfig(
                 network=network,
                 spec=action_spec,
