@@ -222,6 +222,11 @@ _CONFIG_PARITY_SIGNATURE_OVERRIDES = {
     "MultiAsyncCollectorConfig": "torchrl.collectors.MultiCollector",
 }
 
+_CONFIG_PARITY_FIELD_ALIASES = {
+    "QValueModelConfig": {"module": "network"},
+    "ValueModelConfig": {"module": "network"},
+}
+
 _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
     {
         "CatTensorsConfig",
@@ -232,6 +237,8 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiActionConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
+        "QValueModelConfig",
+        "ValueModelConfig",
     }
 )
 
@@ -266,7 +273,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "PettingZooEnvConfig",
         "PrioritizedSamplerConfig",
         "PrioritizedSliceSamplerConfig",
-        "QValueModelConfig",
         "R3MTransformConfig",
         "RandomCropTensorDictConfig",
         "RemoveEmptySpecsConfig",
@@ -291,7 +297,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "VC1TransformConfig",
         "VIPRewardTransformConfig",
         "VIPTransformConfig",
-        "ValueModelConfig",
         "VecGymEnvTransformConfig",
         "VecNormConfig",
         "VecNormV2Config",
@@ -445,6 +450,7 @@ class TestConfigClassParity:
     @pytest.mark.parametrize("config_name", _config_parity_cases())
     def test_wrapped_class_kwargs_have_config_fields(self, config_name):
         fields, wrapped_cls, params = _resolve_parity_target(config_name)
+        aliases = _CONFIG_PARITY_FIELD_ALIASES.get(config_name, {})
 
         missing = [
             pname
@@ -453,6 +459,7 @@ class TestConfigClassParity:
             not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             and not pname.startswith("_")
             and pname not in fields
+            and aliases.get(pname) not in fields
         ]
         assert not missing, (
             f"{config_name} is missing Config field(s) for "
@@ -1878,6 +1885,46 @@ class TestModuleConfigs:
             ("agent", "action_value"),
             ("agent", "chosen_action_value"),
         ]
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_qvalue_model_config_respects_action_spec_shape(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            QValueModelConfig,
+        )
+
+        network = MLPConfig(in_features=3, out_features=4, depth=0)
+        action_spec = {
+            "_target_": "torchrl.data.Categorical",
+            "n": 4,
+            "shape": [1],
+        }
+        observation = torch.randn(5, 3)
+
+        strict_actor = instantiate(QValueModelConfig(network=network, spec=action_spec))
+        with pytest.raises(RuntimeError, match="does not match expected shape"):
+            strict_actor(TensorDict({"observation": observation.clone()}, [5]))
+
+        actor = instantiate(
+            QValueModelConfig(
+                network=network,
+                spec=action_spec,
+                safe=True,
+                strict_shape="auto",
+            )
+        )
+        td = actor(TensorDict({"observation": observation.clone()}, [5]))
+
+        assert actor.module[1].safe
+        assert td["action"].shape == (5, 1)
+        torch.testing.assert_close(
+            td["action"].squeeze(-1), td["action_value"].argmax(-1)
+        )
+        torch.testing.assert_close(
+            td["chosen_action_value"].squeeze(-1),
+            td["action_value"].max(-1).values,
+        )
 
     def test_qmixer_network_config(self):
         from torchrl.trainers.algorithms.configs.modules import QMixerNetworkConfig
