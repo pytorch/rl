@@ -951,6 +951,12 @@ class TestVD4RL:
         assert sample["next", "pixels"].shape == torch.Size([32, 1, 64, 64])
 
 
+_ATARI_DQN_GCS_UNAVAILABLE = (
+    "Atari DQN GCS dataset is no longer available "
+    "(https://github.com/pytorch/rl/issues/3113)"
+)
+
+
 @pytest.mark.slow
 class TestAtariDQN:
     @pytest.fixture(scope="class")
@@ -960,6 +966,7 @@ class TestAtariDQN:
         yield
         AtariDQNExperienceReplay._max_runs = prev_val
 
+    @pytest.mark.skip(reason=_ATARI_DQN_GCS_UNAVAILABLE)
     @pytest.mark.parametrize("dataset_id", ["Asterix/1", "Pong/4"])
     @pytest.mark.parametrize(
         "num_slices,slice_len", [[None, None], [None, 8], [2, None]]
@@ -985,6 +992,7 @@ class TestAtariDQN:
         assert sample.shape == (64,)
         assert sample.get_non_tensor("metadata")["dataset_id"] == dataset_id
 
+    @pytest.mark.skip(reason=_ATARI_DQN_GCS_UNAVAILABLE)
     @pytest.mark.parametrize(
         "num_slices,slice_len", [[None, None], [None, 8], [2, None]]
     )
@@ -1003,6 +1011,7 @@ class TestAtariDQN:
         assert sample[0].get_non_tensor("metadata")["dataset_id"] == "Pong/4"
         assert sample[1].get_non_tensor("metadata")["dataset_id"] == "Asterix/1"
 
+    @pytest.mark.skip(reason=_ATARI_DQN_GCS_UNAVAILABLE)
     @pytest.mark.parametrize("dataset_id", ["Pong/4"])
     def test_atari_preproc(self, dataset_id, tmpdir):
         dataset = AtariDQNExperienceReplay(
@@ -1037,6 +1046,66 @@ class TestAtariDQN:
 
         dataset = ReplayBuffer(storage=new_storage, batch_size=32)
         assert len(dataset) == 100
+
+
+class TestAtariDQNLocal:
+    def test_gcs_access_denied_error(self, tmp_path, monkeypatch):
+        import subprocess
+
+        from torchrl.data.datasets import atari_dqn
+
+        def fake_run(cmd, *args, **kwargs):
+            if cmd == ["gsutil", "version"]:
+                return subprocess.CompletedProcess(cmd, 0, b"", b"")
+            return subprocess.CompletedProcess(
+                cmd,
+                1,
+                stdout=b"",
+                stderr=(
+                    b"AccessDeniedException: 403 anonymous does not have "
+                    b"storage.objects.list access to the Google Cloud Storage bucket."
+                ),
+            )
+
+        monkeypatch.setattr(atari_dqn.subprocess, "run", fake_run)
+        with pytest.warns(DeprecationWarning, match="no longer available"):
+            with pytest.raises(RuntimeError, match=r"no longer available.*`root=`"):
+                AtariDQNExperienceReplay(
+                    "Pong/5", batch_size=4, root=tmp_path, download=True
+                )
+
+    def test_local_copy(self, tmp_path):
+        dataset_id = "Pong/5"
+        dataset_path = tmp_path / dataset_id
+        n = 16
+        td = TensorDict(
+            {
+                "data": TensorDict(
+                    {
+                        "observation": torch.zeros(n + 1, 4, 4, dtype=torch.uint8),
+                        "action": torch.zeros(n, dtype=torch.int32),
+                        "next": TensorDict(
+                            {
+                                "terminated": torch.zeros(n, 1, dtype=torch.uint8),
+                                "reward": torch.zeros(n, dtype=torch.float32),
+                                "done": torch.zeros(n, 1, dtype=torch.uint8),
+                            }
+                        ),
+                    }
+                ),
+            }
+        )
+        td.set_non_tensor("dataset_id", dataset_id)
+        td.memmap_(dataset_path / "0")
+        (dataset_path / "processed.json").write_text('{"processed": null}')
+        with pytest.warns(DeprecationWarning, match="no longer available"):
+            dataset = AtariDQNExperienceReplay(
+                dataset_id, batch_size=4, root=tmp_path, download=True
+            )
+        sample = dataset.sample()
+        assert sample.shape == (4,)
+        assert sample["observation"].shape == (4, 4, 4)
+        assert sample.get_non_tensor("metadata")["dataset_id"] == dataset_id
 
 
 @pytest.mark.slow
