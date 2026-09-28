@@ -4896,10 +4896,21 @@ class MultiCategorical(Categorical):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
+        if val.ndim < 1:
+            # a sample of a spec of shape [1] squeezed by remove_singleton
+            val = val.unsqueeze(0)
+        nvec = self.nvec
+        if nvec.ndim > 1:
+            # a batched spec expands nvec over its batch dims, the widths sit along the last one
+            nvec = nvec.flatten(0, -2)[0]
+            if (self.nvec != nvec).any():
+                raise ValueError(
+                    f"Only homogeneous MultiCategorical specs can be one-hot encoded, got nvec={self.nvec}."
+                )
         return torch.cat(
             [
                 torch.nn.functional.one_hot(val[..., i], n).bool()
-                for i, n in enumerate(self.nvec)
+                for i, n in enumerate(nvec.tolist())
             ],
             -1,
         ).to(self.device)
