@@ -1854,6 +1854,30 @@ class TestLLMMaskedCategorical:
         expected_mode = masked_logits.argmax(dim=-1)
         torch.testing.assert_close(mode, expected_mode)
 
+    @pytest.mark.parametrize("token_level", [False, True])
+    def test_deterministic_sample_matches_mode(self, token_level):
+        """deterministic_sample must exist and equal the argmax of the masked logits."""
+        logits = torch.tensor(
+            [
+                [[1.0, 3.0, 2.0, 0.0], [4.0, 0.0, 1.0, 2.0], [0.0, 1.0, 5.0, 2.0]],
+                [[2.0, 0.0, 1.0, 4.0], [1.0, 6.0, 0.0, 2.0], [3.0, 1.0, 0.0, 2.0]],
+            ]
+        )
+        large_neg = torch.finfo(logits.dtype).min
+        if token_level:
+            mask = torch.ones_like(logits, dtype=torch.bool)
+            mask[0, 0, :2] = False
+            expected = logits.masked_fill(~mask, large_neg).argmax(dim=-1)
+        else:
+            mask = torch.ones(logits.shape[:-1], dtype=torch.bool)
+            mask[0, 0] = False
+            expected = logits.masked_fill(~mask.unsqueeze(-1), large_neg).argmax(dim=-1)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        torch.testing.assert_close(dist.deterministic_sample, dist.mode)
+
     def test_entropy_correctness_position_level(self):
         """Test that entropy computation works correctly with position-level masking."""
         torch.manual_seed(0)

@@ -760,6 +760,7 @@ class LLMMaskedCategorical(D.Distribution):
         - For token-level masking, if a token is masked at a given position, log_prob will return -inf for that entry.
         - For position-level masking, if a position is masked (ignore_index), log_prob will return 0.0 for that entry (correct for cross-entropy loss).
         - Sampling always respects the mask (masked tokens/positions are never sampled).
+        - ``mode`` and ``deterministic_sample`` return the argmax of the masked logits.
 
     All documented use cases are covered by tests in test_distributions.py.
     """
@@ -890,6 +891,10 @@ class LLMMaskedCategorical(D.Distribution):
         """Get the mode using masked logits."""
         masked_logits = self._sampling_logits
         return masked_logits.argmax(dim=-1)
+
+    @property
+    def deterministic_sample(self):
+        return self.mode
 
     def entropy(self) -> torch.Tensor:
         """Compute entropy using masked logits."""
