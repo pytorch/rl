@@ -1442,6 +1442,9 @@ class TestSpec:
             (-2, 2, torch.int64),
             (-3, 0, torch.int32),
             (250, 255, torch.uint8),
+            (-128, 127, torch.int8),
+            (2**63 - 4, 2**63 - 1, torch.int64),
+            (-(2**63), -(2**63) + 3, torch.int64),
         ],
     )
     def test_bounded_discrete_rand_covers_bounds(self, low, high, dtype):
@@ -1464,6 +1467,26 @@ class TestSpec:
         assert sample[:, 0].unique().tolist() == [0, 1]
         assert sample[:, 1].unique().tolist() == [-1, 0, 1]
         assert sample[:, 2].unique().tolist() == [5]
+
+    @pytest.mark.parametrize(
+        "low,high,dtype",
+        [
+            (-(2**15), 2**15 - 1, torch.int16),
+            (-(2**31) + 2, 2**31 - 3, torch.int32),
+            (-(2**63), 0, torch.int64),
+            (-(2**63), 2**63 - 1, torch.int64),
+        ],
+    )
+    def test_bounded_discrete_rand_wide_range(self, low, high, dtype):
+        torch.manual_seed(0)
+        spec = Bounded(low, high, shape=(10_000,), dtype=dtype)
+        sample = spec.rand()
+        assert spec.is_in(sample)
+        margin = (high - low) // 100
+        assert sample.min().item() < low + margin
+        assert sample.max().item() > high - margin
+        below_mid = (sample <= low + (high - low) // 2).float().mean().item()
+        assert 0.45 < below_mid < 0.55
 
     def test_ndbounded_shape(self):
         spec = Bounded(-3, 3 * torch.ones(10, 5), shape=[10, 5])
