@@ -2575,8 +2575,15 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
                 mini = self.space.low
             interval = maxi - mini
             r = torch.rand(_size([*shape, *self._safe_shape]), device=interval.device)
-            r = interval * r
-            r = self.space.low + r
+            if self.dtype.is_floating_point:
+                r = interval * r
+                r = self.space.low + r
+            else:
+                # Both bounds are inclusive: pick uniformly among the
+                # high - low + 1 integers. Flooring before shifting by low
+                # avoids the truncation toward zero of the dtype cast.
+                r = (r * (interval.to(r.dtype) + 1)).floor() + mini
+                r = torch.minimum(r, maxi)
             if r.dtype != self.dtype:
                 r = r.to(self.dtype)
             if self.dtype is not None and r.device != self.device:
