@@ -853,7 +853,6 @@ class TestDQN(LossModuleTestBase):
         manual_weighted_loss = (loss_elements * weights2).sum() / weights2.sum()
         assert torch.allclose(loss_out2["loss"], manual_weighted_loss, rtol=1e-4)
 
-
     @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     def test_load_lazy_estimator(self, action_spec_type):
         # A loss saved after its value estimator was created must restore into
@@ -1013,7 +1012,6 @@ class TestDQN(LossModuleTestBase):
             atol=1e-5,
             rtol=0.0,
         )
-
 
 
 class TestQMixer(LossModuleTestBase):
