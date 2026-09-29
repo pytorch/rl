@@ -510,6 +510,12 @@ class RayReplayBuffer(ReplayBuffer):
     def batch_size(self):
         return self._client.batch_size
 
+    def as_dataset(self, *, num_batches: int | None = None):
+        raise NotImplementedError(
+            "RayReplayBuffer cannot be wrapped in a torch dataset. Sample "
+            "through the buffer client instead."
+        )
+
     def sample(self, *args, **kwargs):
         return self._client.sample(*args, **kwargs)
 

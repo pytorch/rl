@@ -483,6 +483,31 @@ class TensorStorage(Storage):
         # fragmented trajectory index) key their validity on the revision.
         self._bump_mutation_revision()
 
+    def _content_leaves(self) -> list[torch.Tensor]:
+        storage = self._storage
+        if is_tensor_collection(storage):
+            leaves = storage.values(True, True)
+        else:
+            leaves = tree_flatten(storage)[0]
+        return [leaf for leaf in leaves if isinstance(leaf, torch.Tensor)]
+
+    def _share_memory_(self) -> None:
+        if not self.initialized:
+            return
+        for leaf in self._content_leaves():
+            if leaf.device.type == "cpu" and not isinstance(leaf, MemoryMappedTensor):
+                leaf.share_memory_()
+
+    def _fork_safe(self) -> bool:
+        if self._compilable or not self.initialized:
+            return True
+        return all(
+            leaf.device.type != "cpu"
+            or leaf.is_shared()
+            or isinstance(leaf, MemoryMappedTensor)
+            for leaf in self._content_leaves()
+        )
+
     def __getstate__(self):
         state = super().__getstate__()
         if get_spawning_popen() is None:
@@ -520,7 +545,7 @@ class TensorStorage(Storage):
             if is_tensor_collection(storage):
                 storage.apply(assert_is_sharable, filter_empty=True)
             else:
-                tree_map(storage, assert_is_sharable)
+                tree_map(assert_is_sharable, storage)
 
         return state
 
