@@ -1435,6 +1435,36 @@ class TestSpec:
         sample = torch.stack([spec.rand() for _ in range(100)])
         assert (-3 <= sample).all() and (3 >= sample).all()
 
+    @pytest.mark.parametrize(
+        "low,high,dtype",
+        [
+            (0, 1, torch.int64),
+            (-2, 2, torch.int64),
+            (-3, 0, torch.int32),
+            (250, 255, torch.uint8),
+        ],
+    )
+    def test_bounded_discrete_rand_covers_bounds(self, low, high, dtype):
+        # Both bounds are inclusive (``is_in`` and ``project`` accept ``high``),
+        # so ``rand`` must be able to return every integer in [low, high].
+        torch.manual_seed(0)
+        spec = Bounded(low, high, shape=(10_000,), dtype=dtype)
+        sample = spec.rand()
+        assert sample.dtype == dtype
+        assert spec.is_in(sample)
+        assert sample.unique().tolist() == list(range(low, high + 1))
+
+    def test_bounded_discrete_rand_tensor_bounds(self):
+        torch.manual_seed(0)
+        low = torch.tensor([0, -1, 5])
+        high = torch.tensor([1, 1, 5])
+        spec = Bounded(low, high, shape=(3,), dtype=torch.int64)
+        sample = spec.rand((10_000,))
+        assert spec.is_in(sample)
+        assert sample[:, 0].unique().tolist() == [0, 1]
+        assert sample[:, 1].unique().tolist() == [-1, 0, 1]
+        assert sample[:, 2].unique().tolist() == [5]
+
     def test_ndbounded_shape(self):
         spec = Bounded(-3, 3 * torch.ones(10, 5), shape=[10, 5])
         sample = torch.stack([spec.rand() for _ in range(100)], 0)
