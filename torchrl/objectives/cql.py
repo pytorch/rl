@@ -1337,7 +1337,7 @@ class DiscreteCQLLoss(LossModule):
         qvalues = tensordict.get(self.tensor_keys.pred_val, default=None)
         if qvalues is None:
             raise KeyError(
-                "Couldn't find the predicted qvalue with key {self.tensor_keys.pred_val} in the input tensordict. "
+                f"Couldn't find the predicted qvalue with key {self.tensor_keys.pred_val} in the input tensordict. "
                 "This could be caused by calling cql_loss method before value_loss."
             )
 

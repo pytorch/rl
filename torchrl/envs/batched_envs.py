@@ -3184,7 +3184,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         try:
             if self.is_closed:
                 raise RuntimeError(
-                    "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
+                    f"calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
                 )
             if self._metadata_from_workers:
                 # Expensive native environments may retain renderer resources
