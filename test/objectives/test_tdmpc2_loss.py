@@ -16,16 +16,36 @@ from torchrl.objectives import TdMpc2Loss
 
 
 class TestTdMpc2Loss:
-    def test_forward(self):
-        observation_dim, action_dim, latent_dim, num_bins = 5, 2, 8, 5
+    _OBSERVATION_DIM = 5
+    _ACTION_DIM = 2
+    _LATENT_DIM = 8
+    _NUM_BINS = 5
+    _HORIZON = 3
 
-        class _ConcatLinear(nn.Module):
-            def __init__(self, in_features, out_features):
-                super().__init__()
-                self.linear = nn.Linear(in_features, out_features)
+    class _ConcatLinear(nn.Module):
+        def __init__(self, in_features, out_features):
+            super().__init__()
+            self.linear = nn.Linear(in_features, out_features)
 
-            def forward(self, latent, action):
-                return self.linear(torch.cat((latent, action), dim=-1))
+        def forward(self, latent, action):
+            return self.linear(torch.cat((latent, action), dim=-1))
+
+    class _Policy(nn.Module):
+        def __init__(self, latent_dim, action_dim):
+            super().__init__()
+            self.network = nn.Linear(latent_dim, action_dim)
+
+        def forward(self, latent):
+            action = torch.tanh(self.network(latent))
+            zeros = latent.new_zeros(*latent.shape[:-1], 1)
+            return action, action, torch.zeros_like(action), zeros, zeros
+
+    @classmethod
+    def _make_loss(cls):
+        observation_dim = cls._OBSERVATION_DIM
+        action_dim = cls._ACTION_DIM
+        latent_dim = cls._LATENT_DIM
+        num_bins = cls._NUM_BINS
 
         encoder = TensorDictModule(
             nn.Linear(observation_dim, latent_dim),
@@ -33,29 +53,19 @@ class TestTdMpc2Loss:
             out_keys=["latent"],
         )
         dynamics = TensorDictModule(
-            _ConcatLinear(latent_dim + action_dim, latent_dim),
+            cls._ConcatLinear(latent_dim + action_dim, latent_dim),
             in_keys=["latent", "action"],
             out_keys=[("next", "latent")],
         )
         reward_head = TensorDictModule(
-            _ConcatLinear(latent_dim + action_dim, num_bins),
+            cls._ConcatLinear(latent_dim + action_dim, num_bins),
             in_keys=["latent", "action"],
             out_keys=[("next", "reward_logits")],
         )
         world_model = WorldModel(encoder, dynamics, reward_head)
 
-        class _Policy(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.network = nn.Linear(latent_dim, action_dim)
-
-            def forward(self, latent):
-                action = torch.tanh(self.network(latent))
-                zeros = latent.new_zeros(*latent.shape[:-1], 1)
-                return action, action, torch.zeros_like(action), zeros, zeros
-
         policy_prior = TensorDictModule(
-            _Policy(),
+            cls._Policy(latent_dim, action_dim),
             in_keys=["latent"],
             out_keys=["action", "mean", "log_std", "entropy", "scaled_entropy"],
         )
@@ -65,7 +75,11 @@ class TestTdMpc2Loss:
             vmin=-10.0,
             vmax=10.0,
         )
-        loss = TdMpc2Loss(world_model, policy_prior, q_ensemble, horizon=3)
+        return TdMpc2Loss(world_model, policy_prior, q_ensemble, horizon=cls._HORIZON)
+
+    def test_forward(self):
+        observation_dim, action_dim = self._OBSERVATION_DIM, self._ACTION_DIM
+        loss = self._make_loss()
         sample = TensorDict(
             {
                 "observation": torch.randn(2, 3, observation_dim),
@@ -84,6 +98,61 @@ class TestTdMpc2Loss:
         assert set(output.keys()) == expected_keys
         assert set(loss.out_keys) == expected_keys
         assert all(output[key].shape == torch.Size([]) for key in expected_keys)
+
+    def test_model_loss(self):
+        observation_dim, action_dim = self._OBSERVATION_DIM, self._ACTION_DIM
+        loss = self._make_loss()
+        sample = TensorDict(
+            {
+                "observation": torch.randn(2, 3, observation_dim),
+                "action": torch.randn(2, 3, action_dim),
+                ("next", "observation"): torch.randn(2, 3, observation_dim),
+                ("next", "reward"): torch.randn(2, 3, 1),
+                ("next", "terminated"): torch.zeros(2, 3, 1, dtype=torch.bool),
+            },
+            batch_size=[2, 3],
+        )
+
+        model_loss, metadata = loss.model_loss(sample)
+
+        expected_loss = (
+            loss.consistency_coef * metadata["loss_consistency"]
+            + loss.reward_coef * metadata["loss_reward"]
+            + loss.value_coef * metadata["loss_value"]
+        )
+        torch.testing.assert_close(model_loss, expected_loss)
+        assert model_loss.shape == torch.Size([])
+        assert model_loss.requires_grad
+        for key in ("loss_consistency", "loss_reward", "loss_value"):
+            assert metadata[key].requires_grad
+        assert not metadata["actor_latents"].requires_grad
+
+        model_loss.backward()
+
+    def test_actor_loss_from_latents(self):
+        latent_sequence = torch.randn(
+            2,
+            self._HORIZON + 1,
+            self._LATENT_DIM,
+            requires_grad=True,
+        )
+        loss = self._make_loss()
+
+        actor_loss, metadata = loss.actor_loss_from_latents(latent_sequence)
+
+        assert actor_loss.shape == torch.Size([])
+        assert actor_loss.requires_grad
+        assert set(metadata.keys()) == {
+            "pi_entropy",
+            "pi_scaled_entropy",
+            "pi_scale",
+        }
+        for key in metadata.keys():
+            assert not metadata[key].requires_grad
+
+        actor_loss.backward()
+
+        assert latent_sequence.grad is None
 
     def test_actor_latents(self):
         observed = {}
