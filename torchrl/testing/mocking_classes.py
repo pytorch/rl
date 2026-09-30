@@ -2757,8 +2757,6 @@ class EnvThatErrorsBecauseOfStack(EnvBase):
     def _reset(self, tensordict: TensorDict | None = None, **kwargs) -> TensorDict:
         if tensordict is None:
             tensordict = TensorDict(batch_size=self.batch_size, device=self.device)
-        else:
-            tensordict = tensordict.empty()
 
         observation = torch.zeros(
             self.batch_size, dtype=self.observation_spec.dtype, device=self.device

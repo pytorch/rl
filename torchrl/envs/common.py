@@ -3149,14 +3149,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
 
-        set_state = self._resolve_set_state(set_state)
+        select_reset_only = kwargs.pop("select_reset_only", False)
+        set_state = self._resolve_set_state(set_state, select_reset_only)
         if set_state is not None:
             # Only forward ``set_state`` to envs that consume it. This keeps the
             # kwargs of envs that blindly forward to a native backend (gym, brax,
             # ...) clean -- those return ``None`` from ``_resolve_set_state``.
             kwargs["set_state"] = set_state
 
-        tensordict_reset = self._reset(tensordict, **kwargs)
+        if select_reset_only and tensordict is not None:
+            # When making rollouts with step_and_maybe_reset, it can happen that a tensordict has
+            # keys that are used by reset to optionally set the reset state (eg, the fen in chess). If that's the
+            # case and we don't throw them away here, reset will just be a no-op (put the env in the state reached
+            # during the previous step).
+            # Therefore, maybe_reset tells reset to temporarily hide the non-reset keys.
+            # To make step_and_maybe_reset handle custom reset states, some version of TensorDictPrimer should be used.
+            tensordict_reset = self._reset(
+                tensordict.select(*self.reset_keys, strict=False), **kwargs
+            )
+        else:
+            tensordict_reset = self._reset(tensordict, **kwargs)
         # We assume that this is done properly
         # if reset.device != self.device:
         #     reset = reset.to(self.device, non_blocking=True)
@@ -3175,6 +3187,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _resolve_set_state(
         self,
         set_state: bool,
+        select_reset_only: bool,
     ) -> bool | None:
         """Validate and resolve the ``set_state`` reset kwarg.
 
@@ -3191,9 +3204,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     f"via set_state=True: its `_reset` cannot honor a state passed "
                     f"through the reset tensordict."
                 )
+            if select_reset_only:
+                raise ValueError(
+                    "set_state=True is incompatible with select_reset_only=True: "
+                    "the latter strips the state from the input tensordict before reset."
+                )
         if not self._supports_set_state:
             # Unsupported envs never see ``set_state`` (keeps native-backend kwargs clean).
             return None
+        if select_reset_only:
+            # Rollout / auto-reset path: never honor a provided state.
+            return False
         return bool(set_state)
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
@@ -4259,7 +4280,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         any_done = self.any_done(tensordict)
         if any_done:
-            tensordict = self.reset(tensordict)
+            tensordict = self.reset(tensordict, select_reset_only=True)
         return tensordict
 
     def empty_cache(self):
