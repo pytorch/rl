@@ -385,13 +385,13 @@ class IsaacLabWrapper(GymWrapper):
         return self._add_tiled_camera_pixels(observations), info
 
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        # IsaacLab will modify the `terminated`, `truncated` and (from 3.x) `reward`
-        #  tensors in-place. We clone them here to make sure data doesn't inadvertently get modified.
+        # IsaacLab will modify the `terminated` and `truncated` tensors
+        #  in-place. We clone them here to make sure data doesn't inadvertently get modified.
         # The variable naming follows torchrl's convention here.
         observations, reward, terminated, truncated, info = step_outputs_tuple
         observations = self._add_tiled_camera_pixels(observations)
         done = terminated | truncated
-        reward = reward.clone().unsqueeze(-1)  # to get to (num_envs, 1)
+        reward = reward.unsqueeze(-1)  # to get to (num_envs, 1)
         return (
             observations,
             reward,
@@ -595,7 +595,7 @@ class IsaacLabWrapper(GymWrapper):
             unwrapped.sim.forward()
             obs = unwrapped._get_observations()
             if uses_mask:
-                obs = {key: value.clone() for key, value in obs.items()}
+                obs = TensorDict(obs).clone().to_dict()
             return obs, unwrapped.extras
 
         raise TypeError(

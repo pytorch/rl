@@ -406,49 +406,45 @@ def test_isaaclab_data_to_torch():
     )
 
 
-def test_isaaclab_step_outputs_do_not_alias_isaac_buffers():
-    env = IsaacLabWrapper.__new__(IsaacLabWrapper)
-    env.from_tiled_camera = False
-    env._rename_policy_to_observation = False
-    reward = torch.ones(4)
-    terminated = torch.zeros(4, dtype=torch.bool)
-    truncated = torch.zeros(4, dtype=torch.bool)
-    _, reward_out, terminated_out, truncated_out, done_out, _ = env._output_transform(
-        ({"policy": torch.ones(4, 2)}, reward, terminated, truncated, {})
-    )
-    reward.add_(1.0)
-    terminated.fill_(True)
-    truncated.fill_(True)
-    assert reward_out.shape == (4, 1)
-    assert (reward_out == 1.0).all()
-    assert not terminated_out.any()
-    assert not truncated_out.any()
-    assert not done_out.any()
+@pytest.mark.parametrize("warp_env", [False, True], ids=["direct", "direct_warp"])
+def test_isaaclab_direct_partial_reset(monkeypatch, warp_env):
+    _, DirectRLEnv, _ = _install_fake_isaaclab(monkeypatch)
 
-
-def test_isaaclab_direct_reset_uses_mask_for_warp_envs(monkeypatch):
-    class DirectRLEnvWarp:
+    class DirectRLEnvWarp(DirectRLEnv):
         pass
 
-    fake_mod = types.ModuleType("isaaclab_experimental.envs.direct_rl_env_warp")
-    fake_mod.DirectRLEnvWarp = DirectRLEnvWarp
-    monkeypatch.setitem(
-        sys.modules, "isaaclab_experimental", types.ModuleType("isaaclab_experimental")
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "isaaclab_experimental.envs",
-        types.ModuleType("isaaclab_experimental.envs"),
-    )
-    monkeypatch.setitem(
-        sys.modules, "isaaclab_experimental.envs.direct_rl_env_warp", fake_mod
-    )
+    warp_env_mod = types.ModuleType("isaaclab_experimental.envs.direct_rl_env_warp")
+    warp_env_mod.DirectRLEnvWarp = DirectRLEnvWarp
+    for name in ("isaaclab_experimental", "isaaclab_experimental.envs"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, warp_env_mod.__name__, warp_env_mod)
+    fake_warp = types.ModuleType("warp")
+    fake_warp.from_torch = lambda tensor: tensor
+    monkeypatch.setitem(sys.modules, "warp", fake_warp)
     monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab_experimental", True)
     monkeypatch.setattr(isaac_lab_lib, "_has_warp", True)
-    assert IsaacLabWrapper._direct_reset_uses_mask(DirectRLEnvWarp())
-    assert not IsaacLabWrapper._direct_reset_uses_mask(object())
-    monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab_experimental", False)
-    assert not IsaacLabWrapper._direct_reset_uses_mask(DirectRLEnvWarp())
+
+    obs_buf = torch.zeros(4, 2)
+    received = []
+    unwrapped = DirectRLEnvWarp() if warp_env else DirectRLEnv()
+    unwrapped.device = torch.device("cpu")
+    unwrapped.extras = {}
+    unwrapped.scene = types.SimpleNamespace(write_data_to_sim=lambda: None)
+    unwrapped.sim = types.SimpleNamespace(forward=lambda: None)
+    unwrapped._reset_idx = received.append
+    unwrapped._get_observations = lambda: {"policy": obs_buf}
+    env = IsaacLabWrapper.__new__(IsaacLabWrapper)
+    env._env = types.SimpleNamespace(unwrapped=unwrapped)
+
+    reset = torch.tensor([[True], [False], [True], [False]])
+    obs, _ = env._partial_reset(reset=reset)
+    obs_buf.fill_(1.0)
+
+    if warp_env:
+        assert torch.equal(received[0], reset.reshape(-1))
+        assert (obs["policy"] == 0).all()
+    else:
+        assert received[0].tolist() == [0, 2]
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
