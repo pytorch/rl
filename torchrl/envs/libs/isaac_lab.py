@@ -31,6 +31,7 @@ _has_isaaclab_ov = importlib.util.find_spec("isaaclab_ov") is not None
 _has_isaaclab_experimental = (
     importlib.util.find_spec("isaaclab_experimental") is not None
 )
+_has_warp = importlib.util.find_spec("warp") is not None
 
 
 def _isaac_data_to_torch(value: Any) -> torch.Tensor:
@@ -40,10 +41,9 @@ def _isaac_data_to_torch(value: Any) -> torch.Tensor:
     torch_view = getattr(value, "torch", None)
     if isinstance(torch_view, torch.Tensor):
         return torch_view
-    try:
+    if hasattr(value, "__dlpack__"):
         return torch.from_dlpack(value)
-    except Exception:
-        return torch.as_tensor(value)
+    return torch.as_tensor(value)
 
 
 class IsaacLabWrapper(GymWrapper):
@@ -385,8 +385,8 @@ class IsaacLabWrapper(GymWrapper):
         return self._add_tiled_camera_pixels(observations), info
 
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        # IsaacLab will modify the `terminated` and `truncated` tensors
-        #  in-place. We clone them here to make sure data doesn't inadvertently get modified.
+        # IsaacLab will modify the `terminated`, `truncated` and (from 3.x) `reward`
+        #  tensors in-place. We clone them here to make sure data doesn't inadvertently get modified.
         # The variable naming follows torchrl's convention here.
         observations, reward, terminated, truncated, info = step_outputs_tuple
         observations = self._add_tiled_camera_pixels(observations)
@@ -527,8 +527,7 @@ class IsaacLabWrapper(GymWrapper):
             # preserves the incoming state on every sub-env.
             return tensordict.exclude("_reset")
 
-        env_ids = self._reset_mask_to_env_ids(reset)
-        obs, info = self._partial_reset(env_ids=env_ids, **kwargs)
+        obs, info = self._partial_reset(reset=reset, **kwargs)
         return self._build_reset_tensordict(obs, info)
 
     def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
@@ -559,17 +558,19 @@ class IsaacLabWrapper(GymWrapper):
     def _partial_reset(
         self,
         *,
-        env_ids: torch.Tensor,
+        reset: torch.Tensor,
         seed: int | None = None,
         options: dict | None = None,
         **kwargs,
     ) -> tuple[Any, dict | None]:
-        """Reset the listed sub-envs without touching the rest."""
+        """Reset the sub-envs selected by the ``reset`` mask without touching the rest."""
         from isaaclab.envs import DirectMARLEnv, DirectRLEnv, ManagerBasedEnv
 
         unwrapped = self._isaac_unwrapped
         if isinstance(unwrapped, ManagerBasedEnv):
-            reset_kwargs: dict[str, Any] = {"env_ids": env_ids}
+            reset_kwargs: dict[str, Any] = {
+                "env_ids": self._reset_mask_to_env_ids(reset)
+            }
             if seed is not None:
                 reset_kwargs["seed"] = seed
             if options is not None:
@@ -583,15 +584,12 @@ class IsaacLabWrapper(GymWrapper):
             if seed is not None:
                 unwrapped.seed(seed)
             if self._direct_reset_uses_mask(unwrapped):
-                mask = torch.zeros(
-                    self.batch_size.numel(),
-                    dtype=torch.bool,
-                    device=unwrapped.device,
-                )
-                mask[env_ids] = True
-                unwrapped._reset_idx(mask)
+                import warp as wp
+
+                mask = reset.reshape(-1).to(unwrapped.device).contiguous()
+                unwrapped._reset_idx(wp.from_torch(mask))
             else:
-                unwrapped._reset_idx(env_ids)
+                unwrapped._reset_idx(self._reset_mask_to_env_ids(reset))
             unwrapped.scene.write_data_to_sim()
             unwrapped.sim.forward()
             return unwrapped._get_observations(), unwrapped.extras
@@ -605,7 +603,7 @@ class IsaacLabWrapper(GymWrapper):
     @staticmethod
     def _direct_reset_uses_mask(env: Any) -> bool:
         """Whether ``env._reset_idx`` expects a boolean mask (Isaac Lab 3.x ``DirectRLEnvWarp``) rather than indices."""
-        if not _has_isaaclab_experimental:
+        if not (_has_isaaclab_experimental and _has_warp):
             return False
         from isaaclab_experimental.envs.direct_rl_env_warp import DirectRLEnvWarp
 

@@ -392,14 +392,21 @@ def test_isaaclab_all_false_reset_to_state_is_no_op():
     assert (out["policy"] == td["policy"]).all()
 
 
-def test_isaaclab_v3_compat_regressions(monkeypatch):
+def test_isaaclab_data_to_torch():
     tensor = torch.ones(3, 4)
     assert isaac_lab_lib._isaac_data_to_torch(tensor) is tensor
     assert (
         isaac_lab_lib._isaac_data_to_torch(types.SimpleNamespace(torch=tensor))
         is tensor
     )
+    dlpack_out = isaac_lab_lib._isaac_data_to_torch(tensor.numpy())
+    assert dlpack_out.data_ptr() == tensor.data_ptr()
+    torch.testing.assert_close(
+        isaac_lab_lib._isaac_data_to_torch([[1.0, 2.0]]), torch.tensor([[1.0, 2.0]])
+    )
 
+
+def test_isaaclab_step_outputs_do_not_alias_isaac_buffers():
     env = IsaacLabWrapper.__new__(IsaacLabWrapper)
     env.from_tiled_camera = False
     env._rename_policy_to_observation = False
@@ -418,6 +425,8 @@ def test_isaaclab_v3_compat_regressions(monkeypatch):
     assert not truncated_out.any()
     assert not done_out.any()
 
+
+def test_isaaclab_direct_reset_uses_mask_for_warp_envs(monkeypatch):
     class DirectRLEnvWarp:
         pass
 
@@ -435,6 +444,7 @@ def test_isaaclab_v3_compat_regressions(monkeypatch):
         sys.modules, "isaaclab_experimental.envs.direct_rl_env_warp", fake_mod
     )
     monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab_experimental", True)
+    monkeypatch.setattr(isaac_lab_lib, "_has_warp", True)
     assert IsaacLabWrapper._direct_reset_uses_mask(DirectRLEnvWarp())
     assert not IsaacLabWrapper._direct_reset_uses_mask(object())
     monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab_experimental", False)
