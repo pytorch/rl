@@ -123,10 +123,7 @@ class OneHotCategorical(D.Categorical):
 
     @property
     def mode(self) -> torch.Tensor:
-        if hasattr(self, "logits"):
-            return (self.logits == self.logits.max(-1, True)[0]).to(torch.long)
-        else:
-            return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
+        return F.one_hot(self.logits.argmax(dim=-1), self.num_samples)
 
     @property
     def deterministic_sample(self):
@@ -550,10 +547,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
     def mode(self) -> torch.Tensor:
         if self._sparse_mask:
             return F.one_hot(super().mode, self.num_samples)
-        if hasattr(self, "logits"):
-            return (self.logits == self.logits.max(-1, True)[0]).to(torch.long)
-        else:
-            return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
+        return F.one_hot(self.logits.argmax(dim=-1), self.num_samples)
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))
