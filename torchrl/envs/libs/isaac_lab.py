@@ -583,7 +583,8 @@ class IsaacLabWrapper(GymWrapper):
             # that DirectRLEnv / DirectMARLEnv reset() would normally do.
             if seed is not None:
                 unwrapped.seed(seed)
-            if self._direct_reset_uses_mask(unwrapped):
+            uses_mask = self._direct_reset_uses_mask(unwrapped)
+            if uses_mask:
                 import warp as wp
 
                 mask = reset.reshape(-1).to(unwrapped.device).contiguous()
@@ -592,7 +593,10 @@ class IsaacLabWrapper(GymWrapper):
                 unwrapped._reset_idx(self._reset_mask_to_env_ids(reset))
             unwrapped.scene.write_data_to_sim()
             unwrapped.sim.forward()
-            return unwrapped._get_observations(), unwrapped.extras
+            obs = unwrapped._get_observations()
+            if uses_mask:
+                obs = {key: value.clone() for key, value in obs.items()}
+            return obs, unwrapped.extras
 
         raise TypeError(
             f"Per-index reset is not supported for Isaac Lab env of type "
