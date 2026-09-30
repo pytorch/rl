@@ -1860,6 +1860,25 @@ class TestCollectorGeneric:
             for _ in collector:
                 break
 
+    def test_async_env_that_errors_with_healthy_worker(self):
+        """A dead worker stops MultiAsyncCollector even while another worker keeps producing."""
+        frames_per_batch = 20
+        total_frames = 100_000
+        collector = MultiAsyncCollector(
+            [ContinuousActionVecMockEnv, EnvThatErrorsAfter10Iters],
+            policy=RandomPolicy(EnvThatErrorsAfter10Iters().action_spec),
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+        )
+        n_batches = 0
+        try:
+            with pytest.raises(RuntimeError, match="worker 1"):
+                for _ in collector:
+                    n_batches += 1
+        finally:
+            collector.shutdown()
+        assert n_batches < total_frames // frames_per_batch
+
     @retry(AssertionError, tries=10, delay=0)
     @pytest.mark.parametrize("to", [3, 10])
     @pytest.mark.parametrize(
@@ -2738,6 +2757,33 @@ if __name__ == "__main__":
         finally:
             collector.shutdown()
             del collector
+
+    @pytest.mark.parametrize("update_at_each_batch", [False, True])
+    def test_async_update_at_each_batch(self, update_at_each_batch):
+        """MultiAsyncCollector pushes the policy weights between batches only when update_at_each_batch is set.
+
+        The bias is replaced rather than edited in place: on CPU the workers read the
+        policy weights from shared memory, so an in-place edit reaches them without
+        any weight update.
+        """
+        policy = TensorDictModule(
+            BiasModule(0.0), in_keys=["observation"], out_keys=["action"]
+        )
+        collector = MultiAsyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=200,
+            update_at_each_batch=update_at_each_batch,
+        )
+        biases = []
+        try:
+            for i, batch in enumerate(collector):
+                biases.append(batch["action"] - batch["observation"])
+                policy.module.bias = nn.Parameter(torch.tensor(float(i + 1)))
+        finally:
+            collector.shutdown()
+        assert (torch.cat(biases).abs() > 0.5).any() == update_at_each_batch
 
     def test_shared_mem_transport_logs_weight_sync(self):
         transport = SharedMemTransport()
