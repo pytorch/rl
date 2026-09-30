@@ -999,9 +999,6 @@ class _KwargOnlySetStateEnv(EnvBase):
         self.reward_spec = Unbounded(shape=(1,))
         self.done_spec = Binary(n=1, shape=(1,), dtype=torch.bool)
 
-    def _input_td_has_state(self, tensordict):
-        return False
-
     def _reset(self, tensordict, **kwargs):
         if kwargs.get("set_state"):
             raise RuntimeError("unexpected implicit set_state")
@@ -1047,18 +1044,15 @@ class TestResetSetState:
         out_false = env.reset(td.clone(), set_state=False)
         assert out_false["nested", "x"].item() == 0.0
 
-    def test_set_state_nested_key_transition_warning(self):
+    def test_set_state_nested_key_default(self):
         env = _NestedStatelessEnv()
         td = TensorDict({("nested", "x"): torch.full((1,), 3.0)}, batch_size=())
-        # unspecified set_state with a populated nested state key -> FutureWarning,
-        # honored for backwards compatibility.
-        with pytest.warns(FutureWarning, match="set_state"):
-            out = env.reset(td.clone())
-        assert out["nested", "x"].item() == 3.0
-        # an empty tensordict must not warn.
+        # unspecified set_state generates a fresh state.
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
-            env.reset(TensorDict(batch_size=()))
+            out = env.reset(td.clone())
+
+        assert out["nested", "x"].item() == 0.0
 
     def test_set_state_unsupported_raises(self):
         # ContinuousActionVecMockEnv does not opt into deterministic resets.
