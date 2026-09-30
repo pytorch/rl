@@ -916,7 +916,7 @@ def _extract_metrics_from_trajectories(
     if return_episodes:
         metrics["episodes"] = TensorDict(
             episode_reward=torch.tensor(episode_rewards),
-            episode_length=torch.tensor(episode_lengths),
+            episode_length=torch.tensor(episode_lengths, dtype=torch.int64),
             batch_size=[num_episodes],
         )
 

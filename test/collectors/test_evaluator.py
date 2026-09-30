@@ -1451,14 +1451,12 @@ class TestEvaluatorEpisodeSampling:
         )
         result = evaluator.evaluate()
         evaluator.shutdown()
-        expected = torch.tensor(lengths, dtype=torch.float)
+        episodes = result["eval/episodes"]
+        torch.testing.assert_close(episodes["episode_length"], torch.tensor(lengths))
         torch.testing.assert_close(
-            result["eval/episodes"]["episode_length"].float(), expected
+            episodes["episode_reward"], torch.tensor(lengths, dtype=torch.float)
         )
-        torch.testing.assert_close(
-            result["eval/episodes"]["episode_reward"].float(), expected
-        )
-        assert result["eval/reward"] == pytest.approx(expected.mean().item())
+        assert result["eval/reward"] == pytest.approx(sum(lengths) / len(lengths))
 
     @pytest.mark.parametrize(
         "device",
