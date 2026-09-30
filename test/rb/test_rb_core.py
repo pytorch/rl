@@ -1785,10 +1785,25 @@ def test_replay_buffer_prefetch_autograd_roundtrip(checkpoint, tensordict):
 
 @pytest.mark.parametrize("checkpoint", [None, "state_dict", "disk", "pickle"])
 @pytest.mark.parametrize("drop_last", [False, True])
-def test_replay_buffer_resume_prefetched_epoch(checkpoint, drop_last, tmp_path):
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="requires CUDA"
+                ),
+            ],
+        ),
+    ],
+)
+def test_replay_buffer_resume_prefetched_epoch(checkpoint, drop_last, device, tmp_path):
     def make_buffer():
         return ReplayBuffer(
-            storage=LazyTensorStorage(7),
+            storage=LazyTensorStorage(7, device=device),
             sampler=SamplerWithoutReplacement(shuffle=False, drop_last=drop_last),
             batch_size=3,
             prefetch=1,
@@ -1797,7 +1812,9 @@ def test_replay_buffer_resume_prefetched_epoch(checkpoint, drop_last, tmp_path):
     source = make_buffer()
     restored = None
     try:
-        source.extend(TensorDict({("agent", "observation"): torch.arange(7)}, [7]))
+        source.extend(
+            TensorDict({("agent", "observation"): torch.arange(7, device=device)}, [7])
+        )
         num_batches = 2 if drop_last else 3
         for _ in range(num_batches - 1):
             source.sample()
@@ -1817,13 +1834,17 @@ def test_replay_buffer_resume_prefetched_epoch(checkpoint, drop_last, tmp_path):
         # The last batch has been produced, but has not yet been consumed.
         remaining = list(buffer)
         assert len(remaining) == 1
-        expected = torch.arange(3, 6) if drop_last else torch.arange(6, 7)
+        expected = (
+            torch.arange(3, 6, device=device)
+            if drop_last
+            else torch.arange(6, 7, device=device)
+        )
         torch.testing.assert_close(remaining[0]["agent", "observation"], expected)
 
         # Draining the old epoch must still allow a complete new epoch.
         next_epoch = list(buffer)
         assert len(next_epoch) == num_batches
-        expected = torch.arange(6 if drop_last else 7)
+        expected = torch.arange(6 if drop_last else 7, device=device)
         torch.testing.assert_close(
             torch.cat(next_epoch)["agent", "observation"], expected
         )
