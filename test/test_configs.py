@@ -35,13 +35,13 @@ from torchrl.collectors import (
 )
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
+    ReplayBufferEnsemble,
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
     RandomSampler,
-    SamplerEnsemble,
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
@@ -73,6 +73,7 @@ from torchrl.modules import (
     RSSMPriorV3,
     RSSMStateEstimatorV3,
     TanhModule,
+    TdMpc2QEnsemble,
     ValueOperator,
 )
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
@@ -214,6 +215,10 @@ _CONFIG_PARITY_UNRESOLVED = {
     "are intentionally not configurable.",
     "TdMpc2WorldModelConfig": "The composite factory uses high-level architecture "
     "and key fields that do not correspond to WorldModel.__init__ parameters.",
+    "TdMpc2PolicyPriorConfig": "The factory uses high-level architecture fields "
+    "but instantiates a TensorDictModule, so the kwargs do not match.",
+    "TdMpc2QEnsembleConfig": "The composite factory builds and parameterizes a "
+    "vectorized distributional Q-function ensemble.",
     "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
     "the torch versions TorchRL currently supports.",
 }
@@ -232,6 +237,7 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiActionConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
+        "SamplerEnsembleConfig",
     }
 )
 
@@ -274,7 +280,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "Reward2GoTransformConfig",
         "RewardSumConfig",
         "SMACv2EnvConfig",
-        "SamplerEnsembleConfig",
         "SelectTransformConfig",
         "SignTransformConfig",
         "SliceSamplerWithoutReplacementConfig",
@@ -893,26 +898,89 @@ class TestDataConfigs:
         writer = instantiate(cfg)
         assert isinstance(writer, ImmutableDatasetWriter)
 
-    def test_sampler_ensemble_config(self):
-        """Test SamplerEnsembleConfig."""
+    @staticmethod
+    def _ensemble_buffer(sampler):
+        storages = StorageEnsemble(LazyTensorStorage(4), LazyTensorStorage(4))
+        for member, storage in enumerate(storages._storages):
+            storage.set(
+                torch.arange(4),
+                TensorDict(
+                    member=torch.full((4,), member),
+                    step=torch.arange(4),
+                    batch_size=[4],
+                ),
+            )
+        return ReplayBufferEnsemble(
+            storages=storages,
+            samplers=sampler,
+            writers=WriterEnsemble(RoundRobinWriter(), RoundRobinWriter()),
+            batch_size=8,
+        )
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    @pytest.mark.parametrize(
+        "strategy,expected_members",
+        [
+            ({"p": [0.0, 1.0]}, [[1] * 4, [1] * 4]),
+            ({"sample_from_all": True}, [[0] * 4, [1] * 4]),
+            ({"p": [1.0, 0.0], "num_buffer_sampled": 1}, [[0] * 8]),
+        ],
+    )
+    def test_sampler_ensemble_config(self, strategy, expected_members):
+        """A YAML-shaped SamplerEnsembleConfig drives sampling in a buffer ensemble."""
+        from hydra.utils import instantiate
+        from omegaconf import OmegaConf
+        from torchrl.trainers.algorithms.configs.data import SamplerEnsembleConfig
+
+        cfg = OmegaConf.merge(
+            OmegaConf.structured(SamplerEnsembleConfig),
+            {
+                "samplers": [
+                    {"_target_": "torchrl.data.replay_buffers.RandomSampler"},
+                    {"_target_": "torchrl.data.replay_buffers.RandomSampler"},
+                ],
+                **strategy,
+            },
+        )
+        rb = self._ensemble_buffer(instantiate(cfg))
+        assert rb.sample()["member"].tolist() == expected_members
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_sampler_ensemble_config_member_samplers(self):
+        """Each nested sampler config drives its own ensemble member."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.data import (
+            RandomSamplerConfig,
+            SamplerEnsembleConfig,
+            SamplerWithoutReplacementConfig,
+        )
+
+        cfg = SamplerEnsembleConfig(
+            samplers=[SamplerWithoutReplacementConfig(), RandomSamplerConfig()],
+            sample_from_all=True,
+        )
+        rb = self._ensemble_buffer(instantiate(cfg))
+        for _ in range(5):
+            steps = rb.sample()["step"]
+            assert sorted(steps[0].tolist()) == [0, 1, 2, 3]
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_sampler_ensemble_config_conflicting_strategy(self):
+        """Hydra surfaces the p / sample_from_all conflict at instantiation."""
+        from hydra.errors import InstantiationException
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             RandomSamplerConfig,
             SamplerEnsembleConfig,
         )
 
         cfg = SamplerEnsembleConfig(
-            samplers=[RandomSamplerConfig(), RandomSamplerConfig()], p=[0.5, 0.5]
+            samplers=[RandomSamplerConfig(), RandomSamplerConfig()],
+            p=[0.5, 0.5],
+            sample_from_all=True,
         )
-        assert cfg._target_ == "torchrl.data.replay_buffers.SamplerEnsemble"
-        assert len(cfg.samplers) == 2
-        assert cfg.p == [0.5, 0.5]
-
-        # Test instantiation - use direct instantiation to avoid Union type issues
-        sampler1 = RandomSampler()
-        sampler2 = RandomSampler()
-        sampler = SamplerEnsemble(sampler1, sampler2, p=[0.5, 0.5])
-        assert isinstance(sampler, SamplerEnsemble)
-        assert len(sampler._samplers) == 2
+        with pytest.raises(InstantiationException, match="sample_from_all"):
+            instantiate(cfg)
 
     def test_prioritized_slice_sampler_config(self):
         """Test PrioritizedSliceSamplerConfig."""
@@ -1155,8 +1223,10 @@ class TestDataConfigs:
         assert storage.max_size == 1000
         assert storage.stack_dim == 1
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_storage_ensemble_config(self):
         """Test StorageEnsembleConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             ListStorageConfig,
             StorageEnsembleConfig,
@@ -1164,20 +1234,11 @@ class TestDataConfigs:
 
         cfg = StorageEnsembleConfig(
             storages=[ListStorageConfig(max_size=100), ListStorageConfig(max_size=200)],
-            transforms=[],
         )
-        assert cfg._target_ == "torchrl.data.replay_buffers.StorageEnsemble"
-        assert len(cfg.storages) == 2
-        assert len(cfg.transforms) == 0
-
-        # Test instantiation - use direct instantiation since StorageEnsemble expects *storages
-        storage1 = ListStorage(max_size=100)
-        storage2 = ListStorage(max_size=200)
-        storage = StorageEnsemble(
-            storage1, storage2, transforms=[None, None]
-        )  # Provide transforms for each storage
+        storage = instantiate(cfg)
         assert isinstance(storage, StorageEnsemble)
-        assert len(storage._storages) == 2
+        assert storage.max_size == 300
+        assert [member.max_size for member in storage._storages] == [100, 200]
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_lazy_memmap_storage_config(self):
@@ -1481,6 +1542,73 @@ class TestModuleConfigs:
         assert torch.count_nonzero(out["next", "agent", "reward_logits"]) == 0
 
         registered = ConfigStore.instance().load("model/tdmpc2_world_model.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_policy_prior_config(self):
+        """Test TdMpc2PolicyPriorConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs import TdMpc2PolicyPriorConfig
+
+        cfg = TdMpc2PolicyPriorConfig(
+            latent_dim=16,
+            action_dim=3,
+            mlp_dim=13,
+        )
+        policy_prior = instantiate(cfg)
+
+        assert isinstance(policy_prior, TensorDictModule)
+        assert policy_prior.in_keys == ["latent"]
+        assert policy_prior.out_keys == [
+            "action",
+            "mean",
+            "log_std",
+            "entropy",
+            "scaled_entropy",
+        ]
+        output = policy_prior(TensorDict({"latent": torch.randn(2, 16)}, [2]))
+        assert output["action"].shape == (2, 3)
+
+        registered = ConfigStore.instance().load("model/tdmpc2_policy_prior.yaml")
+        assert registered.node["_target_"] == cfg._target_
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_tdmpc2_q_ensemble_config(self):
+        """Test TdMpc2QEnsembleConfig."""
+        from hydra.core.config_store import ConfigStore
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import TdMpc2QEnsembleConfig
+
+        cfg = TdMpc2QEnsembleConfig(
+            latent_dim=16,
+            action_dim=3,
+            mlp_dim=13,
+            num_q=5,
+            num_bins=5,
+        )
+        q_ensemble = instantiate(cfg)
+
+        assert isinstance(q_ensemble, TdMpc2QEnsemble)
+        assert q_ensemble.in_keys == ["latent", "action"]
+        assert q_ensemble.out_keys == ["q_logits"]
+        assert q_ensemble.q_value_key == "q_value"
+        batch_shape = torch.Size((2, 3))
+        td = TensorDict(
+            {
+                "latent": torch.randn(*batch_shape, 16),
+                "action": torch.randn(*batch_shape, 3),
+            },
+            batch_size=batch_shape,
+        )
+        output = q_ensemble(td)
+        assert output["q_logits"].shape == (*batch_shape, 5, 5)
+
+        torch.manual_seed(0)
+        output = q_ensemble.reduce(output, reduction="min")
+        assert output["q_value"].shape == (*batch_shape, 1)
+
+        registered = ConfigStore.instance().load("model/tdmpc2_q_ensemble.yaml")
         assert registered.node["_target_"] == cfg._target_
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")

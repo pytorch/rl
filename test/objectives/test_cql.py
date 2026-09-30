@@ -1063,6 +1063,14 @@ class TestDiscreteCQL(LossModuleTestBase):
             _ = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
+    def test_dcql_cql_loss_before_value_loss(self):
+        actor = self._create_mock_actor(action_spec_type="one_hot")
+        loss_fn = DiscreteCQLLoss(actor)
+        loss_fn.set_keys(pred_val="custom_pred_val")
+        td = self._create_mock_data_dcql(action_spec_type="one_hot")
+        with pytest.raises(KeyError, match="with key custom_pred_val in"):
+            loss_fn.cql_loss(td)
+
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])

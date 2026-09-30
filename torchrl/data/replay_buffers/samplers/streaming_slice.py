@@ -93,6 +93,8 @@ class StreamingSliceSampler(SliceSampler):
                 [3, 4, 5]])
     """
 
+    requires_shared_state = True
+
     def __init__(
         self,
         *,

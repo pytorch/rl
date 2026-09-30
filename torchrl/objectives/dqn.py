@@ -24,6 +24,7 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _select_action_value,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -313,14 +314,7 @@ class DQNLoss(LossModule):
         action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
 
-        if self.action_space == "categorical":
-            if action.ndim != pred_val.ndim:
-                # unsqueeze the action if it lacks on trailing singleton dim
-                action = action.unsqueeze(-1)
-            pred_val_index = torch.gather(pred_val, -1, index=action).squeeze(-1)
-        else:
-            action = action.to(torch.float)
-            pred_val_index = (pred_val * action).sum(-1)
+        pred_val_index = _select_action_value(self.action_space, action, pred_val)
 
         if self.double_dqn:
             step_td = step_mdp(td_copy, keep_other=False)
@@ -339,13 +333,9 @@ class DQNLoss(LossModule):
                 self.value_network(step_td_copy)
                 next_pred_val = step_td_copy.get(self.tensor_keys.action_value)
 
-            if self.action_space == "categorical":
-                if next_action.ndim != next_pred_val.ndim:
-                    # unsqueeze the action if it lacks on trailing singleton dim
-                    next_action = next_action.unsqueeze(-1)
-                next_value = torch.gather(next_pred_val, -1, index=next_action)
-            else:
-                next_value = (next_pred_val * next_action).sum(-1, keepdim=True)
+            next_value = _select_action_value(
+                self.action_space, next_action, next_pred_val, keepdim=True
+            )
         else:
             next_value = None
         target_value = self.value_estimator.value_estimate(

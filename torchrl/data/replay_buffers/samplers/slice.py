@@ -399,6 +399,8 @@ class SliceSampler(Sampler):
     time_dim_name: str | None = "time"
     _warned_short_batch: bool = False
 
+    requires_shared_state = False
+
     def __init__(
         self,
         *,

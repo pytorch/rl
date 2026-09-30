@@ -46,7 +46,13 @@ class SamplerEnsemble(Sampler):
       This format is different from with other samplers which usually return indices
       as regular tensors.
 
+    .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.SamplerEnsembleConfig`
+
     """
+
+    @property
+    def requires_shared_state(self) -> bool:
+        return any(sampler.requires_shared_state for sampler in self._samplers)
 
     def __init__(
         self,

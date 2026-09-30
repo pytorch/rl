@@ -2573,10 +2573,37 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
                 mini = self.space.low.int()
             else:
                 mini = self.space.low
-            interval = maxi - mini
-            r = torch.rand(_size([*shape, *self._safe_shape]), device=interval.device)
-            r = interval * r
-            r = self.space.low + r
+            size = _size([*shape, *self._safe_shape])
+            if self.dtype.is_floating_point:
+                interval = maxi - mini
+                r = torch.rand(size, device=interval.device)
+                r = interval * r
+                r = self.space.low + r
+            else:
+                low = mini.to(torch.int64)
+                high = maxi.to(torch.int64)
+                on_mps = low.device.type == "mps"
+                if self.dtype == torch.int64:
+                    float_dtype = torch.float32 if on_mps else torch.float64
+                    span = high - low
+                    span = span.to(float_dtype) + (span < 0).to(float_dtype) * 2.0**64
+                    offset = torch.rand(size, dtype=float_dtype, device=low.device)
+                    offset = torch.minimum((offset * (span + 1)).floor(), span)
+                    from_low = offset <= span / 2
+                    step = torch.where(from_low, offset, span - offset)
+                    step = step.clamp(
+                        max=2.0**63 * (1 - torch.finfo(float_dtype).eps / 2)
+                    ).long()
+                    r = torch.where(from_low, low + step, high - step)
+                else:
+                    float_dtype = (
+                        torch.float64
+                        if self.dtype == torch.int32 and not on_mps
+                        else torch.float32
+                    )
+                    offset = torch.rand(size, dtype=float_dtype, device=low.device)
+                    offset = (offset * ((high - low).to(float_dtype) + 1)).long()
+                    r = torch.minimum(low + offset, high)
             if r.dtype != self.dtype:
                 r = r.to(self.dtype)
             if self.dtype is not None and r.device != self.device:
