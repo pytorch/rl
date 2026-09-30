@@ -392,6 +392,61 @@ def test_isaaclab_all_false_reset_to_state_is_no_op():
     assert (out["policy"] == td["policy"]).all()
 
 
+def test_isaaclab_data_to_torch():
+    tensor = torch.ones(3, 4)
+    assert isaac_lab_lib._isaac_data_to_torch(tensor) is tensor
+    assert (
+        isaac_lab_lib._isaac_data_to_torch(types.SimpleNamespace(torch=tensor))
+        is tensor
+    )
+    dlpack_out = isaac_lab_lib._isaac_data_to_torch(tensor.numpy())
+    assert dlpack_out.data_ptr() == tensor.data_ptr()
+    torch.testing.assert_close(
+        isaac_lab_lib._isaac_data_to_torch([[1.0, 2.0]]), torch.tensor([[1.0, 2.0]])
+    )
+
+
+@pytest.mark.parametrize("warp_env", [False, True], ids=["direct", "direct_warp"])
+def test_isaaclab_direct_partial_reset(monkeypatch, warp_env):
+    _, DirectRLEnv, _ = _install_fake_isaaclab(monkeypatch)
+
+    class DirectRLEnvWarp(DirectRLEnv):
+        pass
+
+    warp_env_mod = types.ModuleType("isaaclab_experimental.envs.direct_rl_env_warp")
+    warp_env_mod.DirectRLEnvWarp = DirectRLEnvWarp
+    for name in ("isaaclab_experimental", "isaaclab_experimental.envs"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, warp_env_mod.__name__, warp_env_mod)
+    fake_warp = types.ModuleType("warp")
+    fake_warp.from_torch = lambda tensor: tensor
+    monkeypatch.setitem(sys.modules, "warp", fake_warp)
+    monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab_experimental", True)
+    monkeypatch.setattr(isaac_lab_lib, "_has_warp", True)
+
+    obs_buf = torch.zeros(4, 2)
+    received = []
+    unwrapped = DirectRLEnvWarp() if warp_env else DirectRLEnv()
+    unwrapped.device = torch.device("cpu")
+    unwrapped.extras = {}
+    unwrapped.scene = types.SimpleNamespace(write_data_to_sim=lambda: None)
+    unwrapped.sim = types.SimpleNamespace(forward=lambda: None)
+    unwrapped._reset_idx = received.append
+    unwrapped._get_observations = lambda: {"policy": obs_buf}
+    env = IsaacLabWrapper.__new__(IsaacLabWrapper)
+    env._env = types.SimpleNamespace(unwrapped=unwrapped)
+
+    reset = torch.tensor([[True], [False], [True], [False]])
+    obs, _ = env._partial_reset(reset=reset)
+    obs_buf.fill_(1.0)
+
+    if warp_env:
+        assert torch.equal(received[0], reset.reshape(-1))
+        assert (obs["policy"] == 0).all()
+    else:
+        assert received[0].tolist() == [0, 2]
+
+
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
 @pytest.mark.parametrize(
     "task",

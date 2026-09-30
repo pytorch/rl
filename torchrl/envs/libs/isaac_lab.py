@@ -28,6 +28,22 @@ from torchrl.envs.libs.gym import GymWrapper
 _has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_isaaclab_newton = importlib.util.find_spec("isaaclab_newton") is not None
 _has_isaaclab_ov = importlib.util.find_spec("isaaclab_ov") is not None
+_has_isaaclab_experimental = (
+    importlib.util.find_spec("isaaclab_experimental") is not None
+)
+_has_warp = importlib.util.find_spec("warp") is not None
+
+
+def _isaac_data_to_torch(value: Any) -> torch.Tensor:
+    """Converts an Isaac Lab data buffer (2.x torch.Tensor, 3.x warp ProxyArray or warp array) to a torch.Tensor."""
+    if isinstance(value, torch.Tensor):
+        return value
+    torch_view = getattr(value, "torch", None)
+    if isinstance(torch_view, torch.Tensor):
+        return torch_view
+    if hasattr(value, "__dlpack__"):
+        return torch.from_dlpack(value)
+    return torch.as_tensor(value)
 
 
 class IsaacLabWrapper(GymWrapper):
@@ -128,6 +144,13 @@ class IsaacLabWrapper(GymWrapper):
 
         >>> env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
         >>> env = IsaacLabWrapper(env)
+
+    .. note:: With Isaac Lab 3.x, the ``AppLauncher`` boilerplate above is
+        replaced by the ``isaaclab_tasks.utils`` helpers
+        (``add_launcher_args``, ``launch_simulation``,
+        ``resolve_task_config``), and the physics backend is selected through
+        a Hydra-style preset override such as ``physics=newton_mjwarp`` or
+        ``physics=ovphysx``. The wrapper itself supports both versions.
 
     """
 
@@ -295,7 +318,9 @@ class IsaacLabWrapper(GymWrapper):
                     channels = camera.data.output[self.tiled_camera_data_type].shape[-1]
             dtype = self.pixels_dtype
             if dtype is None:
-                dtype = camera.data.output[self.tiled_camera_data_type].dtype
+                dtype = _isaac_data_to_torch(
+                    camera.data.output[self.tiled_camera_data_type]
+                ).dtype
             shape = (*self.batch_size, cfg.height, cfg.width, channels)
             if dtype == torch.uint8:
                 pixels_spec = Bounded(
@@ -324,7 +349,7 @@ class IsaacLabWrapper(GymWrapper):
 
     def _read_tiled_camera_pixels(self) -> torch.Tensor:
         pixels = self._get_tiled_camera().data.output[self.tiled_camera_data_type]
-        pixels = torch.as_tensor(pixels, device=self.device)
+        pixels = _isaac_data_to_torch(pixels).to(self.device)
         if self.pixels_channels is not None:
             pixels = pixels[..., : self.pixels_channels]
         if self.pixels_dtype is not None and pixels.dtype != self.pixels_dtype:
@@ -502,8 +527,7 @@ class IsaacLabWrapper(GymWrapper):
             # preserves the incoming state on every sub-env.
             return tensordict.exclude("_reset")
 
-        env_ids = self._reset_mask_to_env_ids(reset)
-        obs, info = self._partial_reset(env_ids=env_ids, **kwargs)
+        obs, info = self._partial_reset(reset=reset, **kwargs)
         return self._build_reset_tensordict(obs, info)
 
     def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
@@ -534,17 +558,19 @@ class IsaacLabWrapper(GymWrapper):
     def _partial_reset(
         self,
         *,
-        env_ids: torch.Tensor,
+        reset: torch.Tensor,
         seed: int | None = None,
         options: dict | None = None,
         **kwargs,
     ) -> tuple[Any, dict | None]:
-        """Reset the listed sub-envs without touching the rest."""
+        """Reset the sub-envs selected by the ``reset`` mask without touching the rest."""
         from isaaclab.envs import DirectMARLEnv, DirectRLEnv, ManagerBasedEnv
 
         unwrapped = self._isaac_unwrapped
         if isinstance(unwrapped, ManagerBasedEnv):
-            reset_kwargs: dict[str, Any] = {"env_ids": env_ids}
+            reset_kwargs: dict[str, Any] = {
+                "env_ids": self._reset_mask_to_env_ids(reset)
+            }
             if seed is not None:
                 reset_kwargs["seed"] = seed
             if options is not None:
@@ -557,16 +583,35 @@ class IsaacLabWrapper(GymWrapper):
             # that DirectRLEnv / DirectMARLEnv reset() would normally do.
             if seed is not None:
                 unwrapped.seed(seed)
-            unwrapped._reset_idx(env_ids)
+            uses_mask = self._direct_reset_uses_mask(unwrapped)
+            if uses_mask:
+                import warp as wp
+
+                mask = reset.reshape(-1).to(unwrapped.device).contiguous()
+                unwrapped._reset_idx(wp.from_torch(mask))
+            else:
+                unwrapped._reset_idx(self._reset_mask_to_env_ids(reset))
             unwrapped.scene.write_data_to_sim()
             unwrapped.sim.forward()
-            return unwrapped._get_observations(), unwrapped.extras
+            obs = unwrapped._get_observations()
+            if uses_mask:
+                obs = TensorDict(obs).clone().to_dict()
+            return obs, unwrapped.extras
 
         raise TypeError(
             f"Per-index reset is not supported for Isaac Lab env of type "
             f"{type(unwrapped).__name__}. Supported bases are ManagerBasedEnv "
             "(and subclasses), DirectRLEnv and DirectMARLEnv."
         )
+
+    @staticmethod
+    def _direct_reset_uses_mask(env: Any) -> bool:
+        """Whether ``env._reset_idx`` expects a boolean mask (Isaac Lab 3.x ``DirectRLEnvWarp``) rather than indices."""
+        if not (_has_isaaclab_experimental and _has_warp):
+            return False
+        from isaaclab_experimental.envs.direct_rl_env_warp import DirectRLEnvWarp
+
+        return isinstance(env, DirectRLEnvWarp)
 
     def _build_reset_tensordict(self, obs: Any, info: dict | None) -> TensorDictBase:
         """Rebuild a torchrl-style reset tensordict from Isaac's (obs, info)."""
