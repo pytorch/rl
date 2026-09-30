@@ -265,6 +265,7 @@ class MultiAsyncCollector(MultiCollector):
                         f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
                         f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
                     )
+            _check_for_faulty_process(self.procs)
             if self.replay_buffer is None:
                 worker_frames = out.numel()
                 if self.split_trajs:
@@ -282,6 +283,8 @@ class MultiAsyncCollector(MultiCollector):
                 msg = "continue_random"
             else:
                 msg = "continue"
+            if self.update_at_each_batch:
+                self.update_policy_weights_()
             self.pipes[idx].send((idx, msg))
             if out is not None and self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]

@@ -546,9 +546,10 @@ def _identity_decorator(fn: Callable) -> Callable:
 
 def _check_for_faulty_process(processes):
     terminate = False
-    for p in processes:
+    for i, p in enumerate(processes):
         if not p._closed and not p.is_alive():
             terminate = True
+            failed = f"worker {i} (exit code {p.exitcode})"
             for _p in processes:
                 _p: mp.Process
                 if not _p._closed and _p.is_alive():
@@ -563,7 +564,7 @@ def _check_for_faulty_process(processes):
                 break
     if terminate:
         raise RuntimeError(
-            "At least one process failed. Check for more infos in the log."
+            f"At least one process failed: {failed}. Check for more infos in the log."
         )
 
 
