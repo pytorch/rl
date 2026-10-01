@@ -228,8 +228,11 @@ batch of random trajectories can be used to initialize training.
 If provided, it will be rounded up to the closest multiple of frames_per_batch.
 Defaults to `None` (i.e. no random frames).
 - **reset_at_each_iter** (*bool**,**optional*) - Whether environments should be reset
-at the beginning of a batch collection.
-Defaults to `False`.
+at the beginning of a batch collection. Each reset starts new
+trajectories with fresh `("collector", "traj_ids")`. With
+`trajs_per_batch`, episodes interrupted by the reset are
+discarded, unless `set_truncated=True` marks them as truncated,
+in which case they are yielded. Defaults to `False`.
 - **postproc** (*Callable**,**optional*) - A post-processing transform, such as
 a `Transform` or a `MultiStep`
 instance.

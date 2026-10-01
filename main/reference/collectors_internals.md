@@ -184,6 +184,10 @@ the aggregated end-of-trajectory signal from `("next", "done")` via
 `_aggregate_end_of_traj()`, draws as many fresh IDs from the pool as
 there are envs that finished, and `masked_scatter`-s them into the per-env
 `traj_ids` tensor on the carrier.
+- `Collector._start_new_trajectories()` does the same for explicit resets:
+the `reset_at_each_iter` reset at the start of each batch, and
+[`Collector.reset()`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.reset), where only the environments selected by `index`
+receive a new ID.
 
 Setting `track_traj_ids=False` skips both the per-step bookkeeping and the
 allocation of the `traj_ids` tensor. This is useful in throughput-sensitive

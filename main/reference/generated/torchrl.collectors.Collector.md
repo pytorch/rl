@@ -126,8 +126,11 @@ batch of random trajectories can be used to initialize training.
 If provided, it will be rounded up to the closest multiple of frames_per_batch.
 Defaults to `None` (i.e. no random frames).
 - **reset_at_each_iter** (*bool**,**optional*) - Whether environments should be reset
-at the beginning of a batch collection.
-Defaults to `False`.
+at the beginning of a batch collection. Each reset starts new
+trajectories with fresh `("collector", "traj_ids")`. With
+`trajs_per_batch`, episodes interrupted by the reset are
+discarded, unless `set_truncated=True` marks them as truncated,
+in which case they are yielded. Defaults to `False`.
 - **postproc** (*Callable**,**optional*) -
 
 A post-processing transform, such as
@@ -771,9 +774,12 @@ reset(*index=None*, ***kwargs*) → None[[source]](../../_modules/torchrl/collec
 
 Resets the environments to a new initial state.
 
-When `trajs_per_batch` is in use, also drops in-flight episodes and
+The environments that are reset start new trajectories with fresh
+`("collector", "traj_ids")`. When `trajs_per_batch` is in use, a
+full reset also drops in-flight episodes and
 completed-but-not-yet-yielded trajectories, so post-reset batches
-contain only post-reset data.
+contain only post-reset data. A partial reset (`index` given) only
+drops the in-flight episodes of the selected environments.
 
 rollout() → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/collectors/_single.html#Collector.rollout)
 

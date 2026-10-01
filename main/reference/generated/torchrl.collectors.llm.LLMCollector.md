@@ -538,9 +538,12 @@ reset(*index=None*, ***kwargs*) → None
 
 Resets the environments to a new initial state.
 
-When `trajs_per_batch` is in use, also drops in-flight episodes and
+The environments that are reset start new trajectories with fresh
+`("collector", "traj_ids")`. When `trajs_per_batch` is in use, a
+full reset also drops in-flight episodes and
 completed-but-not-yet-yielded trajectories, so post-reset batches
-contain only post-reset data.
+contain only post-reset data. A partial reset (`index` given) only
+drops the in-flight episodes of the selected environments.
 
 *property*rollout*: Callable[[], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)]*
 
