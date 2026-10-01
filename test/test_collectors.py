@@ -1834,7 +1834,8 @@ class TestCollectorGeneric:
                     b3 = data
                 else:
                     break
-            assert_allclose_td(b1, b2)
+            traj_ids = ("collector", "traj_ids")
+            assert_allclose_td(b1.exclude(traj_ids), b2.exclude(traj_ids))
             with pytest.raises(AssertionError):
                 assert_allclose_td(b1, b3)
         finally:
@@ -5726,6 +5727,70 @@ class TestUniqueTraj:
         finally:
             c.shutdown()
             del c
+
+    def test_reset_at_each_iter_starts_new_trajectories(self):
+        env = CountingEnv(max_steps=100)
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=12,
+            reset_at_each_iter=True,
+        )
+        seen = set()
+        try:
+            for batch in collector:
+                assert batch["observation"].squeeze(-1).tolist() == [0, 1, 2, 3]
+                traj_ids = set(batch["collector", "traj_ids"].tolist())
+                assert len(traj_ids) == 1
+                assert not traj_ids & seen
+                seen |= traj_ids
+        finally:
+            collector.shutdown()
+
+    def test_reset_at_each_iter_trajs_per_batch(self):
+        env = CountingEnv(max_steps=2)
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=16,
+            reset_at_each_iter=True,
+            trajs_per_batch=1,
+            traj_format="cat",
+        )
+        try:
+            for batch in collector:
+                obs = batch["observation"].squeeze(-1)
+                torch.testing.assert_close(
+                    obs, torch.arange(obs.numel(), dtype=obs.dtype)
+                )
+                assert collector.stats()["trajectory_pending_frames"] == 0
+        finally:
+            collector.shutdown()
+
+    def test_reset_starts_new_trajectories(self):
+        env = CountingEnv(max_steps=100, batch_size=[2])
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=-1,
+        )
+        try:
+            batches = iter(collector)
+            before = next(batches)["collector", "traj_ids"][:, -1].tolist()
+            collector.reset(index=torch.zeros(2, 1, dtype=torch.bool))
+            assert next(batches)["collector", "traj_ids"][:, 0].tolist() == before
+            collector.reset(index=torch.tensor([[True], [False]]))
+            after_partial = next(batches)["collector", "traj_ids"][:, 0].tolist()
+            assert after_partial[0] not in before
+            assert after_partial[1] == before[1]
+            collector.reset()
+            after_full = next(batches)["collector", "traj_ids"][:, 0].tolist()
+            assert not set(after_full) & set(before + after_partial)
+        finally:
+            collector.shutdown()
 
 
 class TestDynamicEnvs:
