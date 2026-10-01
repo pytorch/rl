@@ -16,7 +16,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.checkpoint import Checkpoint
-from torchrl.collectors import Evaluator
+from torchrl.collectors import bootstrap_estimate, Evaluator, paired_comparison
 from torchrl.collectors._evaluator import (
     _extract_metrics_from_trajectories,
     _freeze_vecnorm,
@@ -26,6 +26,7 @@ from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import (
     Compose,
+    RewardScaling,
     RewardSum,
     StepCounter,
     Transform,
@@ -35,7 +36,11 @@ from torchrl.modules import RandomPolicy
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers.process import ProcessLogger
 from torchrl.testing import AddPixelsTransform
-from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+from torchrl.testing.mocking_classes import (
+    ContinuousActionVecMockEnv,
+    CountingEnv,
+    CountingEnvCountPolicy,
+)
 from torchrl.weight_update import WeightStrategy
 
 
@@ -1421,6 +1426,118 @@ class TestEvaluatorVecNormFreeze:
             ).all(), "VecNormV2 count was updated during eval"
         finally:
             evaluator.shutdown()
+
+
+def _unit_reward(env):
+    return TransformedEnv(env, RewardScaling(loc=1.0, scale=0.0))
+
+
+class TestEvaluatorEpisodeSampling:
+    @pytest.mark.parametrize(
+        "episode_sampling,lengths",
+        [("first_done", [2, 6, 21, 2, 2, 2]), ("per_env", [2, 6, 21, 2, 6, 21])],
+    )
+    def test_episode_sampling(self, episode_sampling, lengths):
+        env = _unit_reward(
+            SerialEnv(3, [partial(CountingEnv, max_steps=m) for m in (1, 5, 20)])
+        )
+        evaluator = Evaluator(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            num_trajectories=6,
+            max_steps=100,
+            episode_sampling=episode_sampling,
+            return_episodes=True,
+        )
+        result = evaluator.evaluate()
+        evaluator.shutdown()
+        episodes = result["eval/episodes"]
+        torch.testing.assert_close(episodes["episode_length"], torch.tensor(lengths))
+        torch.testing.assert_close(
+            episodes["episode_reward"], torch.tensor(lengths, dtype=torch.float)
+        )
+        assert result["eval/reward"] == pytest.approx(sum(lengths) / len(lengths))
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="needs CUDA"
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_seed(self, device):
+        env = _unit_reward(CountingEnv(max_steps=5, device=device))
+        evaluator = Evaluator(
+            env,
+            RandomPolicy(env.action_spec),
+            num_trajectories=8,
+            max_steps=100,
+            episode_sampling="per_env",
+            return_episodes=True,
+        )
+        get_rng_state = (
+            torch.cuda.get_rng_state if device == "cuda" else torch.get_rng_state
+        )
+        rng_state = get_rng_state()
+        lengths = [
+            evaluator.evaluate(seed=seed)["eval/episodes"]["episode_length"]
+            for seed in (0, 0, 1)
+        ]
+        evaluator.shutdown()
+        assert torch.equal(get_rng_state(), rng_state)
+        torch.testing.assert_close(lengths[0], lengths[1])
+        assert not torch.equal(lengths[0], lengths[2])
+
+    def test_invalid_combinations(self):
+        with pytest.raises(ValueError, match="per_env"):
+            Evaluator(
+                _make_env,
+                policy_factory=_make_policy,
+                max_steps=10,
+                episode_sampling="per_env",
+                backend="process",
+            )
+        evaluator = Evaluator(_make_env(), _make_policy(), max_steps=10)
+        with pytest.raises(ValueError, match="requires episode_sampling"):
+            evaluator.evaluate(seed=0)
+        evaluator.shutdown()
+
+
+class TestEvaluationStats:
+    @pytest.mark.parametrize(
+        "statistic,expected,upper",
+        [("mean", 12.5, 37.5), ("median", 0.0, 0.0), ("iqm", 0.0, 25.0)],
+    )
+    def test_bootstrap_estimate(self, statistic, expected, upper):
+        values = torch.tensor([[0.0] * 7 + [100.0], [7.0] * 8])
+        summary = bootstrap_estimate(
+            values, statistic=statistic, generator=torch.Generator().manual_seed(0)
+        )
+        torch.testing.assert_close(summary["estimate"], torch.tensor([expected, 7.0]))
+        torch.testing.assert_close(summary["ci_low"], torch.tensor([0.0, 7.0]))
+        torch.testing.assert_close(summary["ci_high"], torch.tensor([upper, 7.0]))
+        transposed = bootstrap_estimate(
+            values.T, 0, statistic=statistic, generator=torch.Generator().manual_seed(0)
+        )
+        assert (transposed == summary).all()
+
+    def test_paired_comparison(self):
+        first = torch.tensor([3.0, 5.0, 4.0, 6.0])
+        second = first - torch.tensor([1.0, 1.0, 0.0, -1.0])
+        result = paired_comparison(first, second)
+        torch.testing.assert_close(result["estimate"], torch.tensor(0.25))
+        torch.testing.assert_close(
+            result["probability_of_improvement"], torch.tensor(0.625)
+        )
+        assert result["ci_low"] <= 0.25 <= result["ci_high"]
 
 
 if __name__ == "__main__":
