@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+segment_causal_mask_from_is_init
+================================
+
+.. autoclass:: segment_causal_mask_from_is_init
+    :members:

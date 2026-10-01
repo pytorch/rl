@@ -1,0 +1,37 @@
+# Robot Learning
+
+Policy architectures for robot manipulation and imitation learning.
+
+# World Models and Model-Based RL
+
+Modules for model-based reinforcement learning, including world models and dynamics models.
+For an overview of how the DreamerV3 components fit together, see
+[DreamerV3 in a nutshell](dreamer_v3.html).
+
+| [`WorldModel`](generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel)(*args, **kwargs) | A general, composable world model for model-based RL. |
+| --- | --- |
+| [`WorldModelWrapper`](generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper)(*args, **kwargs) | World model wrapper. |
+| [`DreamerActor`](generated/torchrl.modules.DreamerActor.html#torchrl.modules.DreamerActor)(out_features[, depth, ...]) | Dreamer actor network. |
+| [`ObsEncoder`](generated/torchrl.modules.ObsEncoder.html#torchrl.modules.ObsEncoder)([channels, num_layers, ...]) | Observation encoder network. |
+| [`ObsDecoder`](generated/torchrl.modules.ObsDecoder.html#torchrl.modules.ObsDecoder)([channels, num_layers, ...]) | Observation decoder network. |
+| [`RSSMPosterior`](generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior)([hidden_dim, state_dim, ...]) | The posterior network of the RSSM. |
+| [`RSSMPosteriorV3`](generated/torchrl.modules.RSSMPosteriorV3.html#torchrl.modules.RSSMPosteriorV3)([hidden_dim, ...]) | DreamerV3 posterior (representation model) with discrete categorical latent. |
+| [`RSSMPrior`](generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior)(action_spec[, hidden_dim, ...]) | The prior network of the RSSM. |
+| [`RSSMPriorV3`](generated/torchrl.modules.RSSMPriorV3.html#torchrl.modules.RSSMPriorV3)([action_spec, hidden_dim, ...]) | DreamerV3 prior network with discrete categorical latent state. |
+| [`RSSMRollout`](generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout)(*args, **kwargs) | Rollout the RSSM network. |
+| [`RSSMRolloutV3`](generated/torchrl.modules.RSSMRolloutV3.html#torchrl.modules.RSSMRolloutV3)(*args, **kwargs) | Roll out the DreamerV3 RSSM over a sequence. |
+| [`RSSMStateEstimatorV3`](generated/torchrl.modules.RSSMStateEstimatorV3.html#torchrl.modules.RSSMStateEstimatorV3)(*args, **kwargs) | Update the DreamerV3 acting state from an encoded observation. |
+| [`SymExpTwoHot`](generated/torchrl.modules.SymExpTwoHot.html#torchrl.modules.SymExpTwoHot)([num_bins]) | DreamerV3 categorical scalar representation. |
+| [`DreamerV3BlockGRUCell`](generated/torchrl.modules.DreamerV3BlockGRUCell.html#torchrl.modules.DreamerV3BlockGRUCell)(input_size, ...) | Single-step DreamerV3 block-diagonal GRU cell. |
+| [`DreamerV3BlockGRU`](generated/torchrl.modules.DreamerV3BlockGRU.html#torchrl.modules.DreamerV3BlockGRU)(input_size, hidden_size, ...) | Batch-major DreamerV3 block-diagonal GRU sequence module. |
+| [`DreamerV3MLP`](generated/torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP)(in_features, out_features[, ...]) | RMS-normalized multilayer perceptron used by DreamerV3 heads. |
+| [`DreamerV3ImageEncoder`](generated/torchrl.modules.DreamerV3ImageEncoder.html#torchrl.modules.DreamerV3ImageEncoder)([in_channels, depth, ...]) | DreamerV3 convolutional image encoder. |
+| [`DreamerV3ImageDecoder`](generated/torchrl.modules.DreamerV3ImageDecoder.html#torchrl.modules.DreamerV3ImageDecoder)(in_features[, ...]) | DreamerV3 transposed-convolution image decoder. |
+
+## PILCO
+
+Components for moment-matching model-based policy search (PILCO).
+
+| [`GPWorldModel`](generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel)(obs_dim, action_dim[, in_keys, ...]) | Gaussian Process world model with moment-matching uncertainty propagation. |
+| --- | --- |
+| [`RBFController`](generated/torchrl.modules.RBFController.html#torchrl.modules.RBFController)(input_dim, output_dim, max_action) | Radial Basis Function controller for moment-matching policy search. |

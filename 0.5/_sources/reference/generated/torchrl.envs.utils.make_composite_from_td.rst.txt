@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs.utils
+
+
+make_composite_from_td
+======================
+
+.. autofunction:: make_composite_from_td

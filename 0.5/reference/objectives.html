@@ -1,0 +1,1196 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.objectives package &mdash; torchrl 0.5 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="LossModule" href="generated/torchrl.objectives.LossModule.html" />
+    <link rel="prev" title="VmapModule" href="generated/torchrl.modules.VmapModule.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
+                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                  <p></p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">0.5 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+      <li>torchrl.objectives package</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/objectives.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="torchrl-objectives-package">
+<h1>torchrl.objectives package<a class="headerlink" href="#torchrl-objectives-package" title="Permalink to this heading">¶</a></h1>
+<p id="ref-objectives">TorchRL provides a series of losses to use in your training scripts.
+The aim is to have losses that are easily reusable/swappable and that have
+a simple signature.</p>
+<p>The main characteristics of TorchRL losses are:</p>
+<ul class="simple">
+<li><p>they are stateful objects: they contain a copy of the trainable parameters
+such that <code class="docutils literal notranslate"><span class="pre">loss_module.parameters()</span></code> gives whatever is needed to train the
+algorithm.</p></li>
+<li><p>They follow the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> convention: the <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch v2.4)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>
+method will receive a tensordict as input that contains all the necessary
+information to return a loss value.</p></li>
+<li><p>They output a <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code> instance with the loss values
+written under a <code class="docutils literal notranslate"><span class="pre">&quot;loss_&lt;smth&gt;&quot;</span></code> where <code class="docutils literal notranslate"><span class="pre">smth</span></code> is a string describing the
+loss. Additional keys in the tensordict may be useful metrics to log during
+training time.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The reason we return independent losses is to let the user use a different
+optimizer for different sets of parameters for instance. Summing the losses
+can be simply done via</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">loss_val</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">loss</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">loss</span> <span class="ow">in</span> <span class="n">loss_vals</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;loss_&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Initializing parameters in losses can be done via a query to <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.get_stateful_net" title="torchrl.objectives.LossModule.get_stateful_net"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_stateful_net()</span></code></a>
+which will return a stateful version of the network that can be initialized like any other module.
+If the modification is done in-place, it will be downstreamed to any other module that uses the same parameter
+set (within and outside of the loss): for instance, modifying the <code class="docutils literal notranslate"><span class="pre">actor_network</span></code> parameters from the loss
+will also modify the actor in the collector.
+If the parameters are modified out-of-place, <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.from_stateful_net" title="torchrl.objectives.LossModule.from_stateful_net"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_stateful_net()</span></code></a> can be
+used to reset the parameters in the loss to the new value.</p>
+</div>
+<section id="torch-vmap-and-randomness">
+<h2>torch.vmap and randomness<a class="headerlink" href="#torch-vmap-and-randomness" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL loss modules have plenty of calls to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.4)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to amortize the cost of calling multiple similar models
+in a loop, and instead vectorize these operations. <cite>vmap</cite> needs to be told explicitly what to do when random numbers
+need to be generated within the call. To do this, a randomness mode need to be set and must be one of <cite>“error”</cite> (default,
+errors when dealing with pseudo-random functions), <cite>“same”</cite> (replicates the results across the batch) or <cite>“different”</cite>
+(each element of the batch is treated separately).
+Relying on the default will typically result in an error such as this one:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="ne">RuntimeError</span><span class="p">:</span> <span class="n">vmap</span><span class="p">:</span> <span class="n">called</span> <span class="n">random</span> <span class="n">operation</span> <span class="k">while</span> <span class="ow">in</span> <span class="n">randomness</span> <span class="n">error</span> <span class="n">mode</span><span class="o">.</span>
+</pre></div>
+</div>
+<p>Since the calls to <cite>vmap</cite> are buried down the loss modules, TorchRL
+provides an interface to set that vmap mode from the outside through <cite>loss.vmap_randomness = str_value</cite>, see
+<a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.vmap_randomness" title="torchrl.objectives.LossModule.vmap_randomness"><code class="xref py py-meth docutils literal notranslate"><span class="pre">vmap_randomness()</span></code></a> for more information.</p>
+<p><code class="docutils literal notranslate"><span class="pre">LossModule.vmap_randomness</span></code> defaults to <cite>“error”</cite> if no random module is detected, and to <cite>“different”</cite> in
+other cases. By default, only a limited number of modules are listed as random, but the list can be extended
+using the <code class="xref py py-func docutils literal notranslate"><span class="pre">add_random_module()</span></code> function.</p>
+</section>
+<section id="training-value-functions">
+<h2>Training value functions<a class="headerlink" href="#training-value-functions" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL provides a range of <strong>value estimators</strong> such as TD(0), TD(1), TD(<span class="math notranslate nohighlight">\(\lambda\)</span>)
+and GAE.
+In a nutshell, a value estimator is a function of data (mostly
+rewards and done states) and a state value (ie. the value
+returned by a function that is fit to estimate state-values).
+To learn more about value estimators, check the introduction to RL from <a class="reference external" href="https://web.stanford.edu/class/psych209/Readings/SuttonBartoIPRLBook2ndEd.pdf">Sutton
+and Barto</a>,
+in particular the chapters about value iteration and TD learning.
+It gives a somewhat biased estimation of the discounted return following a state
+or a state-action pair based on data and proxy maps. These estimators are
+used in two contexts:</p>
+<ul>
+<li><p>To train the value network to learn the “true” state value (or state-action
+value) map, one needs a target value to fit it to. The better (less bias,
+less variance) the estimator, the better the value network will be, which in
+turn can speed up the policy training significantly. Typically, the value
+network loss will look like:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">value_network</span><span class="p">(</span><span class="n">states</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">target_value</span> <span class="o">=</span> <span class="n">value_estimator</span><span class="p">(</span><span class="n">rewards</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">value_network</span><span class="p">(</span><span class="n">next_state</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">value_net_loss</span> <span class="o">=</span> <span class="p">(</span><span class="n">value</span> <span class="o">-</span> <span class="n">target_value</span><span class="p">)</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+</pre></div>
+</div>
+</li>
+<li><p>Computing an “advantage” signal for policy-optimization. The advantage is
+the delta between the value estimate (from the estimator, ie from “real” data)
+and the output of the value network (ie the proxy to this value). A positive
+advantage can be seen as a signal that the policy actually performed better
+than expected, thereby signaling that there is room for improvement if that
+trajectory is to be taken as example. Conversely, a negative advantage signifies
+that the policy underperformed compared to what was to be expected.</p></li>
+</ul>
+<p>Thins are not always as easy as in the example above and the formula to compute
+the value estimator or the advantage may be slightly more intricate than this.
+To help users flexibly use one or another value estimator, we provide a simple
+API to change it on-the-fly. Here is an example with DQN, but all modules will
+follow a similar structure:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">DQNLoss</span><span class="p">,</span> <span class="n">ValueEstimators</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_module</span> <span class="o">=</span> <span class="n">DQNLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;gamma&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">,</span> <span class="s2">&quot;lmbda&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_module</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TDLambda</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <a class="reference internal" href="generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.ValueEstimators"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimators</span></code></a> class enumerates the value
+estimators to choose from. This makes it easy for the users to rely on
+auto-completion to make their choice.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LossModule</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A parent class for RL losses.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="dqn">
+<h2>DQN<a class="headerlink" href="#dqn" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss" title="torchrl.objectives.DQNLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DQNLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>The DQN Loss class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.DistributionalDQNLoss.html#torchrl.objectives.DistributionalDQNLoss" title="torchrl.objectives.DistributionalDQNLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistributionalDQNLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A distributional DQN loss class.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="ddpg">
+<h2>DDPG<a class="headerlink" href="#ddpg" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss" title="torchrl.objectives.DDPGLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DDPGLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>The DDPG Loss class.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="sac">
+<h2>SAC<a class="headerlink" href="#sac" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss" title="torchrl.objectives.SACLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SACLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the SAC loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss" title="torchrl.objectives.DiscreteSACLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteSACLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Discrete SAC Loss module.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="redq">
+<h2>REDQ<a class="headerlink" href="#redq" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.REDQLoss.html#torchrl.objectives.REDQLoss" title="torchrl.objectives.REDQLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">REDQLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>REDQ Loss module.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="crossq">
+<h2>CrossQ<a class="headerlink" href="#crossq" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+</tbody>
+</table>
+</section>
+<section id="iql">
+<h2>IQL<a class="headerlink" href="#iql" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.IQLLoss.html#torchrl.objectives.IQLLoss" title="torchrl.objectives.IQLLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IQLLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the IQL loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.DiscreteIQLLoss.html#torchrl.objectives.DiscreteIQLLoss" title="torchrl.objectives.DiscreteIQLLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteIQLLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the discrete IQL loss.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cql">
+<h2>CQL<a class="headerlink" href="#cql" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss" title="torchrl.objectives.CQLLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CQLLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the continuous CQL loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.DiscreteCQLLoss.html#torchrl.objectives.DiscreteCQLLoss" title="torchrl.objectives.DiscreteCQLLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteCQLLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the discrete CQL loss.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="dt">
+<h2>DT<a class="headerlink" href="#dt" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.DTLoss.html#torchrl.objectives.DTLoss" title="torchrl.objectives.DTLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DTLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the Online Decision Transformer loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss" title="torchrl.objectives.OnlineDTLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OnlineDTLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the Online Decision Transformer loss.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="td3">
+<h2>TD3<a class="headerlink" href="#td3" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss" title="torchrl.objectives.TD3Loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TD3Loss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TD3 Loss module.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="td3-bc">
+<h2>TD3+BC<a class="headerlink" href="#td3-bc" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.TD3BCLoss.html#torchrl.objectives.TD3BCLoss" title="torchrl.objectives.TD3BCLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TD3BCLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TD3+BC Loss Module.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="ppo">
+<h2>PPO<a class="headerlink" href="#ppo" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss" title="torchrl.objectives.PPOLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PPOLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A parent PPO loss class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss" title="torchrl.objectives.ClipPPOLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ClipPPOLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Clipped PPO loss.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.KLPENPPOLoss.html#torchrl.objectives.KLPENPPOLoss" title="torchrl.objectives.KLPENPPOLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLPENPPOLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>KL Penalty PPO loss.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="a2c">
+<h2>A2C<a class="headerlink" href="#a2c" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss" title="torchrl.objectives.A2CLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">A2CLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TorchRL implementation of the A2C loss.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="reinforce">
+<h2>Reinforce<a class="headerlink" href="#reinforce" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.ReinforceLoss.html#torchrl.objectives.ReinforceLoss" title="torchrl.objectives.ReinforceLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReinforceLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Reinforce loss module.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="dreamer">
+<h2>Dreamer<a class="headerlink" href="#dreamer" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss" title="torchrl.objectives.DreamerActorLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerActorLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Dreamer Actor Loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.DreamerModelLoss.html#torchrl.objectives.DreamerModelLoss" title="torchrl.objectives.DreamerModelLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerModelLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Dreamer Model Loss.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.DreamerValueLoss.html#torchrl.objectives.DreamerValueLoss" title="torchrl.objectives.DreamerValueLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerValueLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Dreamer Value Loss.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="multi-agent-objectives">
+<h2>Multi-agent objectives<a class="headerlink" href="#multi-agent-objectives" title="Permalink to this heading">¶</a></h2>
+<p>These objectives are specific to multi-agent algorithms.</p>
+<section id="qmixer">
+<h3>QMixer<a class="headerlink" href="#qmixer" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.multiagent.QMixerLoss.html#torchrl.objectives.multiagent.QMixerLoss" title="torchrl.objectives.multiagent.QMixerLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QMixerLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>The QMixer loss class.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase" title="torchrl.objectives.value.ValueEstimatorBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueEstimatorBase</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An abstract parent class for value function modules.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.TD0Estimator.html#torchrl.objectives.value.TD0Estimator" title="torchrl.objectives.value.TD0Estimator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TD0Estimator</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Temporal Difference (TD(0)) estimate of advantage function.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.TD1Estimator.html#torchrl.objectives.value.TD1Estimator" title="torchrl.objectives.value.TD1Estimator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TD1Estimator</span></code></a>(*args, **kwargs)</p></td>
+<td><p><span class="math notranslate nohighlight">\(\infty\)</span>-Temporal Difference (TD(1)) estimate of advantage function.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.TDLambdaEstimator.html#torchrl.objectives.value.TDLambdaEstimator" title="torchrl.objectives.value.TDLambdaEstimator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TDLambdaEstimator</span></code></a>(*args, **kwargs)</p></td>
+<td><p>TD(<span class="math notranslate nohighlight">\(\lambda\)</span>) estimate of advantage function.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE" title="torchrl.objectives.value.GAE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GAE</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A class wrapper around the generalized advantage estimate functional.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.td0_return_estimate.html#torchrl.objectives.value.functional.td0_return_estimate" title="torchrl.objectives.value.functional.td0_return_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.td0_return_estimate</span></code></a>(gamma, ...[, ...])</p></td>
+<td><p>TD(0) discounted return estimate of a trajectory.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.td0_advantage_estimate.html#torchrl.objectives.value.functional.td0_advantage_estimate" title="torchrl.objectives.value.functional.td0_advantage_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.td0_advantage_estimate</span></code></a>(gamma, ...)</p></td>
+<td><p>TD(0) advantage estimate of a trajectory.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.td1_return_estimate.html#torchrl.objectives.value.functional.td1_return_estimate" title="torchrl.objectives.value.functional.td1_return_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.td1_return_estimate</span></code></a>(gamma, ...[, ...])</p></td>
+<td><p>TD(1) return estimate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td1_return_estimate.html#torchrl.objectives.value.functional.vec_td1_return_estimate" title="torchrl.objectives.value.functional.vec_td1_return_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.vec_td1_return_estimate</span></code></a>(gamma, ...)</p></td>
+<td><p>Vectorized TD(1) return estimate.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.td1_advantage_estimate.html#torchrl.objectives.value.functional.td1_advantage_estimate" title="torchrl.objectives.value.functional.td1_advantage_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.td1_advantage_estimate</span></code></a>(gamma, ...)</p></td>
+<td><p>TD(1) advantage estimate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td1_advantage_estimate.html#torchrl.objectives.value.functional.vec_td1_advantage_estimate" title="torchrl.objectives.value.functional.vec_td1_advantage_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.vec_td1_advantage_estimate</span></code></a>(gamma, ...)</p></td>
+<td><p>Vectorized TD(1) advantage estimate.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.td_lambda_return_estimate.html#torchrl.objectives.value.functional.td_lambda_return_estimate" title="torchrl.objectives.value.functional.td_lambda_return_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.td_lambda_return_estimate</span></code></a>(gamma, ...)</p></td>
+<td><p>TD(<span class="math notranslate nohighlight">\(\lambda\)</span>) return estimate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td_lambda_return_estimate.html#torchrl.objectives.value.functional.vec_td_lambda_return_estimate" title="torchrl.objectives.value.functional.vec_td_lambda_return_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.vec_td_lambda_return_estimate</span></code></a>(...)</p></td>
+<td><p>Vectorized TD(<span class="math notranslate nohighlight">\(\lambda\)</span>) return estimate.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.td_lambda_advantage_estimate.html#torchrl.objectives.value.functional.td_lambda_advantage_estimate" title="torchrl.objectives.value.functional.td_lambda_advantage_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.td_lambda_advantage_estimate</span></code></a>(...)</p></td>
+<td><p>TD(<span class="math notranslate nohighlight">\(\lambda\)</span>) advantage estimate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate.html#torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate" title="torchrl.objectives.value.functional.vec_td_lambda_advantage_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.vec_td_lambda_advantage_estimate</span></code></a>(...)</p></td>
+<td><p>Vectorized TD(<span class="math notranslate nohighlight">\(\lambda\)</span>) advantage estimate.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.generalized_advantage_estimate.html#torchrl.objectives.value.functional.generalized_advantage_estimate" title="torchrl.objectives.value.functional.generalized_advantage_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.generalized_advantage_estimate</span></code></a>(...)</p></td>
+<td><p>Generalized advantage estimate of a trajectory.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.vec_generalized_advantage_estimate.html#torchrl.objectives.value.functional.vec_generalized_advantage_estimate" title="torchrl.objectives.value.functional.vec_generalized_advantage_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.vec_generalized_advantage_estimate</span></code></a>(...)</p></td>
+<td><p>Vectorized Generalized advantage estimate of a trajectory.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.value.functional.reward2go.html#torchrl.objectives.value.functional.reward2go" title="torchrl.objectives.value.functional.reward2go"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.reward2go</span></code></a>(reward, done, gamma, *)</p></td>
+<td><p>Compute the discounted cumulative sum of rewards given multiple trajectories and the episode ends.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="utils">
+<h2>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h2>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.distance_loss.html#torchrl.objectives.distance_loss" title="torchrl.objectives.distance_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">distance_loss</span></code></a>(v1, v2, loss_function[, ...])</p></td>
+<td><p>Computes a distance loss between two tensors.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.hold_out_net.html#torchrl.objectives.hold_out_net" title="torchrl.objectives.hold_out_net"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hold_out_net</span></code></a>(network)</p></td>
+<td><p>Context manager to hold a network out of a computational graph.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.hold_out_params.html#torchrl.objectives.hold_out_params" title="torchrl.objectives.hold_out_params"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hold_out_params</span></code></a>(params)</p></td>
+<td><p>Context manager to hold a list of parameters out of a computational graph.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.next_state_value.html#torchrl.objectives.next_state_value" title="torchrl.objectives.next_state_value"><code class="xref py py-obj docutils literal notranslate"><span class="pre">next_state_value</span></code></a>(tensordict[, operator, ...])</p></td>
+<td><p>Computes the next state value (without gradient) to compute a target value.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.SoftUpdate.html#torchrl.objectives.SoftUpdate" title="torchrl.objectives.SoftUpdate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SoftUpdate</span></code></a>(loss_module, *[, eps, tau])</p></td>
+<td><p>A soft-update class for target network update in Double DQN/DDPG.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.HardUpdate.html#torchrl.objectives.HardUpdate" title="torchrl.objectives.HardUpdate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HardUpdate</span></code></a>(loss_module, *[, ...])</p></td>
+<td><p>A hard-update class for target network update in Double DQN/DDPG (by contrast with soft updates).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.ValueEstimators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueEstimators</span></code></a>(value)</p></td>
+<td><p>Value function enumerator for custom-built estimators.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.default_value_kwargs.html#torchrl.objectives.default_value_kwargs" title="torchrl.objectives.default_value_kwargs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_value_kwargs</span></code></a>(value_type)</p></td>
+<td><p>Default value function keyword argument generator.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.objectives.LossModule.html" class="btn btn-neutral float-right" title="LossModule" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.modules.VmapModule.html" class="btn btn-neutral" title="VmapModule" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">torchrl.objectives package</a><ul>
+<li><a class="reference internal" href="#torch-vmap-and-randomness">torch.vmap and randomness</a></li>
+<li><a class="reference internal" href="#training-value-functions">Training value functions</a></li>
+<li><a class="reference internal" href="#dqn">DQN</a></li>
+<li><a class="reference internal" href="#ddpg">DDPG</a></li>
+<li><a class="reference internal" href="#sac">SAC</a></li>
+<li><a class="reference internal" href="#redq">REDQ</a></li>
+<li><a class="reference internal" href="#crossq">CrossQ</a></li>
+<li><a class="reference internal" href="#iql">IQL</a></li>
+<li><a class="reference internal" href="#cql">CQL</a></li>
+<li><a class="reference internal" href="#dt">DT</a></li>
+<li><a class="reference internal" href="#td3">TD3</a></li>
+<li><a class="reference internal" href="#td3-bc">TD3+BC</a></li>
+<li><a class="reference internal" href="#ppo">PPO</a></li>
+<li><a class="reference internal" href="#a2c">A2C</a></li>
+<li><a class="reference internal" href="#reinforce">Reinforce</a></li>
+<li><a class="reference internal" href="#dreamer">Dreamer</a></li>
+<li><a class="reference internal" href="#multi-agent-objectives">Multi-agent objectives</a><ul>
+<li><a class="reference internal" href="#qmixer">QMixer</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#returns">Returns</a></li>
+<li><a class="reference internal" href="#utils">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/design-tabs.js"></script>
+         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

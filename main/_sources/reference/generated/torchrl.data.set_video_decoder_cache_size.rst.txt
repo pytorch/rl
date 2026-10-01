@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+set_video_decoder_cache_size
+============================
+
+.. autoclass:: set_video_decoder_cache_size
+    :members:
+    :inherited-members:

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.IQLLossConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: IQLLossConfig

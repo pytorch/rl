@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.trainers.helpers
+
+
+make_target_updater
+===================
+
+.. autofunction:: make_target_updater

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DreamerV3MLP
+============
+
+.. autoclass:: DreamerV3MLP
+    :members:

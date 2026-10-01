@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+TrajectoryPredicate
+===================
+
+.. autoclass:: TrajectoryPredicate
+    :members:
+    :inherited-members:

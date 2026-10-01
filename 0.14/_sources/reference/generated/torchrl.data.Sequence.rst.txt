@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+Sequence
+========
+
+.. autoclass:: Sequence
+    :members:
+    :inherited-members:

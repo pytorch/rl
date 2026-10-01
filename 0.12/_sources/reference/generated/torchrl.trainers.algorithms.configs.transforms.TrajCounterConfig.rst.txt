@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.TrajCounterConfig
+================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: TrajCounterConfig

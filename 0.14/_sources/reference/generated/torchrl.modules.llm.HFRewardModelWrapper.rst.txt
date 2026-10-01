@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.modules.llm
+
+
+HFRewardModelWrapper
+====================
+
+.. autoclass:: HFRewardModelWrapper
+    :members:
+    :inherited-members:

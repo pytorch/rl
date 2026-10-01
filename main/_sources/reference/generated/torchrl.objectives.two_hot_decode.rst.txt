@@ -1,0 +1,6 @@
+﻿torchrl.objectives.two\_hot\_decode
+===================================
+
+.. currentmodule:: torchrl.objectives
+
+.. autofunction:: two_hot_decode

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers
+
+
+LRSchedulerHook
+===============
+
+.. autoclass:: LRSchedulerHook
+    :members:
+    :inherited-members:

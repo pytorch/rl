@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+group_optimizers
+================
+
+.. autoclass:: group_optimizers
+    :members:

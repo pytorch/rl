@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+TQCLoss
+=======
+
+.. autoclass:: TQCLoss
+    :members:

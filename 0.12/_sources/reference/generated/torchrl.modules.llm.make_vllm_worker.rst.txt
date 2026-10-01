@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.modules.llm
+
+
+make_vllm_worker
+================
+
+.. autoclass:: make_vllm_worker
+    :members:
+    :inherited-members:

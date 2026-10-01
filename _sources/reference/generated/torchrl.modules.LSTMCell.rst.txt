@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+LSTMCell
+========
+
+.. autoclass:: LSTMCell
+    :members:

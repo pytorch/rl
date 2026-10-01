@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+RSSMPriorV3
+===========
+
+.. autoclass:: RSSMPriorV3
+    :members:

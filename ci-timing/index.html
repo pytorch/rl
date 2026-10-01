@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TorchRL CI timing dashboard</title>
+<style>
+:root {
+  --paper:#f7f8f6; --card:#ffffff; --ink:#1d2733; --mut:#5c6b78;
+  --line:#dfe4e0; --acc:#2b6cb0; --red:#bf4433; --redbg:#faf0ee;
+}
+html { background:var(--paper); }
+body { color:var(--ink); font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  max-width:1080px; margin:0 auto; padding:36px 24px 80px; }
+.mono { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
+header { border-bottom:2px solid var(--ink); padding-bottom:14px; margin-bottom:20px;
+  display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; }
+h1 { font-size:24px; margin:0; letter-spacing:-0.01em; }
+.sub { color:var(--mut); font-size:13px; }
+.controls { display:flex; gap:14px; align-items:center; font-size:13px; color:var(--mut); margin-bottom:14px; }
+.controls label { display:flex; gap:5px; align-items:center; cursor:pointer; }
+table { border-collapse:collapse; width:100%; font-size:13.5px; margin:8px 0 28px; }
+th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--mut);
+  font-weight:600; padding:6px 10px; border-bottom:1px solid var(--ink); }
+th.num, td.num { text-align:right; font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; }
+td { padding:6px 10px; border-bottom:1px solid var(--line); }
+td.up { color:var(--red); font-weight:600; }
+td.down { color:#2f7d4f; font-weight:600; }
+.chip { background:var(--redbg); color:var(--red); font-size:10.5px; font-weight:600;
+  padding:2px 7px; border-radius:9px; white-space:nowrap; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; }
+figure { margin:0; background:var(--card); border:1px solid var(--line); border-radius:4px; padding:10px 12px 6px; }
+figure.warn { border-top:3px solid var(--red); }
+figcaption { display:flex; justify-content:space-between; font-size:12.5px; font-weight:600; margin-bottom:4px; }
+figcaption .mono { color:var(--mut); font-weight:400; }
+svg { display:block; width:100%; height:auto; }
+.ax { font-size:9.5px; fill:#8a97a3; }
+.axb { font-size:10.5px; font-weight:700; fill:var(--acc); }
+.note { font-size:12.5px; color:var(--mut); margin-top:26px; }
+a { color:var(--acc); }
+#status { color:var(--mut); font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TorchRL CI timing</h1>
+  <div class="sub">Wall-clock duration of workflow runs on <span class="mono">main</span>
+    &middot; updated <span id="updated" class="mono">&hellip;</span></div>
+</header>
+
+<div class="controls">
+  <label><input type="checkbox" id="showRuns" checked> individual runs (last 120 days)</label>
+  <span>line = weekly median of successful runs &middot; dashed line = 30 min</span>
+</div>
+
+<p id="status">Loading data.json&hellip;</p>
+<table id="summary" hidden>
+  <thead>
+    <tr><th>Workflow</th><th class="num">Latest week (min)</th><th class="num">8 weeks ago</th>
+        <th class="num">Change</th><th></th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<div class="grid" id="charts"></div>
+
+<p class="note">Duration is run start to completion of the last job; first attempts only; wheel builds
+not tracked. Data is refreshed daily by the <span class="mono">ci-timing-tracker</span> workflow.
+See also the <a href="../flaky/">flaky test dashboard</a>.</p>
+
+<script>
+"use strict";
+
+const THRESHOLD_MIN = 30;
+
+function weekToDate(wk) {
+  // "2026-W23" -> Date of that ISO week's Monday
+  const [y, w] = wk.split("-W").map(Number);
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7) + (w - 1) * 7);
+  return monday;
+}
+
+function fmtMonth(d) {
+  return d.toLocaleDateString("en", { month: "short", timeZone: "UTC" });
+}
+
+function el(tag, attrs, text) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function renderChart(label, weekly, runs, showRuns) {
+  const W = 420, H = 150, PAD_L = 30, PAD_R = 10, PAD_T = 8, PAD_B = 18;
+  const weeks = Object.keys(weekly).sort();
+  if (!weeks.length) return null;
+
+  const pts = weeks.map(wk => ({ t: weekToDate(wk).getTime(), v: weekly[wk].median }));
+  const runPts = (runs || []).filter(r => r.ok)
+    .map(r => ({ t: new Date(r.date).getTime(), v: r.dur }));
+
+  const t0 = pts[0].t, t1 = Math.max(pts[pts.length - 1].t, Date.now());
+  const allV = pts.map(p => p.v).concat(showRuns ? runPts.map(p => p.v) : []);
+  const vmax = Math.max(Math.max(...allV), THRESHOLD_MIN + 5) * 1.12;
+
+  const X = t => PAD_L + (t - t0) / (t1 - t0 || 1) * (W - PAD_L - PAD_R);
+  const Y = v => (H - PAD_B) - v / vmax * (H - PAD_T - PAD_B);
+
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+
+  for (const gv of [0, vmax / 2 / 1.12, vmax / 1.12]) {
+    svg.append(el("line", { x1: PAD_L, y1: Y(gv), x2: W - PAD_R, y2: Y(gv),
+      stroke: "#e5e9e4", "stroke-width": 1 }));
+    svg.append(el("text", { x: PAD_L - 4, y: Y(gv) + 3, "text-anchor": "end",
+      class: "ax" }, gv.toFixed(0)));
+  }
+
+  // month ticks
+  const start = new Date(t0);
+  for (let d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+       d.getTime() < t1; d.setUTCMonth(d.getUTCMonth() + 1)) {
+    svg.append(el("text", { x: X(d.getTime()), y: H - 4, "text-anchor": "middle",
+      class: "ax" }, fmtMonth(d)));
+  }
+
+  svg.append(el("line", { x1: PAD_L, y1: Y(THRESHOLD_MIN), x2: W - PAD_R, y2: Y(THRESHOLD_MIN),
+    stroke: "#bf4433", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.65 }));
+
+  if (showRuns) {
+    for (const p of runPts) {
+      svg.append(el("circle", { cx: X(p.t), cy: Y(p.v), r: 1.6, fill: "#2b6cb0", opacity: 0.25 }));
+    }
+  }
+
+  const path = pts.map((p, i) => `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" ");
+  const area = path + ` L${X(pts[pts.length - 1].t).toFixed(1)},${Y(0).toFixed(1)}` +
+               ` L${X(pts[0].t).toFixed(1)},${Y(0).toFixed(1)} Z`;
+  svg.append(el("path", { d: area, fill: "#2b6cb0", opacity: 0.07 }));
+  svg.append(el("path", { d: path, fill: "none", stroke: "#2b6cb0",
+    "stroke-width": 1.8, "stroke-linejoin": "round" }));
+
+  const last = pts[pts.length - 1];
+  svg.append(el("circle", { cx: X(last.t), cy: Y(last.v), r: 3, fill: "#2b6cb0" }));
+  svg.append(el("text", { x: X(last.t) - 6, y: Y(last.v) - 7, "text-anchor": "end",
+    class: "axb" }, `${last.v.toFixed(0)}m`));
+
+  const fig = document.createElement("figure");
+  if (last.v >= THRESHOLD_MIN) fig.classList.add("warn");
+  const cap = document.createElement("figcaption");
+  const name = document.createElement("span");
+  name.textContent = label;
+  const val = document.createElement("span");
+  val.className = "mono";
+  val.textContent = `${last.v.toFixed(0)} min`;
+  cap.append(name, val);
+  fig.append(cap, svg);
+  return { fig, latest: last.v };
+}
+
+function renderSummary(data) {
+  const tbody = document.querySelector("#summary tbody");
+  tbody.innerHTML = "";
+  const rows = [];
+  for (const [wf, label] of Object.entries(data.workflows)) {
+    const weekly = data.weekly[wf] || {};
+    const weeks = Object.keys(weekly).sort();
+    if (!weeks.length) continue;
+    const latest = weekly[weeks[weeks.length - 1]].median;
+    const refIdx = Math.max(0, weeks.length - 9);
+    const ref = weekly[weeks[refIdx]].median;
+    rows.push({ label, wf, latest, ref });
+  }
+  rows.sort((a, b) => b.latest - a.latest);
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const delta = r.latest - r.ref;
+    const cls = delta > 3 ? "up" : delta < -3 ? "down" : "";
+    tr.innerHTML =
+      `<td>${r.label} <span class="mono" style="color:var(--mut);font-size:11px">${r.wf}</span></td>` +
+      `<td class="num">${r.latest.toFixed(0)}</td>` +
+      `<td class="num">${r.ref.toFixed(0)}</td>` +
+      `<td class="num ${cls}">${delta >= 0 ? "+" : ""}${delta.toFixed(0)}</td>` +
+      `<td>${r.latest >= THRESHOLD_MIN ? '<span class="chip">&gt;30 min</span>' : ""}</td>`;
+    tbody.append(tr);
+  }
+  document.getElementById("summary").hidden = false;
+}
+
+function renderAll(data) {
+  const charts = document.getElementById("charts");
+  charts.innerHTML = "";
+  const showRuns = document.getElementById("showRuns").checked;
+  const items = [];
+  for (const [wf, label] of Object.entries(data.workflows)) {
+    const out = renderChart(label, data.weekly[wf] || {}, data.runs[wf] || [], showRuns);
+    if (out) items.push(out);
+  }
+  items.sort((a, b) => b.latest - a.latest);
+  for (const it of items) charts.append(it.fig);
+}
+
+fetch("data.json")
+  .then(r => { if (!r.ok) throw new Error(`data.json: HTTP ${r.status}`); return r.json(); })
+  .then(data => {
+    document.getElementById("status").remove();
+    document.getElementById("updated").textContent = (data.updated_at || "").replace("T", " ");
+    renderSummary(data);
+    renderAll(data);
+    document.getElementById("showRuns").addEventListener("change", () => renderAll(data));
+  })
+  .catch(err => {
+    document.getElementById("status").textContent =
+      `Could not load data: ${err.message}. The tracker workflow may not have run yet.`;
+  });
+</script>
+</body>
+</html>

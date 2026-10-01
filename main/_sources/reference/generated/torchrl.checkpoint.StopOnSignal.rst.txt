@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+StopOnSignal
+============
+
+.. autoclass:: StopOnSignal
+    :members:
+    :inherited-members:

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+import_from_string
+==================
+
+.. autofunction:: import_from_string

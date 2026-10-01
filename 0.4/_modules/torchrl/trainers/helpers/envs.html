@@ -1,0 +1,1262 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.trainers.helpers.envs &mdash; torchrl 0.4 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-117752657-2"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'UA-117752657-2');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.4
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.trainers.helpers.envs</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+          <div class="pytorch-call-to-action-links">
+            <div id="tutorial-type">_modules/torchrl/trainers/helpers/envs</div>
+
+            <div id="google-colab-link">
+              <img class="call-to-action-img" src="../../../../_static/images/pytorch-colab.svg"/>
+              <div class="call-to-action-desktop-view">Run in Google Colab</div>
+              <div class="call-to-action-mobile-view">Colab</div>
+            </div>
+            <div id="download-notebook-link">
+              <img class="call-to-action-notebook-img" src="../../../../_static/images/pytorch-download.svg"/>
+              <div class="call-to-action-desktop-view">Download Notebook</div>
+              <div class="call-to-action-mobile-view">Notebook</div>
+            </div>
+            <div id="github-view-link">
+              <img class="call-to-action-img" src="../../../../_static/images/pytorch-github.svg"/>
+              <div class="call-to-action-desktop-view">View on GitHub</div>
+              <div class="call-to-action-mobile-view">GitHub</div>
+            </div>
+          </div>
+
+        
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <h1>Source code for torchrl.trainers.helpers.envs</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span> <span class="k">as</span> <span class="n">dataclass_field</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.env_creator</span> <span class="kn">import</span> <span class="n">env_creator</span><span class="p">,</span> <span class="n">EnvCreator</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.libs.dm_control</span> <span class="kn">import</span> <span class="n">DMControlEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CatFrames</span><span class="p">,</span>
+    <span class="n">CatTensors</span><span class="p">,</span>
+    <span class="n">CenterCrop</span><span class="p">,</span>
+    <span class="n">Compose</span><span class="p">,</span>
+    <span class="n">DoubleToFloat</span><span class="p">,</span>
+    <span class="n">GrayScale</span><span class="p">,</span>
+    <span class="n">NoopResetEnv</span><span class="p">,</span>
+    <span class="n">ObservationNorm</span><span class="p">,</span>
+    <span class="n">Resize</span><span class="p">,</span>
+    <span class="n">RewardScaling</span><span class="p">,</span>
+    <span class="n">ToTensorImage</span><span class="p">,</span>
+    <span class="n">TransformedEnv</span><span class="p">,</span>
+    <span class="n">VecNorm</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms.transforms</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FlattenObservation</span><span class="p">,</span>
+    <span class="n">gSDENoise</span><span class="p">,</span>
+    <span class="n">InitTracker</span><span class="p">,</span>
+    <span class="n">StepCounter</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.recorder</span> <span class="kn">import</span> <span class="n">VideoRecorder</span>
+
+<span class="n">LIBS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;gym&quot;</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">,</span>
+    <span class="s2">&quot;dm_control&quot;</span><span class="p">:</span> <span class="n">DMControlEnv</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="correct_for_frame_skip"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.correct_for_frame_skip.html#torchrl.trainers.helpers.correct_for_frame_skip">[docs]</a><span class="k">def</span> <span class="nf">correct_for_frame_skip</span><span class="p">(</span><span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.</span>
+
+<span class="sd">    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames</span>
+<span class="sd">    of 1M but actually collecting frame_skip * 1M frames.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cfg (DictConfig): DictConfig containing some frame-counting argument, including:</span>
+<span class="sd">            &quot;max_frames_per_traj&quot;, &quot;total_frames&quot;, &quot;frames_per_batch&quot;, &quot;record_frames&quot;, &quot;annealing_frames&quot;,</span>
+<span class="sd">            &quot;init_random_frames&quot;, &quot;init_env_steps&quot;</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">         the input DictConfig, modified in-place.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Adapt all frame counts wrt frame_skip</span>
+    <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">frame_skip</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;total_frames&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;frames_per_batch&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;record_frames&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;annealing_frames&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;init_random_frames&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;init_env_steps&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;noops&quot;</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">field</span><span class="p">):</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="o">//</span> <span class="n">cfg</span><span class="o">.</span><span class="n">frame_skip</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">cfg</span></div>
+
+
+<span class="k">def</span> <span class="nf">make_env_transforms</span><span class="p">(</span>
+    <span class="n">env</span><span class="p">,</span>
+    <span class="n">cfg</span><span class="p">,</span>
+    <span class="n">video_tag</span><span class="p">,</span>
+    <span class="n">logger</span><span class="p">,</span>
+    <span class="n">env_name</span><span class="p">,</span>
+    <span class="n">stats</span><span class="p">,</span>
+    <span class="n">norm_obs_only</span><span class="p">,</span>
+    <span class="n">env_library</span><span class="p">,</span>
+    <span class="n">action_dim_gsde</span><span class="p">,</span>
+    <span class="n">state_dim_gsde</span><span class="p">,</span>
+    <span class="n">batch_dims</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">obs_norm_state_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates the typical transforms for and env.&quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+
+    <span class="n">from_pixels</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">from_pixels</span>
+    <span class="n">vecnorm</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">vecnorm</span>
+    <span class="n">norm_rewards</span> <span class="o">=</span> <span class="n">vecnorm</span> <span class="ow">and</span> <span class="n">cfg</span><span class="o">.</span><span class="n">norm_rewards</span>
+    <span class="n">_norm_obs_only</span> <span class="o">=</span> <span class="n">norm_obs_only</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">norm_rewards</span>
+    <span class="n">reward_scaling</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">reward_scaling</span>
+    <span class="n">reward_loc</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">reward_loc</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">video_tag</span><span class="p">):</span>
+        <span class="n">center_crop</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">center_crop</span>
+        <span class="k">if</span> <span class="n">center_crop</span><span class="p">:</span>
+            <span class="n">center_crop</span> <span class="o">=</span> <span class="n">center_crop</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+            <span class="n">VideoRecorder</span><span class="p">(</span>
+                <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+                <span class="n">tag</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">video_tag</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">env_name</span><span class="si">}</span><span class="s2">_video&quot;</span><span class="p">,</span>
+                <span class="n">center_crop</span><span class="o">=</span><span class="n">center_crop</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">from_pixels</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">cfg</span><span class="o">.</span><span class="n">catframes</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;this env builder currently only accepts positive catframes values&quot;</span>
+                <span class="s2">&quot;when pixels are being used.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">ToTensorImage</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">center_crop</span><span class="p">:</span>
+            <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">CenterCrop</span><span class="p">(</span><span class="o">*</span><span class="n">cfg</span><span class="o">.</span><span class="n">center_crop</span><span class="p">))</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">Resize</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">image_size</span><span class="p">,</span> <span class="n">cfg</span><span class="o">.</span><span class="n">image_size</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">grayscale</span><span class="p">:</span>
+            <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">GrayScale</span><span class="p">())</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">FlattenObservation</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="n">allow_positive_dim</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">CatFrames</span><span class="p">(</span><span class="n">N</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">catframes</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">3</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">stats</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">obs_norm_state_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">obs_stats</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">elif</span> <span class="n">stats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">obs_stats</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">obs_norm_state_dict</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">obs_stats</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">stats</span><span class="p">)</span>
+        <span class="n">obs_stats</span><span class="p">[</span><span class="s2">&quot;standard_normal&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">obs_norm</span> <span class="o">=</span> <span class="n">ObservationNorm</span><span class="p">(</span><span class="o">**</span><span class="n">obs_stats</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">])</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">obs_norm</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">norm_rewards</span><span class="p">:</span>
+        <span class="n">reward_scaling</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">reward_loc</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">if</span> <span class="n">norm_obs_only</span><span class="p">:</span>
+        <span class="n">reward_scaling</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">reward_loc</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">if</span> <span class="n">reward_scaling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">RewardScaling</span><span class="p">(</span><span class="n">reward_loc</span><span class="p">,</span> <span class="n">reward_scaling</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">from_pixels</span><span class="p">:</span>
+        <span class="n">selected_keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">key</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span><span class="s2">&quot;pixels&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">key</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">state_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="p">]</span>
+
+        <span class="c1"># even if there is a single tensor, it&#39;ll be renamed in &quot;observation_vector&quot;</span>
+        <span class="n">out_key</span> <span class="o">=</span> <span class="s2">&quot;observation_vector&quot;</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">CatTensors</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="n">selected_keys</span><span class="p">,</span> <span class="n">out_key</span><span class="o">=</span><span class="n">out_key</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">vecnorm</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">stats</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">obs_norm_state_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_stats</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">elif</span> <span class="n">stats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_stats</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">obs_norm_state_dict</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">_stats</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">stats</span><span class="p">)</span>
+            <span class="n">_stats</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;standard_normal&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+            <span class="n">obs_norm</span> <span class="o">=</span> <span class="n">ObservationNorm</span><span class="p">(</span>
+                <span class="o">**</span><span class="n">_stats</span><span class="p">,</span>
+                <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="n">out_key</span><span class="p">],</span>
+            <span class="p">)</span>
+            <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">obs_norm</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+                <span class="n">VecNorm</span><span class="p">(</span>
+                    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="n">out_key</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">_norm_obs_only</span> <span class="k">else</span> <span class="p">[</span><span class="n">out_key</span><span class="p">],</span>
+                    <span class="n">decay</span><span class="o">=</span><span class="mf">0.9999</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">DoubleToFloat</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;catframes&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">cfg</span><span class="o">.</span><span class="n">catframes</span><span class="p">:</span>
+            <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">CatFrames</span><span class="p">(</span><span class="n">N</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">catframes</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="n">out_key</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">DoubleToFloat</span><span class="p">())</span>
+
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;gSDE&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">cfg</span><span class="o">.</span><span class="n">gSDE</span><span class="p">:</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+            <span class="n">gSDENoise</span><span class="p">(</span><span class="n">action_dim</span><span class="o">=</span><span class="n">action_dim_gsde</span><span class="p">,</span> <span class="n">state_dim</span><span class="o">=</span><span class="n">state_dim_gsde</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">StepCounter</span><span class="p">())</span>
+    <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">InitTracker</span><span class="p">())</span>
+
+    <span class="k">return</span> <span class="n">env</span>
+
+
+<span class="k">def</span> <span class="nf">get_norm_state_dict</span><span class="p">(</span><span class="n">env</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Gets the normalization loc and scale from the env state_dict.&quot;&quot;&quot;</span>
+    <span class="n">sd</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+    <span class="n">sd</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">val</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">sd</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;loc&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">key</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;scale&quot;</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">sd</span>
+
+
+<div class="viewcode-block" id="transformed_env_constructor"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.transformed_env_constructor.html#torchrl.trainers.helpers.transformed_env_constructor">[docs]</a><span class="k">def</span> <span class="nf">transformed_env_constructor</span><span class="p">(</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+    <span class="n">video_tag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Logger</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">stats</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">norm_obs_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">use_env_creator</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">custom_env_maker</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">custom_env</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">EnvBase</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">return_transformed_envs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">action_dim_gsde</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">state_dim_gsde</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">batch_dims</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">obs_norm_state_dict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">Callable</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cfg (DictConfig): a DictConfig containing the arguments of the script.</span>
+<span class="sd">        video_tag (str, optional): video tag to be passed to the Logger object</span>
+<span class="sd">        logger (Logger, optional): logger associated with the script</span>
+<span class="sd">        stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform</span>
+<span class="sd">        norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won&#39;t be normalized online.</span>
+<span class="sd">            Default is `False`.</span>
+<span class="sd">        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,</span>
+<span class="sd">            one can make sure that running statistics will be put in shared memory and accessible for all workers</span>
+<span class="sd">            when using a `VecNorm` transform. Default is `True`.</span>
+<span class="sd">        custom_env_maker (callable, optional): if your env maker is not part</span>
+<span class="sd">            of torchrl env wrappers, a custom callable</span>
+<span class="sd">            can be passed instead. In this case it will override the</span>
+<span class="sd">            constructor retrieved from `args`.</span>
+<span class="sd">        custom_env (EnvBase, optional): if an existing environment needs to be</span>
+<span class="sd">            transformed_in, it can be passed directly to this helper. `custom_env_maker`</span>
+<span class="sd">            and `custom_env` are exclusive features.</span>
+<span class="sd">        return_transformed_envs (bool, optional): if ``True``, a transformed_in environment</span>
+<span class="sd">            is returned.</span>
+<span class="sd">        action_dim_gsde (int, Optional): if gSDE is used, this can present the action dim to initialize the noise.</span>
+<span class="sd">            Make sure this is indicated in environment executed in parallel.</span>
+<span class="sd">        state_dim_gsde: if gSDE is used, this can present the state dim to initialize the noise.</span>
+<span class="sd">            Make sure this is indicated in environment executed in parallel.</span>
+<span class="sd">        batch_dims (int, optional): number of dimensions of a batch of data. If a single env is</span>
+<span class="sd">            used, it should be 0 (default). If multiple envs are being transformed in parallel,</span>
+<span class="sd">            it should be set to 1 (or the number of dims of the batch).</span>
+<span class="sd">        obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded into the</span>
+<span class="sd">            environment</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">make_transformed_env</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransformedEnv</span><span class="p">:</span>
+        <span class="n">env_name</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">env_name</span>
+        <span class="n">env_task</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">env_task</span>
+        <span class="n">env_library</span> <span class="o">=</span> <span class="n">LIBS</span><span class="p">[</span><span class="n">cfg</span><span class="o">.</span><span class="n">env_library</span><span class="p">]</span>
+        <span class="n">frame_skip</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">frame_skip</span>
+        <span class="n">from_pixels</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">from_pixels</span>
+        <span class="n">categorical_action_encoding</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">categorical_action_encoding</span>
+
+        <span class="k">if</span> <span class="n">custom_env</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">custom_env_maker</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;collector_device must be either a string or a sequence of strings&quot;</span>
+                <span class="p">)</span>
+            <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;env_name&quot;</span><span class="p">:</span> <span class="n">env_name</span><span class="p">,</span>
+                <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">device</span><span class="p">,</span>
+                <span class="s2">&quot;frame_skip&quot;</span><span class="p">:</span> <span class="n">frame_skip</span><span class="p">,</span>
+                <span class="s2">&quot;from_pixels&quot;</span><span class="p">:</span> <span class="n">from_pixels</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">video_tag</span><span class="p">),</span>
+                <span class="s2">&quot;pixels_only&quot;</span><span class="p">:</span> <span class="n">from_pixels</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">if</span> <span class="n">env_library</span> <span class="ow">is</span> <span class="n">GymEnv</span><span class="p">:</span>
+                <span class="n">env_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                    <span class="p">{</span><span class="s2">&quot;categorical_action_encoding&quot;</span><span class="p">:</span> <span class="n">categorical_action_encoding</span><span class="p">}</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">categorical_action_encoding</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="s2">&quot;categorical_action_encoding=True is currently only compatible with GymEnvs.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">env_library</span> <span class="ow">is</span> <span class="n">DMControlEnv</span><span class="p">:</span>
+                <span class="n">env_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;task_name&quot;</span><span class="p">:</span> <span class="n">env_task</span><span class="p">})</span>
+            <span class="n">env_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="n">env_library</span><span class="p">(</span><span class="o">**</span><span class="n">env_kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">custom_env</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">custom_env_maker</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="n">custom_env_maker</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">custom_env_maker</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">custom_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="n">custom_env</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cannot provive both custom_env and custom_env_maker&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">noops</span> <span class="ow">and</span> <span class="n">custom_env</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv</span>
+            <span class="c1"># that already has its NoopResetEnv set for the contained envs.</span>
+            <span class="c1"># There is a risk however that we&#39;re just skipping the NoopsReset instantiation</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">NoopResetEnv</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">noops</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">return_transformed_envs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">env</span>
+
+        <span class="k">return</span> <span class="n">make_env_transforms</span><span class="p">(</span>
+            <span class="n">env</span><span class="p">,</span>
+            <span class="n">cfg</span><span class="p">,</span>
+            <span class="n">video_tag</span><span class="p">,</span>
+            <span class="n">logger</span><span class="p">,</span>
+            <span class="n">env_name</span><span class="p">,</span>
+            <span class="n">stats</span><span class="p">,</span>
+            <span class="n">norm_obs_only</span><span class="p">,</span>
+            <span class="n">env_library</span><span class="p">,</span>
+            <span class="n">action_dim_gsde</span><span class="p">,</span>
+            <span class="n">state_dim_gsde</span><span class="p">,</span>
+            <span class="n">batch_dims</span><span class="o">=</span><span class="n">batch_dims</span><span class="p">,</span>
+            <span class="n">obs_norm_state_dict</span><span class="o">=</span><span class="n">obs_norm_state_dict</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">use_env_creator</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">env_creator</span><span class="p">(</span><span class="n">make_transformed_env</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">make_transformed_env</span></div>
+
+
+<div class="viewcode-block" id="parallel_env_constructor"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.parallel_env_constructor.html#torchrl.trainers.helpers.parallel_env_constructor">[docs]</a><span class="k">def</span> <span class="nf">parallel_env_constructor</span><span class="p">(</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>  <span class="c1"># noqa: F821</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ParallelEnv</span><span class="p">,</span> <span class="n">EnvCreator</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cfg (DictConfig): config containing user-defined arguments</span>
+<span class="sd">        kwargs: keyword arguments for the `transformed_env_constructor` method.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">batch_transform</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">batch_transform</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">batch_transform</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;batch_transform must be set to True for the recorder to be synced &quot;</span>
+            <span class="s2">&quot;with the collection envs.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">env_per_collector</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;cfg&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;use_env_creator&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+        <span class="n">make_transformed_env</span> <span class="o">=</span> <span class="n">transformed_env_constructor</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">make_transformed_env</span>
+    <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;cfg&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;use_env_creator&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+    <span class="n">make_transformed_env</span> <span class="o">=</span> <span class="n">transformed_env_constructor</span><span class="p">(</span>
+        <span class="n">return_transformed_envs</span><span class="o">=</span><span class="ow">not</span> <span class="n">batch_transform</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">)</span>
+    <span class="n">parallel_env</span> <span class="o">=</span> <span class="n">ParallelEnv</span><span class="p">(</span>
+        <span class="n">num_workers</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">env_per_collector</span><span class="p">,</span>
+        <span class="n">create_env_fn</span><span class="o">=</span><span class="n">make_transformed_env</span><span class="p">,</span>
+        <span class="n">create_env_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">pin_memory</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">batch_transform</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;cfg&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="p">,</span>
+                <span class="s2">&quot;use_env_creator&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;custom_env&quot;</span><span class="p">:</span> <span class="n">parallel_env</span><span class="p">,</span>
+                <span class="s2">&quot;batch_dims&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">transformed_env_constructor</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)()</span>
+        <span class="k">return</span> <span class="n">env</span>
+    <span class="k">return</span> <span class="n">parallel_env</span></div>
+
+
+<div class="viewcode-block" id="get_stats_random_rollout"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.get_stats_random_rollout.html#torchrl.trainers.helpers.get_stats_random_rollout">[docs]</a><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">get_stats_random_rollout</span><span class="p">(</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+    <span class="n">proof_environment</span><span class="p">:</span> <span class="n">EnvBase</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Gathers stas (loc and scale) from an environment using random rollouts.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cfg (DictConfig): a config object with `init_env_steps` field, indicating</span>
+<span class="sd">            the total number of frames to be collected to compute the stats.</span>
+<span class="sd">        proof_environment (EnvBase instance, optional): if provided, this env will</span>
+<span class="sd">            be used ot execute the rollouts. If not, it will be created using</span>
+<span class="sd">            the cfg object.</span>
+<span class="sd">        key (str, optional): if provided, the stats of this key will be gathered.</span>
+<span class="sd">            If not, it is expected that only one key exists in `env.observation_spec`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">proof_env_is_none</span> <span class="o">=</span> <span class="n">proof_environment</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">proof_env_is_none</span><span class="p">:</span>
+        <span class="n">proof_environment</span> <span class="o">=</span> <span class="n">transformed_env_constructor</span><span class="p">(</span>
+            <span class="n">cfg</span><span class="o">=</span><span class="n">cfg</span><span class="p">,</span> <span class="n">use_env_creator</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">stats</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;loc&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">}</span>
+        <span class="p">)()</span>
+
+    <span class="k">if</span> <span class="n">VERBOSE</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;computing state stats&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;init_env_steps&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">&quot;init_env_steps missing from arguments.&quot;</span><span class="p">)</span>
+
+    <span class="n">n</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">val_stats</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">while</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">cfg</span><span class="o">.</span><span class="n">init_env_steps</span><span class="p">:</span>
+        <span class="n">_td_stats</span> <span class="o">=</span> <span class="n">proof_environment</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">init_env_steps</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">+=</span> <span class="n">_td_stats</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="n">_td_stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="n">val_stats</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="k">del</span> <span class="n">_td_stats</span><span class="p">,</span> <span class="n">val</span>
+    <span class="n">val_stats</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">val_stats</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">proof_environment</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">keys</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;More than one key exists in the observation_specs: </span><span class="si">{</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">keys</span><span class="si">}</span><span class="s2"> were found, &quot;</span>
+                <span class="s2">&quot;thus get_stats_random_rollout cannot infer which to compute the stats of.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;pixels&quot;</span><span class="p">:</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">val_stats</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">val_stats</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">val_stats</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">val_stats</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">m</span><span class="p">[</span><span class="n">s</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">s</span><span class="p">[</span><span class="n">s</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+    <span class="k">if</span> <span class="n">VERBOSE</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;stats computed for </span><span class="si">{</span><span class="n">val_stats</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> steps. Got: </span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;loc = </span><span class="si">{</span><span class="n">m</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;scale = </span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">m</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;non-finite values found in mean&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;non-finite values found in sd&quot;</span><span class="p">)</span>
+    <span class="n">stats</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;loc&quot;</span><span class="p">:</span> <span class="n">m</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="n">s</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">proof_env_is_none</span><span class="p">:</span>
+        <span class="n">proof_environment</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">proof_environment</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="p">):</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+        <span class="k">del</span> <span class="n">proof_environment</span>
+    <span class="k">return</span> <span class="n">stats</span></div>
+
+
+<span class="k">def</span> <span class="nf">initialize_observation_norm_transforms</span><span class="p">(</span>
+    <span class="n">proof_environment</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
+    <span class="n">num_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+    <span class="n">key</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.</span>
+
+<span class="sd">    If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, a call to :obj:`initialize_observation_norm_transforms` will be a no-op.</span>
+<span class="sd">    Similarly, if the transformed environment does not contain any :obj:`ObservationNorm`, a call to this function will have no effect.</span>
+<span class="sd">    If no key is provided but the observations of the :obj:`EnvBase` contains more than one key, an exception will</span>
+<span class="sd">    be raised.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        proof_environment (EnvBase instance, optional): if provided, this env will</span>
+<span class="sd">            be used ot execute the rollouts. If not, it will be created using</span>
+<span class="sd">            the cfg object.</span>
+<span class="sd">        num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`</span>
+<span class="sd">        key (str, optional): if provided, the stats of this key will be gathered.</span>
+<span class="sd">            If not, it is expected that only one key exists in `env.observation_spec`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+        <span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="p">,</span> <span class="n">ObservationNorm</span>
+    <span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">proof_environment</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">keys</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;More than one key exists in the observation_specs: </span><span class="si">{</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">keys</span><span class="si">}</span><span class="s2"> were found, &quot;</span>
+                <span class="s2">&quot;thus initialize_observation_norm_transforms cannot infer which to compute the stats of.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">transform</span> <span class="ow">in</span> <span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">ObservationNorm</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">transform</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+                <span class="n">transform</span><span class="o">.</span><span class="n">init_stats</span><span class="p">(</span><span class="n">num_iter</span><span class="o">=</span><span class="n">num_iter</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">initialized</span><span class="p">:</span>
+        <span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">init_stats</span><span class="p">(</span><span class="n">num_iter</span><span class="o">=</span><span class="n">num_iter</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">retrieve_observation_norms_state_dict</span><span class="p">(</span><span class="n">proof_environment</span><span class="p">:</span> <span class="n">TransformedEnv</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.</span>
+
+<span class="sd">    Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment</span>
+<span class="sd">    If the environment transforms do not contain any :obj:`ObservationNorm`, returns an empty list</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        proof_environment (EnvBase instance, optional): the :obj:``TransformedEnv` to retrieve the :obj:`ObservationNorm`</span>
+<span class="sd">            state dict from</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">obs_norm_state_dicts</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">transform</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">ObservationNorm</span><span class="p">):</span>
+                <span class="n">obs_norm_state_dicts</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="n">transform</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()))</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="p">,</span> <span class="n">ObservationNorm</span><span class="p">):</span>
+        <span class="n">obs_norm_state_dicts</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="n">proof_environment</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()))</span>
+
+    <span class="k">return</span> <span class="n">obs_norm_state_dicts</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">EnvConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Environment config struct.&quot;&quot;&quot;</span>
+
+    <span class="n">env_library</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;gym&quot;</span>
+    <span class="c1"># env_library used for the simulated environment. Default=gym</span>
+    <span class="n">env_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Humanoid-v2&quot;</span>
+    <span class="c1"># name of the environment to be created. Default=Humanoid-v2</span>
+    <span class="n">env_task</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="c1"># task (if any) for the environment. Default=run</span>
+    <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># whether the environment output should be state vector(s) (default) or the pixels.</span>
+    <span class="n">frame_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="c1"># frame_skip for the environment. Note that this value does NOT impact the buffer size,</span>
+    <span class="c1"># maximum steps per trajectory, frames per batch or any other factor in the algorithm,</span>
+    <span class="c1"># e.g. if the total number of frames that has to be computed is 50e6 and the frame skip is 4</span>
+    <span class="c1"># the actual number of frames retrieved will be 200e6. Default=1.</span>
+    <span class="n">reward_scaling</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># scale of the reward.</span>
+    <span class="n">reward_loc</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="c1"># location of the reward.</span>
+    <span class="n">init_env_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span>
+    <span class="c1"># number of random steps to compute normalizing constants</span>
+    <span class="n">vecnorm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># Normalizes the environment observation and reward outputs with the running statistics obtained across processes.</span>
+    <span class="n">norm_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># If True, rewards will be normalized on the fly. This may interfere with SAC update rule and should be used cautiously.</span>
+    <span class="n">norm_stats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="c1"># Deactivates the normalization based on random collection of data.</span>
+    <span class="n">noops</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1"># number of random steps to do after reset. Default is 0</span>
+    <span class="n">catframes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1"># Number of frames to concatenate through time. Default is 0 (do not use CatFrames).</span>
+    <span class="n">center_crop</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">dataclass_field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[])</span>
+    <span class="c1"># center crop size.</span>
+    <span class="n">grayscale</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="c1"># Disables grayscale transform.</span>
+    <span class="n">max_frames_per_traj</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span>
+    <span class="c1"># Number of steps before a reset of the environment is called (if it has not been flagged as done before).</span>
+    <span class="n">batch_transform</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># if ``True``, the transforms will be applied to the parallel env, and not to each individual env.\</span>
+    <span class="n">image_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">84</span>
+    <span class="c1"># if True and environment has discrete action space, then it is encoded as categorical values rather than one-hot.</span>
+    <span class="n">categorical_action_encoding</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+         <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+         <script src="../../../../_static/jquery.js"></script>
+         <script src="../../../../_static/underscore.js"></script>
+         <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

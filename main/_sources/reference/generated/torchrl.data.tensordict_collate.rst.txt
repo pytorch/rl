@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.data
+
+
+tensordict_collate
+==================
+
+.. autofunction:: tensordict_collate

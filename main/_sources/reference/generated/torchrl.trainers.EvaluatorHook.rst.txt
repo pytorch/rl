@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers
+
+
+EvaluatorHook
+=============
+
+.. autoclass:: EvaluatorHook
+    :members:
+    :inherited-members:

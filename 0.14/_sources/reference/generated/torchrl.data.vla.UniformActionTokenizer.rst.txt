@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.vla
+
+
+UniformActionTokenizer
+======================
+
+.. autoclass:: UniformActionTokenizer
+    :members:

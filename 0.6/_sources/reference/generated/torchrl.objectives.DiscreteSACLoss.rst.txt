@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+DiscreteSACLoss
+===============
+
+.. autoclass:: DiscreteSACLoss
+    :members:

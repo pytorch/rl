@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.objectives.llm
+
+
+RewardModelLossOutput
+=====================
+
+.. autoclass:: RewardModelLossOutput
+    :members:
+    :inherited-members:

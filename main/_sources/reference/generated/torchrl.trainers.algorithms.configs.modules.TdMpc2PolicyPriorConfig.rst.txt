@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.modules.TdMpc2PolicyPriorConfig
+===================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.modules
+
+.. autoclass:: TdMpc2PolicyPriorConfig

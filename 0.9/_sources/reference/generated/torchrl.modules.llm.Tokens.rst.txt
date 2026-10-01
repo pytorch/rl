@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.modules.llm
+
+
+Tokens
+======
+
+.. autoclass:: Tokens
+    :members:
+    :inherited-members:

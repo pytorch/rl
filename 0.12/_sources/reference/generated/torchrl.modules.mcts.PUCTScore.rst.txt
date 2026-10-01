@@ -1,0 +1,89 @@
+﻿torchrl.modules.mcts.PUCTScore
+==============================
+
+.. currentmodule:: torchrl.modules.mcts
+
+.. autoclass:: PUCTScore
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~PUCTScore.__init__
+      ~PUCTScore.add_module
+      ~PUCTScore.apply
+      ~PUCTScore.bfloat16
+      ~PUCTScore.buffers
+      ~PUCTScore.children
+      ~PUCTScore.compile
+      ~PUCTScore.cpu
+      ~PUCTScore.cuda
+      ~PUCTScore.double
+      ~PUCTScore.eval
+      ~PUCTScore.extra_repr
+      ~PUCTScore.float
+      ~PUCTScore.forward
+      ~PUCTScore.get_buffer
+      ~PUCTScore.get_extra_state
+      ~PUCTScore.get_parameter
+      ~PUCTScore.get_submodule
+      ~PUCTScore.half
+      ~PUCTScore.ipu
+      ~PUCTScore.is_tdmodule_compatible
+      ~PUCTScore.load_state_dict
+      ~PUCTScore.modules
+      ~PUCTScore.mtia
+      ~PUCTScore.named_buffers
+      ~PUCTScore.named_children
+      ~PUCTScore.named_modules
+      ~PUCTScore.named_parameters
+      ~PUCTScore.parameters
+      ~PUCTScore.register_backward_hook
+      ~PUCTScore.register_buffer
+      ~PUCTScore.register_forward_hook
+      ~PUCTScore.register_forward_pre_hook
+      ~PUCTScore.register_full_backward_hook
+      ~PUCTScore.register_full_backward_pre_hook
+      ~PUCTScore.register_load_state_dict_post_hook
+      ~PUCTScore.register_load_state_dict_pre_hook
+      ~PUCTScore.register_module
+      ~PUCTScore.register_parameter
+      ~PUCTScore.register_state_dict_post_hook
+      ~PUCTScore.register_state_dict_pre_hook
+      ~PUCTScore.requires_grad_
+      ~PUCTScore.reset_out_keys
+      ~PUCTScore.reset_parameters_recursive
+      ~PUCTScore.select_out_keys
+      ~PUCTScore.set_extra_state
+      ~PUCTScore.set_submodule
+      ~PUCTScore.share_memory
+      ~PUCTScore.state_dict
+      ~PUCTScore.to
+      ~PUCTScore.to_empty
+      ~PUCTScore.train
+      ~PUCTScore.type
+      ~PUCTScore.xpu
+      ~PUCTScore.zero_grad
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~PUCTScore.T_destination
+      ~PUCTScore.call_super_init
+      ~PUCTScore.dump_patches
+      ~PUCTScore.in_keys
+      ~PUCTScore.out_keys
+      ~PUCTScore.out_keys_source
+      ~PUCTScore.c
+      ~PUCTScore.training
+   
+   

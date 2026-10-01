@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.DoneTransformConfig
+==================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: DoneTransformConfig

@@ -1,0 +1,855 @@
+# AsyncBatchedCollector
+
+*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | Literal['auto', 'driver'] | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *env_exchange: Literal['queue', 'shm', 'auto'] = 'auto'*, *envs_per_worker: int = 1*, *transition_chunk_size: int | Literal['auto'] = 'auto'*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.RANDOM*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *worker_affinity: Sequence[Sequence[int]] | Callable[[int], Sequence[int]] | None = None*, *driver_affinity: Sequence[int] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
+
+Asynchronous collector with env slots and a policy server.
+
+The collector pairs environment coordinators with an
+[`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) and an
+`InferenceServer`.
+
+Unlike [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector), this collector fully
+decouples environment stepping from policy inference:
+
+- An [`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) runs *N* environments using
+whatever backend the user chooses (`"threading"`,
+`"multiprocessing"`).
+- With a shared-memory exchange or grouped workers, one coordinator drains
+whichever environments are ready and submits their observations without
+blocking. Other exchanges use one lightweight coordinator thread per
+environment.
+- With a [`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport),
+each multiprocessing environment worker talks directly to the dedicated
+inference process; the driver receives completed transitions only.
+Completed and in-flight results are bounded to twice the environment
+count; `transition_chunk_size` sets how many consecutive transitions
+one result holds. Workers and the inference server exit when their
+owner dies.
+- The `InferenceServer` running in a background
+thread continuously drains observation submissions, batches them, runs
+a single forward pass, and fans actions back out.
+
+There is **no global synchronisation barrier**: fast environments keep
+stepping while slow ones wait for inference, and the server always
+processes whatever observations have accumulated.
+
+The user simply provides env factories and a policy; the collector
+handles all wiring internally. With `transport="auto"`, multiprocessing
+environment workers and a `policy_factory`, it also derives the fixed
+request and response layouts and serves the policy from a dedicated
+process that the workers reach directly.
+
+Parameters:
+
+**create_env_fn** (*list**[**Callable**[**[**]**,*[*EnvBase*](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)*]**]*) - a list of callables, each
+returning an [`EnvBase`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) instance. The list
+length determines the number of parallel environments.
+
+Keyword Arguments:
+
+- **policy** (*nn.Module**or**Callable**,**optional*) - the policy module.
+Mutually exclusive with `policy_factory`.
+- **policy_factory** (*Callable**[**[**]**,**Callable**]**,**optional*) - a zero-argument
+callable that returns the policy. Useful when the policy cannot
+be pickled. Mutually exclusive with `policy`.
+- **frames_per_batch** (*int*) - number of environment frames to collect per
+batch. Required.
+- **total_frames** (*int**,**optional*) - total number of frames the collector
+should return during its lifespan. `-1` means endless.
+Defaults to `-1`.
+- **max_batch_size** (*int**,**optional*) - upper bound on the number of
+requests the inference server processes in a single forward pass.
+Defaults to `64`.
+- **min_batch_size** (*int**,**optional*) - minimum number of requests the
+inference server accumulates before dispatching a batch. After
+the first request arrives the server keeps draining for up to
+`server_timeout` seconds until this many items are collected.
+`1` (default) dispatches immediately.
+- **server_timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - seconds the server waits for work
+before dispatching a partial batch. Defaults to `0.01`.
+- **transport** ([*InferenceTransport*](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)*,**"auto"**or**"thread"**,**optional*) - the
+inference transport. A pre-built transport object takes precedence
+over `policy_backend`; a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+runs the complete acting loop in environment worker processes and
+implies a process inference server and multiprocessing environment
+workers. `"auto"` builds that transport when environment workers
+are processes with one environment each and a `policy_factory`
+is given: the request and response layouts come from one
+environment's `fake_tensordict()` and one policy pass. When
+those conditions do not hold, or the layouts cannot be derived,
+the policy is served from a thread of this process and the reason
+is logged. `"driver"` always relays requests through the
+driver's coordinator threads to the transport derived from
+`policy_backend` (a thread server by default, a process server
+with `service_backend="process"`). `None` (default) behaves like
+`"driver"` and emits a
+`FutureWarning` when `"auto"` would pick process slots:
+in v0.15 the default becomes `"auto"`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference
+(shorthand for `InferenceDeviceConfig(policy_device=...)`).
+Defaults to `None`.
+- **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
+configuration: execution `backend` (`"thread"` runs the serve
+loop in this process, `"process"` a dedicated server process
+requiring `policy_factory`; a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+turns `"thread"` into `"process"`), batching, optional static
+CUDA-graph execution, and stats settings.
+Mutually exclusive with the `max_batch_size`,
+`min_batch_size`, and `server_timeout` keyword arguments.
+- **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device
+placement (`policy_device`, `output_device`, `env_device`,
+`storing_device`) for the whole collection pipeline. Mutually
+exclusive with `device`.
+- **policy_version** (*int**,**optional*) - initial behavior-policy version
+attached to server outputs. Defaults to `0`.
+- **policy_version_key** (*NestedKey**or**None**,**optional*) - TensorDict key used
+for behavior-policy version annotations. `None` disables
+annotations. Defaults to `"policy_version"`.
+- **backend** (*str**,**optional*) - global default backend for both
+environments and policy inference. Specific overrides
+`env_backend` and `policy_backend` take precedence when set.
+One of `"threading"`, `"multiprocessing"`, `"ray"`, or
+`"monarch"`. Defaults to `None`: environment workers run in
+threads and inference uses the threading transport. In v0.15 the
+environment-worker default changes to `"multiprocessing"`; a
+`FutureWarning` is emitted until then when neither
+`backend` nor `env_backend` is given.
+- **env_backend** (*str**,**optional*) - backend for the
+[`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) that runs environments. One
+of `"threading"` or `"multiprocessing"`. Falls back to
+`backend` when `None`. The coordinator threads are always
+Python threads regardless of this setting. Defaults to `None`.
+- **env_exchange** (*str**,**optional*) - data exchange of a multiprocessing
+[`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool), one of `"queue"`, `"shm"`
+or `"auto"`. The shared-memory exchange also enables batched
+coordination from one thread; `"auto"` selects it whenever the
+environment schema allows. It does not apply when a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport)
+owns the worker exchange. Defaults to `"auto"`.
+- **envs_per_worker** (*int**,**optional*) - Number of environments hosted by each
+multiprocessing worker. Grouped workers share one coordinator that
+drains ready environments without waiting for a complete group.
+Defaults to `1`.
+- **transition_chunk_size** (*int**or**"auto"**,**optional*) - number of consecutive
+transitions each environment worker process accumulates before
+sending them to the driver as one dense message. Requires a
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport).
+`"auto"` (default) uses at least 64 consecutive transitions per
+message with process workers, `frames_per_batch //
+len(create_env_fn)` when that is larger, and never more than
+`frames_per_batch`: the driver's work per message competes with
+training, and smaller messages measurably slow collection down. A
+transition reaches the driver once its message is complete, about
+64 environment steps later; pass `1` for step-level delivery.
+It resolves to `1` without process workers.
+`1` sends every transition as soon as it completes.
+Larger values take the driver off the per-transition path: it
+receives one message per chunk, concatenates whole chunks into
+each batch and writes each batch to `replay_buffer` with a
+single routed `extend`, so its per-transition Python work is
+amortized over the chunk. The cost is latency: a transition
+reaches the driver only once its chunk is complete, and up to
+`transition_chunk_size - 1` transitions per environment stay in
+the worker while collection is paused or stopped. Batches are then
+dense [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances and `env_index`
+is a tensor. Defaults to `"auto"`.
+- **policy_backend** (*str**,**optional*) - backend for the inference transport
+used to communicate with the
+`InferenceServer`. One of
+`"threading"`, `"multiprocessing"`, `"ray"`, or
+`"monarch"`. Falls back to `backend` when `None`.
+Defaults to `None`.
+- **reset_at_each_iter** (*bool**,**optional*) - whether to reset all envs at the
+start of every collection batch. Defaults to `False`.
+- **postproc** (*Callable**,**optional*) - post-processing transform applied to
+each collected batch before yielding. Defaults to `None`.
+- **exploration_type** (*ExplorationType**,**optional*) - interaction mode used
+when collecting data, one of
+`torchrl.envs.utils.ExplorationType.RANDOM`, `MODE`, `MEAN`
+or `DETERMINISTIC`. Every inference request is stamped with it
+and, when `static_batch_size` is set, the CUDA graph is captured
+under it, independently of the process-wide
+`set_exploration_type()` context, which a
+learner thread of the same process may change at any time.
+Defaults to `ExplorationType.RANDOM`.
+- **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - replay buffer to extend in the
+collector's parent thread after post-processing. When provided,
+iteration yields `None` instead of full rollout batches.
+Defaults to `None`.
+- **post_collect_hook** (*Callable**,**optional*) - callback invoked with each
+post-processed batch before it is normalized and written to replay
+(or yielded when no replay buffer is configured). Defaults to
+`None`.
+- **yield_completed_trajectories** (*bool**,**optional*) - if `True`, the
+collector yields individual completed trajectories as they finish
+rather than fixed-size batches. `frames_per_batch` acts as the
+*minimum* number of frames to accumulate before yielding.
+The synchronous and multi-process collectors expose the same
+capability through the `trajs_per_batch` keyword argument (a
+trajectory count rather than a flag).
+Defaults to `False`.
+- **weight_sync** - an optional
+[`WeightSyncScheme`](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme) forwarded to the
+inference server for receiving weight updates.
+- **weight_sync_model_id** (*str**,**optional*) - model id for weight sync.
+Defaults to `"policy"`.
+- **verbose** (*bool**,**optional*) - if `True`, log progress messages.
+Defaults to `False`.
+- **create_env_kwargs** (*dict**or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*[**dict**]**,**optional*) - keyword arguments
+forwarded to each environment factory. A single dict is broadcast
+to all factories.
+- **worker_affinity** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**] or**Callable**[**[**int**]**,*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**]**,**optional*) - Optional Linux CPU placement forwarded to the multiprocessing
+[`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool). Use it when worker scheduling
+on CPUs reserved for simulators or driver work causes contention or
+step-time jitter; most users should leave it unset. TorchRL knows
+which CPUs are available, but not the application's intended CPU
+partition or each environment's thread requirements, so it cannot
+choose these masks automatically. Provide one mask per worker process,
+or a callable mapping each worker index to its mask. Defaults
+to `None`. See async_batched_collector_cpu_affinity for a
+complete collector example.
+- **driver_affinity** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**,**optional*) - Linux CPU affinity mask for
+the inference-server and coordinator threads, plus
+parent-side multiprocessing queue feeder threads. Dedicated
+process-backed inference servers are not covered. The thread
+constructing the collector is restored to its original affinity
+after startup. Defaults to `None`. See
+async_batched_collector_cpu_affinity for an example.
+
+Examples
+
+```
+>>> from torchrl.collectors import AsyncBatchedCollector
+>>> from torchrl.envs import GymEnv
+>>> from tensordict.nn import TensorDictModule
+>>> import torch.nn as nn
+>>> policy = TensorDictModule(
+... nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
+... )
+>>> collector = AsyncBatchedCollector(
+... create_env_fn=[lambda: GymEnv("CartPole-v1")] * 4,
+... policy=policy,
+... frames_per_batch=200,
+... total_frames=1000,
+... env_backend="multiprocessing",
+... )
+>>> for batch in collector:
+... print(batch.shape)
+... break
+>>> collector.shutdown()
+```
+
+The fast configuration for many process-backed environments serves the
+policy from a dedicated inference process that the environment workers
+reach directly, while the driver only receives dense chunks of
+transitions. The policy is rebuilt inside that process from a picklable,
+module-level factory and created directly on its device; the learner's
+weights pushed before the first iteration are applied when the server
+starts, before any request is served:
+
+```
+>>> import functools
+>>> import torch
+>>> from torchrl.modules.inference_server import (
+... InferenceDeviceConfig,
+... InferenceServerConfig,
+... )
+>>> def make_policy(device):
+... with torch.device(device):
+... module = nn.Linear(4, 2)
+... return TensorDictModule(
+... module, in_keys=["observation"], out_keys=["action"]
+... )
+>>> num_envs = 64
+>>> collector = AsyncBatchedCollector(
+... create_env_fn=[lambda: GymEnv("CartPole-v1")] * num_envs,
+... policy_factory=functools.partial(make_policy, "cuda:0"),
+... frames_per_batch=1024,
+... # One environment per worker process; the shared-memory exchange
+... # is not involved once the workers reach the server directly.
+... env_backend="multiprocessing",
+... # Derive the request and response slot layouts from one
+... # environment and one policy pass, then serve from a process.
+... transport="auto",
+... # Dense 64-step messages keep the driver off the per-transition
+... # path; "auto" gives at least 64 as well.
+... transition_chunk_size=64,
+... server_config=InferenceServerConfig(
+... max_batch_size=num_envs, min_batch_size=1, timeout=0.001
+... ),
+... device_config=InferenceDeviceConfig(
+... policy_device="cuda:0", output_device="cpu", storing_device="cpu"
+... ),
+... )
+>>> collector.server_backend
+'process'
+>>> learner_policy = make_policy("cuda:0") # the copy being trained
+>>> collector.update_policy_weights_(learner_policy)
+>>> for batch in collector:
+... print(batch.shape) # dense: whole 64-step chunks, env_index is a tensor
+... break
+torch.Size([1024])
+>>> collector.shutdown()
+```
+
+The slot layouts can also be built by hand, for instance when the
+served keys differ from what one policy pass returns. A
+[`ProcessSlotTransport`](torchrl.modules.inference_server.ProcessSlotTransport.html#torchrl.modules.inference_server.ProcessSlotTransport) implies
+the process inference server and multiprocessing workers:
+
+```
+>>> from torchrl.modules.inference_server import ProcessSlotTransport
+>>> env = GymEnv("CartPole-v1")
+>>> request_spec = env.fake_tensordict().select("observation")
+>>> response_spec = make_policy("cpu")(request_spec.clone()).select("action")
+>>> response_spec["policy_version"] = torch.zeros((), dtype=torch.long)
+>>> env.close()
+>>> collector = AsyncBatchedCollector(
+... create_env_fn=[lambda: GymEnv("CartPole-v1")] * num_envs,
+... policy_factory=functools.partial(make_policy, "cuda:0"),
+... frames_per_batch=1024,
+... transport=ProcessSlotTransport(
+... request_spec, response_spec, num_slots=num_envs
+... ),
+... transition_chunk_size=64,
+... device_config=InferenceDeviceConfig(
+... policy_device="cuda:0", output_device="cpu", storing_device="cpu"
+... ),
+... )
+>>> collector.shutdown()
+```
+
+Pass `replay_buffer=` to let a background thread write each batch to
+replay with one routed `extend`; the DreamerV3 example under
+`sota-implementations/dreamer_v3` uses this path with a
+[`ReplayBufferEnsemble`](torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble) routed by `env_index`.
+
+async_shutdown(*timeout: float | None = None*, *close_env: bool = True*) → None
+
+Shuts down the collector when started asynchronously with the start method.
+
+Parameters:
+
+- **timeout** (*float**,**optional*) - The maximum time to wait for the collector to shutdown.
+- **close_env** (*bool**,**optional*) - If True, the collector will close the contained environment.
+Defaults to True.
+
+See also
+
+`start()`
+
+cascade_execute(*attr_path: str*, **args*, ***kwargs*) → Any
+
+Execute a method on a nested attribute of this collector.
+
+This method allows remote callers to invoke methods on nested attributes
+of the collector without needing to know the full structure. It's particularly
+useful for calling methods on weight sync schemes from the sender side.
+
+Parameters:
+
+- **attr_path** - Full path to the callable, e.g.,
+"_receiver_schemes['model_id']._set_dist_connection_info"
+- ***args** - Positional arguments to pass to the method.
+- ****kwargs** - Keyword arguments to pass to the method.
+
+Returns:
+
+The return value of the method call.
+
+Examples
+
+```
+>>> collector.cascade_execute(
+... "_receiver_schemes['policy']._set_dist_connection_info",
+... connection_info_ref,
+... worker_idx=0
+... )
+```
+
+disable_profile() → None
+
+Stop any in-flight profiler and restore the prior `post_collect_hook`.
+
+Safe to call when profiling was never enabled (becomes a no-op). When
+the profiler was already self-stopped after `num_rollouts`, this just
+clears the hook and restores any user-set `post_collect_hook`.
+
+enable_profile(***, *workers: list[int] | None = None*, *num_rollouts: int = 3*, *warmup_rollouts: int = 1*, *save_path: str | Path | None = None*, *activities: list[str] | None = None*, *record_shapes: bool = True*, *profile_memory: bool = False*, *with_stack: bool = True*, *with_flops: bool = False*, *on_trace_ready: Callable | None = None*) → None
+
+Enable profiling for collector worker rollouts.
+
+This method configures the collector to profile rollouts using PyTorch's
+profiler. For multi-process collectors, profiling happens in the worker
+processes. For single-process collectors (Collector), profiling happens
+in the main process.
+
+Parameters:
+
+- **workers** - List of worker indices to profile. Defaults to [0].
+For single-process collectors, this is ignored.
+- **num_rollouts** - Total number of rollouts to run the profiler for
+(including warmup). Profiling stops after this many rollouts.
+Defaults to 3.
+- **warmup_rollouts** - Number of rollouts to skip before starting actual
+profiling. Useful for JIT/compile warmup. The profiler runs
+but discards data during warmup. Defaults to 1.
+- **save_path** - Path to save the profiling trace. Supports {worker_idx}
+placeholder for worker-specific files. If None, traces are
+saved to "./collector_profile_{worker_idx}.json".
+- **activities** - List of profiler activities ("cpu", "cuda").
+Defaults to ["cpu", "cuda"].
+- **record_shapes** - Whether to record tensor shapes. Defaults to True.
+- **profile_memory** - Whether to profile memory usage. Defaults to False.
+- **with_stack** - Whether to record Python stack traces. Defaults to True.
+- **with_flops** - Whether to compute FLOPS. Defaults to False.
+- **on_trace_ready** - Optional callback when trace is ready. If None,
+traces are exported to Chrome trace format at save_path.
+
+Raises:
+
+- **RuntimeError** - If called after iteration has started.
+- **ValueError** - If num_rollouts <= warmup_rollouts.
+
+Example
+
+```
+>>> from torchrl.collectors import MultiSyncCollector
+>>> collector = MultiSyncCollector(
+... create_env_fn=[make_env] * 4,
+... policy=policy,
+... frames_per_batch=1000,
+... total_frames=100000,
+... )
+>>> collector.enable_profile(
+... workers=[0],
+... num_rollouts=5,
+... warmup_rollouts=2,
+... save_path="./traces/worker_{worker_idx}.json",
+... )
+>>> # Worker 0 will be profiled for rollouts 2, 3, 4
+>>> for data in collector:
+... train(data)
+>>> collector.shutdown()
+```
+
+Note
+
+- Profiling adds overhead, so only profile specific workers
+- The trace file can be viewed in Chrome's trace viewer
+(chrome://tracing) or with PyTorch's TensorBoard plugin
+- For multi-process collectors, this must be called BEFORE
+iteration starts as it needs to configure workers
+
+*property*env*: [AsyncEnvPool](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool)*
+
+The underlying `AsyncEnvPool`.
+
+get_distant_attr(*attr: str*) → Any
+
+Get a nested attribute of this collector.
+
+This method allows remote callers to retrieve attributes from nested
+structures of the collector without needing to know the full structure.
+
+Parameters:
+
+**attr** - Full path to the attribute, e.g.,
+"_receiver_schemes['model_id'].some_attribute"
+
+Returns:
+
+The value of the attribute.
+
+Examples
+
+```
+>>> collector.get_distant_attr("_receiver_schemes['policy']._sync_interval")
+```
+
+init_updater(**args*, ***kwargs*)
+
+Initialize the weight updater with custom arguments.
+
+This method passes the arguments to the weight updater's init method.
+If no weight updater is set, this is a no-op.
+
+Parameters:
+
+- ***args** - Positional arguments for weight updater initialization
+- ****kwargs** - Keyword arguments for weight updater initialization
+
+iterator() → Iterator[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None][[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.iterator)
+
+Iterate over collected batches.
+
+map_fn(*method_name: str*, *list_of_args: list[tuple] | None = None*, *list_of_kwargs: list[dict] | None = None*) → list[Any]
+
+Apply a method to each set of arguments.
+
+This method executes a method on the collector with different arguments,
+returning a list of results.
+
+Parameters:
+
+- **method_name** - Name of the method to call on the collector.
+- **list_of_args** - List of positional argument tuples. Each tuple
+contains the arguments for one call.
+- **list_of_kwargs** - List of keyword argument dicts. Each dict
+contains the kwargs for one call.
+
+Returns:
+
+List of return values from each method call.
+
+Examples
+
+```
+>>> # Call a method with different arguments
+>>> collector.map_fn("update_policy_weights_", list_of_args=[(weights1,), (weights2,)])
+>>>
+>>> # Call with kwargs
+>>> collector.map_fn("update_policy_weights_", list_of_kwargs=[{"weights": w1}, {"weights": w2}])
+```
+
+pause(*timeout: float | None = 30.0*) → Iterator[None][[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.pause)
+
+Pause environment coordination and policy inference.
+
+In-flight policy and environment requests finish before the context is
+entered. The coordinator threads or environment processes then remain
+parked until the context exits, leaving the inference server idle.
+Completed transitions can remain buffered for the next iteration.
+This provides a quiescent boundary for operations such as a lazy
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) call.
+
+Compile and warm up modules before starting collection whenever
+possible. Use this context when compilation after collection has
+started is unavoidable.
+
+Parameters:
+
+**timeout** (*float**or**None*) - maximum seconds to wait for the
+coordinator threads to pause. `None` waits indefinitely.
+Defaults to `30.0`.
+
+Raises:
+
+- **RuntimeError** - if another pause is active or a coordinator exits.
+- **TimeoutError** - if the coordinator threads do not park within
+ `timeout` seconds.
+
+*property*policy*: Callable*
+
+The policy passed to the inference server.
+
+With `InferenceServerConfig(service_backend="process")` the policy only exists inside the
+server process, so this returns the `policy_factory` instead.
+
+*property*policy_version*: int*
+
+The live behavior-policy version of the inference server.
+
+*property*post_collect_hook*: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None*
+
+Get the post-collection hook.
+
+Returns:
+
+A callable to be executed after each rollout, receiving the collected
+TensorDict as argument, or None.
+
+*property*pre_collect_hook*: Callable[[], None] | None*
+
+Get the pre-collection hook.
+
+Returns:
+
+A callable to be executed before each rollout, or None.
+
+*property*profile_config*: ProfileConfig | None*
+
+Get the profiling configuration.
+
+Returns:
+
+ProfileConfig if profiling is enabled, None otherwise.
+
+receive_weights(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | dict | None = None*, ***, *weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | dict | None = None*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*) → None
+
+Receive and apply weights to the collector's policy.
+
+This method applies weights to the local policy. When receiver schemes are
+registered, it delegates to those schemes. Otherwise, it directly applies
+the provided weights.
+
+The method accepts weights in multiple forms for convenience:
+
+Examples
+
+```
+>>> # Receive from registered schemes (distributed collectors)
+>>> collector.receive_weights()
+>>>
+>>> # Apply weights from a policy module (positional)
+>>> collector.receive_weights(trained_policy)
+>>>
+>>> # Apply weights from a TensorDict (positional)
+>>> collector.receive_weights(weights_tensordict)
+>>>
+>>> # Use keyword arguments for clarity
+>>> collector.receive_weights(weights=weights_td)
+>>> collector.receive_weights(policy=trained_policy)
+```
+
+Parameters:
+
+**policy_or_weights** -
+
+The weights to apply. Can be:
+
+- `nn.Module`: A policy module whose weights will be extracted and applied
+- `TensorDictModuleBase`: A TensorDict module whose weights will be extracted
+- `TensorDictBase`: A TensorDict containing weights
+- `dict`: A regular dict containing weights
+- `None`: Receive from registered schemes or mirror from original policy
+
+Keyword Arguments:
+
+- **weights** - Alternative to positional argument. A TensorDict or dict containing
+weights to apply. Cannot be used together with `policy_or_weights` or `policy`.
+- **policy** - Alternative to positional argument. An `nn.Module` or `TensorDictModuleBase`
+whose weights will be extracted. Cannot be used together with `policy_or_weights`
+or `weights`.
+
+Raises:
+
+**ValueError** - If conflicting parameters are provided or if arguments are passed
+ when receiver schemes are registered.
+
+register_scheme_receiver(*weight_recv_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)]*, ***, *synchronize_weights: bool = True*)
+
+Set up receiver schemes for this collector to receive weights from parent collectors.
+
+This method initializes receiver schemes and stores them in _receiver_schemes
+for later use by _receive_weights_scheme() and receive_weights().
+
+Receiver schemes enable cascading weight updates across collector hierarchies:
+- Parent collector sends weights via its weight_sync_schemes (senders)
+- Child collector receives weights via its weight_recv_schemes (receivers)
+- If child is also a parent (intermediate node), it can propagate to its own children
+
+Parameters:
+
+**weight_recv_schemes** (*dict**[**str**,*[*WeightSyncScheme*](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)*]*) - Dictionary of {model_id: WeightSyncScheme} to set up as receivers.
+These schemes will receive weights from parent collectors.
+
+Keyword Arguments:
+
+**synchronize_weights** (*bool**,**optional*) - If True, synchronize weights immediately after registering the schemes.
+Defaults to True.
+
+*property*server_backend*: str*
+
+`"thread"`, `"process"` or `"ray"`.
+
+Type:
+
+The resolved inference server backend
+
+server_stats(***, *reset: bool = False*) → dict[str, float | int][[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.server_stats)
+
+Return inference-server statistics when available.
+
+set_post_collect_hook(*hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None*) → None
+
+Method form of the `post_collect_hook` setter.
+
+Exposed because Ray actor handles can call methods (actor.method.remote(...))
+but cannot directly invoke property setters. Keeping the actual setter
+for in-process use and this method for remote-actor use.
+
+set_seed(*seed: int*, *static_seed: bool = False*) → int[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.set_seed)
+
+Set the seed (no-op; envs are created inside the pool).
+
+shutdown(*timeout: float | None = None*, *close_env: bool = True*, *raise_on_error: bool = True*) → None[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.shutdown)
+
+Shut down the collector, inference server, threads and env pool.
+
+start() → None[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.start)
+
+Collect into replay in a background thread until `total_frames`.
+
+Requires `replay_buffer`. Post-processing and the post-collect hook
+run on the writer thread. Iteration and background collection are
+mutually exclusive. Use `pause()` to quiesce collection and writes,
+and `async_shutdown()` to join the writer and surface its errors.
+
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool]
+
+Returns a cheap, serializable snapshot of the collector's progress.
+
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames delivered so far (the existing
+collector-specific semantics are unchanged);
+- `"stepped_frames"`: environment transitions collected, including
+frames still held in an unfinished trajectory;
+- `"trajectory_completed_frames"`: frames belonging to trajectories
+that have reached a terminal boundary;
+- `"trajectory_pending_frames"`: current in-flight trajectory frames;
+- `"replay_written_frames"`: frames successfully inserted in the
+attached replay buffer;
+- `"completed_trajectories"`: trajectories that reached a terminal
+boundary;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+The progress entries are cumulative except for
+`"trajectory_pending_frames"`, which is a gauge. Reset and shutdown
+drop in-flight trajectory assembly, so they clear that gauge without
+changing the cumulative entries. Checkpoints restore the cumulative
+entries but start the gauge at zero because collector checkpoints do
+not serialize the environment state or partial trajectory payloads.
+
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens. With `"per_worker"`
+or `"both"`, each worker is queried and its snapshot is
+namespaced as `"worker_<idx>/<metric>"`. For multi-worker
+collectors, `"workers"` and `"workers_alive"` are always
+reported. Per-worker queries share the control channel and must
+not race with concurrent weight updates or other control calls.
+Ray collectors retain their transport-specific timeout and
+remote aggregation behavior.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
+
+update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | dict | None = None*, ***, *weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | dict | None = None*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, *model_id: str | None = None*, *weights_dict: dict[str, Any] | None = None*, ***kwargs*) → None
+
+Update policy weights for the data collector.
+
+This method synchronizes the policy weights used by the collector with the latest
+trained weights. It supports both local and remote weight updates, depending on
+the collector configuration.
+
+The method accepts weights in multiple forms for convenience:
+
+Examples
+
+```
+>>> # Pass policy module as positional argument
+>>> collector.update_policy_weights_(policy_module)
+>>>
+>>> # Pass TensorDict weights as positional argument
+>>> collector.update_policy_weights_(weights_tensordict)
+>>>
+>>> # Use keyword arguments for clarity
+>>> collector.update_policy_weights_(weights=weights_td, model_id="actor")
+>>> collector.update_policy_weights_(policy=actor_module, model_id="actor")
+>>>
+>>> # Update multiple models atomically
+>>> collector.update_policy_weights_(weights_dict={
+... "actor": actor_weights,
+... "critic": critic_weights,
+... })
+>>>
+>>> # Per-worker weight updates (for distinct policy factories)
+>>> # Each worker can have independently updated weights
+>>> collector.update_policy_weights_({
+... 0: worker_0_weights,
+... 1: worker_1_weights,
+... 2: worker_2_weights,
+... })
+```
+
+Parameters:
+
+**policy_or_weights** -
+
+The weights to update with. Can be:
+
+- `nn.Module`: A policy module whose weights will be extracted
+- `TensorDictModuleBase`: A TensorDict module whose weights will be extracted
+- `TensorDictBase`: A TensorDict containing weights
+- `dict`: A regular dict containing weights
+- `dict[int, TensorDictBase]`: Per-worker weights where keys are worker indices.
+This is used with distinct policy factories where each worker has independent weights.
+- `None`: Will try to get weights from server using `_get_server_weights()`
+
+Keyword Arguments:
+
+- **weights** - Alternative to positional argument. A TensorDict or dict containing
+weights to update. Cannot be used together with `policy_or_weights` or `policy`.
+- **policy** - Alternative to positional argument. An `nn.Module` or `TensorDictModuleBase`
+whose weights will be extracted. Cannot be used together with `policy_or_weights`
+or `weights`.
+- **worker_ids** - Identifiers for the workers to update. Relevant when the collector
+has multiple workers. Can be int, list of ints, device, or list of devices.
+- **model_id** - The model identifier to update (default: `"policy"`).
+Cannot be used together with `weights_dict`.
+- **weights_dict** - Dictionary mapping model_id to weights for updating
+multiple models atomically. Keys should match model_ids registered in
+`weight_sync_schemes`. Cannot be used together with `model_id`,
+`policy_or_weights`, `weights`, or `policy`.
+
+Raises:
+
+- **TypeError** - If `worker_ids` is provided but no `weight_updater` is configured.
+- **ValueError** - If conflicting parameters are provided.
+
+Note
+
+Users should extend the `WeightUpdaterBase` classes to customize
+the weight update logic for specific use cases.
+
+See also
+
+`LocalWeightsUpdaterBase` and
+`RemoteWeightsUpdaterBase()`.
+
+*property*worker_idx*: int | None*
+
+Get the worker index for this collector.
+
+Returns:
+
+The worker index (0-indexed).
+
+Raises:
+
+**RuntimeError** - If worker_idx has not been set.

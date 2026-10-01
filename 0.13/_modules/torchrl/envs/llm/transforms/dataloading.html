@@ -1,0 +1,2616 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.envs.llm.transforms.dataloading &#8212; torchrl 0.13 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../../_static/documentation_options.js?v=9bec1924"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/envs/llm/transforms/dataloading';</script>
+    <script src="../../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.envs.llm.transforms.dataloading - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="0.13">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '0.13');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../../index.html" class="version">0.13</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../../index.html" class="version">0.13</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.envs...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.envs.llm.transforms.dataloading">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/envs/llm/transforms/dataloading</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.envs.llm.transforms.dataloading</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Mapping</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeVar</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">is_tensor_collection</span><span class="p">,</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+
+<span class="c1"># Import ray service components</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_RayServiceMetaClass</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span><span class="p">,</span> <span class="n">TensorSpec</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms</span> <span class="kn">import</span> <span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">Transform</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms.ray_service</span> <span class="kn">import</span> <span class="n">_map_input_output_device</span><span class="p">,</span> <span class="n">RayTransform</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">make_composite_from_td</span>
+
+<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="as_nested_tensor">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor">[docs]</a>
+<span class="k">def</span> <span class="nf">as_nested_tensor</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Stacks a list of tensordicts into a single tensordict with nested tensors.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        list_of_tensordicts (list[TensorDictBase]): A list of tensordicts to stack.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        TensorDictBase: A tensordict with nested tensors.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_as_nested_tensor</span><span class="p">(</span><span class="o">*</span><span class="n">list_of_tensors</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">as_nested_tensor</span><span class="p">(</span><span class="n">list_of_tensors</span><span class="p">,</span> <span class="n">layout</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">)</span>
+
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">batch_size</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">))</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>  <span class="c1"># type: ignore[assignment]</span>
+        <span class="n">_as_nested_tensor</span><span class="p">,</span> <span class="o">*</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span></div>
+
+
+
+<div class="viewcode-block" id="as_padded_tensor">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor">[docs]</a>
+<span class="k">def</span> <span class="nf">as_padded_tensor</span><span class="p">(</span>
+    <span class="n">list_of_tensordicts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stack_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Stacks a list of tensordicts into a single tensordict with padded tensors.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        list_of_tensordicts (list[[TensorDictBase]]): A list of tensordicts to stack.</span>
+<span class="sd">        dim (int, optional): The dimension along which to pad. Defaults to 0.</span>
+<span class="sd">        stack_dim (int, optional): The dimension along which to stack. Defaults to 0.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        TensorDictBase: A tensordict with padded tensors.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_stack_tensors</span><span class="p">(</span><span class="o">*</span><span class="n">list_of_tensors</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;dim must be &gt;= 0&quot;</span><span class="p">)</span>
+        <span class="n">max_length</span> <span class="o">=</span> <span class="nb">max</span><span class="p">([</span><span class="n">t</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">list_of_tensors</span><span class="p">])</span>
+
+        <span class="k">def</span> <span class="nf">pad_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
+            <span class="n">padding_length</span> <span class="o">=</span> <span class="n">max_length</span> <span class="o">-</span> <span class="n">tensor</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">s</span> <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="n">dim</span> <span class="k">else</span> <span class="n">padding_length</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="p">]</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">tensor</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">),</span> <span class="n">tensor</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="n">dim</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">pad_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">list_of_tensors</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="n">stack_dim</span><span class="p">)</span>
+
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">batch_size</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_tensordicts</span><span class="p">))</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">=</span> <span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>  <span class="c1"># type: ignore[assignment]</span>
+        <span class="n">_stack_tensors</span><span class="p">,</span> <span class="o">*</span><span class="n">list_of_tensordicts</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span></div>
+
+
+
+<div class="viewcode-block" id="RayDataLoadingPrimer">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer">[docs]</a>
+<span class="k">class</span> <span class="nc">RayDataLoadingPrimer</span><span class="p">(</span><span class="n">RayTransform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments.</span>
+
+<span class="sd">    This class creates a Ray remote actor from DataLoadingPrimer that can be shared across multiple workers.</span>
+<span class="sd">    All method calls are delegated to the remote actor, ensuring that multiple environments iterate over</span>
+<span class="sd">    the same shared dataloader.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        dataloader: A dataloader object to be used directly. Ray will handle serialization.</span>
+<span class="sd">        dataloader_factory: A callable that returns a dataloader. This allows for explicit</span>
+<span class="sd">            resource control and avoids serialization issues.</span>
+<span class="sd">        num_cpus (int, optional): Number of CPUs to allocate to the Ray actor.</span>
+<span class="sd">            Defaults to the dataloader&#39;s num_workers if available, otherwise 1.</span>
+<span class="sd">        num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0.</span>
+<span class="sd">        actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists.</span>
+<span class="sd">        **kwargs: Additional keyword arguments to pass to DataLoadingPrimer.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        Exactly one of `dataloader` or `dataloader_factory` must be provided.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # Option 1: Using a dataloader factory for explicit resource control</span>
+<span class="sd">        &gt;&gt;&gt; def create_dataloader():</span>
+<span class="sd">        ...     return torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)</span>
+<span class="sd">        &gt;&gt;&gt; primer1 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)</span>
+<span class="sd">        &gt;&gt;&gt; primer2 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4)  # Same shared actor</span>
+
+<span class="sd">        &gt;&gt;&gt; # Option 2: Pass dataloader directly (Ray handles serialization)</span>
+<span class="sd">        &gt;&gt;&gt; dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4)</span>
+<span class="sd">        &gt;&gt;&gt; primer1 = RayDataLoadingPrimer(dataloader=dataloader)  # num_cpus=4 inferred from num_workers</span>
+<span class="sd">        &gt;&gt;&gt; primer2 = RayDataLoadingPrimer(dataloader=dataloader)  # Same shared actor</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">dataloader_factory</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_cpus</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_gpus</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">actor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># Validate arguments: exactly one of dataloader or dataloader_factory must be provided</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot provide both &#39;dataloader&#39; and &#39;dataloader_factory&#39;. Choose one.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must provide exactly one of &#39;dataloader&#39; or &#39;dataloader_factory&#39;.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Infer num_cpus from dataloader if not specified</span>
+        <span class="k">if</span> <span class="n">num_cpus</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">temp_dataloader</span> <span class="o">=</span> <span class="n">dataloader_factory</span><span class="p">()</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">temp_dataloader</span><span class="p">,</span> <span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="k">del</span> <span class="n">temp_dataloader</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="k">if</span> <span class="n">num_cpus</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">num_cpus</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># Handle device setup for primers</span>
+        <span class="n">primers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">primers</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">device</span> <span class="o">!=</span> <span class="n">primers</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Device mismatch between primers and device. &quot;</span>
+                    <span class="s2">&quot;Use the device argument to set the device.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
+            <span class="n">primers</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">):</span>
+            <span class="n">primers</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">primers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;primers&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">primers</span>
+
+        <span class="c1"># Store creation parameters for actor creation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataloader</span> <span class="o">=</span> <span class="n">dataloader</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataloader_factory</span> <span class="o">=</span> <span class="n">dataloader_factory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+
+        <span class="c1"># Call parent constructor</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="n">num_cpus</span><span class="p">,</span>
+            <span class="n">num_gpus</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">actor_name</span><span class="o">=</span><span class="n">actor_name</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Actor initialization is handled by the parent RayTransform class</span>
+
+    <span class="k">def</span> <span class="nf">_create_actor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the remote DataLoadingPrimer actor.&quot;&quot;&quot;</span>
+        <span class="c1"># Create the remote DataLoadingPrimer with resource specifications</span>
+        <span class="n">RemoteDataLoadingPrimer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_cpus</span><span class="p">,</span> <span class="n">num_gpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_gpus</span>
+        <span class="p">)(</span><span class="n">DataLoadingPrimer</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">RemoteDataLoadingPrimer</span> <span class="o">=</span> <span class="n">RemoteDataLoadingPrimer</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor_name</span><span class="p">,</span>
+                <span class="n">lifetime</span><span class="o">=</span><span class="s2">&quot;detached&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Create the shared actor, passing factory or dataloader as appropriate</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">actor</span> <span class="o">=</span> <span class="n">RemoteDataLoadingPrimer</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="n">dataloader_factory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataloader_factory</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">actor</span> <span class="o">=</span> <span class="n">RemoteDataLoadingPrimer</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="n">dataloader</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataloader</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_creation_kwargs</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">actor</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get dataloader property.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;dataloader is not implemented for RayDataLoadingPrimer&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">endless_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get endless_dataloader property.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;endless_dataloader is not implemented for RayDataLoadingPrimer&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;String representation.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_actor&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__repr__</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot;RayDataLoadingPrimer(actor=None)&quot;</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;RayDataLoadingPrimer(actor=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_actor&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;None&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">stack_method</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get stack_method property.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;stack_method is not implemented for RayDataLoadingPrimer&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">repeats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get repeats property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;repeats&quot;</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">data_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get data_keys property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;data_keys&quot;</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get primers property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">))</span>
+
+    <span class="nd">@primers</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set primers property.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">_set_attr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
+
+    <span class="c1"># TensorDictPrimer methods</span>
+<div class="viewcode-block" id="RayDataLoadingPrimer.init">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.init">[docs]</a>
+    <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_actor</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">tensordict</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="RayDataLoadingPrimer.reset_dataloader">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.reset_dataloader">[docs]</a>
+    <span class="k">def</span> <span class="nf">reset_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the dataloader.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_method_call</span><span class="p">(</span><span class="s2">&quot;reset_dataloader&quot;</span><span class="p">)</span></div>
+
+
+    <span class="nd">@_map_input_output_device</span>
+    <span class="k">def</span> <span class="nf">_load_from_dataloader</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load data from the dataloader.&quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_method_call</span><span class="p">(</span><span class="s2">&quot;_load_from_dataloader&quot;</span><span class="p">,</span> <span class="n">reset</span><span class="p">)</span>
+
+        <span class="c1"># Ensure proper batch dimensions: if result is scalar (ndim=0), unsqueeze to add batch dim</span>
+        <span class="c1"># This matches the behavior in the original DataLoadingPrimer._load_from_dataloader</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="s2">&quot;ndim&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">result</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get primers property.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_property_get</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">)</span>
+
+    <span class="nd">@primers</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">primers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set primers property.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_delegate_property_set</span><span class="p">(</span><span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@_map_input_output_device</span>
+    <span class="k">def</span> <span class="nf">_reset_func</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset function.&quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset_func</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">)</span>
+
+        <span class="c1"># Handle batch size expansion locally since remote actor lacks parent context</span>
+        <span class="c1"># This mimics the batch expansion logic from TensorDictPrimer._reset_func</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">batch_locked</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="s2">&quot;apply&quot;</span><span class="p">)</span>  <span class="c1"># Check if it&#39;s a TensorDict-like object</span>
+        <span class="p">):</span>
+            <span class="c1"># Ensure result has proper batch dimensions to match parent</span>
+            <span class="n">expected_batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="n">expected_batch_size</span><span class="p">:</span>
+                <span class="c1"># Expand result to match expected batch size</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">expected_batch_size</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+    <span class="c1"># Additional methods and properties are handled by the parent RayTransform class</span>
+
+
+<div class="viewcode-block" id="DataLoadingPrimer">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer">[docs]</a>
+<span class="k">class</span> <span class="nc">DataLoadingPrimer</span><span class="p">(</span><span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_RayServiceMetaClass</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A primer that loads data from a dataloader and converts it into a tensordict using ``stack_method``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        dataloader (Iterable[Dict[str, Any]]): The dataloader to load data from.</span>
+<span class="sd">            During collection, we will attempt to convert it into a tensordict using :func:`~tensordict.from_dict` or a</span>
+<span class="sd">            similar function.</span>
+<span class="sd">            It is assumed that the elements retrieved from the dataloader come in batches along the first dimension</span>
+<span class="sd">            of every tensor, unless `dataloader.batch_size=0`.</span>
+<span class="sd">            The dataloader must yield mappable data structures (e.g., dictionaries).</span>
+<span class="sd">            If a dataloader_factory is provided, it will be used to create a fresh dataloader and this argument can be</span>
+<span class="sd">            omitted.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.</span>
+<span class="sd">        stack_method (Callable[[Any], Any] | Literal[&quot;as_nested_tensor&quot;, &quot;as_padded_tensor&quot;], optional): The method to</span>
+<span class="sd">            use for stacking the data. Defaults to ``maybe_dense_stack``.</span>
+<span class="sd">        repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in</span>
+<span class="sd">            situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo</span>
+<span class="sd">            samples (rather than an advantage module).</span>
+<span class="sd">        batch_size (int, torch.Size or None): the batch-size of the data delivered by the transform.</span>
+<span class="sd">            This is somewhat unrelated to the batch-size of the dataloader, in the sense that this number may or may</span>
+<span class="sd">            not match the DL&#39;s batch size.</span>
+<span class="sd">            If left empty, the batch-size is inferred from `dataloader.batch_size` if that attribute exists. If not,</span>
+<span class="sd">            an empty batch-size will be used (`torch.Size([])`).</span>
+
+<span class="sd">            .. note:: The batch-size of the Primer must match the batch-size of the parent environment (typically a</span>
+<span class="sd">                wrapper around :class:`~torchrl.envs.LLMEnv`).</span>
+
+<span class="sd">        group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that</span>
+<span class="sd">            all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.</span>
+<span class="sd">        dataloader_factory (Callable[[], Iterable[dict[str, Any]]], optional): A callable that returns a dataloader.</span>
+<span class="sd">            This allows for explicit resource control and avoids serialization issues.</span>
+<span class="sd">        use_ray_service (bool, optional): if ``True``, returns a :class:`RayDataLoadingPrimer` instance instead,</span>
+<span class="sd">            which creates a Ray actor for shared dataloader access across multiple environments.</span>
+<span class="sd">            Defaults to ``False``.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        dataloader (Iterable[Any]): The dataloader to load data from.</span>
+<span class="sd">        endless_dataloader (Iterable[Any]): An endless iterator over the dataloader.</span>
+<span class="sd">        stack_method (Callable[[Any], Any]): The method to use for stacking the data.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.envs.LLMEnv` and :class:`~torchrl.envs.LLMEnv.from_dataloader`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Using the regular DataLoadingPrimer:</span>
+
+<span class="sd">        &gt;&gt;&gt; dataloader = torch.utils.data.DataLoader(dataset, batch_size=32)</span>
+<span class="sd">        &gt;&gt;&gt; primer = DataLoadingPrimer(dataloader=dataloader)  # Regular implementation</span>
+
+<span class="sd">        Using the Ray-based implementation for shared dataloader access:</span>
+
+<span class="sd">        &gt;&gt;&gt; primer = DataLoadingPrimer(dataloader=dataloader, use_ray_service=True)  # Returns RayDataLoadingPrimer</span>
+<span class="sd">        &gt;&gt;&gt; # Multiple environments can now share the same dataloader through the Ray actor</span>
+
+<span class="sd">    Example of a dataloader yielding strings:</span>
+<span class="sd">        &gt;&gt;&gt; import random</span>
+<span class="sd">        &gt;&gt;&gt; import string</span>
+<span class="sd">        &gt;&gt;&gt; import tensordict as td</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import Unbounded</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import DataLoadingPrimer, LLMEnv</span>
+<span class="sd">        &gt;&gt;&gt; td.set_capture_non_tensor_stack(False).set()</span>
+<span class="sd">        &gt;&gt;&gt; class DummyDataLoader:</span>
+<span class="sd">        ...     &#39;&#39;&#39;A dummy dataloader that generates random strings.&#39;&#39;&#39;</span>
+<span class="sd">        ...     def __init__(self, batch_size: int = 0):</span>
+<span class="sd">        ...         self.batch_size = batch_size</span>
+<span class="sd">        ...     def generate_random_string(self, length: int = 10) -. str:</span>
+<span class="sd">        ...         &#39;&#39;&#39;Generate a random string of a given length.&#39;&#39;&#39;</span>
+<span class="sd">        ...         return &#39;&#39;.join(random.choice(string.ascii_lowercase) for _ in range(length))</span>
+<span class="sd">        ...     def __iter__(self):</span>
+<span class="sd">        ...         return self</span>
+<span class="sd">        ...     def __next__(self):</span>
+<span class="sd">        ...         if self.batch_size == 0:</span>
+<span class="sd">        ...             return self.generate_random_string()</span>
+<span class="sd">        ...         else:</span>
+<span class="sd">        ...             return [self.generate_random_string() for _ in range(self.batch_size)]</span>
+<span class="sd">        &gt;&gt;&gt; # Create an LLM environment with string-to-string input/output.</span>
+<span class="sd">        &gt;&gt;&gt; env = LLMEnv(from_text=True)</span>
+<span class="sd">        &gt;&gt;&gt; # Append a DataLoadingPrimer to the environment.</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     DataLoadingPrimer(</span>
+<span class="sd">        &gt;&gt;&gt;         dataloader=DummyDataLoader(),</span>
+<span class="sd">        &gt;&gt;&gt;         example_data=&quot;a string!&quot;,</span>
+<span class="sd">        &gt;&gt;&gt;     )</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; # Test the environment.</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rand_action(TensorDict()))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: NonTensorData(data=a string, batch_size=torch.Size([]), device=None)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: NonTensorStack(</span>
+<span class="sd">                    [&#39;a string&#39;, &#39;a string&#39;, &#39;a string&#39;],</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: NonTensorStack(</span>
+<span class="sd">                            [&#39;zxwvupirska string&#39;, &#39;zxwvupirska stringa string...,</span>
+<span class="sd">                            batch_size=torch.Size([3]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: NonTensorStack(</span>
+<span class="sd">                    [&#39;zxwvupirsk&#39;, &#39;zxwvupirska string&#39;, &#39;zxwvupirska ...,</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; # Roll out the environment with a specific initial state.</span>
+<span class="sd">        &gt;&gt;&gt; init_state = env.reset(TensorDict(batch_size=[3]))</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3, auto_reset=False, tensordict=init_state))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: NonTensorStack(</span>
+<span class="sd">                    [[&#39;a string&#39;, &#39;a string&#39;, &#39;a string&#39;], [&#39;a string&#39;...,</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: NonTensorStack(</span>
+<span class="sd">                            [[array([&#39;nngcmflsana string&#39;, &#39;vrrbnhzpmga string...,</span>
+<span class="sd">                            batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                            device=None),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False),</span>
+<span class="sd">                observation: NonTensorStack(</span>
+<span class="sd">                    [[&#39;nngcmflsan&#39;, array([&#39;nngcmflsana string&#39;, &#39;vrrb...,</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([3, 3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+
+<span class="sd">    Example of dataloader yielding tensors:</span>
+<span class="sd">        &gt;&gt;&gt; import random</span>
+<span class="sd">        &gt;&gt;&gt; import string</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; import tensordict as td</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import Unbounded</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import DataLoadingPrimer, LLMEnv</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; td.set_capture_non_tensor_stack(False).set()</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; class DummyTensorDataLoader:</span>
+<span class="sd">        ...     &#39;&#39;&#39;A dummy dataloader that generates tensors of random int64 values.&#39;&#39;&#39;</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def __init__(self, batch_size: int = 0, max_length: int = 10, padding: bool = False):</span>
+<span class="sd">        ...         &#39;&#39;&#39;</span>
+<span class="sd">        ...         Args:</span>
+<span class="sd">        ...             batch_size (int, optional): The batch size of the generated tensors. Defaults to 0.</span>
+<span class="sd">        ...             max_length (int, optional): The maximum length of the generated tensors. Defaults to 10.</span>
+<span class="sd">        ...             padding (bool, optional): Whether to pad the tensors to the maximum length. Defaults to `False`.</span>
+<span class="sd">        ...         &#39;&#39;&#39;</span>
+<span class="sd">        ...         self.batch_size = batch_size</span>
+<span class="sd">        ...         self.max_length = max_length</span>
+<span class="sd">        ...         self.padding = padding</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def generate_random_tensor(self) -. torch.Tensor:</span>
+<span class="sd">        ...         &#39;&#39;&#39;Generate a tensor of random int64 values.&#39;&#39;&#39;</span>
+<span class="sd">        ...         length = random.randint(1, self.max_length)</span>
+<span class="sd">        ...         return torch.tensor([random.randint(0, 100) for _ in range(length)], dtype=torch.int64)</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def pad_tensor(self, tensor: torch.Tensor) -. torch.Tensor:</span>
+<span class="sd">        ...         &#39;&#39;&#39;Pad a tensor to the maximum length.&#39;&#39;&#39;</span>
+<span class="sd">        ...         padding_length = self.max_length - len(tensor)</span>
+<span class="sd">        ...         return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def __iter__(self):</span>
+<span class="sd">        ...         return self</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...     def __next__(self):</span>
+<span class="sd">        ...         if self.batch_size == 0:</span>
+<span class="sd">        ...             tensor = self.generate_random_tensor()</span>
+<span class="sd">        ...             return self.pad_tensor(tensor) if self.padding else tensor</span>
+<span class="sd">        ...         else:</span>
+<span class="sd">        ...             tensors = [self.generate_random_tensor() for _ in range(self.batch_size)]</span>
+<span class="sd">        ...             if self.padding:</span>
+<span class="sd">        ...                 tensors = [self.pad_tensor(tensor) for tensor in tensors]</span>
+<span class="sd">        ...                 return torch.stack(tensors)</span>
+<span class="sd">        ...             else:</span>
+<span class="sd">        ...                 return tensors</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create an LLM environment with non-string input/output and append a DataLoadingPrimer.</span>
+<span class="sd">        &gt;&gt;&gt; env = LLMEnv(from_text=False)</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     DataLoadingPrimer(</span>
+<span class="sd">        &gt;&gt;&gt;         dataloader=DummyTensorDataLoader(),</span>
+<span class="sd">        &gt;&gt;&gt;         data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],</span>
+<span class="sd">        &gt;&gt;&gt;     )</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rand_action(TensorDict()))</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3))</span>
+<span class="sd">        LazyStackedTensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: LazyStackedTensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    exclusive_fields={</span>
+<span class="sd">                    },</span>
+<span class="sd">                    batch_size=torch.Size([3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False,</span>
+<span class="sd">                    stack_dim=0),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            exclusive_fields={</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=torch.Size([3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False,</span>
+<span class="sd">            stack_dim=0)</span>
+<span class="sd">        &gt;&gt;&gt; # Create an LLM environment with padded tensor input/output and append a DataLoadingPrimer.</span>
+<span class="sd">        &gt;&gt;&gt; env = LLMEnv(from_text=False)</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     DataLoadingPrimer(</span>
+<span class="sd">        &gt;&gt;&gt;         dataloader=DummyTensorDataLoader(padding=True),</span>
+<span class="sd">        &gt;&gt;&gt;         data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],</span>
+<span class="sd">        &gt;&gt;&gt;         stack_method=&quot;as_padded_tensor&quot;,</span>
+<span class="sd">        &gt;&gt;&gt;     )</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; print(env.rollout(3, auto_reset=False, tensordict=env.reset(TensorDict(batch_size=[3]))))</span>
+<span class="sd">        LazyStackedTensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                next: LazyStackedTensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">                    exclusive_fields={</span>
+<span class="sd">                    },</span>
+<span class="sd">                    batch_size=torch.Size([3, 3]),</span>
+<span class="sd">                    device=None,</span>
+<span class="sd">                    is_shared=False,</span>
+<span class="sd">                    stack_dim=1),</span>
+<span class="sd">                observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="sd">                terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
+<span class="sd">            exclusive_fields={</span>
+<span class="sd">            },</span>
+<span class="sd">            batch_size=torch.Size([3, 3]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False,</span>
+<span class="sd">            stack_dim=1)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_RayServiceClass</span> <span class="o">=</span> <span class="n">RayDataLoadingPrimer</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">dataloader_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stack_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_ray_service</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># Validate arguments: exactly one of dataloader or dataloader_factory must be provided</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot provide both &#39;dataloader&#39; and &#39;dataloader_factory&#39;. Choose one.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">dataloader</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must provide exactly one of &#39;dataloader&#39; or &#39;dataloader_factory&#39;.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Initialize dataloader from factory if provided</span>
+        <span class="k">if</span> <span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataloader_factory</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span> <span class="o">=</span> <span class="n">dataloader_factory</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataloader</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">repeats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">repeats</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">repeats</span> <span class="o">=</span> <span class="n">repeats</span>
+
+        <span class="c1"># Determine batch-size</span>
+        <span class="c1">#  We must distinguish the batch-size of the DL and the batch size of the transform.</span>
+        <span class="c1">#  We may want more or less elements than the DL and the logic is slightly different so we</span>
+        <span class="c1">#  allow to recompose batches on the fly. If the DL has a batch-size, every element will be</span>
+        <span class="c1">#  unbound and stored in a queue. Otherwise, we get as many elements from the DL to fulfill</span>
+        <span class="c1">#  the required batch-size.</span>
+        <span class="c1">#</span>
+        <span class="c1">#  If the batch-size is passed, we will stack as many elements as necessary to fulfill this.</span>
+        <span class="c1">#  If not, we try to get it from the dataloader. Contrary to the dataloader, we will always</span>
+        <span class="c1">#  deliver the same batch-size (we create an infinite dataloader and reset when it&#39;s done),</span>
+        <span class="c1">#  whereas DLs with drop_last=False may return batches of different sizes.</span>
+        <span class="c1">#</span>
+        <span class="c1"># If the batch size passed to the transform is empty (torch.Size(())) or 0, we will consider that</span>
+        <span class="c1">#  the batch-size is determined on-the-fly.</span>
+        <span class="c1">#</span>
+        <span class="c1"># A batch-size of 0 in the dataloader means no batch-size.</span>
+        <span class="c1">#</span>
+        <span class="c1"># If needed, the various repeats can be grouped in a single batch through group_repeats.</span>
+        <span class="c1">#</span>
+        <span class="c1"># If auto_batch_size is on, we call auto_batch_size=True when doing TensorDict.from_dict:</span>
+        <span class="c1">#  That way we get a tensordict of the right batch-size.</span>
+        <span class="c1"># If the dataloader has no batch-size, we&#39;re not sure that we can determine the batch-size</span>
+        <span class="c1">#  automatically so we will consider that each element in the DL has a batch-size of 0 (ie,</span>
+        <span class="c1">#  a single non-batched element is returned at a time).</span>
+
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([]))</span>
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(())</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">):</span>
+                <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">batch_size_tuple</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">batch_size_tuple</span><span class="p">)</span>
+        <span class="n">auto_batch_size</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;batch_size can only be 0 or 1D, got batch_size=</span><span class="si">{</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># We deliver all the repeats in the same batch</span>
+        <span class="k">if</span> <span class="n">repeats</span> <span class="ow">and</span> <span class="n">group_repeats</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">batch_size</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([]):</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="n">repeats</span><span class="p">,))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">repeats</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span> <span class="o">=</span> <span class="n">auto_batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_endless_iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">stack_method</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">lazy_stack</span>
+        <span class="k">elif</span> <span class="n">stack_method</span> <span class="o">==</span> <span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">:</span>
+            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">as_nested_tensor</span>
+        <span class="k">elif</span> <span class="n">stack_method</span> <span class="o">==</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">:</span>
+            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">as_padded_tensor</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">stack_method</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown stack_method=</span><span class="si">{</span><span class="n">stack_method</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_method</span> <span class="o">=</span> <span class="n">stack_method</span>
+
+        <span class="k">if</span> <span class="n">primers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># We can get the primer from the dataloader itself</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">()</span>
+            <span class="n">primers</span> <span class="o">=</span> <span class="n">make_composite_from_td</span><span class="p">(</span>
+                <span class="n">data</span><span class="p">,</span> <span class="n">dynamic_shape</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">unsqueeze_null_shapes</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
+                <span class="n">primers</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">primers</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">primers</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
+            <span class="n">default_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">,</span>
+            <span class="n">reset_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">expand_specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">single_default_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">call_before_env_reset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_key</span> <span class="o">=</span> <span class="s2">&quot;_reset&quot;</span>
+
+<div class="viewcode-block" id="DataLoadingPrimer.reset_dataloader">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer.reset_dataloader">[docs]</a>
+    <span class="k">def</span> <span class="nf">reset_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the dataloader.</span>
+
+<span class="sd">        This is useful when the dataloader is not infinite and we want to reset it.</span>
+<span class="sd">        If a dataloader_factory was provided, it will be used to create a fresh dataloader.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            self: The transform itself.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Create a fresh dataloader from the factory</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataloader_factory</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_endless_iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_endless_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="n">obj</span>
+
+    <span class="n">_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">primers</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">primers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">parent</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;parent&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">device</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
+
+    <span class="nd">@device</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
+
+    <span class="k">def</span> <span class="nf">_load_from_dataloader</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a single element from the dataloader, or alternatively from the buffer.</span>
+
+<span class="sd">        If `reset` is passed, then one element per reset will be loaded.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+
+        <span class="k">if</span> <span class="n">reset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">reset</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;reset must have at least one True value.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reset</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">loaded</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">reset</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+                <span class="p">]</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_method</span><span class="p">(</span><span class="n">loaded</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span><span class="p">)</span>
+        <span class="c1"># Some heuristic here:</span>
+        <span class="c1"># if data is a map, assume its keys match the keys in spec</span>
+        <span class="c1"># TODO: one could rename the keys too</span>
+        <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+                <span class="n">data</span><span class="p">,</span>
+                <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span>
+                <span class="n">batch_dims</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)),</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">out</span><span class="o">.</span><span class="n">ndim</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">:</span>
+                <span class="c1"># auto_batch_size may fail to detect batch dimensions from</span>
+                <span class="c1"># NonTensorStack entries. Infer from list values in the data.</span>
+                <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">and</span> <span class="n">v</span><span class="p">:</span>
+                        <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+                            <span class="n">data</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                        <span class="p">)</span>
+                        <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Data loader must return a mapping that can be automatically cast to a tensordict. Check that you have &quot;</span>
+                <span class="s2">&quot;the appropriate collate_fn in your dataloader to do so.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">out</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">repeats</span><span class="p">))]</span>
+        <span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span> <span class="nf">set_container</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_container</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
+        <span class="c1"># Check batch size</span>
+        <span class="n">parent</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;parent&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">parent</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The parent env has a different batch size than the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> transform.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">_update_primers_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent_batch_size</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update the primers to match the parent&#39;s batch size.</span>
+
+<span class="sd">        This method is called remotely to ensure the remote actor&#39;s primers</span>
+<span class="sd">        have the correct batch dimensions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="p">,</span> <span class="s2">&quot;expand&quot;</span><span class="p">):</span>
+            <span class="c1"># Expand primers to match the parent batch size</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">parent_batch_size</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">primers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">parent_batch_size</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">class_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">(primers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="si">}</span><span class="s2">, dataloader=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.envs.llm.transforms.dataloading",
+       "headline": "torchrl.envs.llm.transforms.dataloading",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/envs/llm/transforms/dataloading.html",
+       "articleBody": "Source code for torchrl.envs.llm.transforms.dataloading # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import warnings from collections import deque from collections.abc import Callable, Iterable, Mapping from typing import Any, Literal, TypeVar import torch from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase # Import ray service components from torchrl._utils import _RayServiceMetaClass from torchrl.data.tensor_specs import Composite, DEVICE_TYPING, TensorSpec from torchrl.envs.common import EnvBase from torchrl.envs.transforms import TensorDictPrimer, Transform from torchrl.envs.transforms.ray_service import _map_input_output_device, RayTransform from torchrl.envs.utils import make_composite_from_td T = TypeVar(\"T\") [docs] def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -\u003e TensorDictBase: \"\"\"Stacks a list of tensordicts into a single tensordict with nested tensors. Args: list_of_tensordicts (list[TensorDictBase]): A list of tensordicts to stack. Returns: TensorDictBase: A tensordict with nested tensors. \"\"\" def _as_nested_tensor(*list_of_tensors): return torch.nested.as_nested_tensor(list_of_tensors, layout=torch.jagged) batch_size = list(list_of_tensordicts[0].shape) batch_size.insert(0, len(list_of_tensordicts)) result: TensorDictBase = list_of_tensordicts[0].apply( # type: ignore[assignment] _as_nested_tensor, *list_of_tensordicts[1:], batch_size=batch_size ) return result [docs] def as_padded_tensor( list_of_tensordicts: list[TensorDictBase], dim=0, stack_dim: int = 0 ) -\u003e TensorDictBase: \"\"\"Stacks a list of tensordicts into a single tensordict with padded tensors. Args: list_of_tensordicts (list[[TensorDictBase]]): A list of tensordicts to stack. dim (int, optional): The dimension along which to pad. Defaults to 0. stack_dim (int, optional): The dimension along which to stack. Defaults to 0. Returns: TensorDictBase: A tensordict with padded tensors. \"\"\" def _stack_tensors(*list_of_tensors): if dim \u003c 0: raise ValueError(\"dim must be \u003e= 0\") max_length = max([t.size(dim) for t in list_of_tensors]) def pad_tensor(tensor): padding_length = max_length - tensor.size(dim) shape = [ s if i != dim else padding_length for i, s in enumerate(tensor.shape) ] return torch.cat((tensor.new_zeros(shape), tensor), dim=dim) return torch.stack([pad_tensor(t) for t in list_of_tensors], dim=stack_dim) batch_size = list(list_of_tensordicts[0].shape) batch_size.insert(dim, len(list_of_tensordicts)) result: TensorDictBase = list_of_tensordicts[0].apply( # type: ignore[assignment] _stack_tensors, *list_of_tensordicts[1:], batch_size=batch_size ) return result [docs] class RayDataLoadingPrimer(RayTransform): \"\"\"A :class:`~torchrl.envs.llm.transforms.dataloading.DataLoadingPrimer` that creates a single actor that can be shared by multiple environments. This class creates a Ray remote actor from DataLoadingPrimer that can be shared across multiple workers. All method calls are delegated to the remote actor, ensuring that multiple environments iterate over the same shared dataloader. Keyword Args: dataloader: A dataloader object to be used directly. Ray will handle serialization. dataloader_factory: A callable that returns a dataloader. This allows for explicit resource control and avoids serialization issues. num_cpus (int, optional): Number of CPUs to allocate to the Ray actor. Defaults to the dataloader\u0027s num_workers if available, otherwise 1. num_gpus (int, optional): Number of GPUs to allocate to the Ray actor. Defaults to 0. actor_name (str, optional): Name of the Ray actor to use. If provided, the actor will be reused if it already exists. **kwargs: Additional keyword arguments to pass to DataLoadingPrimer. Note: Exactly one of `dataloader` or `dataloader_factory` must be provided. Examples: \u003e\u003e\u003e # Option 1: Using a dataloader factory for explicit resource control \u003e\u003e\u003e def create_dataloader(): ... return torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4) \u003e\u003e\u003e primer1 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4) \u003e\u003e\u003e primer2 = RayDataLoadingPrimer(dataloader_factory=create_dataloader, num_cpus=4) # Same shared actor \u003e\u003e\u003e # Option 2: Pass dataloader directly (Ray handles serialization) \u003e\u003e\u003e dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, num_workers=4) \u003e\u003e\u003e primer1 = RayDataLoadingPrimer(dataloader=dataloader) # num_cpus=4 inferred from num_workers \u003e\u003e\u003e primer2 = RayDataLoadingPrimer(dataloader=dataloader) # Same shared actor \"\"\" def __init__( self, *, dataloader=None, dataloader_factory=None, num_cpus=None, num_gpus=0, device: DEVICE_TYPING | None = None, actor_name: str | None = None, **kwargs, ): # Validate arguments: exactly one of dataloader or dataloader_factory must be provided if dataloader is not None and dataloader_factory is not None: raise ValueError( \"Cannot provide both \u0027dataloader\u0027 and \u0027dataloader_factory\u0027. Choose one.\" ) if dataloader is None and dataloader_factory is None: raise ValueError( \"Must provide exactly one of \u0027dataloader\u0027 or \u0027dataloader_factory\u0027.\" ) # Infer num_cpus from dataloader if not specified if num_cpus is None: if dataloader is not None: num_cpus = getattr(dataloader, \"num_workers\", 1) elif dataloader_factory is not None: temp_dataloader = dataloader_factory() num_cpus = getattr(temp_dataloader, \"num_workers\", 1) del temp_dataloader else: num_cpus = 1 if num_cpus == 0: num_cpus = 1 # Handle device setup for primers primers = kwargs.get(\"primers\", None) if hasattr(primers, \"device\") and primers.device is not None: if device is not None and device != primers.device: raise ValueError( \"Device mismatch between primers and device. \" \"Use the device argument to set the device.\" ) device = primers.device if hasattr(primers, \"cpu\"): primers = primers.cpu() elif hasattr(primers, \"to\"): primers = primers.to(\"cpu\") if primers is not None: kwargs[\"primers\"] = primers # Store creation parameters for actor creation self._dataloader = dataloader self._dataloader_factory = dataloader_factory self._creation_kwargs = kwargs # Call parent constructor super().__init__( num_cpus=num_cpus, num_gpus=num_gpus, device=device, actor_name=actor_name, **kwargs, ) # Actor initialization is handled by the parent RayTransform class def _create_actor(self, **kwargs): \"\"\"Create the remote DataLoadingPrimer actor.\"\"\" # Create the remote DataLoadingPrimer with resource specifications RemoteDataLoadingPrimer = self._ray.remote( num_cpus=self._num_cpus, num_gpus=self._num_gpus )(DataLoadingPrimer) if self._actor_name is not None: RemoteDataLoadingPrimer = RemoteDataLoadingPrimer.options( name=self._actor_name, lifetime=\"detached\", ) # Create the shared actor, passing factory or dataloader as appropriate if self._dataloader_factory is not None: actor = RemoteDataLoadingPrimer.remote( dataloader_factory=self._dataloader_factory, **self._creation_kwargs ) else: actor = RemoteDataLoadingPrimer.remote( dataloader=self._dataloader, **self._creation_kwargs ) return actor @property def dataloader(self): \"\"\"Get dataloader property.\"\"\" raise NotImplementedError( \"dataloader is not implemented for RayDataLoadingPrimer\" ) @property def endless_dataloader(self): \"\"\"Get endless_dataloader property.\"\"\" raise NotImplementedError( \"endless_dataloader is not implemented for RayDataLoadingPrimer\" ) def __repr__(self): \"\"\"String representation.\"\"\" try: if hasattr(self, \"_actor\") and self._actor is not None: return self._ray.get(self._actor.__repr__.remote()) else: return \"RayDataLoadingPrimer(actor=None)\" except Exception: return f\"RayDataLoadingPrimer(actor={getattr(self, \u0027_actor\u0027, \u0027None\u0027)})\" @property def stack_method(self): \"\"\"Get stack_method property.\"\"\" raise NotImplementedError( \"stack_method is not implemented for RayDataLoadingPrimer\" ) @property def repeats(self): \"\"\"Get repeats property.\"\"\" return self._ray.get(self._actor.__getattribute__.remote(\"repeats\")) @property def data_keys(self): \"\"\"Get data_keys property.\"\"\" return self._ray.get(self._actor.__getattribute__.remote(\"data_keys\")) @property def primers(self): \"\"\"Get primers property.\"\"\" return self._ray.get(self._actor.__getattribute__.remote(\"primers\")) @primers.setter def primers(self, value: TensorSpec): \"\"\"Set primers property.\"\"\" self._ray.get(self._actor._set_attr.remote(\"primers\", value)) # TensorDictPrimer methods [docs] def init(self, tensordict: TensorDictBase | None): \"\"\"Initialize.\"\"\" return self._ray.get(self._actor.init.remote(tensordict)) [docs] def reset_dataloader(self): \"\"\"Reset the dataloader.\"\"\" return self._delegate_method_call(\"reset_dataloader\") @_map_input_output_device def _load_from_dataloader( self, reset: torch.Tensor | None = None ) -\u003e TensorDictBase: \"\"\"Load data from the dataloader.\"\"\" result = self._delegate_method_call(\"_load_from_dataloader\", reset) # Ensure proper batch dimensions: if result is scalar (ndim=0), unsqueeze to add batch dim # This matches the behavior in the original DataLoadingPrimer._load_from_dataloader if hasattr(result, \"ndim\") and not result.ndim: result = result.unsqueeze(0) return result @property def primers(self): \"\"\"Get primers property.\"\"\" return self._delegate_property_get(\"primers\") @primers.setter def primers(self, value: TensorSpec): \"\"\"Set primers property.\"\"\" self._delegate_property_set(\"primers\", value) @_map_input_output_device def _reset_func( self, tensordict: TensorDictBase | None, tensordict_reset: TensorDictBase | None ) -\u003e TensorDictBase | None: \"\"\"Reset function.\"\"\" result = super()._reset_func(tensordict, tensordict_reset) # Handle batch size expansion locally since remote actor lacks parent context # This mimics the batch expansion logic from TensorDictPrimer._reset_func if ( self.parent and self.parent.batch_locked and hasattr(result, \"apply\") # Check if it\u0027s a TensorDict-like object ): # Ensure result has proper batch dimensions to match parent expected_batch_size = self.parent.batch_size if result.batch_size != expected_batch_size: # Expand result to match expected batch size result = result.expand(expected_batch_size) return result # Additional methods and properties are handled by the parent RayTransform class [docs] class DataLoadingPrimer(TensorDictPrimer, metaclass=_RayServiceMetaClass): \"\"\"A primer that loads data from a dataloader and converts it into a tensordict using ``stack_method``. Args: dataloader (Iterable[Dict[str, Any]]): The dataloader to load data from. During collection, we will attempt to convert it into a tensordict using :func:`~tensordict.from_dict` or a similar function. It is assumed that the elements retrieved from the dataloader come in batches along the first dimension of every tensor, unless `dataloader.batch_size=0`. The dataloader must yield mappable data structures (e.g., dictionaries). If a dataloader_factory is provided, it will be used to create a fresh dataloader and this argument can be omitted. Keyword Args: primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None. stack_method (Callable[[Any], Any] | Literal[\"as_nested_tensor\", \"as_padded_tensor\"], optional): The method to use for stacking the data. Defaults to ``maybe_dense_stack``. repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo samples (rather than an advantage module). batch_size (int, torch.Size or None): the batch-size of the data delivered by the transform. This is somewhat unrelated to the batch-size of the dataloader, in the sense that this number may or may not match the DL\u0027s batch size. If left empty, the batch-size is inferred from `dataloader.batch_size` if that attribute exists. If not, an empty batch-size will be used (`torch.Size([])`). .. note:: The batch-size of the Primer must match the batch-size of the parent environment (typically a wrapper around :class:`~torchrl.envs.LLMEnv`). group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``. dataloader_factory (Callable[[], Iterable[dict[str, Any]]], optional): A callable that returns a dataloader. This allows for explicit resource control and avoids serialization issues. use_ray_service (bool, optional): if ``True``, returns a :class:`RayDataLoadingPrimer` instance instead, which creates a Ray actor for shared dataloader access across multiple environments. Defaults to ``False``. Attributes: dataloader (Iterable[Any]): The dataloader to load data from. endless_dataloader (Iterable[Any]): An endless iterator over the dataloader. stack_method (Callable[[Any], Any]): The method to use for stacking the data. .. seealso:: :class:`~torchrl.envs.LLMEnv` and :class:`~torchrl.envs.LLMEnv.from_dataloader`. Examples: Using the regular DataLoadingPrimer: \u003e\u003e\u003e dataloader = torch.utils.data.DataLoader(dataset, batch_size=32) \u003e\u003e\u003e primer = DataLoadingPrimer(dataloader=dataloader) # Regular implementation Using the Ray-based implementation for shared dataloader access: \u003e\u003e\u003e primer = DataLoadingPrimer(dataloader=dataloader, use_ray_service=True) # Returns RayDataLoadingPrimer \u003e\u003e\u003e # Multiple environments can now share the same dataloader through the Ray actor Example of a dataloader yielding strings: \u003e\u003e\u003e import random \u003e\u003e\u003e import string \u003e\u003e\u003e import tensordict as td \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torchrl.data import Unbounded \u003e\u003e\u003e from torchrl.envs import DataLoadingPrimer, LLMEnv \u003e\u003e\u003e td.set_capture_non_tensor_stack(False).set() \u003e\u003e\u003e class DummyDataLoader: ... \u0027\u0027\u0027A dummy dataloader that generates random strings.\u0027\u0027\u0027 ... def __init__(self, batch_size: int = 0): ... self.batch_size = batch_size ... def generate_random_string(self, length: int = 10) -. str: ... \u0027\u0027\u0027Generate a random string of a given length.\u0027\u0027\u0027 ... return \u0027\u0027.join(random.choice(string.ascii_lowercase) for _ in range(length)) ... def __iter__(self): ... return self ... def __next__(self): ... if self.batch_size == 0: ... return self.generate_random_string() ... else: ... return [self.generate_random_string() for _ in range(self.batch_size)] \u003e\u003e\u003e # Create an LLM environment with string-to-string input/output. \u003e\u003e\u003e env = LLMEnv(from_text=True) \u003e\u003e\u003e # Append a DataLoadingPrimer to the environment. \u003e\u003e\u003e env = env.append_transform( \u003e\u003e\u003e DataLoadingPrimer( \u003e\u003e\u003e dataloader=DummyDataLoader(), \u003e\u003e\u003e example_data=\"a string!\", \u003e\u003e\u003e ) \u003e\u003e\u003e ) \u003e\u003e\u003e # Test the environment. \u003e\u003e\u003e print(env.rand_action(TensorDict())) TensorDict( fields={ action: NonTensorData(data=a string, batch_size=torch.Size([]), device=None)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e print(env.rollout(3)) TensorDict( fields={ action: NonTensorStack( [\u0027a string\u0027, \u0027a string\u0027, \u0027a string\u0027], batch_size=torch.Size([3]), device=None), done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), next: TensorDict( fields={ done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), observation: NonTensorStack( [\u0027zxwvupirska string\u0027, \u0027zxwvupirska stringa string..., batch_size=torch.Size([3]), device=None), terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([3]), device=None, is_shared=False), observation: NonTensorStack( [\u0027zxwvupirsk\u0027, \u0027zxwvupirska string\u0027, \u0027zxwvupirska ..., batch_size=torch.Size([3]), device=None), terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([3]), device=None, is_shared=False) \u003e\u003e\u003e # Roll out the environment with a specific initial state. \u003e\u003e\u003e init_state = env.reset(TensorDict(batch_size=[3])) \u003e\u003e\u003e print(env.rollout(3, auto_reset=False, tensordict=init_state)) TensorDict( fields={ action: NonTensorStack( [[\u0027a string\u0027, \u0027a string\u0027, \u0027a string\u0027], [\u0027a string\u0027..., batch_size=torch.Size([3, 3]), device=None), done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), next: TensorDict( fields={ done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), observation: NonTensorStack( [[array([\u0027nngcmflsana string\u0027, \u0027vrrbnhzpmga string..., batch_size=torch.Size([3, 3]), device=None), terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([3, 3]), device=None, is_shared=False), observation: NonTensorStack( [[\u0027nngcmflsan\u0027, array([\u0027nngcmflsana string\u0027, \u0027vrrb..., batch_size=torch.Size([3, 3]), device=None), terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([3, 3]), device=None, is_shared=False) Example of dataloader yielding tensors: \u003e\u003e\u003e import random \u003e\u003e\u003e import string \u003e\u003e\u003e \u003e\u003e\u003e import tensordict as td \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torchrl.data import Unbounded \u003e\u003e\u003e from torchrl.envs import DataLoadingPrimer, LLMEnv \u003e\u003e\u003e \u003e\u003e\u003e td.set_capture_non_tensor_stack(False).set() \u003e\u003e\u003e \u003e\u003e\u003e \u003e\u003e\u003e class DummyTensorDataLoader: ... \u0027\u0027\u0027A dummy dataloader that generates tensors of random int64 values.\u0027\u0027\u0027 ... ... def __init__(self, batch_size: int = 0, max_length: int = 10, padding: bool = False): ... \u0027\u0027\u0027 ... Args: ... batch_size (int, optional): The batch size of the generated tensors. Defaults to 0. ... max_length (int, optional): The maximum length of the generated tensors. Defaults to 10. ... padding (bool, optional): Whether to pad the tensors to the maximum length. Defaults to `False`. ... \u0027\u0027\u0027 ... self.batch_size = batch_size ... self.max_length = max_length ... self.padding = padding ... ... def generate_random_tensor(self) -. torch.Tensor: ... \u0027\u0027\u0027Generate a tensor of random int64 values.\u0027\u0027\u0027 ... length = random.randint(1, self.max_length) ... return torch.tensor([random.randint(0, 100) for _ in range(length)], dtype=torch.int64) ... ... def pad_tensor(self, tensor: torch.Tensor) -. torch.Tensor: ... \u0027\u0027\u0027Pad a tensor to the maximum length.\u0027\u0027\u0027 ... padding_length = self.max_length - len(tensor) ... return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor)) ... ... def __iter__(self): ... return self ... ... def __next__(self): ... if self.batch_size == 0: ... tensor = self.generate_random_tensor() ... return self.pad_tensor(tensor) if self.padding else tensor ... else: ... tensors = [self.generate_random_tensor() for _ in range(self.batch_size)] ... if self.padding: ... tensors = [self.pad_tensor(tensor) for tensor in tensors] ... return torch.stack(tensors) ... else: ... return tensors \u003e\u003e\u003e \u003e\u003e\u003e # Create an LLM environment with non-string input/output and append a DataLoadingPrimer. \u003e\u003e\u003e env = LLMEnv(from_text=False) \u003e\u003e\u003e env = env.append_transform( \u003e\u003e\u003e DataLoadingPrimer( \u003e\u003e\u003e dataloader=DummyTensorDataLoader(), \u003e\u003e\u003e data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)], \u003e\u003e\u003e ) \u003e\u003e\u003e ) \u003e\u003e\u003e print(env.rand_action(TensorDict())) TensorDict( fields={ action: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e print(env.rollout(3)) LazyStackedTensorDict( fields={ action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.int64, is_shared=False), done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), next: LazyStackedTensorDict( fields={ done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False), terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([3]), device=None, is_shared=False, stack_dim=0), observation: Tensor(shape=torch.Size([3, -1]), device=cpu, dtype=torch.int64, is_shared=False), terminated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([3]), device=None, is_shared=False, stack_dim=0) \u003e\u003e\u003e # Create an LLM environment with padded tensor input/output and append a DataLoadingPrimer. \u003e\u003e\u003e env = LLMEnv(from_text=False) \u003e\u003e\u003e env = env.append_transform( \u003e\u003e\u003e DataLoadingPrimer( \u003e\u003e\u003e dataloader=DummyTensorDataLoader(padding=True), \u003e\u003e\u003e data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)], \u003e\u003e\u003e stack_method=\"as_padded_tensor\", \u003e\u003e\u003e ) \u003e\u003e\u003e ) \u003e\u003e\u003e print(env.rollout(3, auto_reset=False, tensordict=env.reset(TensorDict(batch_size=[3])))) LazyStackedTensorDict( fields={ action: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.int64, is_shared=False), done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), next: LazyStackedTensorDict( fields={ done: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False), terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([3, 3]), device=None, is_shared=False, stack_dim=1), observation: Tensor(shape=torch.Size([3, 3, -1]), device=cpu, dtype=torch.int64, is_shared=False), terminated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([3, 3, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([3, 3]), device=None, is_shared=False, stack_dim=1) \"\"\" _RayServiceClass = RayDataLoadingPrimer def __init__( self, dataloader: Iterable[dict[str, Any]] | None = None, *, dataloader_factory: Callable[[], Iterable[dict[str, Any]]] | None = None, primers: Composite | None = None, stack_method: Callable[[Any], Any] | Literal[\"as_nested_tensor\", \"as_padded_tensor\"] | None = None, batch_size: int | torch.Size | None = None, repeats: int | None = None, device: torch.device | None = None, group_repeats: bool = False, use_ray_service: bool = False, ): # Validate arguments: exactly one of dataloader or dataloader_factory must be provided if dataloader is not None and dataloader_factory is not None: raise ValueError( \"Cannot provide both \u0027dataloader\u0027 and \u0027dataloader_factory\u0027. Choose one.\" ) if dataloader is None and dataloader_factory is None: raise ValueError( \"Must provide exactly one of \u0027dataloader\u0027 or \u0027dataloader_factory\u0027.\" ) # Initialize dataloader from factory if provided if dataloader_factory is not None: self.dataloader = dataloader_factory() self.dataloader_factory = dataloader_factory else: self.dataloader = dataloader self.dataloader_factory = None if repeats is None: repeats = 0 self.repeats = repeats # Determine batch-size # We must distinguish the batch-size of the DL and the batch size of the transform. # We may want more or less elements than the DL and the logic is slightly different so we # allow to recompose batches on the fly. If the DL has a batch-size, every element will be # unbound and stored in a queue. Otherwise, we get as many elements from the DL to fulfill # the required batch-size. # # If the batch-size is passed, we will stack as many elements as necessary to fulfill this. # If not, we try to get it from the dataloader. Contrary to the dataloader, we will always # deliver the same batch-size (we create an infinite dataloader and reset when it\u0027s done), # whereas DLs with drop_last=False may return batches of different sizes. # # If the batch size passed to the transform is empty (torch.Size(())) or 0, we will consider that # the batch-size is determined on-the-fly. # # A batch-size of 0 in the dataloader means no batch-size. # # If needed, the various repeats can be grouped in a single batch through group_repeats. # # If auto_batch_size is on, we call auto_batch_size=True when doing TensorDict.from_dict: # That way we get a tensordict of the right batch-size. # If the dataloader has no batch-size, we\u0027re not sure that we can determine the batch-size # automatically so we will consider that each element in the DL has a batch-size of 0 (ie, # a single non-batched element is returned at a time). if batch_size is None: batch_size = getattr(dataloader, \"batch_size\", torch.Size([])) if batch_size == 0: batch_size = torch.Size(()) if not isinstance(batch_size, (list, tuple)): if isinstance(batch_size, int): batch_size_tuple = (batch_size,) elif isinstance(batch_size, torch.Size): batch_size_tuple = tuple(batch_size) else: batch_size_tuple = (batch_size,) else: batch_size_tuple = batch_size batch_size = torch.Size(batch_size_tuple) auto_batch_size = getattr(dataloader, \"batch_size\", 1) != 0 if len(batch_size) \u003e 1: raise ValueError( f\"batch_size can only be 0 or 1D, got batch_size={batch_size}.\" ) # We deliver all the repeats in the same batch if repeats and group_repeats: if batch_size == torch.Size([]): batch_size = torch.Size((repeats,)) else: batch_size = torch.Size([batch_size[0] * repeats]) self._queue = deque() self.auto_batch_size = auto_batch_size self.batch_size = batch_size self.endless_dataloader = self._endless_iter(self.dataloader) if stack_method is None: stack_method = lazy_stack elif stack_method == \"as_nested_tensor\": stack_method = as_nested_tensor elif stack_method == \"as_padded_tensor\": stack_method = as_padded_tensor elif not callable(stack_method): raise ValueError(f\"Unknown stack_method={stack_method}\") self.stack_method = stack_method if primers is None: # We can get the primer from the dataloader itself data = self._load_from_dataloader() primers = make_composite_from_td( data, dynamic_shape=True, unsqueeze_null_shapes=False ) if batch_size: primers = primers.expand(batch_size) self._queue.insert(0, data) self.data_keys = list(primers.keys(True, True)) else: self.data_keys = list(primers.keys(True, True)) super().__init__( primers=primers, default_value=self._load_from_dataloader, reset_key=None, expand_specs=None, single_default_value=True, call_before_env_reset=True, device=device, ) self._reset_key = \"_reset\" [docs] def reset_dataloader(self): \"\"\"Reset the dataloader. This is useful when the dataloader is not infinite and we want to reset it. If a dataloader_factory was provided, it will be used to create a fresh dataloader. Returns: self: The transform itself. \"\"\" self._queue.clear() if self.dataloader_factory is not None: # Create a fresh dataloader from the factory self.dataloader = self.dataloader_factory() self.endless_dataloader = self._endless_iter(self.dataloader) return self @classmethod def _endless_iter(self, obj): while True: yield from obj _device: torch.device | None = None @property def device(self) -\u003e torch.device | None: if self._device is None: primers = getattr(self, \"primers\", None) if primers is not None: device = self.primers.device else: parent = getattr(self, \"parent\", None) if parent is not None: device = getattr(parent, \"device\", None) else: device = None self._device = device return self._device @device.setter def device(self, device: torch.device | None): self._device = device def _load_from_dataloader( self, reset: torch.Tensor | None = None ) -\u003e TensorDictBase: \"\"\"Loads a single element from the dataloader, or alternatively from the buffer. If `reset` is passed, then one element per reset will be loaded. \"\"\" device = self.device if reset is not None: if not reset.any(): raise RuntimeError(\"reset must have at least one True value.\") if reset.ndim \u003e 0: loaded = [ self._load_from_dataloader().to(device) for _ in range(reset.sum()) ] return self.stack_method(loaded) if len(self._queue) \u003e 0: result = self._queue.popleft() if result.device != device: result = result.to(device) return result data = next(self.endless_dataloader) # Some heuristic here: # if data is a map, assume its keys match the keys in spec # TODO: one could rename the keys too if is_tensor_collection(data): out = data elif isinstance(data, Mapping): out = TensorDict.from_dict( data, auto_batch_size=self.auto_batch_size, batch_dims=int(bool(self.auto_batch_size or self.batch_size)), device=device, ) if not out.ndim and self.auto_batch_size: # auto_batch_size may fail to detect batch dimensions from # NonTensorStack entries. Infer from list values in the data. for v in data.values(): if isinstance(v, (list, tuple)) and v: out = TensorDict.from_dict( data, batch_size=[len(v)], device=device ) break else: raise TypeError( \"Data loader must return a mapping that can be automatically cast to a tensordict. Check that you have \" \"the appropriate collate_fn in your dataloader to do so.\" ) if not out.ndim: out = out.unsqueeze(0) self._queue.extend( [d for d in out.unbind(0) for _ in range(max(1, self.repeats))] ) out = self._queue.popleft() return out def set_container(self, container: Transform | EnvBase) -\u003e None: result = super().set_container(container) # Check batch size parent = getattr(self, \"parent\", None) if ( self.batch_size is not None and parent is not None and parent.batch_size != self.batch_size ): warnings.warn( f\"The parent env has a different batch size than the {type(self).__name__} transform.\" ) return result def _update_primers_batch_size(self, parent_batch_size): \"\"\"Update the primers to match the parent\u0027s batch size. This method is called remotely to ensure the remote actor\u0027s primers have the correct batch dimensions. \"\"\" if hasattr(self.primers, \"expand\"): # Expand primers to match the parent batch size if self.primers.shape != parent_batch_size: self.primers = self.primers.expand(parent_batch_size) def __repr__(self) -\u003e str: class_name = self.__class__.__name__ return f\"{class_name}(primers={self.primers}, dataloader={self.dataloader})\"",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/envs/llm/transforms/dataloading.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

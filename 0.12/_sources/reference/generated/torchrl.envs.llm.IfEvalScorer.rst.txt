@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs.llm
+
+
+IfEvalScorer
+============
+
+.. autoclass:: IfEvalScorer
+    :members:
+    :inherited-members:

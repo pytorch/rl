@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render.cli
+
+
+build_parser
+============
+
+.. autofunction:: build_parser

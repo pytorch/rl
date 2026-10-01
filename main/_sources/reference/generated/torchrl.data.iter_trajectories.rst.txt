@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.data
+
+
+iter_trajectories
+=================
+
+.. autofunction:: iter_trajectories

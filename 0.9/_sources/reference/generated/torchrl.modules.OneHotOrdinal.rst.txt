@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+OneHotOrdinal
+=============
+
+.. autoclass:: OneHotOrdinal
+    :members:

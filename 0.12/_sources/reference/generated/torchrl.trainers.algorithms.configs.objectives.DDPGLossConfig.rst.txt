@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: DDPGLossConfig

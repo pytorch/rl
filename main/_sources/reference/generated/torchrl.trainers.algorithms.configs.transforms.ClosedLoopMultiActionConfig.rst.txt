@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.ClosedLoopMultiActionConfig
+==========================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: ClosedLoopMultiActionConfig

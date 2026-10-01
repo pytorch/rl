@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+NormalParamWrapper
+==================
+
+.. autoclass:: NormalParamWrapper
+    :members:

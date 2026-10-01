@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.hooks.LogScalarConfig
+=========================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.hooks
+
+.. autoclass:: LogScalarConfig

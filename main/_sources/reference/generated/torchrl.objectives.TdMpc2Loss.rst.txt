@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+TdMpc2Loss
+==========
+
+.. autoclass:: TdMpc2Loss
+    :members:

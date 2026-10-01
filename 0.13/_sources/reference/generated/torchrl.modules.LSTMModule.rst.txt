@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+LSTMModule
+==========
+
+.. autoclass:: LSTMModule
+    :members:

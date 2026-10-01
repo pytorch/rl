@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.collectors.AsyncCollectorConfig
+===================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.collectors
+
+.. autoclass:: AsyncCollectorConfig

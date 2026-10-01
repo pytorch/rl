@@ -1,0 +1,2374 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.collectors.weight_update &#8212; torchrl 0.13 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=9bec1924"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/collectors/weight_update';</script>
+    <script src="../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.collectors.weight_update - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="0.13">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '0.13');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../index.html" class="version">0.13</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../index.html" class="version">0.13</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.coll...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.collectors.weight_update">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/collectors/weight_update</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.collectors.weight_update</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TypeVar</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+<span class="n">Policy</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;Policy&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">TensorDictModuleBase</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="WeightUpdaterBase">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase">[docs]</a>
+<span class="k">class</span> <span class="nc">WeightUpdaterBase</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A base class for updating remote policy weights on inference workers.</span>
+
+<span class="sd">    .. deprecated::</span>
+<span class="sd">        WeightUpdaterBase is deprecated and will be removed in a future version.</span>
+<span class="sd">        Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead.</span>
+
+<span class="sd">    The weight updater is the central piece of the weight update scheme:</span>
+
+<span class="sd">    - In leaf collector nodes, it is responsible for sending the weights to the policy, which can be as simple as</span>
+<span class="sd">      updating a state-dict, or more complex if an inference server is being used.</span>
+<span class="sd">    - In server collector nodes, it is responsible for sending the weights to the leaf collectors.</span>
+
+<span class="sd">    In a collector, the updater is called within :meth:`~torchrl.collector.BaseCollector.update_policy_weights_`.`</span>
+
+<span class="sd">    The main method of this class is the :meth:`~._push_weights` method, which updates the policy weights in the worker /</span>
+<span class="sd">    policy. This method is called by :meth:`~.push_weights`, which also calls the post-hooks: only `_push_weights` should</span>
+<span class="sd">    be implemented by child classes.</span>
+
+<span class="sd">    To extend this class, implement the following abstract methods:</span>
+
+<span class="sd">    - `_get_server_weights` (optional): Define how to retrieve the weights from the server if they are not passed to</span>
+<span class="sd">        the updater directly. This method is only called if the weights (handle) is not passed directly.</span>
+<span class="sd">    - `_sync_weights_with_worker`: Define how to synchronize weights with a specific worker.</span>
+<span class="sd">        This method must be implemented by child classes.</span>
+<span class="sd">    - `_maybe_map_weights`: Optionally transform the server weights before distribution.</span>
+<span class="sd">        By default, this method returns the weights unchanged.</span>
+<span class="sd">    - `all_worker_ids`: Provide a list of all worker identifiers.</span>
+<span class="sd">        Returns `None` by default (no worker id).</span>
+<span class="sd">    - `from_policy` (optional classmethod): Define how to create an instance of the weight updater from a policy.</span>
+<span class="sd">        If implemented, this method will be called before falling back to the default constructor when initializing</span>
+<span class="sd">        a weight updater in a collector.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        collector: The collector (or any container) of the weight receiver. The collector is registered via</span>
+<span class="sd">            :meth:`~torchrl.collectors.WeightUpdaterBase.register_collector`.</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        push_weights: Updates the weights on specified or all remote workers.</span>
+<span class="sd">            The `__call__` method is a proxy to `push_weights`.</span>
+<span class="sd">        register_collector: Registers the collector (or any container) in the receiver through a weakref.</span>
+<span class="sd">            This will be called automatically by the collector upon registration of the updater.</span>
+<span class="sd">        from_policy: Optional classmethod to create an instance from a policy.</span>
+
+<span class="sd">    Post-hooks:</span>
+<span class="sd">        - `register_post_hook`: Registers a post-hook to be called after the weights are updated.</span>
+<span class="sd">            The post-hook must be a callable that takes no arguments.</span>
+<span class="sd">            The post-hook will be called after the weights are updated.</span>
+<span class="sd">            The post-hook will be called in the same process as the weight updater.</span>
+<span class="sd">            The post-hook will be called in the same order as the post-hooks were registered.</span>
+
+<span class="sd">    .. seealso:: :meth:`~torchrl.collectors.BaseCollector.update_policy_weights_`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_collector_wrs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_post_hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="kn">import</span> <span class="nn">warnings</span>
+
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Creating </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> which inherits from WeightUpdaterBase is deprecated. &quot;</span>
+            <span class="s2">&quot;Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead. &quot;</span>
+            <span class="s2">&quot;This will be removed in a future version.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">post_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The list of post-hooks registered to the weight updater.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_hooks</span>
+
+<div class="viewcode-block" id="WeightUpdaterBase.from_policy">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.from_policy">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_policy</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Optional classmethod to create a weight updater instance from a policy.</span>
+
+<span class="sd">        This method can be implemented by subclasses to provide custom initialization logic</span>
+<span class="sd">        based on the policy. If implemented, this method will be called before falling back</span>
+<span class="sd">        to the default constructor when initializing a weight updater in a collector.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy (TensorDictModuleBase): The policy to create the weight updater from.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            WeightUpdaterBase | None: An instance of the weight updater, or None if the policy</span>
+<span class="sd">                cannot be used to create an instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="WeightUpdaterBase.register_collector">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_collector">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">):</span>  <span class="c1"># noqa</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a collector in the updater.</span>
+
+<span class="sd">        Once registered, the updater will not accept another collector.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            collector (BaseCollector): The collector to register.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">collector</span><span class="p">))</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The collector or container of the receiver.</span>
+
+<span class="sd">        Returns `None` if the container is out-of-scope or not set.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot access `collector` with multiple collectors.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">:</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">collector</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">collectors</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The collectors or container of the receiver.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span><span class="p">:</span>
+            <span class="n">collectors</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">wr</span><span class="p">()</span> <span class="k">if</span> <span class="n">wr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">wr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector_wrs</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">collectors</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">collectors</span>
+
+    <span class="k">def</span> <span class="nf">_push_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the weights of the policy, or on specified / all remote workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy_or_weights: The source to get weights from. Can be:</span>
+<span class="sd">                - TensorDictModuleBase: A policy module whose weights will be extracted</span>
+<span class="sd">                - TensorDictBase: A TensorDict containing weights</span>
+<span class="sd">                - dict: A regular dict containing weights</span>
+<span class="sd">                - None: Will try to get weights from server using _get_server_weights()</span>
+<span class="sd">            worker_ids: An optional list of workers to update.</span>
+
+<span class="sd">        Returns: nothing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">policy_or_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Get the weights on server (local)</span>
+            <span class="n">server_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_server_weights</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">server_weights</span> <span class="o">=</span> <span class="n">policy_or_weights</span>
+
+        <span class="n">server_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_map_weights</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span>
+
+        <span class="c1"># Get the remote weights (inference workers)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)):</span>
+            <span class="n">worker_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">worker_ids</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">worker_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">worker_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_worker_ids</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">worker_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_weights_with_worker</span><span class="p">(</span><span class="n">server_weights</span><span class="o">=</span><span class="n">server_weights</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">worker</span> <span class="ow">in</span> <span class="n">worker_ids</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_skip_update</span><span class="p">(</span><span class="n">worker</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_weights_with_worker</span><span class="p">(</span>
+                <span class="n">worker_id</span><span class="o">=</span><span class="n">worker</span><span class="p">,</span> <span class="n">server_weights</span><span class="o">=</span><span class="n">server_weights</span>
+            <span class="p">)</span>
+
+<div class="viewcode-block" id="WeightUpdaterBase.push_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.push_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">push_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the weights of the policy, or on specified / all remote workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy_or_weights: The source to get weights from. Can be:</span>
+<span class="sd">                - TensorDictModuleBase: A policy module whose weights will be extracted</span>
+<span class="sd">                - TensorDictBase: A TensorDict containing weights</span>
+<span class="sd">                - dict: A regular dict containing weights</span>
+<span class="sd">                - None: Will try to get weights from server using _get_server_weights()</span>
+<span class="sd">            worker_ids: An optional list of workers to update.</span>
+
+<span class="sd">        Returns: nothing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_push_weights</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_post_hooks</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="WeightUpdaterBase.init">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.init">[docs]</a>
+    <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the weight updater with custom arguments.</span>
+
+<span class="sd">        This method can be overridden by subclasses to handle custom initialization.</span>
+<span class="sd">        By default, this is a no-op.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            *args: Positional arguments for initialization</span>
+<span class="sd">            **kwargs: Keyword arguments for initialization</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span></div>
+
+
+<div class="viewcode-block" id="WeightUpdaterBase.register_post_hook">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_post_hook">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_post_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a post-hook to be called after weights are updated.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            hook (Callable[[], None]): The post-hook to register.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">post_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_call_post_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calls all registered post-hooks in order.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">post_hooks</span><span class="p">:</span>
+            <span class="n">hook</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_skip_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether to skip updating weights for a worker.</span>
+
+<span class="sd">        By default, never skips updates. Subclasses can override this to implement</span>
+<span class="sd">        custom update frequency logic.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_id (int | torch.device): The worker ID to check.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: Whether to skip the update.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Synchronizes weights with a specific worker.</span>
+
+<span class="sd">        This method must be implemented by child classes to define how weights are</span>
+<span class="sd">        synchronized with workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_id (int | torch.device | None): The worker to sync with, if applicable.</span>
+<span class="sd">            server_weights (TensorDictBase): The weights from the server to sync.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gets the weights from the server.</span>
+
+<span class="sd">        This method is called when no weights are passed to push_weights().</span>
+<span class="sd">        By default returns None. Subclasses can override to implement custom</span>
+<span class="sd">        weight retrieval logic.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDictBase | None: The server weights, or None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Optionally transforms server weights before distribution.</span>
+
+<span class="sd">        By default returns weights unchanged. Subclasses can override to implement</span>
+<span class="sd">        custom weight mapping logic.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy_or_weights (Any): The weights - or any container or handler - to potentially transform, query or extract.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDictBase: The transformed weights.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span><span class="p">):</span>
+            <span class="c1"># Extract weights from policy module</span>
+            <span class="n">server_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="p">(</span><span class="n">TensorDictBase</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)):</span>
+            <span class="c1"># Use weights directly</span>
+            <span class="n">server_weights</span> <span class="o">=</span> <span class="n">policy_or_weights</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;policy_or_weights must be None, TensorDictModuleBase, TensorDictBase or dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">server_weights</span>
+
+<div class="viewcode-block" id="WeightUpdaterBase.all_worker_ids">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.all_worker_ids">[docs]</a>
+    <span class="k">def</span> <span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gets list of all worker IDs.</span>
+
+<span class="sd">        Returns None by default. Subclasses should override to return actual worker IDs.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[int] | list[torch.device] | None: List of worker IDs or None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the weights of the policy, or on specified / all remote workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy_or_weights: The source to get weights from. Can be:</span>
+<span class="sd">                - TensorDictModuleBase: A policy module whose weights will be extracted</span>
+<span class="sd">                - TensorDictBase: A TensorDict containing weights</span>
+<span class="sd">                - dict: A regular dict containing weights</span>
+<span class="sd">                - None: Will try to get weights from server using _get_server_weights()</span>
+<span class="sd">            worker_ids: An optional list of workers to update.</span>
+
+<span class="sd">        Returns: nothing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_weights</span><span class="p">(</span>
+            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="WeightUpdaterBase.increment_version">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.increment_version">[docs]</a>
+    <span class="k">def</span> <span class="nf">increment_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment the policy version.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectors</span><span class="p">:</span>
+            <span class="n">collector</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span></div>
+</div>
+
+
+
+<span class="c1"># Specialized classes</span>
+<div class="viewcode-block" id="VanillaWeightUpdater">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater">[docs]</a>
+<span class="k">class</span> <span class="nc">VanillaWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A simple implementation of :class:`~torchrl.collectors.WeightUpdaterBase` for updating local policy weights.</span>
+
+<span class="sd">    The `VanillaWeightSender` class provides a basic mechanism for updating the weights</span>
+<span class="sd">    of a local policy by directly fetching them from a specified source. It is typically used</span>
+<span class="sd">    in scenarios where the weight update logic is straightforward and does not require any</span>
+<span class="sd">    complex mapping or transformation.</span>
+
+<span class="sd">    This class is used by default in the `Collector` when no custom weight sender</span>
+<span class="sd">    is provided.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.Collector`.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server.</span>
+<span class="sd">            If not provided, the weights must be passed to ``push_weights`` directly.</span>
+<span class="sd">        policy_weights (TensorDictBase): a TensorDictBase containing the policy weights to be updated</span>
+<span class="sd">            in-place. Use ``push_weights`` to update the weights.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="VanillaWeightUpdater.from_policy">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.from_policy">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_policy</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates a VanillaWeightUpdater instance from a policy.</span>
+
+<span class="sd">        This method creates a weight updater that will update the policy&#39;s weights directly</span>
+<span class="sd">        using its state dict.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            policy (TensorDictModuleBase): The policy to create the weight updater from.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            VanillaWeightUpdater: An instance of the weight updater configured to update</span>
+<span class="sd">                the policy&#39;s weights.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">lock_</span><span class="p">())</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weight_getter</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span> <span class="o">=</span> <span class="n">weight_getter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
+
+    <span class="k">def</span> <span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_get_local_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span>
+
+    <span class="k">def</span> <span class="nf">_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">server_weights</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">server_weights</span>
+
+    <span class="k">def</span> <span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="MultiProcessedWeightUpdater">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater">[docs]</a>
+<span class="k">class</span> <span class="nc">MultiProcessedWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across multiple processes or devices.</span>
+
+<span class="sd">    The `MultiProcessedWeightUpdater` class provides a mechanism for updating the weights</span>
+<span class="sd">    of a policy across multiple inference workers in a multiprocessed environment. It is designed</span>
+<span class="sd">    to handle the distribution of weights from a central server to various devices or processes</span>
+<span class="sd">    that are running the policy.</span>
+<span class="sd">    This class is typically used in multiprocessed data collectors where each process or device</span>
+<span class="sd">    requires an up-to-date copy of the policy weights.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        get_server_weights (Callable[[], TensorDictBase] | None): A callable that retrieves the</span>
+<span class="sd">            latest policy weights from the server or another centralized source.</span>
+<span class="sd">        policy_weights (Dict[torch.device, TensorDictBase]): A dictionary mapping each device or</span>
+<span class="sd">            process to its current policy weights, which will be updated.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This class assumes that the server weights can be directly applied to the workers without</span>
+<span class="sd">        any additional processing. If your use case requires more complex weight mapping or synchronization</span>
+<span class="sd">        logic, consider extending `WeightUpdaterBase` with a custom implementation.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and</span>
+<span class="sd">        :class:`~torchrl.collectors.BaseCollector`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">get_server_weights</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">],</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weights_getter</span> <span class="o">=</span> <span class="n">get_server_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
+
+<div class="viewcode-block" id="MultiProcessedWeightUpdater.all_worker_ids">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.all_worker_ids">[docs]</a>
+    <span class="k">def</span> <span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># The weights getter can be none if no mapping is required</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights_getter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights_getter</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">return</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">server_weights</span></div>
+
+
+
+<span class="k">class</span> <span class="nc">RemoteModuleWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A weight updater for remote nn.Modules that requires explicit weight passing.</span>
+
+<span class="sd">    This weight updater is designed for scenarios where the master collector doesn&#39;t have</span>
+<span class="sd">    direct access to worker weights (e.g., when using policy_factory). It enforces that</span>
+<span class="sd">    weights must be passed explicitly when calling update_policy_weights_().</span>
+
+<span class="sd">    This updater does not try to retrieve weights from the server or workers automatically.</span>
+<span class="sd">    Instead, it raises an exception if weights are not provided, ensuring that the weight</span>
+<span class="sd">    synchronization is handled explicitly by the user.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        RuntimeError: If update_policy_weights_() is called without providing weights.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This weight updater is primarily used to suppress warnings in tests and scenarios</span>
+<span class="sd">        where the weight synchronization is handled externally or the workers manage</span>
+<span class="sd">        their own weight updates.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns None since this updater doesn&#39;t manage server weights.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raises an error if weights are not provided explicitly.</span>
+
+<span class="sd">        Since this updater is for remote modules where the master doesn&#39;t have access</span>
+<span class="sd">        to worker weights, it enforces that weights must be passed explicitly.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;RemoteModuleWeightUpdater requires weights to be passed explicitly. &quot;</span>
+                <span class="s2">&quot;Call update_policy_weights_(weights) with the weights to be synchronized.&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># If weights are provided, we assume the synchronization is handled elsewhere</span>
+        <span class="c1"># This is a no-op updater that just validates the weight passing pattern</span>
+
+    <span class="k">def</span> <span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns None since this updater doesn&#39;t manage specific workers.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="RayWeightUpdater">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater">[docs]</a>
+<span class="k">class</span> <span class="nc">RayWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across remote workers using Ray.</span>
+
+<span class="sd">    The `RayWeightUpdater` class provides a mechanism for updating the weights of a policy</span>
+<span class="sd">    across remote inference workers managed by Ray. It leverages Ray&#39;s distributed computing</span>
+<span class="sd">    capabilities to efficiently distribute policy weights to remote collectors.</span>
+<span class="sd">    This class is typically used in distributed data collectors where each remote worker requires</span>
+<span class="sd">    an up-to-date copy of the policy weights.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed</span>
+<span class="sd">            to remote workers.</span>
+<span class="sd">        remote_collectors (List): A list of remote collectors that will receive the updated policy weights.</span>
+<span class="sd">        max_interval (int, optional): The maximum number of batches between weight updates for each worker.</span>
+<span class="sd">            Defaults to 0, meaning weights are updated every batch.</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        all_worker_ids: Returns a list of all worker identifiers (indices of remote collectors).</span>
+<span class="sd">        _get_server_weights: Retrieves the latest weights from the server and stores them in Ray&#39;s object store.</span>
+<span class="sd">        _maybe_map_weights: Optionally maps server weights before distribution (no-op in this implementation).</span>
+<span class="sd">        _sync_weights_with_worker: Synchronizes the server weights with a specific remote worker using Ray.</span>
+<span class="sd">        _skip_update: Determines whether to skip the weight update for a specific worker based on the interval.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This class assumes that the server weights can be directly applied to the remote workers without</span>
+<span class="sd">        any additional processing. If your use case requires more complex weight mapping or synchronization</span>
+<span class="sd">        logic, consider extending `WeightUpdaterBase` with a custom implementation.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and</span>
+<span class="sd">        :class:`~torchrl.collectors.distributed.RayCollector`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">remote_collectors</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">max_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span> <span class="o">=</span> <span class="n">remote_collectors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_interval</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_interval</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RayWeightUpdater.all_worker_ids">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.all_worker_ids">[docs]</a>
+    <span class="k">def</span> <span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="RayWeightUpdater._get_server_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._get_server_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="kn">import</span> <span class="nn">ray</span>
+
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RayWeightUpdater._maybe_map_weights">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._maybe_map_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">server_weights</span></div>
+
+
+<div class="viewcode-block" id="RayWeightUpdater._sync_weights_with_worker">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._sync_weights_with_worker">[docs]</a>
+    <span class="k">def</span> <span class="nf">_sync_weights_with_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;syncing weights with worker </span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span>
+        <span class="n">c</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">server_weights</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+<div class="viewcode-block" id="RayWeightUpdater._skip_update">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._skip_update">[docs]</a>
+    <span class="k">def</span> <span class="nf">_skip_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="c1"># Use gt because we just incremented it</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_interval</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.collectors.weight_update",
+       "headline": "torchrl.collectors.weight_update",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/collectors/weight_update.html",
+       "articleBody": "Source code for torchrl.collectors.weight_update # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import abc import weakref from collections.abc import Callable from typing import Any, TypeVar import torch from tensordict import TensorDict, TensorDictBase from tensordict.nn import TensorDictModuleBase from torchrl._utils import logger as torchrl_logger Policy = TypeVar(\"Policy\", bound=TensorDictModuleBase) [docs] class WeightUpdaterBase(metaclass=abc.ABCMeta): \"\"\"A base class for updating remote policy weights on inference workers. .. deprecated:: WeightUpdaterBase is deprecated and will be removed in a future version. Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead. The weight updater is the central piece of the weight update scheme: - In leaf collector nodes, it is responsible for sending the weights to the policy, which can be as simple as updating a state-dict, or more complex if an inference server is being used. - In server collector nodes, it is responsible for sending the weights to the leaf collectors. In a collector, the updater is called within :meth:`~torchrl.collector.BaseCollector.update_policy_weights_`.` The main method of this class is the :meth:`~._push_weights` method, which updates the policy weights in the worker / policy. This method is called by :meth:`~.push_weights`, which also calls the post-hooks: only `_push_weights` should be implemented by child classes. To extend this class, implement the following abstract methods: - `_get_server_weights` (optional): Define how to retrieve the weights from the server if they are not passed to the updater directly. This method is only called if the weights (handle) is not passed directly. - `_sync_weights_with_worker`: Define how to synchronize weights with a specific worker. This method must be implemented by child classes. - `_maybe_map_weights`: Optionally transform the server weights before distribution. By default, this method returns the weights unchanged. - `all_worker_ids`: Provide a list of all worker identifiers. Returns `None` by default (no worker id). - `from_policy` (optional classmethod): Define how to create an instance of the weight updater from a policy. If implemented, this method will be called before falling back to the default constructor when initializing a weight updater in a collector. Attributes: collector: The collector (or any container) of the weight receiver. The collector is registered via :meth:`~torchrl.collectors.WeightUpdaterBase.register_collector`. Methods: push_weights: Updates the weights on specified or all remote workers. The `__call__` method is a proxy to `push_weights`. register_collector: Registers the collector (or any container) in the receiver through a weakref. This will be called automatically by the collector upon registration of the updater. from_policy: Optional classmethod to create an instance from a policy. Post-hooks: - `register_post_hook`: Registers a post-hook to be called after the weights are updated. The post-hook must be a callable that takes no arguments. The post-hook will be called after the weights are updated. The post-hook will be called in the same process as the weight updater. The post-hook will be called in the same order as the post-hooks were registered. .. seealso:: :meth:`~torchrl.collectors.BaseCollector.update_policy_weights_`. \"\"\" _collector_wrs: list[Any] = None _post_hooks: list[Callable[[], Any]] | None = None def __init_subclass__(cls, **kwargs): super().__init_subclass__(**kwargs) import warnings warnings.warn( f\"Creating {cls.__name__} which inherits from WeightUpdaterBase is deprecated. \" \"Please use WeightSyncScheme from torchrl.weight_update.weight_sync_schemes instead. \" \"This will be removed in a future version.\", DeprecationWarning, stacklevel=2, ) @property def post_hooks(self) -\u003e list[Callable[[], None]]: \"\"\"The list of post-hooks registered to the weight updater.\"\"\" if self._post_hooks is None: self._post_hooks = [] return self._post_hooks [docs] @classmethod def from_policy(cls, policy: TensorDictModuleBase) -\u003e WeightUpdaterBase | None: \"\"\"Optional classmethod to create a weight updater instance from a policy. This method can be implemented by subclasses to provide custom initialization logic based on the policy. If implemented, this method will be called before falling back to the default constructor when initializing a weight updater in a collector. Args: policy (TensorDictModuleBase): The policy to create the weight updater from. Returns: WeightUpdaterBase | None: An instance of the weight updater, or None if the policy cannot be used to create an instance. \"\"\" return None [docs] def register_collector(self, collector): # noqa \"\"\"Register a collector in the updater. Once registered, the updater will not accept another collector. Args: collector (BaseCollector): The collector to register. \"\"\" if self._collector_wrs is None: self._collector_wrs = [] self._collector_wrs.append(weakref.ref(collector)) @property def collector(self) -\u003e Any | None: # noqa \"\"\"The collector or container of the receiver. Returns `None` if the container is out-of-scope or not set. \"\"\" if self._collector_wrs is None: return None if len(self._collector_wrs) \u003e 1: raise ValueError(\"Cannot access `collector` with multiple collectors.\") if self._collector_wrs: collector = self._collector_wrs[0]() else: collector = None return collector @property def collectors(self) -\u003e list[Any] | None: \"\"\"The collectors or container of the receiver.\"\"\" if self._collector_wrs is None: return None if self._collector_wrs: collectors = [ wr() if wr is not None else None for wr in self._collector_wrs ] else: collectors = None return collectors def _push_weights( self, *, policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None, worker_ids: torch.device | int | list[int] | list[torch.device] | None = None, ): \"\"\"Updates the weights of the policy, or on specified / all remote workers. Args: policy_or_weights: The source to get weights from. Can be: - TensorDictModuleBase: A policy module whose weights will be extracted - TensorDictBase: A TensorDict containing weights - dict: A regular dict containing weights - None: Will try to get weights from server using _get_server_weights() worker_ids: An optional list of workers to update. Returns: nothing. \"\"\" if policy_or_weights is None: # Get the weights on server (local) server_weights = self._get_server_weights() else: server_weights = policy_or_weights server_weights = self._maybe_map_weights(server_weights) # Get the remote weights (inference workers) if isinstance(worker_ids, (int, torch.device)): worker_ids = [worker_ids] elif worker_ids is None: worker_ids = self.all_worker_ids() if worker_ids is None: self._sync_weights_with_worker(server_weights=server_weights) return for worker in worker_ids: if self._skip_update(worker): continue self._sync_weights_with_worker( worker_id=worker, server_weights=server_weights ) [docs] def push_weights( self, policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None, worker_ids: torch.device | int | list[int] | list[torch.device] | None = None, ): \"\"\"Updates the weights of the policy, or on specified / all remote workers. Args: policy_or_weights: The source to get weights from. Can be: - TensorDictModuleBase: A policy module whose weights will be extracted - TensorDictBase: A TensorDict containing weights - dict: A regular dict containing weights - None: Will try to get weights from server using _get_server_weights() worker_ids: An optional list of workers to update. Returns: nothing. \"\"\" self._push_weights(policy_or_weights=policy_or_weights, worker_ids=worker_ids) self._call_post_hooks() [docs] def init(self, *args, **kwargs): \"\"\"Initialize the weight updater with custom arguments. This method can be overridden by subclasses to handle custom initialization. By default, this is a no-op. Args: *args: Positional arguments for initialization **kwargs: Keyword arguments for initialization \"\"\" return [docs] def register_post_hook(self, hook: Callable[[], None]): \"\"\"Registers a post-hook to be called after weights are updated. Args: hook (Callable[[], None]): The post-hook to register. \"\"\" self.post_hooks.append(hook) def _call_post_hooks(self): \"\"\"Calls all registered post-hooks in order.\"\"\" for hook in self.post_hooks: hook() def _skip_update(self, worker_id: int | torch.device) -\u003e bool: \"\"\"Whether to skip updating weights for a worker. By default, never skips updates. Subclasses can override this to implement custom update frequency logic. Args: worker_id (int | torch.device): The worker ID to check. Returns: bool: Whether to skip the update. \"\"\" return False @abc.abstractmethod def _sync_weights_with_worker( self, *, worker_id: int | torch.device | None = None, server_weights: TensorDictBase, ) -\u003e None: \"\"\"Synchronizes weights with a specific worker. This method must be implemented by child classes to define how weights are synchronized with workers. Args: worker_id (int | torch.device | None): The worker to sync with, if applicable. server_weights (TensorDictBase): The weights from the server to sync. \"\"\" raise NotImplementedError def _get_server_weights(self) -\u003e TensorDictBase | None: \"\"\"Gets the weights from the server. This method is called when no weights are passed to push_weights(). By default returns None. Subclasses can override to implement custom weight retrieval logic. Returns: TensorDictBase | None: The server weights, or None. \"\"\" return None def _maybe_map_weights(self, policy_or_weights: TensorDictBase) -\u003e TensorDictBase: \"\"\"Optionally transforms server weights before distribution. By default returns weights unchanged. Subclasses can override to implement custom weight mapping logic. Args: policy_or_weights (Any): The weights - or any container or handler - to potentially transform, query or extract. Returns: TensorDictBase: The transformed weights. \"\"\" if isinstance(policy_or_weights, TensorDictModuleBase): # Extract weights from policy module server_weights = TensorDict.from_module(policy_or_weights).data elif isinstance(policy_or_weights, (TensorDictBase, dict)): # Use weights directly server_weights = policy_or_weights else: raise TypeError( f\"policy_or_weights must be None, TensorDictModuleBase, TensorDictBase or dict, got {type(policy_or_weights)}\" ) return server_weights [docs] def all_worker_ids(self) -\u003e list[int] | list[torch.device] | None: \"\"\"Gets list of all worker IDs. Returns None by default. Subclasses should override to return actual worker IDs. Returns: list[int] | list[torch.device] | None: List of worker IDs or None. \"\"\" return None def __call__( self, policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None, worker_ids: torch.device | int | list[int] | list[torch.device] | None = None, ): \"\"\"Updates the weights of the policy, or on specified / all remote workers. Args: policy_or_weights: The source to get weights from. Can be: - TensorDictModuleBase: A policy module whose weights will be extracted - TensorDictBase: A TensorDict containing weights - dict: A regular dict containing weights - None: Will try to get weights from server using _get_server_weights() worker_ids: An optional list of workers to update. Returns: nothing. \"\"\" return self.push_weights( policy_or_weights=policy_or_weights, worker_ids=worker_ids ) [docs] def increment_version(self): \"\"\"Increment the policy version.\"\"\" for collector in self.collectors: collector.increment_version() # Specialized classes [docs] class VanillaWeightUpdater(WeightUpdaterBase): \"\"\"A simple implementation of :class:`~torchrl.collectors.WeightUpdaterBase` for updating local policy weights. The `VanillaWeightSender` class provides a basic mechanism for updating the weights of a local policy by directly fetching them from a specified source. It is typically used in scenarios where the weight update logic is straightforward and does not require any complex mapping or transformation. This class is used by default in the `Collector` when no custom weight sender is provided. .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.Collector`. Keyword Args: weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server. If not provided, the weights must be passed to ``push_weights`` directly. policy_weights (TensorDictBase): a TensorDictBase containing the policy weights to be updated in-place. Use ``push_weights`` to update the weights. \"\"\" [docs] @classmethod def from_policy(cls, policy: TensorDictModuleBase) -\u003e WeightUpdaterBase | None: \"\"\"Creates a VanillaWeightUpdater instance from a policy. This method creates a weight updater that will update the policy\u0027s weights directly using its state dict. Args: policy (TensorDictModuleBase): The policy to create the weight updater from. Returns: VanillaWeightUpdater: An instance of the weight updater configured to update the policy\u0027s weights. \"\"\" policy_weights = TensorDict.from_module(policy) return cls(policy_weights=policy_weights.lock_()) def __init__( self, *, weight_getter: Callable[[], TensorDictBase] | None = None, policy_weights: TensorDictBase, ): self.weight_getter = weight_getter self.policy_weights = policy_weights def _get_server_weights(self) -\u003e TensorDictBase | None: return self.weight_getter() if self.weight_getter is not None else None def _get_local_weights(self) -\u003e TensorDictBase: return self.policy_weights def _map_weights(self, server_weights: TensorDictBase) -\u003e TensorDictBase: return server_weights def _maybe_map_weights(self, server_weights: TensorDictBase) -\u003e TensorDictBase: return server_weights def _sync_weights_with_worker( self, *, worker_id: None = None, server_weights: TensorDictBase ) -\u003e None: if server_weights is None: return self.policy_weights.update_(server_weights) [docs] class MultiProcessedWeightUpdater(WeightUpdaterBase): \"\"\"A remote weight updater for synchronizing policy weights across multiple processes or devices. The `MultiProcessedWeightUpdater` class provides a mechanism for updating the weights of a policy across multiple inference workers in a multiprocessed environment. It is designed to handle the distribution of weights from a central server to various devices or processes that are running the policy. This class is typically used in multiprocessed data collectors where each process or device requires an up-to-date copy of the policy weights. Keyword Args: get_server_weights (Callable[[], TensorDictBase] | None): A callable that retrieves the latest policy weights from the server or another centralized source. policy_weights (Dict[torch.device, TensorDictBase]): A dictionary mapping each device or process to its current policy weights, which will be updated. .. note:: This class assumes that the server weights can be directly applied to the workers without any additional processing. If your use case requires more complex weight mapping or synchronization logic, consider extending `WeightUpdaterBase` with a custom implementation. .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.BaseCollector`. \"\"\" def __init__( self, *, get_server_weights: Callable[[], TensorDictBase] | None, policy_weights: dict[torch.device, TensorDictBase], ): self.weights_getter = get_server_weights self._policy_weights = policy_weights [docs] def all_worker_ids(self) -\u003e list[int] | list[torch.device]: return list(self._policy_weights) def _sync_weights_with_worker( self, worker_id: int | torch.device, server_weights: TensorDictBase | None ) -\u003e None: if server_weights is None: return self._policy_weights[worker_id].data.update_(server_weights) def _get_server_weights(self) -\u003e TensorDictBase | None: # The weights getter can be none if no mapping is required if self.weights_getter is None: return weights = self.weights_getter() if weights is None: return return weights.data def _maybe_map_weights(self, server_weights: TensorDictBase) -\u003e TensorDictBase: return server_weights class RemoteModuleWeightUpdater(WeightUpdaterBase): \"\"\"A weight updater for remote nn.Modules that requires explicit weight passing. This weight updater is designed for scenarios where the master collector doesn\u0027t have direct access to worker weights (e.g., when using policy_factory). It enforces that weights must be passed explicitly when calling update_policy_weights_(). This updater does not try to retrieve weights from the server or workers automatically. Instead, it raises an exception if weights are not provided, ensuring that the weight synchronization is handled explicitly by the user. Raises: RuntimeError: If update_policy_weights_() is called without providing weights. .. note:: This weight updater is primarily used to suppress warnings in tests and scenarios where the weight synchronization is handled externally or the workers manage their own weight updates. .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` \"\"\" def __init__(self): pass def _get_server_weights(self) -\u003e TensorDictBase | None: \"\"\"Returns None since this updater doesn\u0027t manage server weights.\"\"\" return None def _sync_weights_with_worker( self, *, worker_id: int | torch.device | None = None, server_weights: TensorDictBase, ) -\u003e None: \"\"\"Raises an error if weights are not provided explicitly. Since this updater is for remote modules where the master doesn\u0027t have access to worker weights, it enforces that weights must be passed explicitly. \"\"\" if server_weights is None: raise RuntimeError( \"RemoteModuleWeightUpdater requires weights to be passed explicitly. \" \"Call update_policy_weights_(weights) with the weights to be synchronized.\" ) # If weights are provided, we assume the synchronization is handled elsewhere # This is a no-op updater that just validates the weight passing pattern def all_worker_ids(self) -\u003e None: \"\"\"Returns None since this updater doesn\u0027t manage specific workers.\"\"\" return None [docs] class RayWeightUpdater(WeightUpdaterBase): \"\"\"A remote weight updater for synchronizing policy weights across remote workers using Ray. The `RayWeightUpdater` class provides a mechanism for updating the weights of a policy across remote inference workers managed by Ray. It leverages Ray\u0027s distributed computing capabilities to efficiently distribute policy weights to remote collectors. This class is typically used in distributed data collectors where each remote worker requires an up-to-date copy of the policy weights. Args: policy_weights (TensorDictBase): The current weights of the policy that need to be distributed to remote workers. remote_collectors (List): A list of remote collectors that will receive the updated policy weights. max_interval (int, optional): The maximum number of batches between weight updates for each worker. Defaults to 0, meaning weights are updated every batch. Methods: all_worker_ids: Returns a list of all worker identifiers (indices of remote collectors). _get_server_weights: Retrieves the latest weights from the server and stores them in Ray\u0027s object store. _maybe_map_weights: Optionally maps server weights before distribution (no-op in this implementation). _sync_weights_with_worker: Synchronizes the server weights with a specific remote worker using Ray. _skip_update: Determines whether to skip the weight update for a specific worker based on the interval. .. note:: This class assumes that the server weights can be directly applied to the remote workers without any additional processing. If your use case requires more complex weight mapping or synchronization logic, consider extending `WeightUpdaterBase` with a custom implementation. .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.distributed.RayCollector`. \"\"\" def __init__( self, policy_weights: TensorDictBase, remote_collectors: list, max_interval: int = 0, ): self.policy_weights = policy_weights self.remote_collectors = remote_collectors self.max_interval = max(0, max_interval) self._batches_since_weight_update = [0] * len(self.remote_collectors) [docs] def all_worker_ids(self) -\u003e list[int] | list[torch.device]: return list(range(len(self.remote_collectors))) [docs] def _get_server_weights(self) -\u003e Any: import ray return ray.put(self.policy_weights.data) [docs] def _maybe_map_weights(self, server_weights: Any) -\u003e Any: return server_weights [docs] def _sync_weights_with_worker(self, worker_id: int, server_weights: Any) -\u003e Any: torchrl_logger.debug(f\"syncing weights with worker {worker_id}\") c = self.remote_collectors[worker_id] c.update_policy_weights_.remote(policy_weights=server_weights) self._batches_since_weight_update[worker_id] = 0 [docs] def _skip_update(self, worker_id: int) -\u003e bool: self._batches_since_weight_update[worker_id] += 1 # Use gt because we just incremented it if self._batches_since_weight_update[worker_id] \u003e self.max_interval: return False return True",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/collectors/weight_update.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

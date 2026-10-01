@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: A2CTrainerConfig

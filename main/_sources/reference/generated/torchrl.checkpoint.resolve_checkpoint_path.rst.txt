@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+resolve_checkpoint_path
+=======================
+
+.. autofunction:: resolve_checkpoint_path

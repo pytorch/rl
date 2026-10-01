@@ -1,0 +1,89 @@
+﻿torchrl.modules.mcts.UCBScore
+=============================
+
+.. currentmodule:: torchrl.modules.mcts
+
+.. autoclass:: UCBScore
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~UCBScore.__init__
+      ~UCBScore.add_module
+      ~UCBScore.apply
+      ~UCBScore.bfloat16
+      ~UCBScore.buffers
+      ~UCBScore.children
+      ~UCBScore.compile
+      ~UCBScore.cpu
+      ~UCBScore.cuda
+      ~UCBScore.double
+      ~UCBScore.eval
+      ~UCBScore.extra_repr
+      ~UCBScore.float
+      ~UCBScore.forward
+      ~UCBScore.get_buffer
+      ~UCBScore.get_extra_state
+      ~UCBScore.get_parameter
+      ~UCBScore.get_submodule
+      ~UCBScore.half
+      ~UCBScore.ipu
+      ~UCBScore.is_tdmodule_compatible
+      ~UCBScore.load_state_dict
+      ~UCBScore.modules
+      ~UCBScore.mtia
+      ~UCBScore.named_buffers
+      ~UCBScore.named_children
+      ~UCBScore.named_modules
+      ~UCBScore.named_parameters
+      ~UCBScore.parameters
+      ~UCBScore.register_backward_hook
+      ~UCBScore.register_buffer
+      ~UCBScore.register_forward_hook
+      ~UCBScore.register_forward_pre_hook
+      ~UCBScore.register_full_backward_hook
+      ~UCBScore.register_full_backward_pre_hook
+      ~UCBScore.register_load_state_dict_post_hook
+      ~UCBScore.register_load_state_dict_pre_hook
+      ~UCBScore.register_module
+      ~UCBScore.register_parameter
+      ~UCBScore.register_state_dict_post_hook
+      ~UCBScore.register_state_dict_pre_hook
+      ~UCBScore.requires_grad_
+      ~UCBScore.reset_out_keys
+      ~UCBScore.reset_parameters_recursive
+      ~UCBScore.select_out_keys
+      ~UCBScore.set_extra_state
+      ~UCBScore.set_submodule
+      ~UCBScore.share_memory
+      ~UCBScore.state_dict
+      ~UCBScore.to
+      ~UCBScore.to_empty
+      ~UCBScore.train
+      ~UCBScore.type
+      ~UCBScore.xpu
+      ~UCBScore.zero_grad
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~UCBScore.T_destination
+      ~UCBScore.call_super_init
+      ~UCBScore.dump_patches
+      ~UCBScore.in_keys
+      ~UCBScore.out_keys
+      ~UCBScore.out_keys_source
+      ~UCBScore.c
+      ~UCBScore.training
+   
+   

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.trainers.algorithms.configs
+
+
+DreamerV3LossConfig
+===================
+
+.. autoclass:: DreamerV3LossConfig
+    :members:

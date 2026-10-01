@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.render.backends
+
+
+TensorDictPixelsBackend
+=======================
+
+.. autoclass:: TensorDictPixelsBackend
+    :members:
+    :inherited-members:
