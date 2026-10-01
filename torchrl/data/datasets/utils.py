@@ -107,8 +107,8 @@ def load_dataset(dataset_id: str, **kwargs) -> BaseDatasetExperienceReplay:
 
     Built-in prefixes include ``"atari"``, ``"atari_dqn"``, ``"d4rl"``,
     ``"gen_dgrl"``, ``"lerobot"``, ``"minari"``, ``"openml"``, ``"openx"``,
-    ``"roboset"``, and ``"vd4rl"``. Additional prefixes can be installed with
-    :func:`register_dataset`.
+    ``"roboset"``, ``"tdmpc2"``, and ``"vd4rl"``. Additional prefixes can be
+    installed with :func:`register_dataset`.
 
     Args:
         dataset_id (str): a prefixed dataset identifier, e.g.
@@ -158,4 +158,5 @@ register_dataset("minari", "torchrl.data.datasets.minari_data:MinariExperienceRe
 register_dataset("openml", "torchrl.data.datasets.openml:OpenMLExperienceReplay")
 register_dataset("openx", "torchrl.data.datasets.openx:OpenXExperienceReplay")
 register_dataset("roboset", "torchrl.data.datasets.roboset:RobosetExperienceReplay")
+register_dataset("tdmpc2", "torchrl.data.datasets.tdmpc2:TDMPC2ExperienceReplay")
 register_dataset("vd4rl", "torchrl.data.datasets.vd4rl:VD4RLExperienceReplay")
