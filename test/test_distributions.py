@@ -1064,6 +1064,50 @@ class TestMaskedCategorical:
 
 
 class TestOneHotCategorical:
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
+    @pytest.mark.parametrize("use_probs", [False, True])
+    def test_tied_mode(self, batch_shape, use_probs, device):
+        logits = torch.tensor(
+            [[0.0, 0.0, 0.0], [0.0, 2.0, 2.0], [0.0, 1.0, 2.0]], device=device
+        )
+        logits = logits.expand(*batch_shape, 3, 3)
+        params = {"probs": logits.softmax(-1)} if use_probs else {"logits": logits}
+        dist = OneHotCategorical(**params)
+        expected = F.one_hot(torch.tensor([0, 1, 2], device=device), 3).expand(
+            *batch_shape, 3, 3
+        )
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        torch.testing.assert_close(
+            dist.log_prob(dist.mode),
+            torch.distributions.Categorical(**params).log_prob(expected.argmax(-1)),
+        )
+
+    def test_ordinal_tied_mode(self):
+        dist = OneHotOrdinal(torch.zeros(3))
+        expected = torch.tensor([1, 0, 0])
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14), reason="torch.compile requires Python < 3.14"
+    )
+    @pytest.mark.parametrize("mask_type", ["unmasked", "dense"])
+    def test_tied_mode_compile(self, mask_type):
+        logits = torch.zeros(3)
+        if mask_type == "unmasked":
+            dist = OneHotCategorical(logits=logits)
+            expected = torch.tensor([1, 0, 0])
+        else:
+            dist = MaskedOneHotCategorical(
+                logits=logits, mask=torch.tensor([True, False, True])
+            )
+            expected = torch.tensor([1, 0, 0])
+        torch.testing.assert_close(dist.mode, expected)
+        compiled = torch.compile(lambda: dist.mode, backend="eager", fullgraph=True)
+        torch.testing.assert_close(compiled(), expected)
+
     def test_one_hot(self):
         torch.manual_seed(0)
         logits = torch.randn(1, 10)
@@ -1102,6 +1146,31 @@ class TestOneHotCategorical:
 
 
 class TestMaskedOneHotCategorical:
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
+    @pytest.mark.parametrize("use_probs", [False, True])
+    @pytest.mark.parametrize("sparse", [False, True])
+    def test_tied_mode(self, batch_shape, use_probs, sparse, device):
+        logits = torch.tensor(
+            [[2.0, 9.0, 2.0, 0.0], [0.0, 9.0, 1.0, 2.0]], device=device
+        )
+        logits = logits.expand(*batch_shape, 2, 4)
+        params = {"probs": logits.softmax(-1)} if use_probs else {"logits": logits}
+        if sparse:
+            params["indices"] = torch.tensor([2, 0, 3], device=device).expand(
+                *batch_shape, 2, 3
+            )
+            expected_indices = torch.tensor([2, 3], device=device)
+        else:
+            params["mask"] = torch.tensor(
+                [True, False, True, True], device=device
+            ).expand(*batch_shape, 2, 4)
+            expected_indices = torch.tensor([0, 3], device=device)
+        dist = MaskedOneHotCategorical(**params)
+        expected = F.one_hot(expected_indices, 4).expand(*batch_shape, 2, 4)
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+
     def test_errs(self):
         with pytest.raises(
             ValueError,
