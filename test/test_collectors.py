@@ -5825,8 +5825,8 @@ class TestUniqueTraj:
             trajectories = [next(batches)]
             collector.reset(index=torch.tensor([[False], [False], [True]]))
             assert collector.stats()["trajectory_pending_frames"] == 2
-            while sum(traj.numel() == 7 for traj in trajectories) < 2:
-                trajectories.append(next(batches))
+            trajectories += [next(batches) for _ in range(5)]
+            assert sum(traj.numel() == 7 for traj in trajectories) == 2
             traj_ids = [
                 traj["collector", "traj_ids"][0].item() for traj in trajectories
             ]
