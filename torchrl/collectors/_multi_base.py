@@ -208,8 +208,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             If provided, it will be rounded up to the closest multiple of frames_per_batch.
             Defaults to ``None`` (i.e. no random frames).
         reset_at_each_iter (bool, optional): Whether environments should be reset
-            at the beginning of a batch collection.
-            Defaults to ``False``.
+            at the beginning of a batch collection. Each reset starts new
+            trajectories with fresh ``("collector", "traj_ids")``. With
+            ``trajs_per_batch``, episodes interrupted by the reset are
+            discarded, unless ``set_truncated=True`` marks them as truncated,
+            in which case they are yielded. Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
             a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
@@ -2079,6 +2082,9 @@ also that the state dict is synchronised across processes if needed."""
             seed = new_seed
         self.reset()
         return seed
+
+    def _discards_in_flight_trajectories(self) -> bool:
+        return self.reset_at_each_iter
 
     def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
         """Resets the environments to a new initial state.
