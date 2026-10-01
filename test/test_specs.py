@@ -371,6 +371,42 @@ class TestRanges:
         one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
         assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
+    @pytest.mark.parametrize("ns", [[5], [5, 2, 3]])
+    @pytest.mark.parametrize("shape", [torch.Size([3]), torch.Size([4, 5])])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_multi_discrete_conversion_batched_spec(self, ns, shape, device):
+        # the batch dims live in the spec, so nvec is expanded to [*shape, len(ns)]
+        categorical = MultiCategorical(ns, shape=[*shape, len(ns)], device=device)
+        one_hot = MultiOneHot(ns, shape=[*shape, sum(ns)], device=device)
+
+        assert categorical.to_one_hot_spec() == one_hot
+        assert one_hot.to_categorical_spec() == categorical
+
+        sample = categorical.rand()
+        one_hot_recon = categorical.to_one_hot(sample)
+        assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
+        assert (one_hot.to_categorical(one_hot_recon) == sample).all()
+        one_hot_sample = one_hot.rand()
+        categorical_recon = one_hot.to_categorical(one_hot_sample)
+        assert (
+            one_hot.to_categorical_spec().to_one_hot(categorical_recon)
+            == one_hot_sample
+        ).all()
+
+    def test_multi_discrete_conversion_singleton_and_heterogeneous(self):
+        # remove_singleton squeezes the sample of a shape [1] spec to a scalar
+        categorical = MultiCategorical([5])
+        sample = categorical.rand()
+        assert sample.ndim == 0
+        one_hot = categorical.to_one_hot(sample)
+        assert categorical.to_one_hot_spec().is_in(one_hot)
+        assert categorical.to_one_hot_spec().to_categorical(one_hot).item() == sample
+        # rows with different widths cannot share one one-hot tensor
+        with pytest.raises(ValueError, match="homogeneous"):
+            MultiCategorical([[2, 4], [3, 2]]).to_one_hot(
+                torch.tensor([[1, 3], [2, 1]])
+            )
+
 
 @pytest.mark.parametrize("is_complete", [True, False])
 @pytest.mark.parametrize("device", [None, *get_default_devices()])
