@@ -2780,7 +2780,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     @_maybe_delay_init
     def __iter__(self):
-        if self._sampler.ran_out:
+        # An exhausted sampler can still have unconsumed batches in the queue.
+        if self._sampler.ran_out and not self._prefetch_queue:
             self._sampler.ran_out = False
         if self._batch_size is None:
             raise RuntimeError(
