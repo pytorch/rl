@@ -146,7 +146,12 @@ from .value_transforms import (
     SymLogValueTransform,
     ValueTransform,
 )
-from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
+from .planners import (
+    CEMPlanner,
+    MPCPlannerBase,
+    MPPIPlanner,
+    TdMpc2Planner,
+)  # usort:skip
 from .mcts import (  # usort:skip
     EXP3Score,
     MCTSScore,
@@ -272,6 +277,7 @@ __all__ = [
     "SimplicialNormalization",
     "SymExpTwoHot",
     "TdMpc2QEnsemble",
+    "TdMpc2Planner",
     "SymLogValueTransform",
     "TanhDelta",
     "TanhModule",
