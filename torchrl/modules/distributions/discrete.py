@@ -340,12 +340,8 @@ class MaskedCategorical(D.Categorical):
         if not self._sparse_mask:
             return ret
 
-        size = ret.size()
-        outer_dim = sample_shape.numel()
-        inner_dim = self._mask.shape[:-1].numel()
-        idx_3d = self._mask.expand(outer_dim, inner_dim, -1)
-        ret = idx_3d.gather(dim=-1, index=ret.view(outer_dim, inner_dim, 1))
-        return ret.reshape(size)
+        indices = self._mask.expand(ret.shape + (self._num_events,))
+        return indices.gather(-1, ret.unsqueeze(-1)).squeeze(-1)
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if not self._sparse_mask:
@@ -370,40 +366,17 @@ class MaskedCategorical(D.Categorical):
             result = torch.where(torch.isfinite(result), result, self.neg_inf)
             return result
 
-        idx_3d = self._mask.view(1, -1, self._num_events)
-        val_3d = value.view(-1, idx_3d.size(1), 1)
-        mask = idx_3d == val_3d
-        idx = mask.int().argmax(dim=-1, keepdim=True)
-        idx = idx.view_as(value)
+        mask = self._mask == value.unsqueeze(-1)
+        idx = mask.int().argmax(dim=-1)
         if self.use_cross_entropy:
-            logits = self.logits
-            if logits.ndim > 2:
-                # Bring channels in 2nd dim
-                logits = logits.transpose(-1, 1)
-            # possible shapes:
-            # Don't work with cross_entropy (missing batch dimension)
-            # logits.shape = (C,) and idx.shape = (B,)
-            # logits.shape = (C,) and idx.shape = (B0, B1, ...) => requires flattening of idx, only one batch dimension
-            # work with cross_entropy:
-            # logits.shape = (B, C) and idx.shape = (B,)
-            # logits.shape = (B, C, d1, d2, ...) and idx.shape = (B, d1, d2, ...)
-            original_idx_shape = None
-            if logits.ndim == 1 and idx.ndim >= 1:
-                if idx.ndim >= 2:
-                    original_idx_shape = idx.shape
-                    idx = idx.flatten()
-                logits = logits.unsqueeze(0).expand(idx.shape + logits.shape)
-            ret = -torch.nn.functional.cross_entropy(logits, idx, reduction="none")
-            if original_idx_shape is not None:
-                ret = ret.unflatten(0, original_idx_shape)
+            logits = self.logits.expand(idx.shape + (self._num_events,))
+            ret = -torch.nn.functional.cross_entropy(
+                logits.reshape(-1, self._num_events), idx.reshape(-1), reduction="none"
+            ).reshape(idx.shape)
         else:
             ret = super().log_prob(idx)
         # Fill masked values with neg_inf.
-        ret = ret.view_as(val_3d)
-        ret = ret.masked_fill(
-            torch.logical_not(mask.any(dim=-1, keepdim=True)), self.neg_inf
-        )
-        return ret.view_as(value)
+        return ret.masked_fill(~mask.any(dim=-1), self.neg_inf)
 
     @staticmethod
     def _mask_logits(
