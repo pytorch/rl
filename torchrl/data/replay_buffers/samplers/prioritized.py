@@ -104,6 +104,12 @@ class PrioritizedSampler(Sampler):
             trees. Defaults to ``None``, in which case CUDA storage selects a CUDA
             tree when the installed TorchRL extension was built with CUDA support,
             and CPU storage keeps the existing CPU tree.
+        max_pending (int, optional): maximum number of :meth:`mark_update` calls
+            whose priority writes may be deferred before the sampler flushes them
+            to the segment trees. The writer calls ``mark_update`` on every
+            ``add``/``extend``, so this caps the memory held by the pending list
+            for a buffer that is written to but never read from. ``0`` disables
+            the deferral and writes on every ``mark_update``. Defaults to ``64``.
 
     **Parameter Guidelines**:
 
@@ -185,6 +191,7 @@ class PrioritizedSampler(Sampler):
         reduction: str = "max",
         max_priority_within_buffer: bool = False,
         device: torch.device | str | None = None,
+        max_pending: int = 64,
     ) -> None:
         if alpha < 0:
             raise ValueError(
@@ -192,7 +199,12 @@ class PrioritizedSampler(Sampler):
             )
         if beta < 0:
             raise ValueError(f"beta must be greater or equal to 0, got beta={beta}")
+        if max_pending < 0:
+            raise ValueError(
+                f"max_pending must be greater or equal to 0, got max_pending={max_pending}"
+            )
 
+        self._max_pending = max_pending
         self._max_capacity = max_capacity
         self._alpha = alpha
         self._beta = beta
@@ -244,6 +256,7 @@ class PrioritizedSampler(Sampler):
             raise ValueError(
                 f"alpha must be greater or equal than 0, got alpha={value}"
             )
+        self._flush_pending_updates()
         old_alpha = self._alpha
         self._alpha = value
         if value != old_alpha:
@@ -265,6 +278,9 @@ class PrioritizedSampler(Sampler):
                 "the writer process gets a uniform sampler and the learner "
                 "keeps a local prioritized sampler."
             )
+        # Pending entries hold a reference to the storage they were marked
+        # against, which must not be dragged into the pickled state.
+        self._flush_pending_updates()
         return super().__getstate__()
 
     def _tree_device_from_storage(self, storage: Storage | None) -> torch.device | None:
@@ -287,6 +303,7 @@ class PrioritizedSampler(Sampler):
             self._init()
 
     def _init(self) -> None:
+        self._pending_updates = []
         if SumSegmentTreeFp32 is None:
             raise RuntimeError(
                 "SumSegmentTreeFp32 is not available. See warning above."
@@ -342,6 +359,19 @@ class PrioritizedSampler(Sampler):
 
     def _empty(self) -> None:
         self._init()
+
+    def _flush_pending_updates(self) -> None:
+        """Applies the priority updates deferred by :meth:`mark_update`.
+
+        The pending list is cleared before the updates are replayed so that the
+        :meth:`update_priority` calls below do not recurse into this method.
+        """
+        pending_updates = self._pending_updates
+        if not pending_updates:
+            return
+        self._pending_updates = []
+        for index, priority, storage in pending_updates:
+            self.update_priority(index, priority, storage=storage)
 
     @property
     def _max_priority(self) -> tuple[float | None, int | None]:
@@ -477,6 +507,7 @@ class PrioritizedSampler(Sampler):
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
         self._maybe_init_from_storage(storage)
+        self._flush_pending_updates()
         if len(storage) == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
         tree_device = self.device
@@ -569,6 +600,7 @@ class PrioritizedSampler(Sampler):
 
         """
         self._maybe_init_from_storage(storage)
+        self._flush_pending_updates()
         tree_device = self.device
         priority = torch.as_tensor(priority, device=tree_device).detach()
         index = torch.as_tensor(index, dtype=torch.long, device=tree_device)
@@ -684,9 +716,39 @@ class PrioritizedSampler(Sampler):
     def mark_update(
         self, index: int | torch.Tensor, *, storage: Storage | None = None
     ) -> None:
-        self.update_priority(index, self.default_priority, storage=storage)
+        """Marks the given indices for a default-priority update.
+
+        The update is **lazy**: the priority trees are not written to
+        immediately. Instead the ``(index, default_priority)`` pair is appended
+        to an internal pending-updates list and flushed the next time the trees
+        are read (e.g. on :meth:`sample`, :meth:`update_priority`,
+        :meth:`state_dict` or :meth:`dumps`). This keeps segment-tree writes off
+        the hot ``extend`` path, where they are usually superseded by the first
+        :meth:`update_priority` call anyway.
+
+        The default priority is read eagerly, at mark time, so that a later
+        change of the running max does not retroactively alter what was marked.
+        If :meth:`update_priority` is called for the same indices before the
+        flush, the pending defaults are applied first and then overwritten by
+        the explicit priorities.
+
+        At most ``max_pending`` calls are deferred: a buffer that is written to
+        but never read from flushes on its own rather than growing the pending
+        list without bound.
+        """
+        priority = self.default_priority
+        if isinstance(index, torch.Tensor):
+            index = index.clone()
+        self._pending_updates.append((index, priority, storage))
+        # ``mark_update`` is called by the writer on every ``add``/``extend``, and
+        # the pending list only ever shrinks when it is flushed. Bound it so that a
+        # buffer that is written to but never read from cannot accumulate an
+        # unbounded number of deferred index tensors.
+        if len(self._pending_updates) > self._max_pending:
+            self._flush_pending_updates()
 
     def state_dict(self) -> dict[str, Any]:
+        self._flush_pending_updates()
         return {
             "_schema_version": self._STATE_SCHEMA_VERSION,
             "_alpha": self._alpha,
@@ -709,6 +771,7 @@ class PrioritizedSampler(Sampler):
         self._max_priority = deepcopy(state_dict["_max_priority"])
         self._sum_tree = deepcopy(state_dict["_sum_tree"])
         self._min_tree = deepcopy(state_dict["_min_tree"])
+        self._pending_updates = []
         if (
             version < 1
             and self._max_priority_within_buffer
@@ -722,6 +785,7 @@ class PrioritizedSampler(Sampler):
 
     @implement_for("torch", "2.5.0", None)
     def dumps(self, path):  # noqa: F811
+        self._flush_pending_updates()
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         try:
@@ -807,6 +871,7 @@ class PrioritizedSampler(Sampler):
             self._sum_tree[i] = elt
         for i, elt in enumerate(mm_mt.tolist()):
             self._min_tree[i] = elt
+        self._pending_updates = []
         if (
             version < 1
             and self._max_priority_within_buffer
