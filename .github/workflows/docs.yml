@@ -29,9 +29,9 @@ jobs:
       matrix:
         python_version: [ "3.12" ]
         cuda_arch_version: [ "12.8" ]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
       upload-artifact: docs
       timeout: 120

@@ -29,10 +29,10 @@ jobs:
   #       python_version: ["3.10"]
   #       cuda_arch_version: ["12.8"]
   #   if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-  #   uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+  #   uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
   #   with:
   #     repository: pytorch/rl
-  #     runner: "linux.g5.4xlarge.nvidia.gpu"
+  #     runner: "mt-l-x86aavx2-11-41-a10g"
   #     docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
   #     timeout: 120
   #     script: |
@@ -63,10 +63,10 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/brax') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -99,10 +99,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/craftground') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -140,10 +140,10 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/mujoco_playground') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -176,10 +176,10 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/mjlab') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -212,10 +212,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Modules') || contains(github.event.pull_request.labels.*.name, 'Objectives') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -250,10 +250,10 @@ jobs:
   #       python_version: ["3.10"]
   #       cuda_arch_version: ["12.8"]
   #   if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') }}
-  #   uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+  #   uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
   #   with:
   #     repository: pytorch/rl
-  #     runner: "linux.g5.4xlarge.nvidia.gpu"
+  #     runner: "mt-l-x86aavx2-11-41-a10g"
   #     docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
   #     timeout: 120
   #     script: |
@@ -285,10 +285,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/envpool') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -322,10 +322,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/gendgrl') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -357,10 +357,10 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       # gpu-arch-type: "cuda"
       # gpu-arch-version: "11.6"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -409,10 +409,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/jumanji') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -451,10 +451,10 @@ jobs:
         cuda_arch_version: ["12.8"]
       fail-fast: false
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/libero') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
@@ -488,11 +488,11 @@ jobs:
         bash .github/unittest/linux_libs/scripts_libero/post_process.sh
 
   unittests-meltingpot:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/meltingpot') }}
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -530,10 +530,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/open_spiel') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -570,10 +570,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/chess') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -610,10 +610,10 @@ jobs:
         python_version: ["3.10.12"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/unity_mlagents') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -650,10 +650,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/minari') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -682,10 +682,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/openx') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -715,10 +715,10 @@ jobs:
 
   unittests-pettingzoo:
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/pettingzoo') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -756,10 +756,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/procgen') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -797,10 +797,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/safety_gymnasium') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -838,10 +838,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/robohive') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvidia/cudagl:11.4.0-base"
       timeout: 120
       script: |
@@ -872,10 +872,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/roboset') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -908,10 +908,10 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -947,10 +947,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/smacv2') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -988,10 +988,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Data') || contains(github.event.pull_request.labels.*.name, 'Data/vd4rl') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
@@ -1025,10 +1025,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/vmas') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
@@ -1066,10 +1066,10 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Integrations') || contains(github.event.pull_request.labels.*.name, 'Integrations/torch_geometric') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
