@@ -1676,7 +1676,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         dropped_frames = 0
         for traj_id in traj_ids:
             for chunk in assembly[0].pop(traj_id, ()):
-                dropped_frames += chunk.numel()
+                mask = chunk.get(("collector", "mask"), None)
+                dropped_frames += chunk.numel() if mask is None else int(mask.sum())
         if dropped_frames:
             self._record_pending_trajectory_frames(-dropped_frames)
 

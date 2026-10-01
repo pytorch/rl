@@ -93,6 +93,7 @@ from torchrl.envs import (
     EnvCreator,
     InitTracker,
     ParallelEnv,
+    PendulumEnv,
     SerialEnv,
     StepCounter,
     Transform,
@@ -5804,16 +5805,17 @@ class TestUniqueTraj:
 
     def test_partial_reset_trajs_per_batch(self):
         env = SerialEnv(
-            2,
+            3,
             [
                 functools.partial(CountingEnv, max_steps=1),
+                functools.partial(CountingEnv, max_steps=6),
                 functools.partial(CountingEnv, max_steps=6),
             ],
         )
         collector = Collector(
             env,
             CountingEnvCountPolicy(env.action_spec),
-            frames_per_batch=4,
+            frames_per_batch=6,
             total_frames=-1,
             trajs_per_batch=1,
             traj_format="cat",
@@ -5821,20 +5823,33 @@ class TestUniqueTraj:
         try:
             batches = iter(collector)
             trajectories = [next(batches)]
-            collector.reset(index=torch.tensor([[True], [False]]))
-            trajectories += [next(batches) for _ in range(5)]
+            collector.reset(index=torch.tensor([[False], [False], [True]]))
+            assert collector.stats()["trajectory_pending_frames"] == 2
+            while sum(traj.numel() == 7 for traj in trajectories) < 2:
+                trajectories.append(next(batches))
             traj_ids = [
                 traj["collector", "traj_ids"][0].item() for traj in trajectories
             ]
             assert len(set(traj_ids)) == len(traj_ids)
-            lengths = []
             for traj in trajectories:
                 obs = traj["observation"].squeeze(-1)
                 torch.testing.assert_close(
                     obs, torch.arange(obs.numel(), dtype=obs.dtype)
                 )
-                lengths.append(obs.numel())
-            assert 7 in lengths
+        finally:
+            collector.shutdown()
+
+    def test_partial_reset_state_carrying_env(self):
+        torch.manual_seed(0)
+        env = SerialEnv(2, PendulumEnv)
+        collector = Collector(env, None, frames_per_batch=4, total_frames=-1)
+        try:
+            batches = iter(collector)
+            last_th = next(batches)["next", "th"][:, -1].tolist()
+            collector.reset(index=torch.tensor([True, False]))
+            first_th = next(batches)["th"][:, 0].tolist()
+            assert first_th[0] != last_th[0]
+            assert first_th[1] == last_th[1]
         finally:
             collector.shutdown()
 
