@@ -213,7 +213,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             at the beginning of a batch collection. Each reset starts new
             trajectories with fresh ``("collector", "traj_ids")``. With
             ``trajs_per_batch``, episodes interrupted by the reset are
-            discarded. Defaults to ``False``.
+            discarded, unless ``set_truncated=True`` marks them as truncated,
+            in which case they are yielded. Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
             a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.

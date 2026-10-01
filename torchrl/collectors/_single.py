@@ -416,7 +416,8 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             at the beginning of a batch collection. Each reset starts new
             trajectories with fresh ``("collector", "traj_ids")``. With
             ``trajs_per_batch``, episodes interrupted by the reset are
-            discarded. Defaults to ``False``.
+            discarded, unless ``set_truncated=True`` marks them as truncated,
+            in which case they are yielded. Defaults to ``False``.
         postproc (Callable, optional): A post-processing transform, such as
             a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
@@ -2340,11 +2341,14 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         """Resets the environments to a new initial state.
 
         The environments that are reset start new trajectories with fresh
-        ``("collector", "traj_ids")``. When ``trajs_per_batch`` is in use,
-        also drops in-flight episodes and completed-but-not-yet-yielded
-        trajectories, so post-reset batches contain only post-reset data.
+        ``("collector", "traj_ids")``. When ``trajs_per_batch`` is in use, a
+        full reset also drops in-flight episodes and
+        completed-but-not-yet-yielded trajectories, so post-reset batches
+        contain only post-reset data. A partial reset (``index`` given) only
+        drops the in-flight episodes of the selected environments.
         """
-        self._flush_trajectory_assembly()
+        if index is None:
+            self._flush_trajectory_assembly()
         if self.track_traj_ids:
             collector_metadata = self._carrier.get("collector").clone()
         if index is not None:
@@ -2365,31 +2369,36 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             _reset = None
             self._carrier.zero_()
 
-        self._carrier.update(self.env.reset(**kwargs), inplace=True)
+        reset_input = self._carrier if index is not None else None
+        self._carrier.update(self.env.reset(reset_input, **kwargs), inplace=True)
         if self.track_traj_ids:
             self._carrier["collector"] = collector_metadata
-        self._start_new_trajectories(_reset)
+        replaced_ids = self._start_new_trajectories(_reset)
+        if index is not None:
+            self._drop_partial_trajectories(replaced_ids)
 
-    def _start_new_trajectories(self, reset_mask: torch.Tensor | None = None) -> None:
+    def _start_new_trajectories(
+        self, reset_mask: torch.Tensor | None = None
+    ) -> list[int]:
         """Assign fresh trajectory ids to the environments that were just reset.
 
         ``reset_mask`` is a boolean tensor whose leading dimensions match the
         environment batch size. All environments receive a new id when it is
-        ``None``.
+        ``None``. Returns the ids that were replaced.
         """
         if not self.track_traj_ids:
-            return
+            return []
         traj_ids = self._carrier.get(("collector", "traj_ids"))
         if reset_mask is None:
             new_ids = self._traj_pool.get_traj_and_increment(
                 traj_ids.numel(), device=traj_ids.device
             )
             self._carrier.set(("collector", "traj_ids"), new_ids.view(traj_ids.shape))
-            return
+            return traj_ids.reshape(-1).tolist()
         reset_mask = reset_mask.reshape(*traj_ids.shape, -1).any(-1).to(traj_ids.device)
         num_reset = int(reset_mask.sum())
         if not num_reset:
-            return
+            return []
         new_ids = self._traj_pool.get_traj_and_increment(
             num_reset, device=traj_ids.device
         )
@@ -2397,6 +2406,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             ("collector", "traj_ids"),
             traj_ids.masked_scatter(reset_mask, new_ids).reshape(traj_ids.shape),
         )
+        return traj_ids[reset_mask].tolist()
 
     def shutdown(
         self,

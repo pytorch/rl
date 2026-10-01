@@ -5777,18 +5777,64 @@ class TestUniqueTraj:
             frames_per_batch=4,
             total_frames=-1,
         )
+
+        def collect():
+            batch = next(batches)
+            return (
+                batch["observation"].squeeze(-1).tolist(),
+                batch["collector", "traj_ids"][:, 0].tolist(),
+            )
+
         try:
             batches = iter(collector)
-            before = next(batches)["collector", "traj_ids"][:, -1].tolist()
+            _, ids = collect()
             collector.reset(index=torch.zeros(2, 1, dtype=torch.bool))
-            assert next(batches)["collector", "traj_ids"][:, 0].tolist() == before
+            assert collect() == ([[2, 3], [2, 3]], ids)
             collector.reset(index=torch.tensor([[True], [False]]))
-            after_partial = next(batches)["collector", "traj_ids"][:, 0].tolist()
-            assert after_partial[0] not in before
-            assert after_partial[1] == before[1]
+            obs, partial_ids = collect()
+            assert obs == [[0, 1], [4, 5]]
+            assert partial_ids[0] not in ids
+            assert partial_ids[1] == ids[1]
             collector.reset()
-            after_full = next(batches)["collector", "traj_ids"][:, 0].tolist()
-            assert not set(after_full) & set(before + after_partial)
+            obs, full_ids = collect()
+            assert obs == [[0, 1], [0, 1]]
+            assert not set(full_ids) & set(ids + partial_ids)
+        finally:
+            collector.shutdown()
+
+    def test_partial_reset_trajs_per_batch(self):
+        env = SerialEnv(
+            2,
+            [
+                functools.partial(CountingEnv, max_steps=1),
+                functools.partial(CountingEnv, max_steps=6),
+            ],
+        )
+        collector = Collector(
+            env,
+            CountingEnvCountPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=-1,
+            trajs_per_batch=1,
+            traj_format="cat",
+        )
+        try:
+            batches = iter(collector)
+            trajectories = [next(batches)]
+            collector.reset(index=torch.tensor([[True], [False]]))
+            trajectories += [next(batches) for _ in range(5)]
+            traj_ids = [
+                traj["collector", "traj_ids"][0].item() for traj in trajectories
+            ]
+            assert len(set(traj_ids)) == len(traj_ids)
+            lengths = []
+            for traj in trajectories:
+                obs = traj["observation"].squeeze(-1)
+                torch.testing.assert_close(
+                    obs, torch.arange(obs.numel(), dtype=obs.dtype)
+                )
+                lengths.append(obs.numel())
+            assert 7 in lengths
         finally:
             collector.shutdown()
 

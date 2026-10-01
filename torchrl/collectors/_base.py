@@ -1663,6 +1663,23 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         return False
 
+    def _drop_partial_trajectories(self, traj_ids: list[int]) -> None:
+        """Drop the partially-assembled trajectories with the given ids.
+
+        Called by a partial ``reset()``: the selected environments abandon
+        their episodes while the others continue, so only the abandoned
+        chunks are discarded.
+        """
+        assembly = getattr(self, "_traj_assembly", None)
+        if assembly is None:
+            return
+        dropped_frames = 0
+        for traj_id in traj_ids:
+            for chunk in assembly[0].pop(traj_id, ()):
+                dropped_frames += chunk.numel()
+        if dropped_frames:
+            self._record_pending_trajectory_frames(-dropped_frames)
+
     def _flush_trajectory_assembly(self) -> None:
         """Drop partially-assembled and queued-but-not-yet-yielded trajectories.
 
