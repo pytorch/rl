@@ -1044,6 +1044,10 @@ class TestResetSetState:
         out_false = env.reset(td.clone(), set_state=False)
         assert out_false["nested", "x"].item() == 0.0
 
+        # set_state=True + select_reset_only is contradictory
+        with pytest.raises(ValueError, match="select_reset_only"):
+            env.reset(td.clone(), set_state=True, select_reset_only=True)
+
     def test_set_state_nested_key_default(self):
         env = _NestedStatelessEnv()
         td = TensorDict({("nested", "x"): torch.full((1,), 3.0)}, batch_size=())
