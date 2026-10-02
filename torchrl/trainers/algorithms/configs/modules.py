@@ -1283,6 +1283,9 @@ def _make_additive_gaussian_module(*args, **kwargs) -> AdditiveGaussianModule:
 class QValueModelConfig(ModelConfig):
     """A class to configure a QValueActor model.
 
+    Set ``spec`` with a Hydra target to configure the action spec. ``safe``
+    and ``strict_shape`` are passed to :class:`~torchrl.modules.QValueActor`.
+
     .. seealso:: :class:`torchrl.modules.QValueActor`
     """
 
@@ -1293,6 +1296,9 @@ class QValueModelConfig(ModelConfig):
     action_value_key: Any = None
     chosen_action_value_key: Any = None
     action_mask_key: Any = None
+    spec: Any = None
+    safe: bool = False
+    strict_shape: Any = True
 
     def __post_init__(self) -> None:
         super().__post_init__()
