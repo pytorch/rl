@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-01T06:30:15.402708+00:00",
+  "generated_at": "2026-10-02T06:31:02.052674+00:00",
   "analysis_period": {
     "start": "2026-09-08",
-    "end": "2026-09-30",
+    "end": "2026-10-01",
     "runs_analyzed": 60
   },
   "summary": {
-    "total_tests": 31839,
+    "total_tests": 31829,
     "flaky_count": 72,
     "new_flaky_count": 0,
     "resolved_count": 0
