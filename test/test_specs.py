@@ -371,6 +371,39 @@ class TestRanges:
         one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
         assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
 
+    @pytest.mark.parametrize(
+        "nvec",
+        [
+            [[1, 2], [3, 4]],
+            [[3, 2], [3, 2]],
+            [[[2, 4], [3, 5]], [[4, 5], [2, 3]], [[2, 3], [3, 2]]],
+        ],
+    )
+    def test_multi_discrete_conversion_nested(self, nvec):
+        spec = MultiCategorical(nvec)
+
+        sub_specs = spec.unbind(0)
+        widths = [s.to_one_hot_spec().shape[-1] for s in sub_specs]
+        is_homogeneous = len(set(widths)) == 1
+        expected_last_dim = widths[0] if is_homogeneous else -1
+
+        one_hot_spec = spec.to_one_hot_spec()
+        assert one_hot_spec.shape == (*spec.shape[:-1], expected_last_dim)
+
+        val = spec.rand()
+        if is_homogeneous:
+            onehot = spec.to_one_hot(val)
+            assert onehot.shape == (*spec.shape[:-1], widths[0])
+        else:
+            with pytest.raises(ValueError, match="homogeneous"):
+                spec.to_one_hot(val)
+
+    def test_multi_discrete_conversion_batched_dim(self):
+        spec = MultiCategorical([3, 2], shape=(4, 2))
+        val = spec.rand((10,))
+        onehot = spec.to_one_hot(val)
+        assert onehot.shape == (10, 4, 5)
+
 
 @pytest.mark.parametrize("is_complete", [True, False])
 @pytest.mark.parametrize("device", [None, *get_default_devices()])
