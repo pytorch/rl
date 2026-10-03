@@ -509,11 +509,6 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         tensordict: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
-        if kwargs.get("set_state", False):
-            raise NotImplementedError(
-                "EnvPool (AsyncEnvPool / ParallelEnv) currently drops kwargs and "
-                "cannot forward set_state=True to sub-environments."
-            )
         if self._current_step > 0:
             raise RuntimeError("Some envs are still processing a step.")
         if tensordict is None:
@@ -532,7 +527,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         if indices.shape != tensordict.shape:
             indices = expand_as_right(indices, tensordict)
         tensordict[self._env_idx_key] = indices
-        self.async_reset_send(tensordict)
+        self.async_reset_send(tensordict, **kwargs)
         tensordict = self.async_reset_recv(min_get=self.num_envs)
         return tensordict
 
@@ -1000,13 +995,14 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         *,
         per_env: bool,
         record_action: bool,
+        **kwargs,
     ) -> None:
         requests = [[] for _ in range(self.num_workers)]
         for env_index, local_td in _zip_strict(env_idx, local_tds):
             data = self._prepare_worker_data(
                 env_index, local_td, record_action=record_action
             )
-            requests[self._env_to_worker[env_index]].append((env_index, data))
+            requests[self._env_to_worker[env_index]].append((env_index, data, kwargs))
         for worker_index, worker_requests in enumerate(requests):
             if worker_requests:
                 self.input_queue[worker_index].put((msg, worker_requests, per_env))
@@ -1244,6 +1240,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self,
         tensordict: TensorDictBase | None = None,
         env_index: int | list[int] | None = None,
+        **kwargs,
     ) -> None:
         tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
         _per_env = isinstance(env_index, int)
@@ -1262,6 +1259,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             tensordict.unbind(0),
             per_env=_per_env,
             record_action=False,
+            **kwargs,
         )
 
     def async_reset_recv(
@@ -1314,6 +1312,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self,
         tensordict: TensorDictBase | None = None,
         env_index: int | list[int] | None = None,
+        **kwargs,
     ) -> None:
         tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
 
@@ -1329,6 +1328,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             tensordict.unbind(0),
             per_env=False,
             record_action=False,
+            **kwargs,
         )
 
     _async_private_reset_recv = async_reset_recv
@@ -1481,8 +1481,13 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                         next_slots.unbind(0),
                     )
                 ]
-            for env_index, data in requests:
-                local_input_queues[env_index].put((msg, data, per_env))
+            for request in requests:
+                if len(request) == 3:
+                    env_index, data, kwargs = request
+                else:
+                    env_index, data = request
+                    kwargs = {}
+                local_input_queues[env_index].put((msg, data, per_env, kwargs))
 
     @classmethod
     def _env_exec(
@@ -1518,11 +1523,15 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
 
             while True:
                 msg_data = input_queue.get()
-                if len(msg_data) == 3:
+                if len(msg_data) == 4:
+                    msg, data, per_env, kwargs = msg_data
+                elif len(msg_data) == 3:
                     msg, data, per_env = msg_data
+                    kwargs = {}
                 else:
                     msg, data = msg_data
                     per_env = False
+                    kwargs = {}
                 if grouped_input and msg != "shutdown":
                     if msg == "init_shm":
                         input_slots, result_slots, next_slots, clock = data
@@ -1544,7 +1553,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 elif msg == "reset":
                     if shared_slots is not None:
                         data = shared_slots[0].select(*data, strict=True)
-                    data = env.reset(data)
+                    data = env.reset(data, **kwargs)
                     target = per_env_reset_queue if per_env else reset_queue
                     if shared_slots is None:
                         data.set(cls._env_idx_key, NonTensorData(data=i))
@@ -1699,14 +1708,22 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         return env._step(td).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
-    def _reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
-        env, td, idx = env_td
-        return env.reset(td).set(cls._env_idx_key, NonTensorData(data=idx))
+    def _reset_func(cls, env_td: tuple):
+        if len(env_td) == 4:
+            env, td, idx, kwargs = env_td
+        else:
+            env, td, idx = env_td
+            kwargs = {}
+        return env.reset(td, **kwargs).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
-    def _private_reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
-        env, td, idx = env_td
-        return env._reset(td).set(cls._env_idx_key, NonTensorData(data=idx))
+    def _private_reset_func(cls, env_td: tuple):
+        if len(env_td) == 4:
+            env, td, idx, kwargs = env_td
+        else:
+            env, td, idx = env_td
+            kwargs = {}
+        return env._reset(td, **kwargs).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
     def _step_and_maybe_reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
@@ -1927,6 +1944,7 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         self,
         tensordict: TensorDictBase | None = None,
         env_index: int | list[int] | None = None,
+        **kwargs,
     ) -> None:
         tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
         _per_env = isinstance(env_index, int)
@@ -1941,7 +1959,7 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         tds = tensordict.unbind(0)
         envs = [self.envs[idx] for idx in env_idx]
         futures = [
-            self._pool.submit(self._reset_func, (env, td, idx))
+            self._pool.submit(self._reset_func, (env, td, idx, kwargs))
             for env, td, idx in zip(envs, tds, env_idx)
         ]
         if _per_env:
@@ -1982,6 +2000,7 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         self,
         tensordict: TensorDictBase | None = None,
         env_index: int | list[int] | None = None,
+        **kwargs,
     ) -> None:
         tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
 
@@ -1994,7 +2013,7 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         tds = tensordict.unbind(0)
         envs = [self.envs[idx] for idx in env_idx]
         futures = [
-            self._pool.submit(self._private_reset_func, (env, td, idx))
+            self._pool.submit(self._private_reset_func, (env, td, idx, kwargs))
             for env, td, idx in zip(envs, tds, env_idx)
         ]
         self._current_reset = self._current_reset + len(futures)

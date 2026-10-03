@@ -25,7 +25,7 @@ from tensordict.tensorclass import TensorClass
 from torch import nn
 
 from torchrl.data.tensor_specs import Binary, Composite, NonTensor, Unbounded
-from torchrl.envs import EnvBase, ParallelEnv, SerialEnv
+from torchrl.envs import AsyncEnvPool, EnvBase, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import StepCounter, Transform, TransformedEnv
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
@@ -1099,6 +1099,19 @@ class TestResetSetState:
             warnings.simplefilter("error", FutureWarning)
             out = env.reset(td)
         assert (out["observation"] == 0).all()
+
+    def test_async_pool_kwargs_forwarding(self):
+        # Regression test: verify that kwargs (like set_state=True) are properly
+        # forwarded across the AsyncEnvPool boundary to the sub-environments.
+        # _KwargOnlySetStateEnv is explicitly hardcoded to raise a RuntimeError
+        # if set_state=True reaches its _reset method.
+        env = AsyncEnvPool([_KwargOnlySetStateEnv, _KwargOnlySetStateEnv])
+        try:
+            with pytest.raises(RuntimeError, match="unexpected implicit set_state"):
+                # If kwargs are silently dropped, this will NOT raise an error and the test will fail!
+                env.reset(set_state=True)
+        finally:
+            env.close()
 
 
 _MOCK_ENV_KEY_CASES = [
