@@ -4923,13 +4923,37 @@ class MultiCategorical(Categorical):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
-        return torch.cat(
-            [
-                torch.nn.functional.one_hot(val[..., i], n).bool()
-                for i, n in enumerate(self.nvec)
-            ],
-            -1,
-        ).to(self.device)
+
+        if self.ndim > 1:
+            axis = val.ndim - self.ndim
+            sub_specs = self.unbind(0)
+            sub_vals = val.unbind(axis)
+
+            results = [
+                sub_spec.to_one_hot(sub_val, safe=False)
+                for sub_spec, sub_val in zip(sub_specs, sub_vals)
+            ]
+
+            first_shape = results[0].shape
+            is_homogeneous = all(result.shape == first_shape for result in results)
+
+            if is_homogeneous:
+                return torch.stack(results, dim=axis)
+            else:
+                raise ValueError(
+                    f"MultiDiscrete specification must be homogeneous across batch dimensions "
+                    f"to stack one-hot representations. Encountered varying shapes: "
+                    f"{[result.shape for result in results]}"
+                )
+
+        else:
+            return torch.cat(
+                [
+                    torch.nn.functional.one_hot(val[..., i], n).bool()
+                    for i, n in enumerate(self.nvec)
+                ],
+                -1,
+            ).to(self.device)
 
     def to_one_hot_spec(self) -> MultiOneHot:
         """Converts the spec to the equivalent one-hot spec."""
