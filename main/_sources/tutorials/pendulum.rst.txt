@@ -387,7 +387,7 @@ expect it to be ``False``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 350-386
+.. GENERATED FROM PYTHON SOURCE LINES 350-385
 
 Deterministic reset: ``env.reset(td, set_state=True)``
 ------------------------------------------------------
@@ -407,7 +407,7 @@ this is the ``set_state`` keyword argument of
 
 ``set_state`` is a keyword argument rather than a ``tensordict`` key on
 purpose: a per-step entry would not stack uniformly across a rollout and
-padding it would be costly. With ``set_state=False`` (the future default) any
+padding it would be costly. With ``set_state=False`` (the default) any
 state in the input is ignored and a fresh random state is drawn, which is what
 you want when starting a new trajectory from the terminal ``tensordict`` of a
 previous one. A ``_reset`` implementation honors the flag by reading it from
@@ -419,14 +419,13 @@ its keyword arguments, e.g.::
             return tensordict.copy()          # honor the provided state
         ...                                    # otherwise draw a fresh state
 
-.. note:: Until v0.15, passing a state-bearing ``tensordict`` to ``reset``
-   *without* ``set_state`` keeps honoring that state (for backwards
-   compatibility) but raises a ``FutureWarning``. Pass ``set_state=True`` (or
-   ``set_state=False``) explicitly to opt into the final behavior and silence
-   the warning.
+.. note:: Prior to v0.15, passing a state-bearing ``tensordict`` to ``reset``
+   *without* ``set_state`` kept honoring that state (for backwards
+   compatibility) but raised a ``FutureWarning``. As of v0.15, this behavior
+   has been finalized and ``set_state=False`` is the default.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 389-442
+.. GENERATED FROM PYTHON SOURCE LINES 388-441
 
 Environment metadata: ``env.*_spec``
 ------------------------------------
@@ -482,7 +481,7 @@ For non batch-locked environments, such as the one in our example (see below),
 this is irrelevant as the environment batch size will most likely be empty.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 442-493
+.. GENERATED FROM PYTHON SOURCE LINES 441-492
 
 .. code-block:: Python
 
@@ -544,7 +543,7 @@ this is irrelevant as the environment batch size will most likely be empty.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 494-504
+.. GENERATED FROM PYTHON SOURCE LINES 493-503
 
 Reproducible experiments: seeding
 ---------------------------------
@@ -557,7 +556,7 @@ incorporates a mechanism that allows seeding multiple environments with a
 different pseudo-random and reproducible seed.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 504-513
+.. GENERATED FROM PYTHON SOURCE LINES 503-512
 
 .. code-block:: Python
 
@@ -577,7 +576,7 @@ different pseudo-random and reproducible seed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 514-525
+.. GENERATED FROM PYTHON SOURCE LINES 513-524
 
 Wrapping things together: the :class:`~torchrl.envs.EnvBase` class
 ------------------------------------------------------------------
@@ -591,7 +590,7 @@ We add a static method :meth:`PendulumEnv.gen_params` which deterministically
 generates a set of hyperparameters to be used during execution:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 525-552
+.. GENERATED FROM PYTHON SOURCE LINES 524-551
 
 .. code-block:: Python
 
@@ -629,7 +628,7 @@ generates a set of hyperparameters to be used during execution:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 553-559
+.. GENERATED FROM PYTHON SOURCE LINES 552-558
 
 We define the environment as non-``batch_locked`` by turning the ``homonymous``
 attribute to ``False``. This means that we will **not** enforce the input
@@ -638,7 +637,7 @@ attribute to ``False``. This means that we will **not** enforce the input
 The following code will just put together the pieces we have coded above.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 559-588
+.. GENERATED FROM PYTHON SOURCE LINES 558-587
 
 .. code-block:: Python
 
@@ -678,7 +677,7 @@ The following code will just put together the pieces we have coded above.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 589-597
+.. GENERATED FROM PYTHON SOURCE LINES 588-596
 
 Testing our environment
 -----------------------
@@ -689,7 +688,7 @@ matches the one dictated by its specs.
 Let us try it out:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 597-601
+.. GENERATED FROM PYTHON SOURCE LINES 596-600
 
 .. code-block:: Python
 
@@ -704,13 +703,13 @@ Let us try it out:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 602-605
+.. GENERATED FROM PYTHON SOURCE LINES 601-604
 
 We can have a look at our specs to have a visual representation of the environment
 signature:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 605-610
+.. GENERATED FROM PYTHON SOURCE LINES 604-609
 
 .. code-block:: Python
 
@@ -883,12 +882,12 @@ signature:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 611-613
+.. GENERATED FROM PYTHON SOURCE LINES 610-612
 
 We can execute a couple of commands too to check that the output structure
 matches what is expected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 613-617
+.. GENERATED FROM PYTHON SOURCE LINES 612-616
 
 .. code-block:: Python
 
@@ -928,7 +927,7 @@ matches what is expected.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 618-624
+.. GENERATED FROM PYTHON SOURCE LINES 617-623
 
 We can run the :func:`env.rand_step` to generate
 an action randomly from the ``action_spec`` domain. A ``tensordict`` containing
@@ -937,7 +936,7 @@ environment is stateless. In stateful contexts, ``env.rand_step()`` works
 perfectly too.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 624-627
+.. GENERATED FROM PYTHON SOURCE LINES 623-626
 
 .. code-block:: Python
 
@@ -998,7 +997,7 @@ perfectly too.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 628-643
+.. GENERATED FROM PYTHON SOURCE LINES 627-642
 
 Transforming an environment
 ---------------------------
@@ -1016,7 +1015,7 @@ dimension. We also pass them as ``in_keys_inv`` to squeeze them back to their
 original shape once they are passed as input in the next iteration.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 643-653
+.. GENERATED FROM PYTHON SOURCE LINES 642-652
 
 .. code-block:: Python
 
@@ -1037,7 +1036,7 @@ original shape once they are passed as input in the next iteration.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 654-713
+.. GENERATED FROM PYTHON SOURCE LINES 653-712
 
 Writing custom transforms
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1099,7 +1098,7 @@ Let us code new transforms that will compute the ``sine`` and ``cosine``
 values of the position angle, as these values are more useful to us to learn
 a policy than the raw angle value:
 
-.. GENERATED FROM PYTHON SOURCE LINES 713-768
+.. GENERATED FROM PYTHON SOURCE LINES 712-767
 
 .. code-block:: Python
 
@@ -1176,13 +1175,13 @@ a policy than the raw angle value:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 769-772
+.. GENERATED FROM PYTHON SOURCE LINES 768-771
 
 Concatenates the observations onto an "observation" entry.
 ``del_keys=False`` ensures that we keep these values for the next
 iteration.
 
-.. GENERATED FROM PYTHON SOURCE LINES 772-777
+.. GENERATED FROM PYTHON SOURCE LINES 771-776
 
 .. code-block:: Python
 
@@ -1210,11 +1209,11 @@ iteration.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 778-779
+.. GENERATED FROM PYTHON SOURCE LINES 777-778
 
 Once more, let us check that our environment specs match what is received:
 
-.. GENERATED FROM PYTHON SOURCE LINES 779-781
+.. GENERATED FROM PYTHON SOURCE LINES 778-780
 
 .. code-block:: Python
 
@@ -1227,7 +1226,7 @@ Once more, let us check that our environment specs match what is received:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 782-799
+.. GENERATED FROM PYTHON SOURCE LINES 781-798
 
 Executing a rollout
 -------------------
@@ -1247,7 +1246,7 @@ Executing a rollout is a succession of simple steps:
 These operations have been conveniently wrapped in the :meth:`~torchrl.envs.EnvBase.rollout`
 method, from which we provide a simplified version here below.
 
-.. GENERATED FROM PYTHON SOURCE LINES 799-816
+.. GENERATED FROM PYTHON SOURCE LINES 798-815
 
 .. code-block:: Python
 
@@ -1328,7 +1327,7 @@ method, from which we provide a simplified version here below.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 817-828
+.. GENERATED FROM PYTHON SOURCE LINES 816-827
 
 Batching computations
 ---------------------
@@ -1342,7 +1341,7 @@ without recreating the environment.
 To do this, we just generate parameters with the desired shape.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 828-835
+.. GENERATED FROM PYTHON SOURCE LINES 827-834
 
 .. code-block:: Python
 
@@ -1436,14 +1435,14 @@ To do this, we just generate parameters with the desired shape.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 836-840
+.. GENERATED FROM PYTHON SOURCE LINES 835-839
 
 Executing a rollout with a batch of data requires us to reset the environment
 out of the rollout function, since we need to define the batch_size
 dynamically and this is not supported by :meth:`~torchrl.envs.EnvBase.rollout`:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 840-849
+.. GENERATED FROM PYTHON SOURCE LINES 839-848
 
 .. code-block:: Python
 
@@ -1516,7 +1515,7 @@ dynamically and this is not supported by :meth:`~torchrl.envs.EnvBase.rollout`:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 850-866
+.. GENERATED FROM PYTHON SOURCE LINES 849-865
 
 Training a simple policy
 ------------------------
@@ -1535,7 +1534,7 @@ be coded with a custom environment in TorchRL.
 Let us first write the policy network:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 866-884
+.. GENERATED FROM PYTHON SOURCE LINES 865-883
 
 .. code-block:: Python
 
@@ -1564,12 +1563,12 @@ Let us first write the policy network:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 885-887
+.. GENERATED FROM PYTHON SOURCE LINES 884-886
 
 and our optimizer:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 887-890
+.. GENERATED FROM PYTHON SOURCE LINES 886-889
 
 .. code-block:: Python
 
@@ -1583,7 +1582,7 @@ and our optimizer:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 891-905
+.. GENERATED FROM PYTHON SOURCE LINES 890-904
 
 Training loop
 ^^^^^^^^^^^^^
@@ -1600,7 +1599,7 @@ At the end of the training loop, we should have a final reward close to 0
 which demonstrates that the pendulum is upward and still as desired.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 905-955
+.. GENERATED FROM PYTHON SOURCE LINES 904-954
 
 .. code-block:: Python
 
@@ -1667,12 +1666,12 @@ which demonstrates that the pendulum is upward and still as desired.
 
  .. code-block:: none
 
-      0%|          | 0/31 [00:00<?, ?it/s]    reward: -6.4381, last reward: -6.6717, gradient norm:  7.013:   0%|          | 0/31 [00:00<?, ?it/s]    reward: -6.4381, last reward: -6.6717, gradient norm:  7.013:   3%|▎         | 1/31 [00:00<00:04,  6.90it/s]    reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   3%|▎         | 1/31 [00:00<00:04,  6.90it/s]     reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   6%|▋         | 2/31 [00:00<00:04,  6.99it/s]    reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:   6%|▋         | 2/31 [00:00<00:04,  6.99it/s]    reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:  10%|▉         | 3/31 [00:00<00:03,  7.31it/s]    reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  10%|▉         | 3/31 [00:00<00:03,  7.31it/s]     reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  13%|█▎        | 4/31 [00:00<00:03,  7.46it/s]    reward: -6.5832, last reward: -4.3353, gradient norm:  3.126:  13%|█▎        | 4/31 [00:00<00:03,  7.46it/s]    reward: -6.5832, last reward: -4.3353, gradient norm:  3.126:  16%|█▌        | 5/31 [00:00<00:03,  7.55it/s]    reward: -6.7391, last reward: -4.1995, gradient norm:  2.576:  16%|█▌        | 5/31 [00:00<00:03,  7.55it/s]    reward: -6.7391, last reward: -4.1995, gradient norm:  2.576:  19%|█▉        | 6/31 [00:00<00:03,  7.60it/s]    reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  19%|█▉        | 6/31 [00:00<00:03,  7.60it/s]    reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  23%|██▎       | 7/31 [00:00<00:03,  7.64it/s]    reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  23%|██▎       | 7/31 [00:01<00:03,  7.64it/s]    reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  26%|██▌       | 8/31 [00:01<00:02,  7.68it/s]    reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  26%|██▌       | 8/31 [00:01<00:02,  7.68it/s]    reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  29%|██▉       | 9/31 [00:01<00:02,  7.72it/s]    reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  29%|██▉       | 9/31 [00:01<00:02,  7.72it/s]    reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  32%|███▏      | 10/31 [00:01<00:02,  7.73it/s]    reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  32%|███▏      | 10/31 [00:01<00:02,  7.73it/s]    reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  35%|███▌      | 11/31 [00:01<00:02,  7.74it/s]    reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  35%|███▌      | 11/31 [00:01<00:02,  7.74it/s]    reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  39%|███▊      | 12/31 [00:01<00:02,  7.74it/s]    reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  39%|███▊      | 12/31 [00:01<00:02,  7.74it/s]    reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  42%|████▏     | 13/31 [00:01<00:02,  7.75it/s]    reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  42%|████▏     | 13/31 [00:01<00:02,  7.75it/s]    reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  45%|████▌     | 14/31 [00:01<00:02,  7.75it/s]    reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  45%|████▌     | 14/31 [00:01<00:02,  7.75it/s]    reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  48%|████▊     | 15/31 [00:01<00:02,  7.75it/s]    reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  48%|████▊     | 15/31 [00:02<00:02,  7.75it/s]    reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  52%|█████▏    | 16/31 [00:02<00:01,  7.75it/s]    reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  52%|█████▏    | 16/31 [00:02<00:01,  7.75it/s]    reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  55%|█████▍    | 17/31 [00:02<00:01,  7.76it/s]    reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  55%|█████▍    | 17/31 [00:02<00:01,  7.76it/s]    reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  58%|█████▊    | 18/31 [00:02<00:01,  7.75it/s]    reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  58%|█████▊    | 18/31 [00:02<00:01,  7.75it/s]    reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  61%|██████▏   | 19/31 [00:02<00:01,  7.74it/s]    reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  61%|██████▏   | 19/31 [00:02<00:01,  7.74it/s]     reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  65%|██████▍   | 20/31 [00:02<00:01,  7.70it/s]    reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  65%|██████▍   | 20/31 [00:02<00:01,  7.70it/s]    reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  68%|██████▊   | 21/31 [00:02<00:01,  7.65it/s]    reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  68%|██████▊   | 21/31 [00:02<00:01,  7.65it/s]    reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  71%|███████   | 22/31 [00:02<00:01,  7.65it/s]    reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  71%|███████   | 22/31 [00:03<00:01,  7.65it/s]     reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  74%|███████▍  | 23/31 [00:03<00:01,  7.63it/s]    reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  74%|███████▍  | 23/31 [00:03<00:01,  7.63it/s]    reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  77%|███████▋  | 24/31 [00:03<00:00,  7.62it/s]    reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  77%|███████▋  | 24/31 [00:03<00:00,  7.62it/s]    reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  81%|████████  | 25/31 [00:03<00:00,  7.60it/s]    reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  81%|████████  | 25/31 [00:03<00:00,  7.60it/s]    reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  84%|████████▍ | 26/31 [00:03<00:00,  7.61it/s]    reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  84%|████████▍ | 26/31 [00:03<00:00,  7.61it/s]     reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  87%|████████▋ | 27/31 [00:03<00:00,  7.64it/s]    reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  87%|████████▋ | 27/31 [00:03<00:00,  7.64it/s]    reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  90%|█████████ | 28/31 [00:03<00:00,  7.63it/s]    reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  90%|█████████ | 28/31 [00:03<00:00,  7.63it/s]    reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  94%|█████████▎| 29/31 [00:03<00:00,  7.62it/s]    reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  94%|█████████▎| 29/31 [00:03<00:00,  7.62it/s]    reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  97%|█████████▋| 30/31 [00:03<00:00,  7.63it/s]    reward: -6.0550, last reward: -8.1112, gradient norm:  8.922:  97%|█████████▋| 30/31 [00:04<00:00,  7.63it/s]    reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:04<00:00,  7.65it/s]    reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:04<00:00,  7.64it/s]
+      0%|          | 0/31 [00:00<?, ?it/s]    reward: -6.4381, last reward: -6.6717, gradient norm:  7.013:   0%|          | 0/31 [00:00<?, ?it/s]    reward: -6.4381, last reward: -6.6717, gradient norm:  7.013:   3%|▎         | 1/31 [00:00<00:04,  7.42it/s]    reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   3%|▎         | 1/31 [00:00<00:04,  7.42it/s]     reward: -6.2590, last reward: -6.5361, gradient norm:  2.55:   6%|▋         | 2/31 [00:00<00:03,  7.32it/s]    reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:   6%|▋         | 2/31 [00:00<00:03,  7.32it/s]    reward: -6.1138, last reward: -6.1229, gradient norm:  3.929:  10%|▉         | 3/31 [00:00<00:03,  7.33it/s]    reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  10%|▉         | 3/31 [00:00<00:03,  7.33it/s]     reward: -6.1932, last reward: -7.0100, gradient norm:  6.44:  13%|█▎        | 4/31 [00:00<00:03,  7.34it/s]    reward: -6.5832, last reward: -4.3353, gradient norm:  3.126:  13%|█▎        | 4/31 [00:00<00:03,  7.34it/s]    reward: -6.5832, last reward: -4.3353, gradient norm:  3.126:  16%|█▌        | 5/31 [00:00<00:03,  7.35it/s]    reward: -6.7391, last reward: -4.1995, gradient norm:  2.576:  16%|█▌        | 5/31 [00:00<00:03,  7.35it/s]    reward: -6.7391, last reward: -4.1995, gradient norm:  2.576:  19%|█▉        | 6/31 [00:00<00:03,  7.36it/s]    reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  19%|█▉        | 6/31 [00:00<00:03,  7.36it/s]    reward: -6.8264, last reward: -5.2494, gradient norm:  7.198:  23%|██▎       | 7/31 [00:00<00:03,  7.40it/s]    reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  23%|██▎       | 7/31 [00:01<00:03,  7.40it/s]    reward: -6.7867, last reward: -5.3624, gradient norm:  4.171:  26%|██▌       | 8/31 [00:01<00:03,  7.44it/s]    reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  26%|██▌       | 8/31 [00:01<00:03,  7.44it/s]    reward: -6.9220, last reward: -4.8760, gradient norm:  1.766:  29%|██▉       | 9/31 [00:01<00:02,  7.47it/s]    reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  29%|██▉       | 9/31 [00:01<00:02,  7.47it/s]    reward: -6.6887, last reward: -5.4955, gradient norm:  21.92:  32%|███▏      | 10/31 [00:01<00:02,  7.48it/s]    reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  32%|███▏      | 10/31 [00:01<00:02,  7.48it/s]    reward: -6.7179, last reward: -4.7035, gradient norm:  3.056:  35%|███▌      | 11/31 [00:01<00:02,  7.51it/s]    reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  35%|███▌      | 11/31 [00:01<00:02,  7.51it/s]    reward: -6.5741, last reward: -4.2936, gradient norm:  2.083:  39%|███▊      | 12/31 [00:01<00:02,  7.51it/s]    reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  39%|███▊      | 12/31 [00:01<00:02,  7.51it/s]    reward: -6.7024, last reward: -4.7707, gradient norm:  1.039:  42%|████▏     | 13/31 [00:01<00:02,  7.49it/s]    reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  42%|████▏     | 13/31 [00:01<00:02,  7.49it/s]    reward: -6.3238, last reward: -5.9996, gradient norm:  14.73:  45%|████▌     | 14/31 [00:01<00:02,  7.45it/s]    reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  45%|████▌     | 14/31 [00:02<00:02,  7.45it/s]    reward: -6.2495, last reward: -7.7481, gradient norm:  3.358:  48%|████▊     | 15/31 [00:02<00:02,  7.46it/s]    reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  48%|████▊     | 15/31 [00:02<00:02,  7.46it/s]    reward: -6.3425, last reward: -8.7920, gradient norm:  14.18:  52%|█████▏    | 16/31 [00:02<00:02,  7.42it/s]    reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  52%|█████▏    | 16/31 [00:02<00:02,  7.42it/s]    reward: -6.0427, last reward: -9.2459, gradient norm:  4.408:  55%|█████▍    | 17/31 [00:02<00:01,  7.40it/s]    reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  55%|█████▍    | 17/31 [00:02<00:01,  7.40it/s]    reward: -5.8613, last reward: -4.6345, gradient norm:  27.46:  58%|█████▊    | 18/31 [00:02<00:01,  7.40it/s]    reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  58%|█████▊    | 18/31 [00:02<00:01,  7.40it/s]    reward: -5.8230, last reward: -6.0143, gradient norm:  33.68:  61%|██████▏   | 19/31 [00:02<00:01,  7.41it/s]    reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  61%|██████▏   | 19/31 [00:02<00:01,  7.41it/s]     reward: -5.7731, last reward: -5.6127, gradient norm:  25.3:  65%|██████▍   | 20/31 [00:02<00:01,  7.41it/s]    reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  65%|██████▍   | 20/31 [00:02<00:01,  7.41it/s]    reward: -5.8158, last reward: -5.7852, gradient norm:  13.66:  68%|██████▊   | 21/31 [00:02<00:01,  7.41it/s]    reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  68%|██████▊   | 21/31 [00:02<00:01,  7.41it/s]    reward: -5.9687, last reward: -4.9258, gradient norm:  10.83:  71%|███████   | 22/31 [00:02<00:01,  7.42it/s]    reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  71%|███████   | 22/31 [00:03<00:01,  7.42it/s]     reward: -5.9617, last reward: -4.2573, gradient norm:  1.98:  74%|███████▍  | 23/31 [00:03<00:01,  7.44it/s]    reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  74%|███████▍  | 23/31 [00:03<00:01,  7.44it/s]    reward: -6.1261, last reward: -7.9520, gradient norm:  53.99:  77%|███████▋  | 24/31 [00:03<00:00,  7.51it/s]    reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  77%|███████▋  | 24/31 [00:03<00:00,  7.51it/s]    reward: -6.1183, last reward: -7.9438, gradient norm:  1.678:  81%|████████  | 25/31 [00:03<00:00,  7.54it/s]    reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  81%|████████  | 25/31 [00:03<00:00,  7.54it/s]    reward: -5.9948, last reward: -8.6588, gradient norm:  12.05:  84%|████████▍ | 26/31 [00:03<00:00,  7.58it/s]    reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  84%|████████▍ | 26/31 [00:03<00:00,  7.58it/s]     reward: -6.2913, last reward: -7.3637, gradient norm:  4.09:  87%|████████▋ | 27/31 [00:03<00:00,  7.59it/s]    reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  87%|████████▋ | 27/31 [00:03<00:00,  7.59it/s]    reward: -6.2270, last reward: -7.3009, gradient norm:  13.6:  90%|█████████ | 28/31 [00:03<00:00,  7.61it/s]    reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  90%|█████████ | 28/31 [00:03<00:00,  7.61it/s]    reward: -6.1598, last reward: -8.9761, gradient norm:  8.041:  94%|█████████▎| 29/31 [00:03<00:00,  7.61it/s]    reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  94%|█████████▎| 29/31 [00:04<00:00,  7.61it/s]    reward: -6.0858, last reward: -7.5394, gradient norm:  2.045:  97%|█████████▋| 30/31 [00:04<00:00,  7.60it/s]    reward: -6.0550, last reward: -8.1112, gradient norm:  8.922:  97%|█████████▋| 30/31 [00:04<00:00,  7.60it/s]    reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:04<00:00,  7.61it/s]    reward: -6.0550, last reward: -8.1112, gradient norm:  8.922: 100%|██████████| 31/31 [00:04<00:00,  7.48it/s]
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 956-972
+.. GENERATED FROM PYTHON SOURCE LINES 955-971
 
 Conclusion
 ----------
@@ -1694,7 +1693,7 @@ scratch. We touched the subjects of:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.275 seconds)
+   **Total running time of the script:** (0 minutes 4.370 seconds)
 
 
 .. _sphx_glr_download_tutorials_pendulum.py:

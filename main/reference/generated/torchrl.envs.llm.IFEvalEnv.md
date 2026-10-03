@@ -2068,7 +2068,7 @@ Return type:
 
 Module
 
-reset(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, ***, *set_state: bool | None = None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+reset(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, ***, *set_state: bool = False*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Resets the environment.
 
@@ -2088,13 +2088,10 @@ the relevant state entries - e.g. `"th"`/`"thdot"` - are
 honored; for stateful envs that support it, the underlying
 set-state API is used). Passing `set_state=True` to an env that
 cannot honor a provided state raises `NotImplementedError`.
-If `False`, any state present in `tensordict` is ignored and a
-fresh (typically random) initial state is generated. The default
-(`None`) preserves the historical behavior of honoring state
-found in `tensordict`, but emits a `FutureWarning`: from
-**v0.15** an unspecified `set_state` will be treated as
-`False`. This is a keyword argument, deliberately *not* a
-tensordict key, so it never stacks/pads across a rollout.
+If `False` (default), any state present in `tensordict` is ignored and a
+fresh (typically random) initial state is generated. This is a keyword
+argument, deliberately *not* a tensordict key, so it never
+stacks/pads across a rollout.
 - **kwargs** (*optional*) - other arguments to be passed to the native
 reset function.
 
@@ -2235,7 +2232,7 @@ UnboundedContinuous(
 
 Returns the reward spec of the env as if it had no batch dimensions.
 
-rollout(*max_steps: int*, *policy: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *callback: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase), ...], Any] | None = None*, ***, *actions: Iterable[Any] | None = None*, *auto_reset: bool = True*, *auto_cast_to_device: bool = False*, *break_when_any_done: bool | None = None*, *break_when_all_done: bool | None = None*, *return_contiguous: bool | None = False*, *tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *set_truncated: bool = False*, *out=None*, *trust_policy: bool = False*, *storing_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *set_state: bool | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+rollout(*max_steps: int*, *policy: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *callback: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase), ...], Any] | None = None*, ***, *actions: Iterable[Any] | None = None*, *auto_reset: bool = True*, *auto_cast_to_device: bool = False*, *break_when_any_done: bool | None = None*, *break_when_all_done: bool | None = None*, *return_contiguous: bool | None = False*, *tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *set_truncated: bool = False*, *out=None*, *trust_policy: bool = False*, *storing_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *set_state: bool = False*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Executes a rollout in the environment.
 
@@ -2317,7 +2314,7 @@ Defaults to `None`.
 Pass `set_state=True` to start the rollout *deterministically*
 from the state contained in `tensordict`. See
 [`reset()`](torchrl.envs.EnvBase.html#id1) for details. Defaults to
-`None`.
+`False`.
 
 Returns:
 

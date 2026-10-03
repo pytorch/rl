@@ -185,10 +185,8 @@ the state entries found in `td`; for stateful environments that support it,
 the underlying set-state API is used; envs that cannot honor a provided state
 raise `NotImplementedError`. `set_state` is a keyword argument (not a
 tensordict key) so it never stacks/pads across a rollout. When `set_state` is
-left unspecified but the tensordict carries state, the state is honored for
-backwards compatibility and a `FutureWarning` is emitted: from v0.15 an
-unspecified `set_state` will be treated as `False` (state ignored, fresh
-reset).
+left unspecified but the tensordict carries state, it defaults to `False` (state
+ignored, fresh reset). Prior to v0.15, this was implicitly treated as `True`.
 - `env.step()`: a step method that takes a [`tensordict.TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) input
 containing an input action as well as other inputs (for model-based or stateless
 environments, for instance).
