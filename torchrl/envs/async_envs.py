@@ -509,6 +509,11 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         tensordict: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
+        if kwargs.get("set_state", False):
+            raise NotImplementedError(
+                "EnvPool (AsyncEnvPool / ParallelEnv) currently drops kwargs and "
+                "cannot forward set_state=True to sub-environments."
+            )
         if self._current_step > 0:
             raise RuntimeError("Some envs are still processing a step.")
         if tensordict is None:

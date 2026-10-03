@@ -3113,7 +3113,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self,
         tensordict: TensorDictBase | None = None,
         *,
-        set_state: bool | None = None,
+        set_state: bool = False,
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
@@ -3132,13 +3132,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 honored; for stateful envs that support it, the underlying
                 set-state API is used). Passing ``set_state=True`` to an env that
                 cannot honor a provided state raises ``NotImplementedError``.
-                If ``False``, any state present in ``tensordict`` is ignored and a
-                fresh (typically random) initial state is generated. The default
-                (``None``) preserves the historical behavior of honoring state
-                found in ``tensordict``, but emits a :class:`FutureWarning`: from
-                **v0.15** an unspecified ``set_state`` will be treated as
-                ``False``. This is a keyword argument, deliberately *not* a
-                tensordict key, so it never stacks/pads across a rollout.
+                If ``False`` (default), any state present in ``tensordict`` is ignored and a
+                fresh (typically random) initial state is generated. This is a keyword
+                argument, deliberately *not* a tensordict key, so it never
+                stacks/pads across a rollout.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
 
@@ -3153,12 +3150,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self._assert_tensordict_shape(tensordict)
 
         select_reset_only = kwargs.pop("select_reset_only", False)
-        set_state = self._resolve_set_state(set_state, tensordict, select_reset_only)
+        set_state = self._resolve_set_state(set_state, select_reset_only)
         if set_state is not None:
             # Only forward ``set_state`` to envs that consume it. This keeps the
             # kwargs of envs that blindly forward to a native backend (gym, brax,
             # ...) clean -- those return ``None`` from ``_resolve_set_state``.
             kwargs["set_state"] = set_state
+
         if select_reset_only and tensordict is not None:
             # When making rollouts with step_and_maybe_reset, it can happen that a tensordict has
             # keys that are used by reset to optionally set the reset state (eg, the fen in chess). If that's the
@@ -3186,22 +3184,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         return self._reset_proc_data(tensordict, tensordict_reset)
 
-    def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
-        """Whether ``tensordict`` populates any leaf of this env's ``state_spec``."""
-        if tensordict is None:
-            return False
-        state_keys = list(self.state_spec.keys(True, True))
-        if not state_keys:
-            return False
-        # ``leaves_only=False`` so that NonTensor state entries (e.g. ChessEnv's
-        # ``fen``/``pgn``) are detected too -- ``leaves_only=True`` filters them out.
-        td_keys = set(tensordict.keys(include_nested=True, leaves_only=False))
-        return any(key in td_keys for key in state_keys)
-
     def _resolve_set_state(
         self,
-        set_state: bool | None,
-        tensordict: TensorDictBase | None,
+        set_state: bool,
         select_reset_only: bool,
     ) -> bool | None:
         """Validate and resolve the ``set_state`` reset kwarg.
@@ -3210,8 +3195,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         bool for envs that support deterministic resets, or ``None`` for envs
         that do not -- in which case nothing is forwarded). Raises if
         ``set_state=True`` is requested on an unsupported env or in an
-        incompatible context, and emits the transition ``FutureWarning`` when
-        state is honored implicitly.
+        incompatible context.
         """
         if set_state is True:
             if not self._supports_set_state:
@@ -3230,22 +3214,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return None
         if select_reset_only:
             # Rollout / auto-reset path: never honor a provided state.
-            return False
-        if set_state is None:
-            # Transition behavior: honor state implicitly if present, but warn.
-            # TODO(v0.15): treat an unspecified ``set_state`` as ``False`` and
-            #  drop this branch (and the ``select_reset_only`` strip can follow).
-            if self._input_td_has_state(tensordict):
-                warnings.warn(
-                    "A reset tensordict carrying state was passed to `reset()` "
-                    "without specifying `set_state`. The state is honored for now, "
-                    "but from v0.15 it will be ignored unless you pass "
-                    "`set_state=True` explicitly (pass `set_state=False` to opt "
-                    "into the future behavior and silence this warning).",
-                    category=FutureWarning,
-                    stacklevel=2,
-                )
-                return True
             return False
         return bool(set_state)
 
@@ -3378,7 +3346,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         if tensordict is not None:
             # all_actions enumerates the actions available *from the provided
             # state*, so honor it deterministically where the env supports it.
-            self.reset(tensordict, set_state=True if self._supports_set_state else None)
+            self.reset(
+                tensordict, set_state=True if self._supports_set_state else False
+            )
 
         return self.full_action_spec.enumerate(use_mask=True)
 
@@ -3467,7 +3437,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         out=None,
         trust_policy: bool = False,
         storing_device: DEVICE_TYPING | None = None,
-        set_state: bool | None = None,
+        set_state: bool = False,
     ) -> TensorDictBase:
         """Executes a rollout in the environment.
 
@@ -3541,7 +3511,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 Pass ``set_state=True`` to start the rollout *deterministically*
                 from the state contained in ``tensordict``. See
                 :meth:`~torchrl.envs.EnvBase.reset` for details. Defaults to
-                ``None``.
+                ``False``.
 
         Returns:
             TensorDict object containing the resulting trajectory.

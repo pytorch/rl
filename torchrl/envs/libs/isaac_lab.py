@@ -530,12 +530,6 @@ class IsaacLabWrapper(GymWrapper):
         obs, info = self._partial_reset(reset=reset, **kwargs)
         return self._build_reset_tensordict(obs, info)
 
-    def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
-        # Isaac Lab honors a ``scene_state`` snapshot passed as a reset kwarg,
-        # never tensordict state entries, so a reset tensordict carrying
-        # observations must not trigger the implicit-state transition warning.
-        return False
-
     @property
     def _native_autoreset_enabled(self) -> bool:
         """Whether the wrapping pipeline has ``native_autoreset=True``.
