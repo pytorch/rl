@@ -219,7 +219,7 @@ if [[ "$TORCH_VERSION" == "nightly" ]]; then
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv_pip_install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      uv_pip_install "torch==2.13.0" "torchvision==0.28.0" --index-url https://download.pytorch.org/whl/cpu
   else
       uv_pip_install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
@@ -325,7 +325,8 @@ export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
-bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" \
+  "$TORCH_VERSION" "${TORCHRL_TD_EXPECTATION:-auto}"
 
 Xvfb :99 -screen 0 1024x768x24 &
 

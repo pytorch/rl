@@ -66,7 +66,8 @@ jobs:
           export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=nightly
+          export TORCH_VERSION=stable
+          export TORCHRL_TD_EXPECTATION=main
         fi
         export TD_GET_DEFAULTS_TO_NONE=1
         # Set env vars from matrix
