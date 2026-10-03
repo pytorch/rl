@@ -1066,9 +1066,6 @@ class RayCollector(BaseCollector):
             out_td = []
             for r in pending_tasks:
                 rollouts = ray.get(r)
-                ray.internal.free(
-                    r
-                )  # should not be necessary, deleted automatically when ref count is down to 0
                 out_td.append(rollouts)
 
             # Handle case where replay_buffer is used and rollouts are None
@@ -1153,9 +1150,6 @@ class RayCollector(BaseCollector):
 
             # Retrieve single rollouts
             out_td = ray.get(future)
-            ray.internal.free(
-                [future]
-            )  # should not be necessary, deleted automatically when ref count is down to 0
 
             # Track collected frames - use frames_per_batch since out_td might be None
             # when using RayReplayBuffer (sub-collectors write directly to buffer)
