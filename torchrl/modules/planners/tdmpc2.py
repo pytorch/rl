@@ -14,6 +14,7 @@ import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
+from ...envs.utils import exploration_type, ExplorationType
 from ..models.tdmpc2 import symlog_two_hot_decode, TdMpc2QEnsemble
 
 if TYPE_CHECKING:
@@ -426,8 +427,6 @@ class TdMpc2Planner(TensorDictModuleBase):
             1
         )
         action = selected[0]
-        from ...envs.utils import exploration_type, ExplorationType
-
         interaction = exploration_type()
         if interaction is None:
             use_exploration_noise = self.training
