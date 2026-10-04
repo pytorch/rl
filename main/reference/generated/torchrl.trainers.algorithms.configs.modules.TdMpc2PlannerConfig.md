@@ -1,0 +1,5 @@
+# torchrl.trainers.algorithms.configs.modules.TdMpc2PlannerConfig
+
+*class*torchrl.trainers.algorithms.configs.modules.TdMpc2PlannerConfig(*world_model: Any = None*, *policy_prior: Any = None*, *q_ensemble: Any = None*, *horizon: int | None = None*, *discount: float | None = None*, *num_samples: int = 512*, *num_elites: int = 64*, *num_pi_trajs: int = 24*, *iterations: int = 6*, *min_std: float = 0.05*, *max_std: float = 2.0*, *temperature: float = 0.5*, *observation_key: Any = None*, *action_key: Any = None*, *is_init_key: Any = 'is_init'*, *prev_mean_key: Any = '_tdmpc2_prev_mean'*, *action_dim: int | None = None*, *_partial_: bool = False*, *_target_: str = 'torchrl.trainers.algorithms.configs.modules._make_tdmpc2_planner'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/modules.html#TdMpc2PlannerConfig)
+
+Configuration for the TD-MPC2 action planner.

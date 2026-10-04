@@ -121,6 +121,7 @@ actor = ProbabilisticActor(
 - [DreamerV3ImageDecoder](generated/torchrl.modules.DreamerV3ImageDecoder.html)
 - [SimplicialNormalization](generated/torchrl.modules.SimplicialNormalization.html)
 - [TdMpc2QEnsemble](generated/torchrl.modules.TdMpc2QEnsemble.html)
+- [TdMpc2Planner](generated/torchrl.modules.TdMpc2Planner.html)
 - [PILCO](modules_models.html#pilco)
 - [Distribution Classes](modules_distributions.html)
 
