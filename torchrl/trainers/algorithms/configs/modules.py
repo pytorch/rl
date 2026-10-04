@@ -12,6 +12,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+from hydra.utils import instantiate
 from omegaconf import MISSING
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl.modules import (
@@ -23,6 +24,7 @@ from torchrl.modules import (
     RSSMStateEstimatorV3,
     SimplicialNormalization,
     TanhModule,
+    TdMpc2Planner,
     TdMpc2QEnsemble,
     ValueOperator,
     WorldModel,
@@ -897,6 +899,100 @@ def _make_tdmpc2_policy_prior(
     if shared:
         policy_prior = policy_prior.share_memory()
     return policy_prior
+
+
+@dataclass
+class TdMpc2PlannerConfig(ConfigBase):
+    """Configuration for the TD-MPC2 action planner."""
+
+    world_model: Any = None
+    policy_prior: Any = None
+    q_ensemble: Any = None
+    horizon: int | None = None
+    discount: float | None = None
+    num_samples: int = 512
+    num_elites: int = 64
+    num_pi_trajs: int = 24
+    iterations: int = 6
+    min_std: float = 0.05
+    max_std: float = 2.0
+    temperature: float = 0.5
+    observation_key: Any = None
+    action_key: Any = None
+    is_init_key: Any = "is_init"
+    prev_mean_key: Any = "_tdmpc2_prev_mean"
+    action_dim: int | None = None
+    _partial_: bool = False
+    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_tdmpc2_planner"
+
+    def __post_init__(self) -> None:
+        if self.horizon is not None and self.horizon <= 0:
+            raise ValueError(f"horizon must be positive, got {self.horizon}.")
+        if self.discount is not None and not 0 <= self.discount <= 1:
+            raise ValueError(f"discount must be in [0, 1], got {self.discount}.")
+
+
+def _make_tdmpc2_planner(
+    *,
+    world_model: Any,
+    policy_prior: Any,
+    q_ensemble: Any,
+    horizon: int | None = None,
+    discount: float | None = None,
+    num_samples: int = 512,
+    num_elites: int = 64,
+    num_pi_trajs: int = 24,
+    iterations: int = 6,
+    min_std: float = 0.05,
+    max_std: float = 2.0,
+    temperature: float = 0.5,
+    observation_key: Any = None,
+    action_key: Any = None,
+    is_init_key: Any = "is_init",
+    prev_mean_key: Any = "_tdmpc2_prev_mean",
+    action_dim: int | None = None,
+) -> TdMpc2Planner:
+    """Build a TD-MPC2 planner from shared live learner components."""
+    components = {
+        "world_model": world_model,
+        "policy_prior": policy_prior,
+        "q_ensemble": q_ensemble,
+    }
+    for name, component in components.items():
+        if not isinstance(component, torch.nn.Module) and hasattr(
+            component, "_target_"
+        ):
+            components[name] = instantiate(component)
+    missing = [name for name, component in components.items() if component is None]
+    if missing:
+        raise TypeError(
+            "TdMpc2PlannerConfig requires live component modules for "
+            + ", ".join(missing)
+            + "; the trainer factory should inject these automatically."
+        )
+    if horizon is None:
+        horizon = 3
+    if discount is None:
+        discount = 0.99
+    return TdMpc2Planner(
+        **components,
+        horizon=horizon,
+        discount=discount,
+        num_samples=num_samples,
+        num_elites=num_elites,
+        num_pi_trajs=num_pi_trajs,
+        iterations=iterations,
+        min_std=min_std,
+        max_std=max_std,
+        temperature=temperature,
+        observation_key=(
+            None if observation_key is None else _normalize_hydra_key(observation_key)
+        ),
+        action_key=(None if action_key is None else _normalize_hydra_key(action_key)),
+        is_init_key=_normalize_hydra_key(is_init_key),
+        prev_mean_key=_normalize_hydra_key(prev_mean_key),
+        action_dim=action_dim,
+    )
 
 
 @dataclass
