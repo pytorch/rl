@@ -4902,11 +4902,27 @@ class MultiCategorical(Categorical):
         nvec = self.nvec
         if nvec.ndim > 1:
             # a batched spec expands nvec over its batch dims, the widths sit along the last one
-            nvec = nvec.flatten(0, -2)[0]
-            if (self.nvec != nvec).any():
-                raise ValueError(
-                    f"Only homogeneous MultiCategorical specs can be one-hot encoded, got nvec={self.nvec}."
-                )
+            widths = nvec.flatten(0, -2)[0]
+            if (nvec != widths).any():
+                # rows with different widths cannot share one dense tensor: like the samples of the
+                # stacked spec that to_one_hot_spec returns here, the result is a nested tensor whose
+                # entries are the one-hot encodings of the rows along the first dim
+                if val.ndim != self.ndim:
+                    raise RuntimeError(
+                        "Cannot create a nested tensor with a stack dimension other than 0. "
+                        f"Got a value of shape {val.shape} for a spec of shape {self.shape}."
+                    )
+                rows = [
+                    spec.to_one_hot(_val, safe=False)
+                    for spec, _val in zip(self.unbind(0), val.unbind(0))
+                ]
+                if any(row.is_nested for row in rows):
+                    raise RuntimeError(
+                        "Cannot create a nested tensor with a stack dimension other than 0. "
+                        "The rows of nvec differ beyond the first dim."
+                    )
+                return torch.nested.nested_tensor(rows)
+            nvec = widths
         return torch.cat(
             [
                 torch.nn.functional.one_hot(val[..., i], n).bool()

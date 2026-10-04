@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import warnings
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ from torchrl.data.tensor_specs import (
     MultiOneHot,
     NonTensor,
     OneHot,
+    Stacked,
     StackedComposite,
     TensorSpec,
     Unbounded,
@@ -393,7 +395,7 @@ class TestRanges:
             == one_hot_sample
         ).all()
 
-    def test_multi_discrete_conversion_singleton_and_heterogeneous(self):
+    def test_multi_discrete_conversion_singleton(self):
         # remove_singleton squeezes the sample of a shape [1] spec to a scalar
         categorical = MultiCategorical([5])
         sample = categorical.rand()
@@ -401,11 +403,39 @@ class TestRanges:
         one_hot = categorical.to_one_hot(sample)
         assert categorical.to_one_hot_spec().is_in(one_hot)
         assert categorical.to_one_hot_spec().to_categorical(one_hot).item() == sample
-        # rows with different widths cannot share one one-hot tensor
-        with pytest.raises(ValueError, match="homogeneous"):
-            MultiCategorical([[2, 4], [3, 2]]).to_one_hot(
-                torch.tensor([[1, 3], [2, 1]])
+
+    @pytest.mark.parametrize("batch", [torch.Size([]), torch.Size([3])])
+    def test_multi_discrete_conversion_heterogeneous(self, batch):
+        # rows with different widths encode to a nested tensor, one row per entry, like the samples of
+        # the stacked one-hot spec
+        nvec = torch.tensor([[2, 4], [3, 2]])
+        if batch:
+            nvec = nvec[:, None].expand(2, *batch, 2)
+        categorical = MultiCategorical(nvec)
+        one_hot_spec = categorical.to_one_hot_spec()
+        assert isinstance(one_hot_spec, Stacked)
+        sample = categorical.rand()
+        with warnings.catch_warnings():
+            # torch warns once per process that strided nested tensors are a prototype, here or in
+            # Stacked.rand, whichever builds the first one
+            warnings.filterwarnings(
+                "ignore", message="The PyTorch API of nested tensors is in prototype"
             )
+            one_hot = categorical.to_one_hot(sample)
+            assert one_hot.is_nested
+            assert one_hot_spec.is_in(one_hot)
+            for row_spec, row_sample, row_one_hot, width in zip(
+                categorical.unbind(0), sample.unbind(0), one_hot.unbind(0), (6, 5)
+            ):
+                assert row_one_hot.shape == (*batch, width)
+                assert (row_one_hot == row_spec.to_one_hot(row_sample)).all()
+            # a value with extra leading dims and rows that differ beyond the first dim have no
+            # nested tensor stacked along dim 0, as their stacked spec has none
+            with pytest.raises(RuntimeError, match="stack dimension other than 0"):
+                categorical.to_one_hot(sample.expand(2, *sample.shape))
+            deep = MultiCategorical(torch.tensor([[[2, 4], [3, 2]], [[2, 4], [3, 2]]]))
+            with pytest.raises(RuntimeError, match="stack dimension other than 0"):
+                deep.to_one_hot(deep.rand())
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
