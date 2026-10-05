@@ -678,6 +678,51 @@ class TestTruncatedNormal:
             pi_x, torch.as_tensor(pdf_scypi_truncnorm, dtype=torch.float32)
         )
 
+    @pytest.mark.skipif(not _has_scipy, reason="scipy not installed")
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize(
+        "loc,scale", [(1.5, 0.1), (2.0, 0.1), (3.0, 0.5), (-2.5, 0.3), (-4.0, 0.5)]
+    )
+    def test_truncnormal_loc_beyond_bounds_against_scipy(self, loc, scale, dtype):
+        # loc sits several scales outside [low, high], so Phi(a) and Phi(b) are
+        # both tiny and the moments must be formed from ratios, not from Z
+        from scipy.stats import truncnorm as sp_truncnorm
+
+        low, high = -1.0, 1.0
+        d = TruncatedNormal(
+            torch.tensor([loc], dtype=dtype),
+            torch.tensor([scale], dtype=dtype),
+            low=low,
+            high=high,
+            tanh_loc=False,
+        )
+        ref = sp_truncnorm(
+            (low - loc) / scale, (high - loc) / scale, loc=loc, scale=scale
+        )
+        assert low <= d.mean.item() <= high
+        assert d.variance.item() > 0
+        tol = (
+            {"rtol": 5e-2, "atol": 1e-4}
+            if dtype is torch.float32
+            else {"rtol": 1e-5, "atol": 1e-7}
+        )
+        torch.testing.assert_close(
+            d.mean, torch.tensor([ref.mean()], dtype=dtype), **tol
+        )
+        torch.testing.assert_close(
+            d.variance, torch.tensor([ref.var()], dtype=dtype), **tol
+        )
+        torch.testing.assert_close(
+            d.entropy(), torch.tensor(ref.entropy(), dtype=dtype), **tol
+        )
+        # interior points: log_prob nudges values off the bounds by eps first
+        x = torch.linspace(low, high, 101, dtype=dtype)[1:-1].unsqueeze(-1)
+        torch.testing.assert_close(
+            d.log_prob(x),
+            torch.tensor(ref.logpdf(x.squeeze(-1).numpy()), dtype=dtype),
+            **tol,
+        )
+
     @pytest.mark.parametrize(
         "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
     )

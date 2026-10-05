@@ -20,6 +20,28 @@ CONST_LOG_INV_SQRT_2PI = math.log(CONST_INV_SQRT_2PI)
 CONST_LOG_SQRT_2PI_E = 0.5 * math.log(2 * math.pi * math.e)
 
 
+def _log_gauss_mass(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """log(Phi(b) - Phi(a)) for a < b, evaluated in the left tail so it stays accurate far from zero."""
+    dtype = a.dtype
+    if dtype in (torch.float16, torch.bfloat16):
+        # log_ndtr has no half precision kernel on CPU
+        a, b = a.float(), b.float()
+    # Phi(b) - Phi(a) = Phi(-a) - Phi(-b): mirror intervals right of zero into the left tail
+    right = a > 0
+    a, b = torch.where(right, -b, a), torch.where(right, -a, b)
+    left = b <= 0
+    # both bounds in the left tail: log Phi(b) + log(1 - Phi(a) / Phi(b))
+    log_ndtr_a = torch.special.log_ndtr(torch.where(left, a, -1.0))
+    log_ndtr_b = torch.special.log_ndtr(torch.where(left, b, 0.0))
+    mass_left = log_ndtr_b + torch.log1p(-(log_ndtr_a - log_ndtr_b).exp())
+    # interval containing zero: Phi(b) - Phi(a) = 1 - Phi(a) - Phi(-b)
+    mass_mid = torch.log1p(
+        -torch.special.ndtr(torch.where(left, -1.0, a))
+        - torch.special.ndtr(torch.where(left, -1.0, -b))
+    )
+    return torch.where(left, mass_left, mass_mid).to(dtype)
+
+
 class TruncatedStandardNormal(Distribution):
     """Truncated Standard Normal distribution.
 
@@ -60,20 +82,20 @@ class TruncatedStandardNormal(Distribution):
         self._little_phi_b = self._little_phi(self.b)
         self._big_phi_a = self._big_phi(self.a)
         self._big_phi_b = self._big_phi(self.b)
-        self._Z = (self._big_phi_b - self._big_phi_a).clamp(eps, 1 - eps)
-        self._log_Z = self._Z.log()
+        self._log_Z = _log_gauss_mass(self.a, self.b)
+        self._Z = self._log_Z.exp()
+        # phi(a) / Z and phi(b) / Z as exp(log phi - log Z): both vanish in the
+        # tails, only their ratio to Z is well defined there
+        little_phi_a_d_Z = (self._log_little_phi(self.a) - self._log_Z).exp()
+        little_phi_b_d_Z = (self._log_little_phi(self.b) - self._log_Z).exp()
         little_phi_coeff_a = torch.nan_to_num(self.a, nan=math.nan)
         little_phi_coeff_b = torch.nan_to_num(self.b, nan=math.nan)
         self._lpbb_m_lpaa_d_Z = (
-            self._little_phi_b * little_phi_coeff_b
-            - self._little_phi_a * little_phi_coeff_a
-        ) / self._Z
-        self._mean = -(self._little_phi_b - self._little_phi_a) / self._Z
-        self._variance = (
-            1
-            - self._lpbb_m_lpaa_d_Z
-            - ((self._little_phi_b - self._little_phi_a) / self._Z) ** 2
+            little_phi_b_d_Z * little_phi_coeff_b
+            - little_phi_a_d_Z * little_phi_coeff_a
         )
+        self._mean = little_phi_a_d_Z - little_phi_b_d_Z
+        self._variance = 1 - self._lpbb_m_lpaa_d_Z - self._mean**2
         self._entropy = CONST_LOG_SQRT_2PI_E + self._log_Z - 0.5 * self._lpbb_m_lpaa_d_Z
 
     @constraints.dependent_property
@@ -102,6 +124,10 @@ class TruncatedStandardNormal(Distribution):
     @staticmethod
     def _little_phi(x):
         return (-(x**2) * 0.5).exp() * CONST_INV_SQRT_2PI
+
+    @staticmethod
+    def _log_little_phi(x):
+        return CONST_LOG_INV_SQRT_2PI - (x**2) * 0.5
 
     def _big_phi(self, x):
         phi = 0.5 * (1 + (x * CONST_INV_SQRT_2).erf())
