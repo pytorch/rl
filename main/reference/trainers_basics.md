@@ -48,6 +48,7 @@ minimal mode.
 | [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer)(*args, **kwargs) | A trainer class for Conservative Q-Learning (CQL) algorithm. |
 | [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer)(*args, **kwargs) | A trainer class for Twin Delayed DDPG (TD3) algorithm. |
 | [`GRPOTrainer`](generated/torchrl.trainers.algorithms.GRPOTrainer.html#torchrl.trainers.algorithms.GRPOTrainer)(*args, **kwargs) | A trainer for LLM alignment using GRPO (or compatible) objectives. |
+| [`TdMpc2OptimizationStepper`](generated/torchrl.trainers.algorithms.TdMpc2OptimizationStepper.html#torchrl.trainers.algorithms.TdMpc2OptimizationStepper)(loss_module, ...) | Execute the two-phase TD-MPC2 learner update. |
 
 ## Offline and online FQL
 

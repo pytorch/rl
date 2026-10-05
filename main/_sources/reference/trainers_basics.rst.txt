@@ -62,6 +62,7 @@ minimal mode.
     CQLTrainer
     TD3Trainer
     GRPOTrainer
+    TdMpc2OptimizationStepper
 
 Offline and online FQL
 ----------------------
