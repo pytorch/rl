@@ -21,8 +21,12 @@ the Normal distribution and similar. If in_keys is a dictionary,, the keys
 are the keys of the distribution and the values are the keys in the
 tensordict that will get match to the corresponding distribution keys.
 - **out_keys** (*str**or**iterable**of**str*) - keys where the sampled values will be
-written. Importantly, if these keys are found in the input TensorDict, the
-sampling step will be skipped.
+written. By default a new sample is drawn at every call, overwriting
+any value already stored under these keys. The sampling step is skipped
+only when these keys are present in the input TensorDict and the call is
+made under `tensordict.nn.set_skip_existing()` (`True`). To score
+stored actions without resampling, use `get_dist()` followed by
+`dist.log_prob(action)`.
 - **spec** ([*TensorSpec*](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*,**optional*) - keyword-only argument containing the specs
 of the output tensor. If the module outputs multiple output tensors,
 spec characterize the space of the first output tensor.

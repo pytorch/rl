@@ -73,7 +73,7 @@ Examples
 ... "done": torch.zeros(batch, 1, dtype=torch.bool),
 ... "terminated": torch.zeros(batch, 1, dtype=torch.bool),
 ... },
-... "action": torch.randn(batch, n_act),
+... "action": torch.rand(batch, n_act) * 2 - 1,
 ... }, [batch])
 >>> loss(data)
 TensorDict(
@@ -119,7 +119,7 @@ Examples
 ... next_reward=torch.randn(batch, 1),
 ... next_done=torch.zeros(batch, 1, dtype=torch.bool),
 ... next_terminated=torch.zeros(batch, 1, dtype=torch.bool),
-... action=torch.randn(batch, n_act),)
+... action=torch.rand(batch, n_act) * 2 - 1,)
 >>> loss_actor.backward()
 ```
 
