@@ -393,10 +393,7 @@ class ReinforceLoss(LossModule):
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
         if isinstance(dist, CompositeDistribution):
-            action_keys = self.tensor_keys.action
-            if isinstance(action_keys, NestedKey):
-                action_keys = (action_keys,)
-            action = tensordict.select(*action_keys)
+            action = tensordict
         else:
             action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
         log_prob = dist.log_prob(action)

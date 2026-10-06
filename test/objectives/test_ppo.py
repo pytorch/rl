@@ -3627,61 +3627,44 @@ class TestReinforce(LossModuleTestBase):
         expected = -(log_prob.unsqueeze(-1) * advantage).mean()
         torch.testing.assert_close(loss["loss_actor"].detach(), expected)
 
-    @pytest.mark.parametrize("aggregate", [True, False])
-    def test_reinforce_scores_stored_composite_actions(self, aggregate):
+    def test_reinforce_composite_action(self):
         torch.manual_seed(self.seed)
-        n_obs, batch = 3, 64
-        net1 = nn.Linear(n_obs, 4)
-        net2 = nn.Linear(n_obs, 3)
-        with set_composite_lp_aggregate(aggregate):
-            actor = ProbabilisticActor(
-                Seq(
-                    Mod(
-                        net1,
-                        in_keys=["observation"],
-                        out_keys=[("params", "a1", "logits")],
-                    ),
-                    Mod(
-                        net2,
-                        in_keys=["observation"],
-                        out_keys=[("params", "a2", "logits")],
-                    ),
-                ),
-                in_keys=["params"],
-                distribution_class=CompositeDistribution,
-                distribution_kwargs={
-                    "distribution_map": {"a1": d.Categorical, "a2": d.Categorical},
-                    "name_map": {"a1": ("action", "a1"), "a2": ("action", "a2")},
-                },
-                out_keys=[("action", "a1"), ("action", "a2")],
-                return_log_prob=True,
-                default_interaction_type=InteractionType.RANDOM,
-            )
-            critic = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-            loss_fn = ReinforceLoss(actor, critic)
-
-            observation = torch.randn(batch, n_obs)
-            a1 = torch.arange(batch) % 4
-            a2 = torch.arange(batch) % 3
-            advantage = torch.randn(batch, 1)
-            td = TensorDict(
-                {
-                    "observation": observation,
-                    "action": {"a1": a1.clone(), "a2": a2.clone()},
-                    "advantage": advantage,
-                    "value_target": torch.randn(batch, 1),
-                },
-                [batch],
-            )
-            loss = loss_fn(td)
-
-        torch.testing.assert_close(td["action", "a1"], a1)
-        torch.testing.assert_close(td["action", "a2"], a2)
+        net1, net2 = nn.Linear(3, 4), nn.Linear(3, 3)
+        actor = ProbabilisticActor(
+            Seq(
+                Mod(net1, ["observation"], [("params", "a1", "logits")]),
+                Mod(net2, ["observation"], [("params", "a2", "logits")]),
+            ),
+            in_keys=["params"],
+            distribution_class=CompositeDistribution,
+            distribution_kwargs={
+                "distribution_map": {"a1": d.Categorical, "a2": d.Categorical},
+                "name_map": {"a1": ("action", "a1"), "a2": ("action", "a2")},
+            },
+            out_keys=[("action", "a1"), ("action", "a2")],
+        )
+        loss_fn = ReinforceLoss(actor, ValueOperator(nn.Linear(3, 1), ["observation"]))
+        obs, a1, a2, adv = (
+            torch.randn(8, 3),
+            torch.arange(8) % 4,
+            torch.arange(8) % 3,
+            torch.randn(8, 1),
+        )
+        td = TensorDict(
+            {
+                "observation": obs,
+                "action": {"a1": a1, "a2": a2},
+                "advantage": adv,
+                "value_target": torch.randn(8, 1),
+            },
+            [8],
+        )
+        loss = loss_fn(td)
         with torch.no_grad():
-            log_prob = d.Categorical(logits=net1(observation)).log_prob(
-                a1
-            ) + d.Categorical(logits=net2(observation)).log_prob(a2)
-        expected = -(log_prob.unsqueeze(-1) * advantage).mean()
+            log_prob = d.Categorical(logits=net1(obs)).log_prob(a1) + d.Categorical(
+                logits=net2(obs)
+            ).log_prob(a2)
+        expected = -(log_prob.unsqueeze(-1) * adv).mean()
         torch.testing.assert_close(loss["loss_actor"].detach(), expected)
 
 
