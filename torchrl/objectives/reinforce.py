@@ -22,6 +22,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _maybe_get_or_select,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -123,7 +124,7 @@ class ReinforceLoss(LossModule):
         ...         "done": torch.zeros(batch, 1, dtype=torch.bool),
         ...         "terminated": torch.zeros(batch, 1, dtype=torch.bool),
         ...     },
-        ...     "action": torch.randn(batch, n_act),
+        ...     "action": torch.rand(batch, n_act) * 2 - 1,
         ... }, [batch])
         >>> loss(data)
         TensorDict(
@@ -166,7 +167,7 @@ class ReinforceLoss(LossModule):
         ...     next_reward=torch.randn(batch, 1),
         ...     next_done=torch.zeros(batch, 1, dtype=torch.bool),
         ...     next_terminated=torch.zeros(batch, 1, dtype=torch.bool),
-        ...     action=torch.randn(batch, n_act),)
+        ...     action=torch.rand(batch, n_act) * 2 - 1,)
         >>> loss_actor.backward()
 
     """
@@ -187,8 +188,10 @@ class ReinforceLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             sample_log_prob (NestedKey): The input tensordict key where the sample log probability is expected.
                 Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
-                `"action_log_prob"`  otherwise.
-            action (NestedKey): The input tensordict key where the action is expected.
+                `"action_log_prob"`  otherwise. Not read by this loss: the log-probability is recomputed from
+                the stored ``action`` under the current policy parameters.
+            action (NestedKey): The input tensordict key where the action is expected. The action is scored
+                as stored and is never resampled by the loss.
                 Defaults to ``"action"``.
             reward (NestedKey): The input tensordict key where the reward is expected.
                 Will be used for the underlying value estimator. Defaults to ``"reward"``.
@@ -381,9 +384,9 @@ class ReinforceLoss(LossModule):
         with self.actor_network_params.to_module(
             self.actor_network, preserve_module_state=False
         ) if self.functional else contextlib.nullcontext():
-            tensordict = self.actor_network(tensordict)
-
-        log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+            dist = self.actor_network.get_dist(tensordict)
+        action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+        log_prob = dist.log_prob(action)
         if log_prob.shape == advantage.shape[:-1]:
             log_prob = log_prob.unsqueeze(-1)
         loss_actor = -log_prob * advantage.detach()

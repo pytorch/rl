@@ -3593,6 +3593,40 @@ class TestReinforce(LossModuleTestBase):
             loss = loss_fn(td)
             assert "loss_value" in loss.keys()
 
+    def test_reinforce_scores_stored_actions(self):
+        torch.manual_seed(self.seed)
+        n_obs, n_act, batch = 3, 4, 64
+        logits_net = nn.Linear(n_obs, n_act)
+        actor = ProbabilisticActor(
+            Mod(logits_net, in_keys=["observation"], out_keys=["logits"]),
+            in_keys=["logits"],
+            distribution_class=d.Categorical,
+            return_log_prob=True,
+            default_interaction_type=InteractionType.RANDOM,
+        )
+        critic = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+        loss_fn = ReinforceLoss(actor, critic)
+
+        observation = torch.randn(batch, n_obs)
+        action = torch.arange(batch) % n_act
+        advantage = torch.randn(batch, 1)
+        td = TensorDict(
+            {
+                "observation": observation,
+                "action": action.clone(),
+                "advantage": advantage,
+                "value_target": torch.randn(batch, 1),
+            },
+            [batch],
+        )
+        loss = loss_fn(td)
+
+        torch.testing.assert_close(td["action"], action)
+        with torch.no_grad():
+            log_prob = d.Categorical(logits=logits_net(observation)).log_prob(action)
+        expected = -(log_prob.unsqueeze(-1) * advantage).mean()
+        torch.testing.assert_close(loss["loss_actor"].detach(), expected)
+
 
 class TestKLAdaptiveLR:
     def test_rescales_outside_the_kl_band_only(self):
