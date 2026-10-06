@@ -3586,6 +3586,80 @@ class TestReinforce(LossModuleTestBase):
             loss = loss_fn(td)
             assert "loss_value" in loss.keys()
 
+    def test_reinforce_scores_stored_actions(self):
+        torch.manual_seed(self.seed)
+        n_obs, n_act, batch = 3, 4, 64
+        logits_net = nn.Linear(n_obs, n_act)
+        actor = ProbabilisticActor(
+            Mod(logits_net, in_keys=["observation"], out_keys=["logits"]),
+            in_keys=["logits"],
+            distribution_class=d.Categorical,
+            return_log_prob=True,
+            default_interaction_type=InteractionType.RANDOM,
+        )
+        critic = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+        loss_fn = ReinforceLoss(actor, critic)
+
+        observation = torch.randn(batch, n_obs)
+        action = torch.arange(batch) % n_act
+        advantage = torch.randn(batch, 1)
+        td = TensorDict(
+            {
+                "observation": observation,
+                "action": action.clone(),
+                "advantage": advantage,
+                "value_target": torch.randn(batch, 1),
+            },
+            [batch],
+        )
+        loss = loss_fn(td)
+
+        torch.testing.assert_close(td["action"], action)
+        with torch.no_grad():
+            log_prob = d.Categorical(logits=logits_net(observation)).log_prob(action)
+        expected = -(log_prob.unsqueeze(-1) * advantage).mean()
+        torch.testing.assert_close(loss["loss_actor"].detach(), expected)
+
+    def test_reinforce_composite_action(self):
+        torch.manual_seed(self.seed)
+        net1, net2 = nn.Linear(3, 4), nn.Linear(3, 3)
+        actor = ProbabilisticActor(
+            Seq(
+                Mod(net1, ["observation"], [("params", "a1", "logits")]),
+                Mod(net2, ["observation"], [("params", "a2", "logits")]),
+            ),
+            in_keys=["params"],
+            distribution_class=CompositeDistribution,
+            distribution_kwargs={
+                "distribution_map": {"a1": d.Categorical, "a2": d.Categorical},
+                "name_map": {"a1": ("action", "a1"), "a2": ("action", "a2")},
+            },
+            out_keys=[("action", "a1"), ("action", "a2")],
+        )
+        loss_fn = ReinforceLoss(actor, ValueOperator(nn.Linear(3, 1), ["observation"]))
+        obs, a1, a2, adv = (
+            torch.randn(8, 3),
+            torch.arange(8) % 4,
+            torch.arange(8) % 3,
+            torch.randn(8, 1),
+        )
+        td = TensorDict(
+            {
+                "observation": obs,
+                "action": {"a1": a1, "a2": a2},
+                "advantage": adv,
+                "value_target": torch.randn(8, 1),
+            },
+            [8],
+        )
+        loss = loss_fn(td)
+        with torch.no_grad():
+            log_prob = d.Categorical(logits=net1(obs)).log_prob(a1) + d.Categorical(
+                logits=net2(obs)
+            ).log_prob(a2)
+        expected = -(log_prob.unsqueeze(-1) * adv).mean()
+        torch.testing.assert_close(loss["loss_actor"].detach(), expected)
+
 
 class TestKLAdaptiveLR:
     def test_rescales_outside_the_kl_band_only(self):
