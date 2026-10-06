@@ -557,7 +557,7 @@ issue to you.
 
 ### Trusted collaborators
 
-TorchRL is maintained by [Vincent Moens (`vmoens`)](https://github.com/vmoens) and [Achintya Paningapalli (`theap06`)](https://github.com/theap06).
+TorchRL is maintained by [Vincent Moens (`vmoens`)](https://github.com/vmoens), [Achintya Paningapalli (`theap06`)](https://github.com/theap06), and [Ben Sprenger (`bsprenger`)](https://github.com/bsprenger).
 The following trusted collaborators are also available for review guidance and
 contributor advice:
 
