@@ -8,10 +8,16 @@ import contextlib
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict import (
+    is_tensor_collection,
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+)
 
 from tensordict.nn import (
     composite_lp_aggregate,
+    CompositeDistribution,
     dispatch,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
@@ -23,6 +29,7 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _maybe_get_or_select,
+    _sum_td_features,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -385,8 +392,16 @@ class ReinforceLoss(LossModule):
             self.actor_network, preserve_module_state=False
         ) if self.functional else contextlib.nullcontext():
             dist = self.actor_network.get_dist(tensordict)
-        action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+        if isinstance(dist, CompositeDistribution):
+            action_keys = self.tensor_keys.action
+            if isinstance(action_keys, NestedKey):
+                action_keys = (action_keys,)
+            action = tensordict.select(*action_keys)
+        else:
+            action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
         log_prob = dist.log_prob(action)
+        if is_tensor_collection(log_prob):
+            log_prob = _sum_td_features(log_prob)
         if log_prob.shape == advantage.shape[:-1]:
             log_prob = log_prob.unsqueeze(-1)
         loss_actor = -log_prob * advantage.detach()
