@@ -4897,16 +4897,11 @@ class MultiCategorical(Categorical):
         if safe:
             self.assert_is_in(val)
         if val.ndim < 1:
-            # a sample of a spec of shape [1] squeezed by remove_singleton
             val = val.unsqueeze(0)
         nvec = self.nvec
         if nvec.ndim > 1:
-            # a batched spec expands nvec over its batch dims, the widths sit along the last one
             widths = nvec.flatten(0, -2)[0]
             if (nvec != widths).any():
-                # rows with different widths cannot share one dense tensor: like the samples of the
-                # stacked spec that to_one_hot_spec returns here, the result is a nested tensor whose
-                # entries are the one-hot encodings of the rows along the first dim
                 if val.ndim != self.ndim:
                     raise RuntimeError(
                         "Cannot create a nested tensor with a stack dimension other than 0. "
