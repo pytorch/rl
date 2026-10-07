@@ -325,7 +325,14 @@ without actually opening any file.
 - **non_blocking** (*bool**,**optional*) - if `True`, synchronize won't be
 called after loading tensors on device. Defaults to `False`.
 - **out** (*TensorDictBase**,**optional*) - optional tensordict where the data
-should be written.
+should be loaded. Its nested containers are reused, but its
+leaves are rebound to the loaded tensors, so their storage is
+not reused. Keys of `out` that are missing from the saved
+data are removed. If `out` has a device, the data is loaded
+on it, and a different `device` raises a `ValueError`.
+To write the data into the preallocated storage of `out`,
+use `out.update_(TensorDict.load_memmap(prefix, device=device))`
+instead.
 - **robust_key** (*bool**,**optional*) - if `True` (default), expects robust key encoding was used
 when saving and decodes filenames accordingly. If `False`, uses legacy
 behavior. If `None`, uses the default robust behavior.
@@ -434,6 +441,12 @@ fake: TensorDict(
  device=cpu,
  is_shared=False)
 ```
+
+load_memmap_(*prefix: str | Path*, *robust_key: bool | None = True*, ***, *allow_pickle: bool | None = None*, *mode: str | None = None*)
+
+Loads the content of a memory-mapped tensorclass within the tensorclass where `load_memmap_` is called.
+
+See [`load_memmap_()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap_) for more info.
 
 load_state_dict(*state_dict: dict[str, Any]*, *strict=True*, *assign=False*, *from_flatten=None*)
 

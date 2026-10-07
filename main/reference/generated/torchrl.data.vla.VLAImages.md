@@ -790,7 +790,14 @@ without actually opening any file.
 - **non_blocking** (*bool**,**optional*) - if `True`, synchronize won't be
 called after loading tensors on device. Defaults to `False`.
 - **out** (*TensorDictBase**,**optional*) - optional tensordict where the data
-should be written.
+should be loaded. Its nested containers are reused, but its
+leaves are rebound to the loaded tensors, so their storage is
+not reused. Keys of `out` that are missing from the saved
+data are removed. If `out` has a device, the data is loaded
+on it, and a different `device` raises a `ValueError`.
+To write the data into the preallocated storage of `out`,
+use `out.update_(TensorDict.load_memmap(prefix, device=device))`
+instead.
 - **robust_key** (*bool**,**optional*) - if `True` (default), expects robust key encoding was used
 when saving and decodes filenames accordingly. If `False`, uses legacy
 behavior. If `None`, uses the default robust behavior.
