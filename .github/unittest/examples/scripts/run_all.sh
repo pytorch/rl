@@ -12,6 +12,14 @@ apt-get install -y --no-install-recommends \
   cmake curl ffmpeg g++ gcc git libegl1 libgl1 libgles2 libglfw3 libglvnd0 \
   libglx-mesa0 libglew-dev libosmesa6 libosmesa6-dev python3-dev tzdata
 
+# torchrl/_comm/distributed.py resolves socket.gethostbyname(gethostname()) to
+# pick the dist.TCPStore address. Nothing puts an OSDC job container's hostname
+# in its /etc/hosts, so that raises gaierror; a plain `docker run` added the
+# entry, which is why this only appears off EC2. Every participant lives in
+# this container, so loopback is the right answer.
+echo "127.0.0.1 $(hostname)" >> /etc/hosts
+getent hosts "$(hostname)"
+
 this_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 root_dir="$(cd "${this_dir}/../../../.." >/dev/null 2>&1 && pwd)"
 env_dir="${root_dir}/venv"

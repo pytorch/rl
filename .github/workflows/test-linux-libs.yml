@@ -33,7 +33,7 @@ jobs:
   #   with:
   #     repository: pytorch/rl
   #     runner: "mt-l-x86aavx2-11-41-a10g"
-  #     docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+  #     docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
   #     timeout: 120
   #     script: |
   #       if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -69,7 +69,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -105,7 +105,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -146,7 +146,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -182,7 +182,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -218,7 +218,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -254,7 +254,7 @@ jobs:
   #   with:
   #     repository: pytorch/rl
   #     runner: "mt-l-x86aavx2-11-41-a10g"
-  #     docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+  #     docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
   #     timeout: 120
   #     script: |
   #       if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -289,7 +289,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -326,7 +326,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -363,7 +363,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       # gpu-arch-type: "cuda"
       # gpu-arch-version: "11.6"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -415,7 +415,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -457,7 +457,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.8.1-cudnn-devel-ubuntu24.04"
       timeout: 120
       upload-artifact: test-results-libero
       script: |
@@ -495,7 +495,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -536,7 +536,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -576,7 +576,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -616,7 +616,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -654,7 +654,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -686,7 +686,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -721,7 +721,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -762,7 +762,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -803,7 +803,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -838,34 +838,76 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/robohive') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
-    with:
-      repository: pytorch/rl
-      runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cudagl:11.4.0-base"
-      timeout: 120
-      script: |
-        if [[ "${{ github.ref }}" =~ release/* ]]; then
-          export RELEASE=1
-          export TORCH_VERSION=stable
-        else
-          export RELEASE=0
-          export TORCH_VERSION=nightly
-        fi
+    # Not linux_job_v3: on OSDC the checkout runs inside this container, and
+    # nvidia/cudagl ships no git, so it would degrade to a REST tarball with no
+    # .git. The image is kept as-is -- it is the only one providing the EGL
+    # stack this suite renders with, and setup_env.sh installs no GL itself.
+    runs-on: mt-l-x86aavx2-11-41-a10g
+    container:
+      image: "nvidia/cudagl:11.4.0-base"
+    timeout-minutes: 120
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPOSITORY: pytorch/rl
+    steps:
+      - name: Install git
+        shell: bash
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y --no-install-recommends git
 
-        set -euo pipefail
-        export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu128"
-        export TAR_OPTIONS="--no-same-owner"
-        export UPLOAD_CHANNEL="nightly"
-        export TF_CPP_MIN_LOG_LEVEL=0
-        export BATCHED_PIPE_TIMEOUT=60
-        export TD_GET_DEFAULTS_TO_NONE=1
+      - name: Check out pytorch/rl
+        uses: actions/checkout@v4
+        with:
+          path: pytorch/rl
 
-        bash .github/unittest/linux_libs/scripts_robohive/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_robohive/install_and_run_test.sh
-        bash .github/unittest/linux_libs/scripts_robohive/post_process.sh
+      - name: Set up runner directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in ARTIFACT:artifacts TEST_RESULTS:test-results DOCS:docs; do
+            var="RUNNER_${name%%:*}_DIR"
+            dir="${RUNNER_TEMP}/${name##*:}"
+            rm -rf "${dir}"
+            mkdir -p "${dir}"
+            echo "${var}=${dir}" >> "${GITHUB_ENV}"
+          done
 
+      - name: Run script
+        shell: bash
+        working-directory: pytorch/rl
+        run: |
+          set -eou pipefail
+          eval "$(conda shell.bash hook)"
+          set -x
+          if [[ "${{ github.ref }}" =~ release/* ]]; then
+            export RELEASE=1
+            export TORCH_VERSION=stable
+          else
+            export RELEASE=0
+            export TORCH_VERSION=nightly
+          fi
+
+          set -euo pipefail
+          export PYTHON_VERSION="3.10"
+          export CU_VERSION="cu128"
+          export TAR_OPTIONS="--no-same-owner"
+          export UPLOAD_CHANNEL="nightly"
+          export TF_CPP_MIN_LOG_LEVEL=0
+          export BATCHED_PIPE_TIMEOUT=60
+          export TD_GET_DEFAULTS_TO_NONE=1
+
+          bash .github/unittest/linux_libs/scripts_robohive/setup_env.sh
+          bash .github/unittest/linux_libs/scripts_robohive/install_and_run_test.sh
+          bash .github/unittest/linux_libs/scripts_robohive/post_process.sh
+
+      - name: Surface failing tests
+        if: always()
+        uses: pmeier/pytest-results-action@a2c1430e2bddadbad9f49a6f9b879f062c6b19b1
+        with:
+          path: ${{ env.RUNNER_TEST_RESULTS_DIR }}
+          fail-on-empty: false
   unittests-roboset:
     strategy:
       matrix:
@@ -876,7 +918,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -914,7 +956,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -953,7 +995,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -992,7 +1034,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-a10g"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -1031,7 +1073,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -1072,7 +1114,7 @@ jobs:
       runner: "mt-l-x86aavx2-11-41-a10g"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.4.1-cudnn-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then

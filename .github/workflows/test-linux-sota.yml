@@ -37,7 +37,7 @@ jobs:
     with:
       runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda13.0.3-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90

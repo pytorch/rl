@@ -33,7 +33,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-l4"
-      docker-image: "pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.9.2-cudnn-devel-ubuntu24.04"
       timeout: 60
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -76,7 +76,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "mt-l-x86aavx2-11-41-l4"
-      docker-image: "pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.9.2-cudnn-devel-ubuntu24.04"
       timeout: 60
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then

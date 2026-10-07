@@ -32,7 +32,7 @@ jobs:
     with:
       runner: mt-l-x86aavx2-45-167-a10g-4
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda12.8.1-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90

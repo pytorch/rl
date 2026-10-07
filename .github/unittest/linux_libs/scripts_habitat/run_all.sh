@@ -8,7 +8,9 @@ apt-get update
 apt-get install -y vim git wget cmake ninja-build
 
 # OpenGL/EGL dependencies for headless rendering
-apt-get install -y libglfw3 libglfw3-dev libgl1-mesa-glx libosmesa6 libosmesa6-dev libglew-dev
+# libgl1-mesa-glx is gone on noble; libgl1 + libglx-mesa0 is what it became,
+# and both resolve on jammy too.
+apt-get install -y libglfw3 libglfw3-dev libgl1 libglx-mesa0 libosmesa6 libosmesa6-dev libglew-dev
 apt-get install -y libxinerama-dev libxcursor-dev libxi-dev libxrandr-dev libxxf86vm-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
 apt-get install -y libegl1-mesa-dev libgles2-mesa-dev
