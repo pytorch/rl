@@ -4923,10 +4923,32 @@ class MultiCategorical(Categorical):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
+        if val.ndim < 1:
+            val = val.unsqueeze(0)
+        nvec = self.nvec
+        if nvec.ndim > 1:
+            widths = nvec.flatten(0, -2)[0]
+            if (nvec != widths).any():
+                if val.ndim != self.ndim:
+                    raise RuntimeError(
+                        "Cannot create a nested tensor with a stack dimension other than 0. "
+                        f"Got a value of shape {val.shape} for a spec of shape {self.shape}."
+                    )
+                rows = [
+                    spec.to_one_hot(_val, safe=False)
+                    for spec, _val in zip(self.unbind(0), val.unbind(0))
+                ]
+                if any(row.is_nested for row in rows):
+                    raise RuntimeError(
+                        "Cannot create a nested tensor with a stack dimension other than 0. "
+                        "The rows of nvec differ beyond the first dim."
+                    )
+                return torch.nested.nested_tensor(rows)
+            nvec = widths
         return torch.cat(
             [
                 torch.nn.functional.one_hot(val[..., i], n).bool()
-                for i, n in enumerate(self.nvec)
+                for i, n in enumerate(nvec.tolist())
             ],
             -1,
         ).to(self.device)

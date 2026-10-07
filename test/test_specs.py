@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import warnings
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ from torchrl.data.tensor_specs import (
     MultiOneHot,
     NonTensor,
     OneHot,
+    Stacked,
     StackedComposite,
     TensorSpec,
     Unbounded,
@@ -370,6 +372,81 @@ class TestRanges:
         assert categorical.is_in(categorical_recon), (categorical, categorical_recon)
         one_hot_recon = categorical.to_one_hot(categorical.rand(shape))
         assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
+
+    @pytest.mark.parametrize("ns", [[5], [5, 2, 3]])
+    @pytest.mark.parametrize("shape", [torch.Size([3]), torch.Size([4, 5])])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_multi_discrete_conversion_batched_spec(self, ns, shape, device):
+        categorical = MultiCategorical(ns, shape=[*shape, len(ns)], device=device)
+        one_hot = MultiOneHot(ns, shape=[*shape, sum(ns)], device=device)
+
+        assert categorical.to_one_hot_spec() == one_hot
+        assert one_hot.to_categorical_spec() == categorical
+
+        sample = categorical.rand()
+        one_hot_recon = categorical.to_one_hot(sample)
+        assert one_hot.is_in(one_hot_recon), (one_hot, one_hot_recon)
+        assert (one_hot.to_categorical(one_hot_recon) == sample).all()
+        one_hot_sample = one_hot.rand()
+        categorical_recon = one_hot.to_categorical(one_hot_sample)
+        assert (
+            one_hot.to_categorical_spec().to_one_hot(categorical_recon)
+            == one_hot_sample
+        ).all()
+
+    def test_multi_discrete_conversion_singleton(self):
+        categorical = MultiCategorical([5])
+        sample = categorical.rand()
+        assert sample.ndim == 0
+        one_hot = categorical.to_one_hot(sample)
+        assert categorical.to_one_hot_spec().is_in(one_hot)
+        assert categorical.to_one_hot_spec().to_categorical(one_hot).item() == sample
+
+    @pytest.mark.parametrize("batch", [torch.Size([]), torch.Size([3])])
+    def test_multi_discrete_conversion_heterogeneous(self, batch):
+        nvec = torch.tensor([[2, 4], [3, 2]])
+        if batch:
+            nvec = nvec[:, None].expand(2, *batch, 2)
+        categorical = MultiCategorical(nvec)
+        one_hot_spec = categorical.to_one_hot_spec()
+        assert isinstance(one_hot_spec, Stacked)
+        sample = categorical.rand()
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="The PyTorch API of nested tensors is in prototype"
+            )
+            one_hot = categorical.to_one_hot(sample)
+            assert one_hot.is_nested
+            assert one_hot_spec.is_in(one_hot)
+            for row_spec, row_sample, row_one_hot, width in zip(
+                categorical.unbind(0), sample.unbind(0), one_hot.unbind(0), (6, 5)
+            ):
+                assert row_one_hot.shape == (*batch, width)
+                assert (row_one_hot == row_spec.to_one_hot(row_sample)).all()
+            with pytest.raises(RuntimeError, match="stack dimension other than 0"):
+                categorical.to_one_hot(sample.expand(2, *sample.shape))
+            deep = MultiCategorical(torch.tensor([[[2, 4], [3, 2]], [[2, 4], [3, 2]]]))
+            with pytest.raises(RuntimeError, match="stack dimension other than 0"):
+                deep.to_one_hot(deep.rand())
+
+    def test_multi_discrete_conversion_heterogeneous_equal_width(self):
+        categorical = MultiCategorical(torch.tensor([[2, 3], [3, 2]]))
+        one_hot_spec = categorical.to_one_hot_spec()
+        sample = torch.tensor([[1, 2], [2, 1]])
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="The PyTorch API of nested tensors is in prototype"
+            )
+            one_hot = categorical.to_one_hot(sample)
+
+        assert isinstance(one_hot_spec, Stacked)
+        assert one_hot_spec.is_in(one_hot)
+        for row_spec, row_sample, row_one_hot in zip(
+            categorical.unbind(0), sample.unbind(0), one_hot.unbind(0)
+        ):
+            assert row_one_hot.shape == (5,)
+            assert (row_one_hot == row_spec.to_one_hot(row_sample)).all()
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
