@@ -1,6 +1,6 @@
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f0725d8bd30>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7ff817c1f880>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -534,8 +534,8 @@ Examples
 >>> pytree_recon = td.to_pytree()
 >>> # Check that the leaves match
 >>> def check(v1, v2):
->>> assert (v1 == v2).all()
->>>
+... assert (v1 == v2).all()
+...
 >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
 >>> assert weird_key in pytree_recon[1]
 ```

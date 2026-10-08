@@ -6,7 +6,7 @@ A Ray implementation of the Replay Buffer that can be extended and sampled remot
 
 Keyword Arguments:
 
-- **replay_buffer_cls** ([*type*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.type)*[*[*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*]**,**optional*) - the class to use for the replay buffer.
+- **replay_buffer_cls** ([*type*](torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.type)*[*[*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*]**,**optional*) - the class to use for the replay buffer.
 Defaults to [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer).
 - **ray_init_config** (*dict**[**str**,**Any**]**,**optional*) - keyword arguments to pass to ray.init().
 - **remote_config** (*dict**[**str**,**Any**]**,**optional*) - keyword arguments to pass to cls.as_remote().

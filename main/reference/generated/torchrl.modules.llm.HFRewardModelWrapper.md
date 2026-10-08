@@ -1146,7 +1146,7 @@ Examples
 >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
 >>> old_param = net[0].weight.clone()
 >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
->>> module.reset_parameters()
+>>> module.reset_parameters_recursive()
 >>> (old_param == net[0].weight).any()
 tensor(False)
 ```
@@ -1161,7 +1161,7 @@ This method also supports functional parameter sampling:
 >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
 >>> params = TensorDict.from_module(module)
 >>> old_params = params.clone(recurse=True)
->>> module.reset_parameters(params)
+>>> _ = module.reset_parameters_recursive(params)
 >>> (old_params == params).any()
 False
 ```
@@ -1221,7 +1221,7 @@ This feature will also work with dispatched arguments:
 
 ```
 >>> mod(torch.zeros(()), torch.ones(()))
-tensor(2.)
+tensor(3.)
 ```
 
 This change will occur in-place (ie the same module will be returned

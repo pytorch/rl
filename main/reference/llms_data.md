@@ -16,7 +16,7 @@ It provides a comprehensive API for managing conversation data with features inc
 
 | [`History`](generated/torchrl.data.llm.History.html#torchrl.data.llm.History)(role, content[, is_complete, ...]) | |
 | --- | --- |
-| [`ContentBase`](generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase)(type, text, url, data, ...[, ...]) | |
+| [`ContentBase`](generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase)(type[, text, url, data, ...]) | |
 | [`add_chat_template`](generated/torchrl.data.llm.add_chat_template.html#torchrl.data.llm.add_chat_template)(template_name, template[, ...]) | Add a custom chat template to the global template dictionary. |
 
 ## TopK Reward Selector

@@ -665,8 +665,8 @@ Examples
 >>> pytree_recon = td.to_pytree()
 >>> # Check that the leaves match
 >>> def check(v1, v2):
->>> assert (v1 == v2).all()
->>>
+... assert (v1 == v2).all()
+...
 >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
 >>> assert weird_key in pytree_recon[1]
 ```

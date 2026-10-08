@@ -1,12 +1,17 @@
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7f0728e35760>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text', 'image', 'audio', 'video', 'file', 'function_call']"*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
 Concatenates tensordicts into a single tensordict along the given dimension.
 
 This call is equivalent to calling [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) but is compatible with torch.compile.
+
+*property*data*: Any*
+
+partial(func, *args, **keywords) - new function with partial application
+of the given arguments and keywords.
 
 *property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*
 
@@ -534,8 +539,8 @@ Examples
 >>> pytree_recon = td.to_pytree()
 >>> # Check that the leaves match
 >>> def check(v1, v2):
->>> assert (v1 == v2).all()
->>>
+... assert (v1 == v2).all()
+...
 >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
 >>> assert weird_key in pytree_recon[1]
 ```
@@ -1190,6 +1195,11 @@ Returns:
 
 self
 
+*property*size*: Any*
+
+partial(func, *args, **keywords) - new function with partial application
+of the given arguments and keywords.
+
 stack(*dim: int = 0*, ***, *out=None*)
 
 Stacks tensordicts into a single tensordict along the given dimension.
@@ -1219,6 +1229,11 @@ tensordict. Otherwise they will be discrarded. Default: `True`.
 Returns:
 
 A new TensorDict object containing the same values as the tensorclass.
+
+*property*type*: Any*
+
+partial(func, *args, **keywords) - new function with partial application
+of the given arguments and keywords.
 
 unbind(*dim: int*)
 

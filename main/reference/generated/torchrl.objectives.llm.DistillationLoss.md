@@ -1448,7 +1448,7 @@ This feature will also work with dispatched arguments:
 
 ```
 >>> mod(torch.zeros(()), torch.ones(()))
-tensor(2.)
+tensor(3.)
 ```
 
 This change will occur in-place (ie the same module will be returned

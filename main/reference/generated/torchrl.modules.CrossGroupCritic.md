@@ -42,7 +42,7 @@ project to this size. Defaults to `64`.
 - **trunk_depth** (*int*) - number of hidden layers in the shared MLP trunk.
 Defaults to `2`.
 - **trunk_cells** (*int*) - width of each trunk hidden layer. Defaults to `256`.
-- **activation_class** ([*type*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.type)*[**nn.Module**]*) - activation used in encoders and
+- **activation_class** ([*type*](torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.type)*[**nn.Module**]*) - activation used in encoders and
 trunk. Defaults to [`Tanh`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh).
 - **share_params** (*bool*) - if `True` a single value head is shared across
 all groups (useful when groups are homogeneous or have the same
