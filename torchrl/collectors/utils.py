@@ -24,11 +24,10 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS
-from tensordict.utils import Buffer
 from torch import multiprocessing as mp, nn as nn
 from torch.nn import Parameter
 
-from torchrl._utils import DEFAULT_DONE_KEYS
+from torchrl._utils import Buffer, DEFAULT_DONE_KEYS
 
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
