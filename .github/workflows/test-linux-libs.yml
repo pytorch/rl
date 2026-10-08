@@ -382,19 +382,6 @@ jobs:
         export TAR_OPTIONS="--no-same-owner"
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
-        export PYTHONUNBUFFERED=1
-
-        # TODO: remove once the OSDC pod failure in test_gym_gymnasium_parallel is understood
-        ulimit -a
-        cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/pids.max || true
-        nvidia-smi || true
-        df -h /dev/shm
-        (set +x; while true; do
-          echo "[monitor] $(date -u +%T) gpu=$(nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,noheader 2>&1)" \
-            "mem=$(cat /sys/fs/cgroup/memory.current) pids=$(cat /sys/fs/cgroup/pids.current)" \
-            "shm=$(df --output=used /dev/shm | tail -1) events=$(tr '\n' ' ' < /sys/fs/cgroup/memory.events)"
-          sleep 5
-        done) &
 
         ./.github/unittest/linux_libs/scripts_gym/run_all.sh
 
