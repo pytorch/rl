@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-10-07
+# Flaky Test Report - 2026-10-08
 
 ## Summary
 
 - **Flaky tests**: 5768
 - **Newly flaky** (last 7 days): 36
 - **Resolved**: 0
-- **Total tests analyzed**: 32499
+- **Total tests analyzed**: 32507
 - **CI runs analyzed**: 60
 
 ---
@@ -14,26 +14,26 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...y::TestRayCollector::test_distributed_collector_basic[50]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...::TestRayCollector::test_distributed_collector_basic[100]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...ted.py::TestRayCollector::test_distributed_collector_mult` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...tributed.py::TestRayCollector::test_collector_next_method` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...ibuted.py::TestRayCollector::test_dqn_trainer_ray_backend` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...ollector::test_offpolicy_trainer_ray_backend[DDPGTrainer]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...Collector::test_offpolicy_trainer_ray_backend[SACTrainer]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...Collector::test_offpolicy_trainer_ray_backend[TD3Trainer]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...tor::test_ray_learner_publishes_to_collector_owned_policy` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...py::TestRayCollector::test_ray_owned_inference_and_replay` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...RayCollector::test_ray_collector_pause_drains_and_resumes` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...:TestRayCollector::test_distributed_collector_sync[False]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...::TestRayCollector::test_distributed_collector_sync[True]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...r::test_collector_shutdown_clears_python_processes[False]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...or::test_collector_shutdown_clears_python_processes[True]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...tor::test_distributed_collector_class[MultiSyncCollector]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...or::test_distributed_collector_class[MultiAsyncCollector]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...RayCollector::test_distributed_collector_class[Collector]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...distributed_collector_updatepolicy[False-False-Collector]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
-| `...ed_collector_updatepolicy[False-False-MultiSyncCollector]` 🆕 | 33.3% (20/60) | 20 | 0.67 | 2026-10-06 |
+| `...y::TestRayCollector::test_distributed_collector_basic[50]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...::TestRayCollector::test_distributed_collector_basic[100]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...ted.py::TestRayCollector::test_distributed_collector_mult` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...tributed.py::TestRayCollector::test_collector_next_method` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...ibuted.py::TestRayCollector::test_dqn_trainer_ray_backend` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...ollector::test_offpolicy_trainer_ray_backend[DDPGTrainer]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...Collector::test_offpolicy_trainer_ray_backend[SACTrainer]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...Collector::test_offpolicy_trainer_ray_backend[TD3Trainer]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...tor::test_ray_learner_publishes_to_collector_owned_policy` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...py::TestRayCollector::test_ray_owned_inference_and_replay` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...RayCollector::test_ray_collector_pause_drains_and_resumes` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...:TestRayCollector::test_distributed_collector_sync[False]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...::TestRayCollector::test_distributed_collector_sync[True]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...r::test_collector_shutdown_clears_python_processes[False]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...or::test_collector_shutdown_clears_python_processes[True]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...tor::test_distributed_collector_class[MultiSyncCollector]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...or::test_distributed_collector_class[MultiAsyncCollector]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...RayCollector::test_distributed_collector_class[Collector]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...distributed_collector_updatepolicy[False-False-Collector]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
+| `...ed_collector_updatepolicy[False-False-MultiSyncCollector]` 🆕 | 40.0% (24/60) | 24 | 0.80 | 2026-10-07 |
 
 
 ### Newly Flaky Tests
@@ -86,4 +86,4 @@
 
 ---
 
-*Generated at 2026-10-07T06:25:30.380806+00:00*
+*Generated at 2026-10-08T06:29:39.589753+00:00*
