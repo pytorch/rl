@@ -39,10 +39,25 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   fi
 fi
 
+# torchrl/_comm/distributed.py resolves socket.gethostbyname(gethostname()) to
+# pick the dist.TCPStore address. Nothing puts an OSDC job container's hostname
+# in its /etc/hosts, so that raises gaierror; a plain `docker run` added the
+# entry, which is why this only appears off EC2. Every participant lives in
+# this container, so loopback is the right answer.
+if [[ $OSTYPE != 'darwin'* ]]; then
+  echo "127.0.0.1 $(hostname)" >> /etc/hosts
+  getent hosts "$(hostname)"
+fi
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 if [[ $OSTYPE != 'darwin'* ]]; then
-  # from cudagl docker image
-  cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+  # from cudagl docker image. /usr/share/glvnd/egl_vendor.d is a read-only
+  # mount under the NVIDIA container runtime, so install into
+  # /etc/glvnd/egl_vendor.d, the other default libglvnd search path, and
+  # skip entirely when the runtime already supplied the file.
+  if [ ! -e /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
+    install -Dm644 $this_dir/10_nvidia.json /etc/glvnd/egl_vendor.d/10_nvidia.json
+  fi
 fi
 
 
