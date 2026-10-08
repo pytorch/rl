@@ -412,6 +412,23 @@ run_non_distributed_tests() {
     test/test_inference_server.py
     test/test_loggers.py
   )
+  # Individual tests that must not run under xdist. The quarantine above is
+  # path-based, and moving all of test_dreamer_v3.py would cost ~1300s of the
+  # shard's 2950s, so deselect just the offender.
+  #
+  # test_dreamer_v3_checkpoint_resume_processes spawns a CUDA subprocess. With
+  # 16 xdist workers on one A10G it loses the race for a context and dies in
+  # cuDevicePrimaryCtxRetain with CUDA_ERROR_OUT_OF_MEMORY, before allocating
+  # anything.
+  local quarantine_test_ids=(
+    "test/objectives/test_dreamer_v3.py::test_dreamer_v3_checkpoint_resume_processes"
+  )
+  local quarantine_deselects=""
+  local quarantine_id
+  for quarantine_id in "${quarantine_test_ids[@]}"; do
+    quarantine_deselects+="--deselect ${quarantine_id} "
+  done
+
   local quarantine_test_paths=("${collector_test_paths[@]}" "${mp_test_paths[@]}")
   local collector_tests="${collector_test_paths[*]}"
   local mp_tests="${mp_test_paths[*]}"
@@ -454,7 +471,13 @@ run_non_distributed_tests() {
       # configuration the timing numbers were collected with.
       xdist_workers=24
     else
-      xdist_workers=auto
+      # GPU: bound by device memory, not cores. -n auto gives 16 workers here,
+      # and 16 concurrent CUDA contexts on the single A10G leave no room for a
+      # test that spawns its own CUDA subprocess -- they die in
+      # cuDevicePrimaryCtxRetain with CUDA_ERROR_OUT_OF_MEMORY, and ordinary
+      # Triton tests start failing to allocate too. Which tests lose the race
+      # varies run to run, so cap the concurrency rather than chase them.
+      xdist_workers=4
     fi
   fi
   local xdist_args=""
@@ -484,7 +507,7 @@ run_non_distributed_tests() {
       ;;
     2)
       echo "Running shard 2: process-spawning tests (${quarantine_tests})"
-      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${quarantine_tests} \
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${quarantine_tests} "${quarantine_test_ids[@]}" \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args} ${serial_timeout}
@@ -495,6 +518,7 @@ run_non_distributed_tests() {
         ${common_ignores} \
         --ignore test/transforms \
         ${quarantine_ignores} \
+        ${quarantine_deselects} \
         ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
@@ -508,6 +532,7 @@ run_non_distributed_tests() {
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
         ${quarantine_ignores} \
+        ${quarantine_deselects} \
         ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
@@ -608,6 +633,29 @@ python .github/unittest/helpers/upload_test_results.py || echo "Warning: Failed 
 # ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
+
+# ==================================================================================== #
+# ================================ Reap strays ======================================= #
+
+# On OSDC the step runs under run_with_env_secrets.py, which drains our stdout
+# until EOF. EOF only arrives once every process holding the write end has
+# closed it, so a single xdist worker or Ray actor that outlives pytest keeps
+# the job alive until its 120-minute timeout, long after this script exits 0.
+# Under linux_job_v2 the surrounding `docker run` reaped these for us.
+echo "::group::Processes still alive before exit"
+ps -eo pid,ppid,etimes,rss,args --sort=-rss | head -40 || true
+echo "::endgroup::"
+
+# Anything still running that is not this shell or ps itself.
+strays="$(pgrep -f 'pytest|ray::|Xvfb' 2>/dev/null | grep -v "^$$\$" || true)"
+if [ -n "${strays}" ]; then
+  echo "Reaping strays holding the step open: ${strays}"
+  # shellcheck disable=SC2086
+  kill -TERM ${strays} 2>/dev/null || true
+  sleep 5
+  # shellcheck disable=SC2086
+  kill -KILL ${strays} 2>/dev/null || true
+fi
 
 # Exit with failure if any tests failed
 exit $EXIT_STATUS
