@@ -210,7 +210,7 @@ run_tests() {
     python -m pytest test/libs/test_gym.py -v -s -o log_cli=true --log-cli-level=INFO -k test_gym_gymnasium_parallel --mp_fork || true
     nvidia-smi || true
 
-    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v -o log_cli=true --durations 200 -k "gym and not isaac" --mp_fork; then
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v -o log_cli=true --durations 200 -k "gym and not isaac" --mp_fork_if_no_cuda; then
         echo "ERROR: test/libs failed for ${version_name}"
         test_failed=1
     fi
