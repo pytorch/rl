@@ -57,6 +57,7 @@ jobs:
     with:
       package-type: wheel
       os: linux-aarch64
+      runner-fleet: osdc
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       # aarch64 only supports CPU builds
