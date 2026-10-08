@@ -66,7 +66,7 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: validate-report
     name: ${{ matrix.device }} Pytest benchmark
-    runs-on: linux.g5.4xlarge.nvidia.gpu
+    runs-on: mt-l-x86aavx2-11-41-a10g
     timeout-minutes: 120
     strategy:
       fail-fast: false
