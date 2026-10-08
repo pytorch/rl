@@ -613,6 +613,36 @@ class TestRewardSum(TransformBase):
         res = t(td)
         assert ("some", "nested_sum") in res.keys(True, True)
 
+    @pytest.mark.parametrize("in_key", ["reward", ("agents", "reward")])
+    @pytest.mark.parametrize("layout", ["time", "batch_time", "time_batch"])
+    def test_offline_time_dimension(self, in_key, layout):
+        reward = torch.tensor(
+            [
+                [[1.0, 10.0], [2.0, 20.0]],
+                [[3.0, 30.0], [4.0, 40.0]],
+                [[5.0, 50.0], [6.0, 60.0]],
+            ]
+        )
+        expected = torch.tensor(
+            [
+                [[1.0, 10.0], [2.0, 20.0]],
+                [[4.0, 40.0], [6.0, 60.0]],
+                [[9.0, 90.0], [12.0, 120.0]],
+            ]
+        )
+        if layout == "time":
+            reward, expected = reward[:, 0], expected[:, 0]
+            names = ["time"]
+        elif layout == "batch_time":
+            reward, expected = reward.transpose(0, 1), expected.transpose(0, 1)
+            names = [None, "time"]
+        else:
+            names = ["time", None]
+        td = TensorDict({in_key: reward}, batch_size=reward.shape[:-1], names=names)
+        out_key = ("stats", "episode_reward")
+        result = RewardSum(in_keys=[in_key], out_keys=[out_key])(td)
+        torch.testing.assert_close(result[out_key], expected)
+
     def test_transform_compose(
         self,
     ):

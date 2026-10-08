@@ -626,7 +626,7 @@ class RewardSum(Transform):
             raise ValueError(
                 "At least one dimension of the tensordict must be named 'time' in offline mode"
             )
-        time_dim = time_dim[0] - 1
+        time_dim = time_dim[0]
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             reward = tensordict[in_key]
             cumsum = reward.cumsum(time_dim)
