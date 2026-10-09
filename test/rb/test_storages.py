@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from functools import partial
 from pathlib import Path
@@ -50,6 +51,7 @@ from torchrl.data import (
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     SamplerWithoutReplacement,
+    SliceSampler,
 )
 from torchrl.data.replay_buffers.storages import (
     _MEMMAP_STORAGE_REGISTRY,
@@ -917,6 +919,24 @@ def test_storage_save_hook(tmpdir):
     assert observed["is_full"] is False
 
 
+class _PausingTrajectoryStorage(LazyTensorStorage):
+    """Expose a partial record write until the test releases the producer."""
+
+    def __init__(self):
+        super().__init__(max_size=8, shared_init=True)
+        self.partial_write = mp.Event()
+        self.release_write = mp.Event()
+        self.pause_write = False
+
+    def set(self, cursor, data, *, set_cursor=True):
+        if self.pause_write:
+            super().set(cursor, data.select(("episode", "id")), set_cursor=False)
+            self.partial_write.set()
+            if not self.release_write.wait(timeout=30):
+                raise TimeoutError("Test did not release the partial replay write.")
+        return super().set(cursor, data, set_cursor=set_cursor)
+
+
 class TestSharedStorageInit:
     def worker(self, rb, worker_id, queue):
         length = len(rb)
@@ -1009,6 +1029,67 @@ class TestSharedStorageInit:
         expected = {0.0, 1.0, 2.0, 3.0}
         assert expected.issubset(values)
         assert len(storage) >= 8
+
+    def test_shared_trajectory_readiness_during_overwrite(self):
+        storage = _PausingTrajectoryStorage()
+        rb = TensorDictReplayBuffer(
+            storage=storage,
+            sampler=SliceSampler(
+                num_slices=1,
+                traj_key=("episode", "id"),
+                step_key=("episode", "step"),
+                fragmented=True,
+            ),
+            batch_size=4,
+        ).share(True)
+        rb.extend(
+            TensorDict(
+                {
+                    ("episode", "id"): torch.arange(2).repeat_interleave(4),
+                    ("episode", "step"): torch.arange(4).repeat(2),
+                },
+                [8],
+            )
+        )
+        storage.pause_write = True
+        data = TensorDict(
+            {
+                ("episode", "id"): torch.ones(4, dtype=torch.long),
+                ("episode", "step"): torch.arange(4, 8),
+            },
+            [4],
+        )
+        process = mp.Process(target=rb.extend, args=(data,))
+        process.start()
+        reader_started = threading.Event()
+        completed = threading.Event()
+        results = []
+
+        def check_readiness():
+            reader_started.set()
+            results.append(rb.can_sample())
+            completed.set()
+
+        reader = threading.Thread(target=check_readiness)
+        try:
+            assert storage.partial_write.wait(timeout=30)
+            reader.start()
+            assert reader_started.wait(timeout=5)
+            assert not completed.wait(timeout=0.1)
+        finally:
+            storage.release_write.set()
+            if reader.ident is not None:
+                reader.join(timeout=30)
+            process.join(timeout=30)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+        assert process.exitcode == 0
+        assert not reader.is_alive()
+        assert results == [True]
+        sample = rb.sample()
+        assert (sample["episode", "id"] == 1).all()
+        assert (sample["episode", "step"].diff(dim=-1) == 1).all()
 
     def test_shared_init_reconciles_non_cpu_device(self):
         """Shared init installs a CPU memmap backing; a non-cpu storage device

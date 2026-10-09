@@ -1108,7 +1108,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 "batch_size not specified. Configure it on the replay buffer "
                 "or pass it to can_sample()."
             )
-        return self._sampler.can_sample(self._storage, batch_size)
+        # Structured samplers read multiple metadata columns. Keep the snapshot
+        # consistent with process-shared writers, just as in _sample().
+        with self._replay_lock, self._write_lock:
+            return self._sampler.can_sample(self._storage, batch_size)
 
     def _conditional_update_device(self) -> torch.device | None:
         """Returns the device conditional patches are written to, when known."""
