@@ -14,7 +14,7 @@ echo TORCHRL_BUILD_VERSION is set to %TORCHRL_BUILD_VERSION%
 
 rem Check the stable dependency before every release build and wheel smoke test.
 if "%GITHUB_REF_NAME:~0,8%" == "release/" (
-    python -c "import torch; assert torch.__version__.split('+', 1)[0] == '2.14.0', f'Expected stable PyTorch 2.14.0, got {torch.__version__}'; print(f'Release build PyTorch: {torch.__version__}')" || exit /b 1
+    python -c "import torch; assert torch.__version__.split('+', 1)[0] == '2.14.1', f'Expected stable PyTorch 2.14.1, got {torch.__version__}'; print(f'Release build PyTorch: {torch.__version__}')" || exit /b 1
 )
 
 @echo on

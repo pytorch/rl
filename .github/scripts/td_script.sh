@@ -3,7 +3,7 @@
 # test-infra maps release branches to its test index. Override its install
 # command before the first install so release wheels use stable PyTorch.
 if [[ "${GITHUB_REF_NAME:-}" == release/* || ("${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$) ]]; then
-    export TORCHRL_RELEASE_TORCH_VERSION=2.14.0
+    export TORCHRL_RELEASE_TORCH_VERSION=2.14.1
     export PIP_INSTALL_TORCH="pip install torch==${TORCHRL_RELEASE_TORCH_VERSION} --index-url https://download.pytorch.org/whl/${CU_VERSION:-cpu}"
 fi
 

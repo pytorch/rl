@@ -5,7 +5,7 @@ set -e
 # The Windows pre-script runs after test-infra installs from its test index.
 # Replace that wheel with the stable build before compiling the extensions.
 if [[ "${GITHUB_REF_NAME:-}" == release/* || ("${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$) ]]; then
-    ${CONDA_RUN} pip install --force-reinstall --no-deps torch==2.14.0 --index-url "https://download.pytorch.org/whl/${CU_VERSION:-cpu}"
+    ${CONDA_RUN} pip install --force-reinstall --no-deps torch==2.14.1 --index-url "https://download.pytorch.org/whl/${CU_VERSION:-cpu}"
 fi
 
 pip install --upgrade setuptools packaging
