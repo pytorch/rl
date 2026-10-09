@@ -206,7 +206,7 @@ run_tests() {
         test_failed=1
     fi
     
-    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 -k "gym and not isaac" --mp_fork; then
+    if ! python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs --instafail -v --durations 200 -k "gym and not isaac" --mp_fork_if_no_cuda; then
         echo "ERROR: test/libs failed for ${version_name}"
         test_failed=1
     fi
