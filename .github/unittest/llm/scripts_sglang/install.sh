@@ -69,7 +69,7 @@ fi
 printf "* Installing tensordict\n"
 # Install tensordict dependencies first (pyvers is required but --no-deps skips it)
 uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
-uv pip install "pybind11[global]" ninja
+uv pip install "pybind11[global]" ninja cmake
 if [[ "$RELEASE" == 0 ]]; then
     uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else

@@ -618,25 +618,7 @@ bash ${this_dir}/post_process.sh
 # ==================================================================================== #
 # ================================ Reap strays ======================================= #
 
-# On OSDC the step runs under run_with_env_secrets.py, which drains our stdout
-# until EOF. EOF only arrives once every process holding the write end has
-# closed it, so a single xdist worker or Ray actor that outlives pytest keeps
-# the job alive until its 120-minute timeout, long after this script exits 0.
-# Under linux_job_v2 the surrounding `docker run` reaped these for us.
-echo "::group::Processes still alive before exit"
-ps -eo pid,ppid,etimes,rss,args --sort=-rss | head -40 || true
-echo "::endgroup::"
-
-# Anything still running that is not this shell or ps itself.
-strays="$(pgrep -f 'pytest|ray::|Xvfb' 2>/dev/null | grep -v "^$$\$" || true)"
-if [ -n "${strays}" ]; then
-  echo "Reaping strays holding the step open: ${strays}"
-  # shellcheck disable=SC2086
-  kill -TERM ${strays} 2>/dev/null || true
-  sleep 5
-  # shellcheck disable=SC2086
-  kill -KILL ${strays} 2>/dev/null || true
-fi
+bash "${root_dir}/.github/unittest/helpers/reap_strays.sh"
 
 # Exit with failure if any tests failed
 exit $EXIT_STATUS

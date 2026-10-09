@@ -12,7 +12,7 @@ apt-get install -y vim git wget cmake ninja-build
 # and both resolve on jammy too.
 apt-get install -y libglfw3 libglfw3-dev libgl1 libglx-mesa0 libosmesa6 libosmesa6-dev libglew-dev
 apt-get install -y libxinerama-dev libxcursor-dev libxi-dev libxrandr-dev libxxf86vm-dev
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 libglib2.0-0
 apt-get install -y libegl1-mesa-dev libgles2-mesa-dev
 
 # Build tools and libraries for habitat-sim
