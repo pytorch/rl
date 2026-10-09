@@ -49,7 +49,7 @@ git submodule sync && git submodule update --init --recursive
 pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
   pip install "pybind11[global]" ninja
-  pip install --no-deps git+https://github.com/pytorch/tensordict.git
+  pip install --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
   pip install --no-deps tensordict
 fi

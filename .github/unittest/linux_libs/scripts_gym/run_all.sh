@@ -75,7 +75,7 @@ printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
     # Install tensordict dependencies (since we use --no-deps)
     uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
-    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
     uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
     uv pip install --no-deps tensordict

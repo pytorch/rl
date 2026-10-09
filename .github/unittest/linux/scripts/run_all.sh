@@ -253,7 +253,7 @@ export pybind11_DIR
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
   uv_pip_install --no-deps tensordict
 fi

@@ -74,7 +74,7 @@ fi
 # tensordict is a hard dependency of torchrl; install it explicitly since we test
 # `pip/uv install --no-deps` for torchrl itself.
 if [[ "$RELEASE" == 0 ]]; then
-  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+  uv_pip_install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
   uv_pip_install tensordict
 fi
