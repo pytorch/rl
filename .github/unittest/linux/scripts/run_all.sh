@@ -454,7 +454,13 @@ run_non_distributed_tests() {
       # configuration the timing numbers were collected with.
       xdist_workers=24
     else
-      xdist_workers=auto
+      # GPU: bound by device memory, not cores. -n auto gives 16 workers here,
+      # and 16 concurrent CUDA contexts on the single A10G leave no room for a
+      # test that spawns its own CUDA subprocess -- they die in
+      # cuDevicePrimaryCtxRetain with CUDA_ERROR_OUT_OF_MEMORY, and ordinary
+      # Triton tests start failing to allocate too. Which tests lose the race
+      # varies run to run, so cap the concurrency rather than chase them.
+      xdist_workers=4
     fi
   fi
   local xdist_args=""
@@ -608,6 +614,29 @@ python .github/unittest/helpers/upload_test_results.py || echo "Warning: Failed 
 # ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
+
+# ==================================================================================== #
+# ================================ Reap strays ======================================= #
+
+# On OSDC the step runs under run_with_env_secrets.py, which drains our stdout
+# until EOF. EOF only arrives once every process holding the write end has
+# closed it, so a single xdist worker or Ray actor that outlives pytest keeps
+# the job alive until its 120-minute timeout, long after this script exits 0.
+# Under linux_job_v2 the surrounding `docker run` reaped these for us.
+echo "::group::Processes still alive before exit"
+ps -eo pid,ppid,etimes,rss,args --sort=-rss | head -40 || true
+echo "::endgroup::"
+
+# Anything still running that is not this shell or ps itself.
+strays="$(pgrep -f 'pytest|ray::|Xvfb' 2>/dev/null | grep -v "^$$\$" || true)"
+if [ -n "${strays}" ]; then
+  echo "Reaping strays holding the step open: ${strays}"
+  # shellcheck disable=SC2086
+  kill -TERM ${strays} 2>/dev/null || true
+  sleep 5
+  # shellcheck disable=SC2086
+  kill -KILL ${strays} 2>/dev/null || true
+fi
 
 # Exit with failure if any tests failed
 exit $EXIT_STATUS
