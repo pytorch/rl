@@ -1598,6 +1598,63 @@ class TestGRPOLossRefactorBehavior:
         torch.testing.assert_close(dapo_out.loss_objective, grpo_out.loss_objective)
         torch.testing.assert_close(dapo_out.clip_fraction, grpo_out.clip_fraction)
 
+    @pytest.mark.parametrize("aggregation", ["token_mean", "prompt_mean"])
+    @pytest.mark.parametrize("kl_kind", ["ref", "inference"])
+    def test_kl_penalty_is_a_mean_over_valid_tokens(self, aggregation, kl_kind):
+        cur = torch.tensor([[-1.0, -2.0, -0.5], [-0.2, -1.5, -3.0]])
+        other = torch.tensor([[-1.5, -1.0, -0.5], [-0.4, -1.0, -2.0]])
+        mask = torch.tensor([[False, True, True], [True, True, True]])
+        diff = other - cur
+        kl_token = diff.expm1() - diff
+        if aggregation == "token_mean":
+            expected = kl_token[mask].mean()
+        else:
+            expected = torch.stack(
+                [kl_token[i][mask[i]].mean() for i in range(2)]
+            ).mean()
+
+        def make_data(cur, other, mask):
+            batch, seq = cur.shape
+            return TensorDict(
+                {
+                    "current_log_prob": cur,
+                    "mask": mask,
+                    ("tokens", "full"): torch.zeros(batch, seq, dtype=torch.long),
+                    ("log_probs", "full"): other if kl_kind == "inference" else cur,
+                    "advantage": torch.ones(batch, seq, 1),
+                    ("next", "ref_log_probs", "full"): other,
+                },
+                batch_size=[batch],
+            )
+
+        coeff = 0.5
+        loss_fn = GRPOLoss(
+            _FixedLogProbPolicy(),
+            clip_epsilon=0.2,
+            entropy_bonus=False,
+            aggregation=aggregation,
+            kl_to_ref_coeff=coeff if kl_kind == "ref" else None,
+            kl_to_inference_coeff=coeff if kl_kind == "inference" else None,
+        )
+        out = loss_fn(make_data(cur, other, mask))
+        # Same tokens, left padded to a longer sequence.
+        pad = torch.zeros(2, 4)
+        pad_mask = torch.zeros(2, 4, dtype=torch.bool)
+        out_padded = loss_fn(
+            make_data(
+                torch.cat([pad, cur], -1),
+                torch.cat([pad, other], -1),
+                torch.cat([pad_mask, mask], -1),
+            )
+        )
+
+        kl = getattr(out, f"kl_to_{kl_kind}")
+        assert kl.shape == out.loss_objective.shape
+        expected = expected.reshape(kl.shape)
+        torch.testing.assert_close(kl, expected)
+        torch.testing.assert_close(getattr(out, f"loss_kl_to_{kl_kind}"), coeff * kl)
+        torch.testing.assert_close(getattr(out_padded, f"kl_to_{kl_kind}"), expected)
+
 
 @pytest.mark.slow
 @pytest.mark.integration
