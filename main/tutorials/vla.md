@@ -134,7 +134,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f379c2d6010>
+<torch._C.Generator object at 0x7f005a0d61d0>
 ```
 
 ## The canonical VLA schema
@@ -324,7 +324,7 @@ The behavior-cloning loss drops sharply as the policy fits the expert chunks:
 ```
 
 ```
-(1.6689702272415161, 0.07800987362861633)
+(1.6689702272415161, 0.07800992578268051)
 ```
 
 ## Chunked inference
@@ -531,7 +531,7 @@ swap [`TinyVLA`](../reference/generated/torchrl.modules.vla.TinyVLA.html#torchrl
 - SimpleVLA-RL (GRPO fine-tuning): [https://arxiv.org/abs/2509.09674](https://arxiv.org/abs/2509.09674)
 - The [VLA reference documentation](../reference/vla.html#ref-vla).
 
-**Total running time of the script:** (0 minutes 0.498 seconds)
+**Total running time of the script:** (0 minutes 0.398 seconds)
 
 [`Download Jupyter notebook: vla.ipynb`](../_downloads/4f2ab836eee1cdeaf65dd37f30e821be/vla.ipynb)
 

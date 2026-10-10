@@ -23,13 +23,6 @@ Saves the tensordict to disk.
 
 This function is a proxy to `memmap()`.
 
-*classmethod*fields()
-
-Return a tuple describing the fields of this dataclass.
-
-Accepts a dataclass or an instance of one. Tuple elements are of
-type Field.
-
 from_any(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
 Recursively converts any object to a TensorDict.
@@ -667,7 +660,7 @@ Examples
 >>> assert (td["age"] == np.array([10, 4])).all()
 ```
 
-*classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
+*classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool | None = None*) → Any
 
 Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
 
@@ -683,8 +676,9 @@ Parameters:
 - **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
 - **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
 fields that neither argument holds are set to `None`.
-- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
-a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+- **safe** (*bool**,**optional*) - Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
+raise an error if `tensordict` is not a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase).
+Without it, such a tensordict raises an error.
 
 Examples
 

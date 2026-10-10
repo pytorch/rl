@@ -644,7 +644,7 @@ sequences.
 env.close()
 ```
 
-**Total running time of the script:** (1 minutes 0.168 seconds)
+**Total running time of the script:** (0 minutes 58.184 seconds)
 
 [`Download Jupyter notebook: mujoco_cube_bowl_macros.ipynb`](../_downloads/bcaf588259087706c7dcfb03a5a9380e/mujoco_cube_bowl_macros.ipynb)
 
