@@ -9,13 +9,10 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 export TZ=UTC
 apt-get update
-apt-get install -yq --no-install-recommends git wget unzip curl patchelf
+# python3-venv lets linux_job_v3's HF cache sync install the AWS CLI
+apt-get install -yq --no-install-recommends git wget unzip curl patchelf cmake python3-venv
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
-# The base PyTorch devel image provides compilers, CMake >= 3.22, and most build deps.
-# Install only minimal utilities not guaranteed to be present.
-
-# CMake available in the PyTorch devel image (Ubuntu 22.04) is sufficient.
 
 # Cleanup APT cache
 apt-get clean && rm -rf /var/lib/apt/lists/*

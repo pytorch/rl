@@ -650,6 +650,14 @@ def test_run_example_terminates_timeouts(tmp_path: Path) -> None:
             os.kill(child_pid, 0)
         except ProcessLookupError:
             break
+        # A killed child re-parented to a PID 1 that never reaps orphans (OSDC's
+        # `tail -f /dev/null`) stays a zombie, which os.kill still reports.
+        try:
+            stat = Path(f"/proc/{child_pid}/stat").read_text()
+            if stat.rsplit(")", 1)[1].split()[0] == "Z":
+                break
+        except (FileNotFoundError, IndexError):
+            pass
         time.sleep(0.01)
     else:
         pytest.fail(f"child process {child_pid} survived timeout cleanup")
