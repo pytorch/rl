@@ -23,7 +23,7 @@ from .ppo import PPOTrainer
 from .reinforce import ReinforceTrainer
 from .sac import SACTrainer
 from .td3 import TD3Trainer
-from .tdmpc2 import TdMpc2OptimizationStepper
+from .tdmpc2 import TdMpc2OptimizationStepper, TdMpc2Trainer
 
 __all__ = [
     "A2CTrainer",
@@ -43,4 +43,5 @@ __all__ = [
     "SACTrainer",
     "TD3Trainer",
     "TdMpc2OptimizationStepper",
+    "TdMpc2Trainer",
 ]

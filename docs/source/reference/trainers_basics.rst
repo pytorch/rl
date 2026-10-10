@@ -61,6 +61,7 @@ minimal mode.
     FQLTrainer
     CQLTrainer
     TD3Trainer
+    TdMpc2Trainer
     GRPOTrainer
     TdMpc2OptimizationStepper
 
