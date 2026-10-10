@@ -141,7 +141,7 @@ python -c "import functorch"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
+  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
   uv pip install --no-deps tensordict
 fi

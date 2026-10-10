@@ -66,7 +66,7 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip3 install git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
   pip3 install tensordict
 fi

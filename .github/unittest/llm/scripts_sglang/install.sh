@@ -71,7 +71,7 @@ printf "* Installing tensordict\n"
 uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 uv pip install "pybind11[global]" ninja
 if [[ "$RELEASE" == 0 ]]; then
-    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+    uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
     uv pip install --no-deps tensordict
 fi
@@ -126,7 +126,7 @@ uv pip install mcp langdetect
 # against the final torch wheel present in the environment.
 printf "* Reinstalling TensorDict and TorchRL against final backend stack\n"
 if [[ "$RELEASE" == 0 ]]; then
-    uv pip install --reinstall --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+    uv pip install --reinstall --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
 else
     uv pip install --reinstall --no-deps tensordict
 fi
