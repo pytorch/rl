@@ -110,6 +110,10 @@ class MultiStepTransform(Transform):
                  [19],
                  [20]]])
 
+    .. seealso::
+        :class:`~torchrl.trainers.algorithms.configs.MultiStepTransformConfig`
+        exposes this transform through TorchRL's structured Hydra configuration.
+
     """
 
     ENV_ERR = (
