@@ -577,14 +577,14 @@ class VecNormV2(Transform):
                 return data
 
         if self.decay < 1.0:
-            bias_correction = 1 - (count * math.log(self.decay)).exp()
+            bias_correction = -(count * math.log(self.decay)).expm1()
             bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), data)
         else:
             bias_correction = 1
 
-        var = var - loc.pow(2)
         loc = loc / bias_correction
         var = var / bias_correction
+        var = (var - loc.pow(2)).clamp_min(0)
 
         scale = var.sqrt().clamp_min(self.eps)
 
@@ -849,16 +849,16 @@ class VecNormV2(Transform):
             loc = self._loc
             count = self._count
             if self.decay != 1.0:
-                bias_correction = 1 - (count * math.log(self.decay)).exp()
+                bias_correction = -(count * math.log(self.decay)).expm1()
                 bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), loc)
             else:
                 bias_correction = 1
             if loc_only:
                 return loc / bias_correction, None
             var = self._var
-            var = var - loc.pow(2)
             loc = loc / bias_correction
             var = var / bias_correction
+            var = (var - loc.pow(2)).clamp_min(0)
             scale = var.sqrt().clamp_min(self.eps)
             return loc, scale
         else:

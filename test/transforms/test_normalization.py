@@ -121,6 +121,49 @@ class TestVecNormV2:
             assert env.transform._loc.ndim == 0
             assert env.transform._var.ndim == 0
 
+    class OffsetEnv(SimpleEnv):
+        OFFSET = 100.0
+
+        def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+            tensordict = super()._reset(tensordict, **kwargs)
+            tensordict["observation"] = tensordict["observation"] + self.OFFSET
+            return tensordict
+
+        def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+            tensordict = super()._step(tensordict)
+            tensordict["observation"] = tensordict["observation"] + self.OFFSET
+            return tensordict
+
+    @pytest.mark.parametrize("stateful", [True, False])
+    def test_vecnorm2_scale_with_offset(self, stateful):
+        # Observations are OFFSET + N(0, 1): the scale must track the std (1),
+        # not the mean, as soon as the running stats have warmed up.
+        torch.manual_seed(0)
+        env = self.OffsetEnv().append_transform(
+            VecNormV2(
+                in_keys=["observation"],
+                out_keys=["obs_norm"],
+                decay=0.9999,
+                stateful=stateful,
+            )
+        )
+        r = env.rollout(1000, break_when_any_done=False)
+        obs = r["next", "observation"]
+        obs_norm = r["next", "obs_norm"]
+        torch.testing.assert_close(
+            obs_norm[500:].std(unbiased=False), torch.tensor(1.0), atol=0.2, rtol=0
+        )
+        if stateful:
+            torch.testing.assert_close(
+                env.transform.scale["observation"],
+                obs.std(unbiased=False),
+                atol=0.2,
+                rtol=0,
+            )
+            torch.testing.assert_close(
+                env.transform.loc["observation"], obs.mean(), atol=0.2, rtol=0
+            )
+
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
     @pytest.mark.parametrize("stateful", [True, False])
     def test_stateful_and_stateless_specs(self, stateful):
