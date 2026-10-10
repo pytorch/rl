@@ -1,9 +1,9 @@
-# Flaky Test Report - 2026-10-09
+# Flaky Test Report - 2026-10-10
 
 ## Summary
 
-- **Flaky tests**: 5772
-- **Newly flaky** (last 7 days): 40
+- **Flaky tests**: 5773
+- **Newly flaky** (last 7 days): 41
 - **Resolved**: 0
 - **Total tests analyzed**: 32507
 - **CI runs analyzed**: 60
@@ -14,13 +14,13 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ripts/test_examples.py::test_example[distributed-ray-dqn]` 🆕 | 50.0% (10/20) | 10 | 1.00 | 2026-10-09 |
-| `...scripts/test_examples.py::test_example[ray-wandb-monitor]` 🆕 | 50.0% (10/20) | 10 | 1.00 | 2026-10-09 |
-| `...ts/test_examples.py::test_example[services-ray-collector]` 🆕 | 50.0% (10/20) | 10 | 1.00 | 2026-10-09 |
-| `....py::TestCollectorStats::test_ray_stats_during_collection` 🆕 | 54.3% (89/164) | 89 | 0.91 | 2026-10-09 |
-| `...llectors.py::TestCollectorStats::test_ray_collector_stats` 🆕 | 54.3% (89/164) | 89 | 0.91 | 2026-10-09 |
-| `...re::test_static_batch_pads_slices_and_owns_results[False]` | 59.5% (44/74) | 44 | 0.81 | 2026-10-07 |
-| `...cessSlotTransport::test_server_batched_pass_on_cuda[True]` | 64.9% (48/74) | 48 | 0.70 | 2026-10-08 |
+| `...cessSlotTransport::test_server_batched_pass_on_cuda[True]` | 50.7% (36/71) | 36 | 0.99 | 2026-10-08 |
+| `....py::TestCollectorStats::test_ray_stats_during_collection` 🆕 | 54.6% (89/163) | 89 | 0.91 | 2026-10-09 |
+| `...llectors.py::TestCollectorStats::test_ray_collector_stats` 🆕 | 54.6% (89/163) | 89 | 0.91 | 2026-10-09 |
+| `...re::test_static_batch_pads_slices_and_owns_results[False]` | 45.1% (32/71) | 32 | 0.90 | 2026-10-07 |
+| `...ts/test_examples.py::test_example[services-ray-collector]` 🆕 | 55.6% (10/18) | 10 | 0.89 | 2026-10-09 |
+| `...ripts/test_examples.py::test_example[distributed-ray-dqn]` 🆕 | 55.6% (10/18) | 10 | 0.89 | 2026-10-09 |
+| `...scripts/test_examples.py::test_example[ray-wandb-monitor]` 🆕 | 55.6% (10/18) | 10 | 0.89 | 2026-10-09 |
 | `...y::TestRayCollector::test_distributed_collector_basic[50]` 🆕 | 66.7% (40/60) | 40 | 0.67 | 2026-10-09 |
 | `...::TestRayCollector::test_distributed_collector_basic[100]` 🆕 | 66.7% (40/60) | 40 | 0.67 | 2026-10-09 |
 | `...ted.py::TestRayCollector::test_distributed_collector_mult` 🆕 | 66.7% (40/60) | 40 | 0.67 | 2026-10-09 |
@@ -38,11 +38,11 @@
 
 ### Newly Flaky Tests
 
-- `.github/unittest/examples/scripts/test_examples.py::test_example[distributed-ray-dqn]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[ray-wandb-monitor]`
-- `.github/unittest/examples/scripts/test_examples.py::test_example[services-ray-collector]`
 - `test/test_collectors.py::TestCollectorStats::test_ray_stats_during_collection`
 - `test/test_collectors.py::TestCollectorStats::test_ray_collector_stats`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[services-ray-collector]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[distributed-ray-dqn]`
+- `.github/unittest/examples/scripts/test_examples.py::test_example[ray-wandb-monitor]`
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_basic[50]`
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_basic[100]`
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_mult`
@@ -74,6 +74,7 @@
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiSyncCollector]`
 - `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiAsyncCollector]`
 - `test/test_distributed.py::TestRayCollector::test_ray_collector_policy_constructor`
+- `.github/unittest/examples/scripts/test_examples.py::test_run_example_terminates_timeouts`
 - `test/test_specs.py::TestRanges::test_multi_discrete_conversion_batched_spec[device0-shape0-ns0]`
 - `test/test_specs.py::TestRanges::test_multi_discrete_conversion_batched_spec[device0-shape0-ns1]`
 - `test/test_specs.py::TestRanges::test_multi_discrete_conversion_batched_spec[device0-shape1-ns0]`
@@ -90,4 +91,4 @@
 
 ---
 
-*Generated at 2026-10-09T06:32:13.413694+00:00*
+*Generated at 2026-10-10T06:29:49.524687+00:00*
