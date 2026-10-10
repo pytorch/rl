@@ -534,7 +534,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -658,13 +658,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -764,7 +787,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 

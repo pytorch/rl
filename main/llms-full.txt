@@ -26032,7 +26032,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -26156,13 +26156,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -26282,7 +26305,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -37101,7 +37126,7 @@ Proxy to `zero()`.
 
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f3787a47100>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase'*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -37641,7 +37666,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -37765,13 +37790,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -37889,7 +37937,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -40182,7 +40232,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -40306,13 +40356,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 *classmethod*from_timestamps(*path: str | PathLike*, *timestamps: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *stream: int | None = None*, *fps: float | None = None*, *auto_decode: bool = False*, *device: Any = None*, *dtype: Any = None*) → VideoClipRef[[source]](../../_modules/torchrl/data/video.html#VideoClipRef.from_timestamps)
 
@@ -40462,7 +40535,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -51728,7 +51803,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -51852,13 +51927,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -51978,7 +52076,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -53082,7 +53182,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -53206,13 +53306,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 *classmethod*from_text(*text: str | list[str]*, *chat_template_name: str | None = None*, *chat_template: str | None = None*, *tokenizer: transformers.AutoTokenizer | transformers.AutoProcessor | None = None*) → History[[source]](../../_modules/torchrl/data/llm/history.html#History.from_text)
 
@@ -53380,7 +53503,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -59465,7 +59590,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -59589,13 +59714,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -59695,7 +59843,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -60475,7 +60623,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -60599,13 +60747,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -60705,7 +60876,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -61398,7 +61569,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -61522,13 +61693,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -61628,7 +61822,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -62321,7 +62515,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -62445,13 +62639,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -62551,7 +62768,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -99951,11 +100168,11 @@ RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 Background color for the `mujoco-torch` ray-cast renderer.
 Subclasses (e.g. satellite) override to a deep-space tone.
 
-REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'heading_std': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
+REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
 
 Default value of every term parameter a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) carries.
 
-REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'heading': _RegisteredTerm(fn=<function heading>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
+REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
 
 Registered reward terms by name, in weight-vector order.
 
@@ -107864,7 +108081,7 @@ Examples
 >>> td = TensorDict.from_parquet("data.parquet", columns=["obs", "reward"])
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -107935,13 +108152,36 @@ torch.Size([1000, 84, 84, 3])
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 get(*key: NestedKey*, **args*, ***kwargs*)
 
@@ -107969,7 +108209,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-*classmethod*load_memmap(*prefix: str | Path*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+*classmethod*load_memmap(*prefix: str | Path*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -163423,7 +163665,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -163547,13 +163789,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -163673,7 +163938,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -208874,7 +209141,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -208998,13 +209265,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -209104,7 +209394,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -210051,7 +210341,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -210175,13 +210465,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -210281,7 +210594,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -213338,7 +213651,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -213462,13 +213775,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -213572,7 +213908,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -214444,7 +214780,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -214568,13 +214904,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -214674,7 +215033,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -215928,7 +216287,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -216052,13 +216411,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -216158,7 +216540,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -228960,7 +229342,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -229084,13 +229466,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -229210,7 +229615,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -233527,7 +233934,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -233651,13 +234058,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -233777,7 +234207,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -234761,7 +235193,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -234885,13 +235317,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -235011,7 +235466,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -237779,7 +238236,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -237903,13 +238360,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -238029,7 +238509,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -239045,7 +239527,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -239169,13 +239651,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -239295,7 +239800,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -255867,7 +256374,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -255991,13 +256498,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -256117,7 +256647,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -258802,7 +259334,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -258926,13 +259458,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -259052,7 +259607,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -261891,7 +262448,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -262015,13 +262572,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -262141,7 +262721,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -264920,7 +265502,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -265044,13 +265626,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -265170,7 +265775,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -266150,7 +266757,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -266274,13 +266881,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -266400,7 +267030,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -272549,7 +273181,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -272673,13 +273305,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -272799,7 +273454,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -275592,7 +276249,7 @@ Examples
 >>> assert weird_key in pytree_recon[1]
 ```
 
-from_schema(***, *batch_size: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[int] | [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → TensorDictBase
+from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Pre-allocate a zero-filled TensorDict from a schema.
 
@@ -275716,13 +276373,36 @@ Examples
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: dict | None = None*, *safe: bool = True*) → Any
 
-Tensor class wrapper to instantiate a new tensor class object.
+Wraps a tensordict in a new instance of the tensorclass, without copying the leaves.
+
+If `tensordict` is a [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), the entries of the fields
+annotated with a tensorclass (or `Optional` of one) that are tensordicts become
+instances of that tensorclass, recursively. They are set in a shallow copy of
+`tensordict`, which keeps its own entries. An entry with keys that the annotated
+class does not declare stays a tensordict. Other backends are wrapped as they are:
+setting a tensorclass in them would write to their storage (e.g. an H5 file).
 
 Parameters:
 
-- **tensordict** (*TensorDictBase*) - Dictionary of tensor types
-- **non_tensordict** (*dict*) - Dictionary with non-tensor and nested tensor class objects
-- **safe** (*bool*) - Whether to raise an error if the tensordict is not a TensorDictBase instance
+- **tensordict** (*TensorDictBase*) - the tensordict that holds the tensor fields.
+- **non_tensordict** (*dict**,**optional*) - the values of the non-tensor fields. The
+fields that neither argument holds are set to `None`.
+- **safe** (*bool**,**optional*) - if `True`, raise an error when `tensordict` is not
+a [`TensorDictBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase). Defaults to `True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Pose(TensorClass):
+... q: torch.Tensor
+>>> class Obs(TensorClass):
+... a: Pose
+>>> obs = Obs(a=Pose(q=torch.zeros(5, 4), batch_size=[5]), batch_size=[5])
+>>> type(Obs.from_tensordict(obs.to_tensordict()).a).__name__
+'Pose'
+```
 
 from_tuple(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -275842,7 +276522,9 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: TensorDictBase | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Self
+Deprecated since version 0.15: Use `load_memmap_()` instead.
+
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str | None = None*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
