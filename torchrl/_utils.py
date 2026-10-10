@@ -46,6 +46,12 @@ try:
 except ImportError:
     from torch._dynamo import is_compiling
 
+try:
+    from torch.nn import Buffer  # noqa: F401
+except ImportError:
+    # torch<2.5 only: on newer torch, tensordict.utils.Buffer is an empty placeholder
+    from tensordict.utils import Buffer  # noqa: F401
+
 
 def _get_default_mp_start_method() -> str:
     """Returns TorchRL's preferred multiprocessing start method.

@@ -69,8 +69,10 @@ from torchrl.collectors.distributed.ray import _has_ray, RayCollector
 from torchrl.collectors.distributed.rpc import RPCCollector
 
 from torchrl.collectors.utils import (
+    _cast,
     _device_shareable_across_processes,
     _make_policy_factory,
+    _map_weight,
     _maybe_normalize_replay_buffer_tensordict_device,
     _traj_chunk_ends_done,
     _traj_emit,
@@ -158,6 +160,7 @@ from torchrl.weight_update import (
 )
 from torchrl.weight_update._ray import _weight_tensors
 from torchrl.weight_update.utils import _weight_tensor_signature
+from torchrl.weight_update.weight_sync_schemes import _to_module_compatible_tensor
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
@@ -201,6 +204,17 @@ def test_weight_sync_scheme_from_backend_forwards_kwargs():
 def test_weight_sync_scheme_from_backend_rejects_unknown():
     with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
         WeightSyncScheme.from_backend("unknown")
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.5.0"), reason="torch.nn.Buffer requires torch>=2.5"
+)
+def test_weight_helpers_keep_buffers():
+    # https://github.com/pytorch/rl/issues/4535: buffers must not be cast to plain tensors
+    buffer = nn.Buffer(torch.zeros(3))
+    assert isinstance(_cast(buffer.data, buffer), nn.Buffer)
+    assert isinstance(_map_weight(buffer, torch.device("cpu")), nn.Buffer)
+    assert isinstance(_to_module_compatible_tensor(torch.zeros(3), buffer), nn.Buffer)
 
 
 class TestWeightSyncCPUStaging:
