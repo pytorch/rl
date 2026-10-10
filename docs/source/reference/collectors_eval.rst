@@ -210,6 +210,63 @@ tensordict:
 
     evaluator = Evaluator(env, policy, max_steps=1000, on_result=on_eval)
 
+Comparing policies
+------------------
+
+To compare policies, environments (for instance the same task in two
+simulators) or perturbations, evaluate each combination with
+``episode_sampling="per_env"``, ``return_episodes=True`` and a fixed set of
+seeds, then reduce the per-episode returns with :func:`bootstrap_estimate` and
+:func:`paired_comparison`.
+
+``episode_sampling="per_env"`` makes every rollout contribute exactly one
+episode per sub-environment. The default (``"first_done"``) keeps the first
+episodes to finish, which over-samples sub-environments with short episodes
+when more episodes than sub-environments are requested. Passing the same
+``seed`` to :meth:`~Evaluator.evaluate` starts every policy from the same
+states, so per-episode results are paired across policies.
+
+.. code-block:: python
+
+    import torch
+    from torchrl.collectors import Evaluator, bootstrap_estimate, paired_comparison
+
+    policies = {"ppo": ppo_policy, "sac": sac_policy}
+    envs = {"gymnasium": make_gym_env, "mujoco": make_mujoco_env}
+    seeds = range(5)
+
+    returns = {}
+    for env_name, make_env in envs.items():
+        for policy_name, policy in policies.items():
+            evaluator = Evaluator(
+                make_env(),
+                policy,
+                num_trajectories=10,
+                max_steps=1000,
+                episode_sampling="per_env",
+                return_episodes=True,
+            )
+            returns[env_name, policy_name] = torch.cat(
+                [
+                    evaluator.evaluate(seed=seed)["eval/episodes"]["episode_reward"]
+                    for seed in seeds
+                ]
+            )
+
+    for env_name in envs:
+        summary = bootstrap_estimate(returns[env_name, "ppo"], statistic="iqm")
+        versus = paired_comparison(returns[env_name, "ppo"], returns[env_name, "sac"])
+        logger.log_metrics(
+            {
+                f"{env_name}/ppo/iqm": summary["estimate"],
+                f"{env_name}/ppo_minus_sac": versus["estimate"],
+                f"{env_name}/ppo_beats_sac": versus["probability_of_improvement"],
+            }
+        )
+
+Perturbations follow the same pattern: make them part of the environment
+factory (for instance ``lambda: make_env().append_transform(FrameSkipTransform(2))``).
+
 API Reference
 -------------
 
@@ -218,3 +275,5 @@ API Reference
     :template: rl_template.rst
 
     Evaluator
+    bootstrap_estimate
+    paired_comparison

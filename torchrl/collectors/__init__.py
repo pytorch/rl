@@ -9,6 +9,7 @@ from torchrl.modules.tensordict_module.exploration import RandomPolicy
 from ._async_batched import AsyncBatchedCollector
 
 from ._base import BaseCollector, ProfileConfig
+from ._evaluation_stats import bootstrap_estimate, paired_comparison
 from ._evaluator import Evaluator
 
 from ._multi_async import MultiAsyncCollector
@@ -35,6 +36,8 @@ __all__ = [
     "MultiSyncCollector",
     "AsyncBatchedCollector",
     "Evaluator",
+    "bootstrap_estimate",
+    "paired_comparison",
     "MultiAsyncCollector",
     "ProfileConfig",
     # Other exports
