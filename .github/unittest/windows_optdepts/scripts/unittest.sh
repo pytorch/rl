@@ -71,13 +71,13 @@ python -m pip install "numpy<2.0"
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if $torch_cuda ; then
-    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 -U
+    python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 -U
   else
     python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
   if $torch_cuda ; then
-      python -m pip install torch --index-url https://download.pytorch.org/whl/cu118 -U
+      python -m pip install torch --index-url https://download.pytorch.org/whl/cu130 -U
   else
       python -m pip install torch --index-url https://download.pytorch.org/whl/cpu -U
   fi

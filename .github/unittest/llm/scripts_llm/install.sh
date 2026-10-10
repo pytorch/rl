@@ -27,18 +27,18 @@ fi
 git submodule sync && git submodule update --init --recursive
 
 # We skip pytorch install due to vllm requirements
-#printf "Installing PyTorch with cu128"
+#printf "Installing PyTorch with cu130"
 #if [[ "$TORCH_VERSION" == "nightly" ]]; then
 #  if [ "${CU_VERSION:-}" == cpu ] ; then
 #      pip install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu -U
 #  else
-#      pip install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+#      pip install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cu130 -U
 #  fi
 #elif [[ "$TORCH_VERSION" == "stable" ]]; then
 #    if [ "${CU_VERSION:-}" == cpu ] ; then
 #      pip install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
 #  else
-#      pip install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cu128
+#      pip install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cu130
 #  fi
 #else
 #  printf "Failed to install pytorch"

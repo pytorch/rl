@@ -172,8 +172,8 @@ Two expensive suites in `.github/workflows/test-linux.yml` do NOT run on pull
 requests by default; they run on every push to main and on the nightly
 orchestrator. A PR that needs their signal opts in via a label:
 
-- **`ci/olddeps`** runs `tests-olddeps` (oldest supported stable torch, cu118,
-  gym 0.13). Add it whenever your change uses a torch API added recently (a
+- **`ci/olddeps`** runs `tests-olddeps` (oldest supported stable torch, 2.13 on
+  cu130, gym 0.13). Add it whenever your change uses a torch API added recently (a
   new `torch.*` function, kwarg or behavior flag). If in doubt whether the
   oldest supported torch has it, add the label.
 - **`ci/optdeps`** runs the full `tests-optdeps` suite (~2h). Add it when your

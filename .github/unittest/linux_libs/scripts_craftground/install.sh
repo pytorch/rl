@@ -28,18 +28,18 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu128"
+printf "Installing PyTorch with cu130"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
   else
-      uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 -U
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
       uv pip install torch --index-url https://download.pytorch.org/whl/cpu -U
   else
-      uv pip install torch --index-url https://download.pytorch.org/whl/cu128 -U
+      uv pip install torch --index-url https://download.pytorch.org/whl/cu130 -U
   fi
 else
   printf "Failed to install pytorch"

@@ -216,7 +216,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10"]
-        cuda_arch_version: ["11.8"]
+        cuda_arch_version: ["13.0"]
         # The single serial run reached 84 min of pytest (96 min job wall),
         # the critical path of the unit-test workflows. Fan out into three
         # serial shards; see linux_olddeps/scripts_gym_0_13/run_test.sh.
@@ -226,7 +226,7 @@ jobs:
     with:
       runner: mt-l-x86aavx2-11-41-a10g
       repository: pytorch/rl
-      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda11.8.0-cudnn8-devel-ubuntu22.04"
+      docker-image: "ghcr.io/pytorch/test-infra/osdc-cuda:cuda13.0.3-cudnn-devel-ubuntu24.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
@@ -234,7 +234,7 @@ jobs:
       script: |
         set -euo pipefail
         export PYTHON_VERSION="3.10"
-        export CU_VERSION="cu118"
+        export CU_VERSION="cu130"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
