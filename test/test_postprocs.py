@@ -107,6 +107,42 @@ class TestMultiStep:
                 ms_tensordict.get(("next", "original_reward")),
             )
 
+    def test_multistep_shifts_terminated(self):
+        # The trajectory terminates after step 3, whose next observation (4) is
+        # terminal. With n_steps=3, steps 1 and 2 are mapped to that terminal
+        # observation and must be flagged as terminated, otherwise losses
+        # bootstrap from it.
+        T = 6
+        terminated = torch.zeros(T, 1, dtype=torch.bool)
+        terminated[3] = True
+        tensordict = TensorDict(
+            {
+                "observation": torch.arange(T, dtype=torch.float).unsqueeze(-1),
+                "next": {
+                    "observation": torch.arange(1, T + 1, dtype=torch.float).unsqueeze(
+                        -1
+                    ),
+                    "reward": torch.ones(T, 1),
+                    "done": terminated.clone(),
+                    "terminated": terminated.clone(),
+                },
+            },
+            batch_size=[T],
+        )
+
+        ms_tensordict = MultiStep(0.9, 3)(tensordict)
+
+        torch.testing.assert_close(
+            ms_tensordict["next", "observation"].squeeze(-1),
+            torch.tensor([3.0, 4.0, 4.0, 4.0, 6.0, 6.0]),
+        )
+        torch.testing.assert_close(
+            ms_tensordict["next", "terminated"].squeeze(-1),
+            torch.tensor([False, True, True, True, False, False]),
+        )
+        # "done" delimits trajectories and is left untouched
+        torch.testing.assert_close(ms_tensordict["next", "done"], terminated)
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "batch_size",

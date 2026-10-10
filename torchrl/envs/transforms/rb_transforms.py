@@ -32,7 +32,8 @@ class MultiStepTransform(Transform):
 
     All entries in the ``"next"`` tensordict that are not part of the ``done_keys``
     or ``reward_keys`` will be mapped to their respective ``t + n_steps - 1``
-    correspondent.
+    correspondent. The ``"terminated"`` entry is mapped too, so that it flags
+    the state the shifted next observation belongs to.
 
     This transform is a more hyperparameter resistant version of
     :class:`~torchrl.data.postprocs.postprocs.MultiStep`:
@@ -58,7 +59,8 @@ class MultiStepTransform(Transform):
             an end of trajectory.
             Defaults to ``"done"``.
         done_keys (list of NestedKey, optional): the list of end keys in the input tensordict.
-            All the entries indicated by these keys will be left untouched by the transform.
+            All the entries indicated by these keys, except ``"terminated"``,
+            will be left untouched by the transform.
             Defaults to :data:`~torchrl.data.DEFAULT_DONE_KEYS`, i.e.
             ``["done", "truncated", "terminated"]``.
         mask_key (NestedKey, optional): the mask key in the input tensordict.

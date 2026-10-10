@@ -174,7 +174,10 @@ class MultiStep(nn.Module):
                 The TensorDict must contain a ``("next", "reward")`` and
                 ``("next", "done")`` keys.
                 All keys that are contained within the "next" nested tensordict
-                will be shifted by (at most) :attr:`~.n_steps` frames.
+                will be shifted by (at most) :attr:`~.n_steps` frames, except
+                the ``"done"`` and ``"truncated"`` entries which delimit
+                trajectories. The ``"terminated"`` entry is shifted so that it
+                flags the state the shifted next observation belongs to.
                 The TensorDict will also be updated with new key-value pairs:
 
                 - gamma: indicating the discount to be used for the next
@@ -269,9 +272,16 @@ def _multi_step_func(
     # with a done state         tensor([[ 0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  1]])
     # meaning that the first obs will be replaced by the third, the second by the fourth etc.
     # The fifth remains the fifth as it is terminal
+    # ("next", "terminated") is shifted along with the next observation so that it
+    # flags the state this observation belongs to: otherwise the n - 1 steps
+    # preceding a termination would bootstrap from the terminal state.
+    # The other done entries are left untouched as they delimit trajectories.
     tensordict_gather = (
         tensordict.get("next")
-        .exclude(*reward_keys, *done_keys)
+        .exclude(
+            *reward_keys,
+            *(key for key in done_keys if unravel_key(key) != "terminated"),
+        )
         .gather(-1, idx_to_gather)
     )
 
