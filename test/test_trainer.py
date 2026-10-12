@@ -2298,6 +2298,37 @@ class TestPostOptimCompleteLog:
 
 
 class TestDefaultOptimizationStepper:
+    def test_returns_detached_metrics(self):
+        model = nn.Linear(1, 1, bias=False)
+
+        class LossWithMetric(nn.Module):
+            def forward(self, td):
+                prediction = model(td["x"])
+                return TensorDict(
+                    {
+                        "loss": prediction.square().mean(),
+                        "metric": prediction.mean(),
+                    },
+                    [],
+                )
+
+        stepper = DefaultOptimizationStepper()
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=None,
+            loss_module=LossWithMetric(),
+            optimizer=torch.optim.SGD(model.parameters(), lr=1e-3),
+            optimization_stepper=stepper,
+        )
+        trainer._pbar_str = OrderedDict()
+
+        metrics = stepper.step(trainer, TensorDict({"x": torch.ones(2, 1)}, []))
+
+        assert not metrics["loss"].requires_grad
+        assert not metrics["metric"].requires_grad
+
     def test_loss_components_partial(self):
         torch.manual_seed(0)
         x = torch.randn(5, 10)
