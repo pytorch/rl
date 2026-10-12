@@ -57,11 +57,7 @@ def _atari_dqn_gcs_unavailable(stderr: bytes | str | None = None) -> RuntimeErro
 def _raise_if_gcs_unavailable(output: subprocess.CompletedProcess) -> None:
     stderr = output.stderr or b""
     stdout = output.stdout or b""
-    if (
-        output.returncode != 0
-        or b"AccessDenied" in stderr
-        or b"AccessDenied" in stdout
-    ):
+    if output.returncode != 0 or b"AccessDenied" in stderr or b"AccessDenied" in stdout:
         raise _atari_dqn_gcs_unavailable(stderr or stdout)
 
 
@@ -568,9 +564,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 except subprocess.CalledProcessError:
                     raise RuntimeError("gsutil is not installed or not found in PATH.")
                 command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
-                output = subprocess.run(
-                    command, shell=True, capture_output=True
-                )
+                output = subprocess.run(command, shell=True, capture_output=True)
                 _raise_if_gcs_unavailable(output)
                 files = [
                     file.decode("utf-8").replace("$", r"\$")  # noqa: W605
