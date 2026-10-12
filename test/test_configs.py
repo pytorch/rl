@@ -237,10 +237,14 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiActionConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
+        "PrioritizedSamplerConfig",
+        "PrioritizedSliceSamplerConfig",
         "Reward2GoTransformConfig",
         "RewardScalingConfig",
         "SamplerEnsembleConfig",
+        "SliceSamplerWithoutReplacementConfig",
         "StackConfig",
+        "TensorStorageConfig",
         "VecNormConfig",
         "VecNormV2Config",
     }
@@ -286,7 +290,6 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "SMACv2EnvConfig",
         "SelectTransformConfig",
         "SignTransformConfig",
-        "SliceSamplerWithoutReplacementConfig",
         "SqueezeTransformConfig",
         "StorageConfig",
         "TensorDictModuleConfig",
@@ -719,6 +722,13 @@ class TestDataConfigs:
         assert storage.max_size == 1000
         assert storage.ndim == 2
 
+        # Unset device/ndim must follow TensorStorage, not None.
+        default_storage = instantiate(TensorStorageConfig(max_size=4))
+        assert isinstance(default_storage, TensorStorage)
+        assert default_storage.max_size == 4
+        assert default_storage.device == torch.device("cpu")
+        assert default_storage.ndim == 1
+
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensordict_replay_buffer_config(self):
         """Test TensorDictReplayBufferConfig."""
@@ -1001,7 +1011,6 @@ class TestDataConfigs:
             strict_length=True,
             compile=False,  # Use bool instead of Union[bool, dict]
             span=False,  # Use bool instead of Union[bool, int, tuple]
-            use_gpu=False,  # Use bool instead of Union[torch.device, bool]
             max_capacity=1000,
             alpha=0.7,
             beta=0.9,
@@ -1009,6 +1018,7 @@ class TestDataConfigs:
             reduction="max",
         )
         assert cfg._target_ == "torchrl.data.replay_buffers.PrioritizedSliceSampler"
+        assert "use_gpu" not in PrioritizedSliceSamplerConfig.__dataclass_fields__
         assert cfg.num_slices == 10
         assert cfg.slice_len is None
         assert cfg.end_key == ("next", "done")
@@ -1018,7 +1028,6 @@ class TestDataConfigs:
         assert cfg.strict_length is True
         assert cfg.compile is False
         assert cfg.span is False
-        assert cfg.use_gpu is False
         assert cfg.max_capacity == 1000
         assert cfg.alpha == 0.7
         assert cfg.beta == 0.9
@@ -1039,8 +1048,10 @@ class TestDataConfigs:
         assert sampler.alpha == 0.7
         assert sampler.beta == 0.9
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_slice_sampler_without_replacement_config(self):
         """Test SliceSamplerWithoutReplacementConfig."""
+        from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import (
             SliceSamplerWithoutReplacementConfig,
         )
@@ -1048,13 +1059,16 @@ class TestDataConfigs:
         cfg = SliceSamplerWithoutReplacementConfig(
             num_slices=10,
             slice_len=None,  # Only set one of num_slices or slice_len
+            drop_last=False,
             end_key=("next", "done"),
             traj_key="episode",
-            cache_values=True,
             truncated_key=("next", "truncated"),
             strict_length=True,
+            output_layout="flat",
+            slice_end_key=("collector", "slice_end"),
+            time_dim_name="time",
+            shuffle=True,
             compile=False,  # Use bool instead of Union[bool, dict]
-            span=False,  # Use bool instead of Union[bool, int, tuple]
             use_gpu=False,  # Use bool instead of Union[torch.device, bool]
         )
         assert (
@@ -1062,19 +1076,28 @@ class TestDataConfigs:
         )
         assert cfg.num_slices == 10
         assert cfg.slice_len is None
+        assert cfg.drop_last is False
+        assert cfg.shuffle is True
         assert cfg.end_key == ("next", "done")
         assert cfg.traj_key == "episode"
-        assert cfg.cache_values is True
         assert cfg.truncated_key == ("next", "truncated")
         assert cfg.strict_length is True
+        assert cfg.output_layout == "flat"
+        assert cfg.slice_end_key == ("collector", "slice_end")
+        assert cfg.time_dim_name == "time"
         assert cfg.compile is False
-        assert cfg.span is False
         assert cfg.use_gpu is False
+        assert "cache_values" not in cfg.__dataclass_fields__
+        assert "span" not in cfg.__dataclass_fields__
 
-        # Test instantiation - use direct instantiation to avoid Union type issues
-        sampler = SliceSamplerWithoutReplacement(num_slices=10)
+        sampler = instantiate(cfg)
         assert isinstance(sampler, SliceSamplerWithoutReplacement)
         assert sampler.num_slices == 10
+        assert sampler.drop_last is False
+        assert sampler.shuffle is True
+        assert sampler.output_layout == "flat"
+        assert sampler.slice_end_key == ("collector", "slice_end")
+        assert sampler.time_dim_name == "time"
 
     def test_slice_sampler_config(self):
         """Test SliceSamplerConfig."""
@@ -1167,6 +1190,24 @@ class TestDataConfigs:
         assert sampler._beta == 0.9
         assert sampler._eps == 1e-8
         assert sampler.reduction == "max"
+
+    def test_prioritized_config_defaults_match_constructor(self):
+        # Field defaults only. Instantiating PrioritizedSampler needs the
+        # SumSegmentTreeFp32 extension, which is not part of this assertion.
+        from torchrl.trainers.algorithms.configs.data import (
+            PrioritizedSamplerConfig,
+            PrioritizedSliceSamplerConfig,
+        )
+
+        defaults = PrioritizedSamplerConfig(max_capacity=4, alpha=0.6, beta=0.4)
+        assert defaults.eps == 1e-8
+        assert defaults.reduction == "max"
+        slice_defaults = PrioritizedSliceSamplerConfig(
+            max_capacity=4, alpha=0.6, beta=0.4, num_slices=1
+        )
+        assert slice_defaults.eps == 1e-8
+        assert slice_defaults.reduction == "max"
+        assert "use_gpu" not in PrioritizedSliceSamplerConfig.__dataclass_fields__
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_sampler_without_replacement_config(self):
@@ -1313,7 +1354,6 @@ class TestDataConfigs:
                 beta=0.9,
                 compile=False,  # Use bool instead of Union[bool, dict]
                 span=False,  # Use bool instead of Union[bool, int, tuple]
-                use_gpu=False,  # Use bool instead of Union[torch.device, bool]
             ),
             storage=LazyMemmapStorageConfig(max_size=1000, device="cpu", ndim=2),
             writer=TensorDictRoundRobinWriterConfig(compilable=True),
