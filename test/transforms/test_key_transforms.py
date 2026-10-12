@@ -934,7 +934,7 @@ class TestRenameTransform(TransformBase):
         )
         action = torch.tensor([3.0])
         inv_td = TensorDict({("agent", "command"): action}, [])
-        inverse.inv(inv_td)
+        inv_td = inverse.inv(inv_td)
         torch.testing.assert_close(inv_td.get(("agent", "action")), action)
         if create_copy:
             torch.testing.assert_close(inv_td.get(("agent", "command")), action)
