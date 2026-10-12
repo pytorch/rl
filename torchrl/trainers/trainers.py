@@ -343,7 +343,7 @@ class DefaultOptimizationStepper(OptimizationStepper):
         trainer.optimizer.step()
         trainer.optimizer.zero_grad()
 
-        return losses_td
+        return losses_td.detach()
 
 
 class MixedPrecisionOptimizationStepper(OptimizationStepper):
