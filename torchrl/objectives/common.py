@@ -16,11 +16,10 @@ from typing import Any, Literal
 import torch
 from tensordict import is_tensor_collection, NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
-from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
 
-from torchrl._utils import rl_warnings
+from torchrl._utils import Buffer, rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
 from torchrl.objectives.utils import _reduce, default_value_kwargs, ValueEstimators
@@ -1032,8 +1031,9 @@ class _make_target_param:
         self.clone = clone
 
     def __call__(self, x):
+        is_param = isinstance(x, nn.Parameter)
         x = x.data.clone() if self.clone else x.data
-        if isinstance(x, nn.Parameter):
+        if is_param:
             return Buffer(x)
         return x
 

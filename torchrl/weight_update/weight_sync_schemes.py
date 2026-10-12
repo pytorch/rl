@@ -16,9 +16,8 @@ from typing import Any, Literal, overload, Protocol, TypeAlias
 import torch
 
 from tensordict import TensorDict, TensorDictBase
-from tensordict.utils import Buffer
 from torch import nn
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import Buffer, logger as torchrl_logger
 
 __all__ = [
     "TransportBackend",
