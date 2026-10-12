@@ -237,7 +237,12 @@ _CONFIG_PARITY_DEFAULTS_CHECKED = frozenset(
         "MultiActionConfig",
         "MultiAsyncCollectorConfig",
         "MultiSyncCollectorConfig",
+        "Reward2GoTransformConfig",
+        "RewardScalingConfig",
         "SamplerEnsembleConfig",
+        "StackConfig",
+        "VecNormConfig",
+        "VecNormV2Config",
     }
 )
 
@@ -277,14 +282,12 @@ _CONFIG_PARITY_KNOWN_GAPS = frozenset(
         "RandomCropTensorDictConfig",
         "RemoveEmptySpecsConfig",
         "RenameTransformConfig",
-        "Reward2GoTransformConfig",
         "RewardSumConfig",
         "SMACv2EnvConfig",
         "SelectTransformConfig",
         "SignTransformConfig",
         "SliceSamplerWithoutReplacementConfig",
         "SqueezeTransformConfig",
-        "StackConfig",
         "StorageConfig",
         "TensorDictModuleConfig",
         "TensorDictPrimerConfig",
@@ -5510,6 +5513,86 @@ class TestTransformConfigs:
         nested = instantiate(DoneTransformConfig(reward_key=["player0", "reward"]))
         assert isinstance(nested, DoneTransform)
         assert nested.reward_key == ("player0", "reward")
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_stack_config_instantiation(self):
+        from hydra.utils import instantiate
+        from torchrl.envs.transforms import Stack
+        from torchrl.trainers.algorithms.configs.transforms import StackConfig
+
+        cfg = StackConfig(in_keys=["a", "b"], out_key="c")
+        assert cfg.dim == -1
+        assert cfg.allow_positive_dim is False
+        assert cfg.del_keys is True
+        assert cfg.in_key_inv is None
+        assert cfg.out_keys_inv is None
+        with pytest.raises(TypeError):
+            StackConfig(in_keys=["a", "b"], out_keys=["c"])
+
+        transform = instantiate(cfg)
+        assert isinstance(transform, Stack)
+        assert transform.in_keys == ["a", "b"]
+        assert transform.out_keys == ["c"]
+        assert transform.dim == -1
+
+        td = TensorDict({"a": torch.zeros(3), "b": torch.ones(3)}, [])
+        stacked = transform(td)
+        assert stacked["c"].shape == (3, 2)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_reward_scaling_config_instantiation(self):
+        from hydra.utils import instantiate
+        from torchrl.envs.transforms import RewardScaling
+        from torchrl.trainers.algorithms.configs.transforms import RewardScalingConfig
+
+        cfg = RewardScalingConfig()
+        assert not hasattr(cfg, "eps")
+        transform = instantiate(cfg)
+        assert isinstance(transform, RewardScaling)
+        assert transform.loc.item() == 0.0
+        assert transform.scale.item() == 1.0
+        assert transform.standard_normal.item() is False
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_reward2go_config_instantiation(self):
+        from hydra.utils import instantiate
+        from torchrl.envs.transforms import Reward2GoTransform
+        from torchrl.trainers.algorithms.configs.transforms import (
+            Reward2GoTransformConfig,
+        )
+
+        cfg = Reward2GoTransformConfig()
+        assert cfg.gamma == 1.0
+        assert cfg.done_key == "done"
+        transform = instantiate(cfg)
+        assert isinstance(transform, Reward2GoTransform)
+        assert transform.gamma.item() == 1.0
+        assert transform.done_key == "done"
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_vecnorm_config_defaults_match_constructor(self):
+        from hydra.utils import instantiate
+        from torchrl.envs.transforms import VecNorm, VecNormV2
+        from torchrl.trainers.algorithms.configs.transforms import (
+            VecNormConfig,
+            VecNormV2Config,
+        )
+
+        assert VecNormConfig().decay == 0.9999
+        assert VecNormConfig().eps == 1e-4
+        assert VecNormV2Config().decay == 0.9999
+        assert VecNormV2Config().eps == 1e-4
+
+        with pytest.warns(FutureWarning):
+            vecnorm = instantiate(VecNormConfig())
+        assert isinstance(vecnorm, VecNorm)
+        assert vecnorm.decay == 0.9999
+        assert vecnorm.eps == 1e-4
+
+        vecnorm_v2 = instantiate(VecNormV2Config(in_keys=["observation"]))
+        assert isinstance(vecnorm_v2, VecNormV2)
+        assert vecnorm_v2.decay == 0.9999
+        assert vecnorm_v2.eps == 1e-4
 
 
 if __name__ == "__main__":
