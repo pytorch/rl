@@ -61,7 +61,7 @@ are not recommended as they don't play well with generators).
 Defaults to None.
 - **tokenizer** (*transformers.PreTrainedTokenizer**,**optional*) - A tokenizer that will be used to tokenize the text.
 Defaults to None.
-- **template_kwargs** (*dict**[**str**,**any**]**,**optional*) - Keyword arguments passed to [`apply_chat_template()`](torchrl.data.llm.History.html#torchrl.data.llm.History.apply_chat_template).
+- **template_kwargs** (*dict**[**str**,**any**]**,**optional*) - Keyword arguments passed to [`apply_chat_template()`](torchrl.data.llm.History.html#id1).
 Defaults to None.
 - **system_role** (*str**,**optional*) - The role of the system (at reset time). Defaults to "system".
 - **user_role** (*str**,**optional*) - The role of the user (at reset time). Defaults to "user".

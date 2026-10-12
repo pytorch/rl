@@ -81,3 +81,14 @@ Returns:
 
 TensorDict with keys `"loss_act"`, `"loss_reconstruction"`,
 and `"loss_kl"`.
+
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.

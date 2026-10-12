@@ -227,3 +227,7 @@ Examples
 ... obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated, sample_log_prob=sample_log_prob
 ... )
 ```
+
+*property*in_keys
+
+The keys that the module reads from the input tensordict.

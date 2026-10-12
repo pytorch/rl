@@ -25,3 +25,14 @@ alias of `_AcceptedKeys`
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/objectives/decision_transformer.html#DTLoss.forward)
 
 Compute the loss for the Online Decision Transformer.
+
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.

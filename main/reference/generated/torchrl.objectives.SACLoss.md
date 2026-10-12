@@ -252,6 +252,10 @@ A new tensordict with no batch dimension containing various loss scalars which w
 is essential that the losses are returned with this name as they will be read by the trainer before
 backpropagation.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
 Load a state dict, building the default value estimator first when the state carries one.
@@ -331,6 +335,13 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
 >>> ppo_loss.make_value_estimator(gae)
 ```
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.
 
 state_dict(**args*, *destination=None*, *prefix=''*, *keep_vars=False*)
 

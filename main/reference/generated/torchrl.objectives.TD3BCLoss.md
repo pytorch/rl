@@ -204,6 +204,10 @@ a tensordict with these values.
 To see what keys are expected in the input tensordict and what keys are expected as output, check the
 class's "in_keys" and "out_keys" attributes.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/td3_bc.html#TD3BCLoss.make_value_estimator)
 
 Value-function constructor.

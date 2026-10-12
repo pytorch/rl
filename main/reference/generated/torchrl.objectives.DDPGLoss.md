@@ -146,6 +146,10 @@ Returns:
 
 a tuple of 2 tensors containing the DDPG loss.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/ddpg.html#DDPGLoss.make_value_estimator)
 
 Value-function constructor.

@@ -16,12 +16,12 @@ input/output formats across training and inference pipelines.
 
 ## Data Structure Classes
 
-| [`ChatHistory`](generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory)([prompt, response, full, ...]) | |
+| [`ChatHistory`](generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory)([prompt, response, full, ...]) | A chat history container for managing conversation data in LLM environments. |
 | --- | --- |
-| [`Text`](generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text)([prompt, response, full, device, names]) | |
-| [`LogProbs`](generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs)([prompt, response, full, padded, ...]) | |
-| [`Masks`](generated/torchrl.modules.llm.Masks.html#torchrl.modules.llm.Masks)([all_attention_mask, ...]) | |
-| [`Tokens`](generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens)([prompt, response, full, padded, ...]) | |
+| [`Text`](generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text)([prompt, response, full, device, names]) | A text container. |
+| [`LogProbs`](generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs)([prompt, response, full, padded, ...]) | A log-probability container. |
+| [`Masks`](generated/torchrl.modules.llm.Masks.html#torchrl.modules.llm.Masks)([all_attention_mask, ...]) | A Masks container. |
+| [`Tokens`](generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens)([prompt, response, full, padded, ...]) | A Tokens container. |
 
 ## Utilities
 

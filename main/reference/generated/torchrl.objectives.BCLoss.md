@@ -122,6 +122,10 @@ Returns:
 
 TensorDict with key "loss_bc".
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 set_keys(***kwargs*) → None[[source]](../../_modules/torchrl/objectives/bc.html#BCLoss.set_keys)
 
 Set tensordict key names.

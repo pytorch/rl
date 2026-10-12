@@ -154,3 +154,10 @@ Returns:
 A new tensordict with no batch dimension containing various loss scalars which will be named "loss*". It
 is essential that the losses are returned with this name as they will be read by the trainer before
 backpropagation.
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.

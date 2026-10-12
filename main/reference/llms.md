@@ -237,7 +237,7 @@ These environments wrap a [`ChatEnv`](generated/torchrl.envs.llm.ChatEnv.html#to
 | [`GSM8KPrepareQuestion`](generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion)([in_keys, out_keys]) | A transform to prepare the prompt when using GSM8k within an LLMEnv. |
 | [`IFEvalEnv`](generated/torchrl.envs.llm.IFEvalEnv.html#torchrl.envs.llm.IFEvalEnv)(*args, **kwargs) | A chat environment based on the IFEval dataset. |
 | [`IfEvalScorer`](generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer)(*[, instruction_ids_key, ...]) | Scorer for the IF-Eval task. |
-| [`IFEvalScoreData`](generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData)(prompt_level_strict_acc, ...) | |
+| [`IFEvalScoreData`](generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData)(prompt_level_strict_acc, ...) | IFEval score container. |
 | [`LLMEnv`](generated/torchrl.envs.llm.LLMEnv.html#torchrl.envs.llm.LLMEnv)(*args, **kwargs) | A text generation environment for language models. |
 | [`LLMHashingEnv`](generated/torchrl.envs.llm.LLMHashingEnv.html#torchrl.envs.llm.LLMHashingEnv)(*args, **kwargs) | A text generation environment that uses a hashing module to identify unique observations. |
 | [`make_mlgym`](generated/torchrl.envs.llm.make_mlgym.html#torchrl.envs.llm.make_mlgym)(*[, task, tasks, tokenizer, ...]) | Wraps an MLGymEnv in a TorchRL Environment. |
@@ -476,34 +476,34 @@ LLM post-training requires specialized loss functions that are adapted to the un
 
 ### GRPO, DAPO, CISPO
 
-| [`LLMLossOutput`](generated/torchrl.objectives.llm.LLMLossOutput.html#torchrl.objectives.llm.LLMLossOutput)(loss_objective, clip_fraction, ...) | |
+| [`LLMLossOutput`](generated/torchrl.objectives.llm.LLMLossOutput.html#torchrl.objectives.llm.LLMLossOutput)(loss_objective, clip_fraction, ...) | Base class for LLM loss outputs. |
 | --- | --- |
 | [`GRPOLoss`](generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss)(*args, **kwargs) | GRPO loss. |
-| [`GRPOLossOutput`](generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput)(loss_objective, ...[, ...]) | |
+| [`GRPOLossOutput`](generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput)(loss_objective, ...[, ...]) | GRPO Loss Output. |
 | [`CISPOLoss`](generated/torchrl.objectives.llm.CISPOLoss.html#torchrl.objectives.llm.CISPOLoss)(*args, **kwargs) | CISPO (Clipped Importance Sampling Policy Optimization). |
-| [`CISPOLossOutput`](generated/torchrl.objectives.llm.CISPOLossOutput.html#torchrl.objectives.llm.CISPOLossOutput)(loss_objective, ...[, ...]) | |
+| [`CISPOLossOutput`](generated/torchrl.objectives.llm.CISPOLossOutput.html#torchrl.objectives.llm.CISPOLossOutput)(loss_objective, ...[, ...]) | CISPO Loss Output. |
 | [`DAPO`](generated/torchrl.objectives.llm.DAPO.html#torchrl.objectives.llm.DAPO)(*args, **kwargs) | DAPO (Clip-Higher over GRPO). |
-| [`DAPOLossOutput`](generated/torchrl.objectives.llm.DAPOLossOutput.html#torchrl.objectives.llm.DAPOLossOutput)(loss_objective, ...[, ...]) | |
+| [`DAPOLossOutput`](generated/torchrl.objectives.llm.DAPOLossOutput.html#torchrl.objectives.llm.DAPOLossOutput)(loss_objective, ...[, ...]) | DAPO Loss Output. |
 | [`MCAdvantage`](generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage)(grpo_size[, prompt_key, ...]) | Monte-Carlo advantage computation engine. |
 
 ### SFT
 
 | [`SFTLoss`](generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss)(*args, **kwargs) | Supervised fine-tuning loss. |
 | --- | --- |
-| [`SFTLossOutput`](generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput)(loss_sft[, loss_kl_to_ref, ...]) | |
+| [`SFTLossOutput`](generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput)(loss_sft[, loss_kl_to_ref, ...]) | SFT Loss Output. |
 
 ### Reward Model Training
 
 | [`reward_model_loss`](generated/torchrl.objectives.llm.reward_model_loss.html#torchrl.objectives.llm.reward_model_loss)(chosen_scores, ...) | Compute the Bradley-Terry pairwise reward-model loss. |
 | --- | --- |
 | [`RewardModelLoss`](generated/torchrl.objectives.llm.RewardModelLoss.html#torchrl.objectives.llm.RewardModelLoss)(*args, **kwargs) | Bradley-Terry reward-model training loss for RLHF. |
-| [`RewardModelLossOutput`](generated/torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput)(loss_reward_model[, ...]) | |
+| [`RewardModelLossOutput`](generated/torchrl.objectives.llm.RewardModelLossOutput.html#torchrl.objectives.llm.RewardModelLossOutput)(loss_reward_model[, ...]) | Reward-model loss output. |
 
 ### Distillation
 
 | [`DistillationLoss`](generated/torchrl.objectives.llm.DistillationLoss.html#torchrl.objectives.llm.DistillationLoss)(*args, **kwargs) | Token-level knowledge-distillation loss for LLM policies. |
 | --- | --- |
-| [`DistillationLossOutput`](generated/torchrl.objectives.llm.DistillationLossOutput.html#torchrl.objectives.llm.DistillationLossOutput)(loss_distill, ...[, ...]) | |
+| [`DistillationLossOutput`](generated/torchrl.objectives.llm.DistillationLossOutput.html#torchrl.objectives.llm.DistillationLossOutput)(loss_distill, ...[, ...]) | Distillation Loss Output. |
 | [`k3_kl_token_estimate`](generated/torchrl.objectives.llm.k3_kl_token_estimate.html#torchrl.objectives.llm.k3_kl_token_estimate)(target_log_prob, log_prob) | Per-token k3 estimate of the KL divergence to a target distribution. |
 
 | [`TopKRewardSelector`](generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector)(total_dialog_turns, topk_size) | A replay-buffer transform that selects the top-k rewards for each prompt. |

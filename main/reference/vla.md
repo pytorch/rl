@@ -55,11 +55,11 @@ defaults.
 
 ## Data and metadata
 
-| [`RobotDatasetMetadata`](generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata)(dataset_id[, ...]) | |
+| [`RobotDatasetMetadata`](generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata)(dataset_id[, ...]) | Metadata describing a robot dataset / embodiment for VLA workflows. |
 | --- | --- |
-| [`VLAAction`](generated/torchrl.data.vla.VLAAction.html#torchrl.data.vla.VLAAction)([chunk, tokens, raw_tokens, ...]) | |
-| [`VLAImages`](generated/torchrl.data.vla.VLAImages.html#torchrl.data.vla.VLAImages)([image, wrist_image, extra, ...]) | |
-| [`VLAObservation`](generated/torchrl.data.vla.VLAObservation.html#torchrl.data.vla.VLAObservation)([images, state, instruction, ...]) | |
+| [`VLAAction`](generated/torchrl.data.vla.VLAAction.html#torchrl.data.vla.VLAAction)([chunk, tokens, raw_tokens, ...]) | Container for VLA policy outputs. |
+| [`VLAImages`](generated/torchrl.data.vla.VLAImages.html#torchrl.data.vla.VLAImages)([image, wrist_image, extra, ...]) | Container for VLA image observations. |
+| [`VLAObservation`](generated/torchrl.data.vla.VLAObservation.html#torchrl.data.vla.VLAObservation)([images, state, instruction, ...]) | Container for VLA observations. |
 | [`validate_vla_tensordict`](generated/torchrl.data.vla.validate_vla_tensordict.html#torchrl.data.vla.validate_vla_tensordict)(tensordict, *[, ...]) | Validate that a tensordict follows the canonical VLA schema. |
 
 Robot VLA trajectories can be loaded into the canonical schema from

@@ -225,6 +225,10 @@ a tensordict with these values along with the "alpha" value and the "entropy" va
 To see what keys are expected in the input tensordict and what keys are expected as output, check the
 class's "in_keys" and "out_keys" attributes.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
 Load a state dict, building the default value estimator first when the state carries one.
@@ -313,6 +317,13 @@ Parameters:
 
 **fault_tolerant** (*bool**,**optional*) - if `True`, returns None if the target entropy
 cannot be determined. Raises an exception otherwise. Defaults to `True`.
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.
 
 qvalue_loss(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), dict[str, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)]][[source]](../../_modules/torchrl/objectives/crossq.html#CrossQLoss.qvalue_loss)
 

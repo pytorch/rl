@@ -469,6 +469,10 @@ Return type:
 
 Module
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 ipu(*device: int | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → Self
 
 Move all model parameters and buffers to the IPU.
@@ -497,6 +501,15 @@ Module
 *static*is_tdmodule_compatible(*module*)
 
 Checks if a module is compatible with TensorDictModule API.
+
+Parameters:
+
+**module** (*object*) - the object to check.
+
+Returns:
+
+`True` if `module` has both an `in_keys` and an `out_keys`
+attribute.
 
 load_state_dict(*state_dict: Mapping[str, Any]*, **args*, ***kwargs*)
 
@@ -748,6 +761,17 @@ Example:
 >>> if name in ['bias']:
 >>> print(param.size())
 ```
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.
+
+*property*out_keys_source
+
+All the keys that the module writes, before `select_out_keys()`.
 
 output_type
 
@@ -1171,7 +1195,7 @@ Module
 
 reset_out_keys()
 
-Resets the `out_keys` attribute to its orignal value.
+Resets the `out_keys` attribute to its original value.
 
 Returns: the same module, with its original `out_keys` values.
 
@@ -1182,7 +1206,7 @@ Examples
 >>> from tensordict.nn import TensorDictModule, TensorDictSequential
 >>> import torch
 >>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
->>> mod.select_out_keys("d")
+>>> _ = mod.select_out_keys("d")
 >>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
 >>> mod(td)
 TensorDict(
@@ -1193,7 +1217,7 @@ TensorDict(
  batch_size=torch.Size([]),
  device=None,
  is_shared=False)
->>> mod.reset_out_keys()
+>>> _ = mod.reset_out_keys()
 >>> mod(td)
 TensorDict(
  fields={
@@ -1216,7 +1240,8 @@ Selects the keys that will be found in the output tensordict.
 
 This is useful whenever one wants to get rid of intermediate keys in a
 complicated graph, or when the presence of these keys may trigger unexpected
-behaviours.
+behaviours. The module removes only the out-keys that are not selected:
+the other entries of the input tensordict stay in place.
 
 The original `out_keys` can still be accessed via `module.out_keys_source`.
 
@@ -1247,7 +1272,7 @@ TensorDict(
  batch_size=torch.Size([]),
  device=None,
  is_shared=False)
->>> mod.select_out_keys("d")
+>>> _ = mod.select_out_keys("d")
 >>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
 >>> mod(td)
 TensorDict(
@@ -1261,7 +1286,6 @@ TensorDict(
 ```
 
 This feature will also work with dispatched arguments:
-.. rubric:: Examples
 
 ```
 >>> mod(torch.zeros(()), torch.ones(()))
@@ -1272,10 +1296,8 @@ This change will occur in-place (ie the same module will be returned
 with an updated list of out_keys). It can be reverted using the
 `TensorDictModuleBase.reset_out_keys()` method.
 
-Examples
-
 ```
->>> mod.reset_out_keys()
+>>> _ = mod.reset_out_keys()
 >>> mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
 TensorDict(
  fields={
@@ -1289,7 +1311,6 @@ TensorDict(
 ```
 
 This will work with other classes too, such as Sequential:
-.. rubric:: Examples
 
 ```
 >>> from tensordict.nn import TensorDictSequential
@@ -1307,7 +1328,7 @@ TensorDict(
  batch_size=torch.Size([]),
  device=None,
  is_shared=False)
->>> seq.select_out_keys("z")
+>>> _ = seq.select_out_keys("z")
 >>> td = TensorDict({"x": torch.zeros(())}, [])
 >>> seq(td)
 TensorDict(

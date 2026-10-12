@@ -198,6 +198,10 @@ A new tensordict with no batch dimension containing various loss scalars which w
 is essential that the losses are returned with this name as they will be read by the trainer before
 backpropagation.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/redq.html#REDQLoss.make_value_estimator)
 
 Value-function constructor.

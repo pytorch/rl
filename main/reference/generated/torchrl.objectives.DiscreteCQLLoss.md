@@ -114,6 +114,10 @@ Returns:
 
 a tensor containing the CQL loss.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/cql.html#DiscreteCQLLoss.make_value_estimator)
 
 Value-function constructor.

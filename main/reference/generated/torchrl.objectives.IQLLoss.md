@@ -202,6 +202,10 @@ A new tensordict with no batch dimension containing various loss scalars which w
 is essential that the losses are returned with this name as they will be read by the trainer before
 backpropagation.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 *static*loss_value_diff(*diff*, *expectile=0.8*)[[source]](../../_modules/torchrl/objectives/iql.html#IQLLoss.loss_value_diff)
 
 Loss function for iql expectile value difference.

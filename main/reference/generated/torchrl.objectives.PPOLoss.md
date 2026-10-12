@@ -393,6 +393,10 @@ Whether the module is functional.
 
 Unless it has been specifically designed not to be functional, all losses are functional.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 loss_critic(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorDict](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), ...][[source]](../../_modules/torchrl/objectives/ppo.html#PPOLoss.loss_critic)
 
 Returns the critic loss multiplied by `critic_coeff`, if it is not `None`.
@@ -466,3 +470,10 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
 >>> ppo_loss.make_value_estimator(gae)
 ```
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.

@@ -264,7 +264,7 @@ counting only generation-stale handles.
 | --- | --- |
 | [`Sequence`](generated/torchrl.data.Sequence.html#torchrl.data.Sequence)(length[, episode_boundary, ...]) | Expands anchors into a window of records around each anchor. |
 | [`Transition`](generated/torchrl.data.Transition.html#torchrl.data.Transition)() | The identity sample unit: every anchor is one transition. |
-| [`ConditionalUpdateResult`](generated/torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)(updated[, ...]) | |
+| [`ConditionalUpdateResult`](generated/torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)(updated[, ...]) | Result of [`ReplayBuffer.update_if_present()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_if_present). |
 
 ## Offline-to-online helpers
 
@@ -299,7 +299,7 @@ return [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajec
 different lengths can be assembled into a single ragged batch with
 `lazy_stack()`.
 
-| [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory)(data, *, batch_size[, device, names]) | |
+| [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory)(data, *, batch_size[, device, names]) | A trajectory-first view over a contiguous slice of transitions. |
 | --- | --- |
 | [`TrajectoryPredicate`](generated/torchrl.data.TrajectoryPredicate.html#torchrl.data.TrajectoryPredicate)(fn[, description, keys]) | A boolean predicate over a [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory). |
 
@@ -652,7 +652,7 @@ references spanning thousands of files stay light on the replay-buffer sample pa
 When camera and control loops run at different rates, prefer
 [`VideoClipRef.from_timestamps()`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_timestamps) to align frames by time rather than by index.
 
-| [`VideoClipRef`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef)(sources[, frame_index, ...]) | |
+| [`VideoClipRef`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef)(sources[, frame_index, ...]) | A lazy, picklable reference to frames inside an encoded video. |
 | --- | --- |
 | [`clear_video_decoder_cache`](generated/torchrl.data.clear_video_decoder_cache.html#torchrl.data.clear_video_decoder_cache)() | Closes and clears all cached torchcodec decoders in the current process. |
 | [`set_video_decoder_cache_size`](generated/torchrl.data.set_video_decoder_cache_size.html#torchrl.data.set_video_decoder_cache_size)(maxsize) | Sets the maximum number of open torchcodec decoders cached per process. |

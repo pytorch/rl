@@ -137,7 +137,7 @@ Methods
 | `register_state_dict_post_hook`(hook) | Register a post-hook for the [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) method. |
 | `register_state_dict_pre_hook`(hook) | Register a pre-hook for the [`state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) method. |
 | `requires_grad_`([requires_grad]) | Change if autograd should record operations on parameters in this module. |
-| `reset_out_keys`() | Resets the `out_keys` attribute to its orignal value. |
+| `reset_out_keys`() | Resets the `out_keys` attribute to its original value. |
 | `reset_parameters_recursive`([parameters]) | Recursively reset the parameters of the module and its children. |
 | `select_out_keys`(*out_keys) | Selects the keys that will be found in the output tensordict. |
 | `set_extra_state`(state) | Set extra state contained in the loaded state_dict. |
@@ -157,8 +157,8 @@ Attributes
 | --- | --- |
 | `call_super_init` | |
 | `dump_patches` | |
-| `in_keys` | |
-| `out_keys` | |
-| `out_keys_source` | |
+| `in_keys` | The keys that the module reads from the input tensordict. |
+| `out_keys` | The keys that the module writes to the output tensordict. |
+| `out_keys_source` | All the keys that the module writes, before `select_out_keys()`. |
 | `c` | |
 | `training` | |

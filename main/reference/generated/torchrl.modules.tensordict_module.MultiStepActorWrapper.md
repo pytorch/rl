@@ -138,6 +138,17 @@ this function, one should call the `Module` instance afterwards
 instead of this since the former takes care of running the
 registered hooks while the latter silently ignores them.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 *property*init_key*: NestedKey*
 
 The indicator of the initial step for a given element of the batch.
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.

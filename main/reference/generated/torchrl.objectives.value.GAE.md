@@ -295,6 +295,10 @@ Examples
 >>> advantage, value_target = module(obs=obs, next_reward=reward, next_done=done, next_obs=next_obs, next_terminated=terminated)
 ```
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 value_estimate(*tensordict*, *params: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *target_params: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *time_dim: int | None = None*, ***kwargs*)[[source]](../../_modules/torchrl/objectives/value/advantages.html#GAE.value_estimate)
 
 Gets a value estimate, usually used as a target value for the value network.

@@ -12,7 +12,7 @@ Parameters:
 default = `"biased_softplus_1.0"` (i.e. softplus map with bias such that fn(0.0) = 1.0)
 choices: `"softplus"`, `"exp"`, `"relu"`, `"biased_softplus_1"` or `"none"` (no mapping).
 See [`mappings()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.mappings.html#tensordict.nn.mappings) for more details.
-- **scale_lb** (*Number**,**optional*) - The minimum value that the variance can take. Default is 1e-4.
+- **scale_lb** (*Number**,**optional*) - The minimum value of the scale (the standard deviation). Default is 1e-4.
 
 Examples
 

@@ -13,7 +13,7 @@ The environment layer orchestrates data loading, tool execution, reward computat
 | [`GSM8KRewardParser`](generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser)([tokenizer, in_keys, ...]) | Reward parser for GSM8KEnv or make_gsm8k_env. |
 | [`IFEvalEnv`](generated/torchrl.envs.llm.IFEvalEnv.html#torchrl.envs.llm.IFEvalEnv)(*args, **kwargs) | A chat environment based on the IFEval dataset. |
 | [`IfEvalScorer`](generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer)(*[, instruction_ids_key, ...]) | Scorer for the IF-Eval task. |
-| [`IFEvalScoreData`](generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData)(prompt_level_strict_acc, ...) | |
+| [`IFEvalScoreData`](generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData)(prompt_level_strict_acc, ...) | IFEval score container. |
 | [`MATHEnv`](generated/torchrl.envs.llm.MATHEnv.html#torchrl.envs.llm.MATHEnv)(*args, **kwargs) | MATH (competition mathematics) dataset environment. |
 | [`MATHRewardParser`](generated/torchrl.envs.llm.MATHRewardParser.html#torchrl.envs.llm.MATHRewardParser)([tokenizer, in_keys, ...]) | Reward parser for the MATH (competition mathematics) dataset. |
 | [`LLMEnv`](generated/torchrl.envs.llm.LLMEnv.html#torchrl.envs.llm.LLMEnv)(*args, **kwargs) | A text generation environment for language models. |

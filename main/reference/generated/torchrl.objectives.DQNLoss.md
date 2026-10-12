@@ -116,6 +116,10 @@ Returns:
 
 a tensor containing the DQN loss.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/dqn.html#DQNLoss.make_value_estimator)
 
 Value-function constructor.

@@ -83,6 +83,17 @@ Returns:
 
 An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.
+
 set_keys(***kwargs*) → None[[source]](../../_modules/torchrl/objectives/value/advantages.html#ValueEstimatorBase.set_keys)
 
 Set tensordict key names.

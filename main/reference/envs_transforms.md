@@ -288,18 +288,18 @@ to be able to create this other composition:
 | [`FrameSkipTransform`](generated/torchrl.envs.transforms.FrameSkipTransform.html#torchrl.envs.transforms.FrameSkipTransform)([frame_skip]) | A frame-skip transform. |
 | [`GrayScale`](generated/torchrl.envs.transforms.GrayScale.html#torchrl.envs.transforms.GrayScale)([in_keys, out_keys]) | Turns a pixel observation to grayscale. |
 | [`Hash`](generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash)(in_keys, out_keys[, in_keys_inv, ...]) | Adds a hash value to a tensordict. |
-| [`HumanoidMacroAction`](generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction)(mode, steps, ...[, ...]) | |
+| [`HumanoidMacroAction`](generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction)(mode, steps, ...[, ...]) | Structured action for humanoid actuator-control macros. |
 | [`InitTracker`](generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker)([init_key]) | Reset tracker. |
 | [`LastAction`](generated/torchrl.envs.transforms.LastAction.html#torchrl.envs.transforms.LastAction)([in_keys, out_keys, default, ...]) | Copies the last action into the next observation. |
 | [`LineariseRewards`](generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards)(in_keys[, out_keys, weights]) | Transforms a multi-objective reward signal to a single-objective one via a weighted sum. |
-| [`MacroAction`](generated/torchrl.envs.transforms.MacroAction.html#torchrl.envs.transforms.MacroAction)(mode, steps, settle_steps, *, ...) | |
+| [`MacroAction`](generated/torchrl.envs.transforms.MacroAction.html#torchrl.envs.transforms.MacroAction)(mode, steps, settle_steps, *, ...) | Base structured macro action: a primitive id plus a duration. |
 | [`MacroPrimitive`](generated/torchrl.envs.transforms.MacroPrimitive.html#torchrl.envs.transforms.MacroPrimitive)(value[, names, module, ...]) | Generic primitive ids understood by [`MacroPrimitiveTransform`](generated/torchrl.envs.transforms.MacroPrimitiveTransform.html#torchrl.envs.transforms.MacroPrimitiveTransform). |
 | [`MacroPrimitiveTransform`](generated/torchrl.envs.transforms.MacroPrimitiveTransform.html#torchrl.envs.transforms.MacroPrimitiveTransform)(*args[, execute, ...]) | Expand a high-level macro action into a low-level action sequence. |
-| [`TargetMacroAction`](generated/torchrl.envs.transforms.TargetMacroAction.html#torchrl.envs.transforms.TargetMacroAction)(mode, steps, settle_steps, ...) | |
+| [`TargetMacroAction`](generated/torchrl.envs.transforms.TargetMacroAction.html#torchrl.envs.transforms.TargetMacroAction)(mode, steps, settle_steps, ...) | Macro action carrying a single `target` interpreted by the transform. |
 | [`CartesianSolver`](generated/torchrl.envs.transforms.CartesianSolver.html#torchrl.envs.transforms.CartesianSolver)(*args, **kwargs) | Contract of the Cartesian inverse-kinematics hook used by `movel`. |
-| [`RobotMacroAction`](generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction)(mode, steps, settle_steps, ...) | |
+| [`RobotMacroAction`](generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction)(mode, steps, settle_steps, ...) | Human-writable UR-style macro action. |
 | [`RobotMacroActionMode`](generated/torchrl.envs.transforms.RobotMacroActionMode.html#torchrl.envs.transforms.RobotMacroActionMode)(value[, names, module, ...]) | Readable modes for [`RobotMacroAction`](generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction). |
-| [`SatelliteMacroAction`](generated/torchrl.envs.transforms.SatelliteMacroAction.html#torchrl.envs.transforms.SatelliteMacroAction)(mode, steps, ...[, ...]) | |
+| [`SatelliteMacroAction`](generated/torchrl.envs.transforms.SatelliteMacroAction.html#torchrl.envs.transforms.SatelliteMacroAction)(mode, steps, ...[, ...]) | Structured action containing a desired satellite attitude. |
 | [`SatelliteAttitudeTransform`](generated/torchrl.envs.transforms.SatelliteAttitudeTransform.html#torchrl.envs.transforms.SatelliteAttitudeTransform)(*args[, execute, ...]) | Expand desired satellite attitudes into CMG gimbal-rate sequences. |
 | [`URScriptPrimitive`](generated/torchrl.envs.transforms.URScriptPrimitive.html#torchrl.envs.transforms.URScriptPrimitive)(value[, names, module, ...]) | Integer ids for URScript-style robot primitives. |
 | [`MeanActionSelector`](generated/torchrl.envs.transforms.MeanActionSelector.html#torchrl.envs.transforms.MeanActionSelector)([observation_key, action_key]) | Bridges Gaussian belief-space policies with standard environments. |

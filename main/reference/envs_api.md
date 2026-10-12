@@ -367,7 +367,7 @@ state into the parent batch. Boolean masks are not supported.
 | [`MicroDuckSkillController`](generated/torchrl.envs.MicroDuckSkillController.html#torchrl.envs.MicroDuckSkillController)(*args, **kwargs) | Translate high-level MicroDuck skill decisions into joint targets. |
 | [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv)([microduck_root, root, download]) | Locomotion tasks for the MicroDuck biped: stand, walk, sidestep, jump. |
 | [`MicroDuckSkillEnv`](generated/torchrl.envs.MicroDuckSkillEnv.html#torchrl.envs.MicroDuckSkillEnv)(*args, **kwargs) | High-level environment whose actions select frozen MicroDuck skills. |
-| [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)(command_low, command_high, ...) | |
+| [`MicroDuckTask`](generated/torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask)(command_low, command_high, ...) | One locomotion task of [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv), as data. |
 | [`MicroDuckTaskSampler`](generated/torchrl.envs.MicroDuckTaskSampler.html#torchrl.envs.MicroDuckTaskSampler)([weights, task_ids, ...]) | Write a [`MicroDuckEnv`](generated/torchrl.envs.MicroDuckEnv.html#torchrl.envs.MicroDuckEnv) `task_id` per env at reset from a weighted mixture. |
 | [`SatelliteEnv`](generated/torchrl.envs.SatelliteEnv.html#torchrl.envs.SatelliteEnv)(*args[, num_workers, parallel]) | Attitude-control task with 4 or 6 CMGs. |
 | [`Walker2dEnv`](generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv)(*args[, num_workers, parallel]) | Planar bipedal walker (9-DoF, 6 actuators). |
@@ -385,7 +385,7 @@ state into the parent batch. Boolean masks are not supported.
 
 | [`check_env_specs`](generated/torchrl.envs.check_env_specs.html#torchrl.envs.check_env_specs)(env[, return_contiguous, ...]) | Tests an environment specs against the results of short rollout. |
 | --- | --- |
-| [`exploration_type`](generated/torchrl.envs.exploration_type.html#torchrl.envs.exploration_type)() | Returns the current sampling type. |
+| [`exploration_type`](generated/torchrl.envs.exploration_type.html#torchrl.envs.exploration_type)() | Returns the interaction type set by `set_interaction_type`, or `None` outside of it. |
 | [`get_available_libraries`](generated/torchrl.envs.get_available_libraries.html#torchrl.envs.get_available_libraries)() | Returns all the supported libraries. |
 | [`make_composite_from_td`](generated/torchrl.envs.make_composite_from_td.html#torchrl.envs.make_composite_from_td)(data, *[, ...]) | Creates a Composite instance from a tensordict, assuming all values are unbounded. |
 | [`set_exploration_type`](generated/torchrl.envs.set_exploration_type.html#torchrl.envs.set_exploration_type) | alias of [`set_interaction_type`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type) |

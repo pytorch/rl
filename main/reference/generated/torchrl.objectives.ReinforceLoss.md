@@ -150,6 +150,10 @@ Whether the module is functional.
 
 Unless it has been specifically designed not to be functional, all losses are functional.
 
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/reinforce.html#ReinforceLoss.make_value_estimator)
 
 Value-function constructor.

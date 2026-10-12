@@ -30,3 +30,14 @@ The forward method.
 Computes the discriminator loss and gradient penalty if use_grad_penalty is set to True. If use_grad_penalty is set to True, the detached gradient penalty loss is also returned for logging purposes.
 To see what keys are expected in the input tensordict and what keys are expected as output, check the
 class's "in_keys" and "out_keys" attributes.
+
+*property*in_keys
+
+The keys that the module reads from the input tensordict.
+
+*property*out_keys
+
+The keys that the module writes to the output tensordict.
+
+After `select_out_keys()`, only the selected keys. The full list
+is in `out_keys_source`.
