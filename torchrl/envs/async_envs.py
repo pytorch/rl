@@ -29,7 +29,7 @@ from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict, expand_as_right, NestedKey
 
 from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.data.tensor_specs import NonTensor
+from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec
 from torchrl.envs._async_exchange import _receive_batch, _SharedSlotExchange
 from torchrl.envs.common import _EnvPostInit, EnvBase
 
@@ -420,6 +420,10 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         )
 
     @property
+    def observation_spec(self) -> Composite:
+        return self.full_observation_spec
+
+    @property
     def full_reward_spec(self):
         child_specs = self._get_child_specs()
         return torch.stack(
@@ -443,9 +447,20 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         specs.set(self._env_idx_key, NonTensor(example_data=0, shape=specs.shape))
         return specs
 
-    # TODO: _make_single_env_spec (used by *_unbatched properties) takes spec[0],
-    # which assumes all child envs have identical specs. Should add validation
-    # that child specs match, and error if they differ.
+    def _make_single_env_spec(self, spec: TensorSpec) -> TensorSpec:
+        if not self.batch_dims:
+            return spec
+        if self.num_envs > 1 and spec.shape and spec.shape[0] == self.num_envs:
+            first_spec = spec[0]
+            for i in range(1, self.num_envs):
+                if spec[i] != first_spec:
+                    raise ValueError(
+                        f"Cannot compute a single unbatched spec because child environment {i} "
+                        f"has a specification that differs from child environment 0:\n"
+                        f"Child 0: {first_spec}\n"
+                        f"Child {i}: {spec[i]}"
+                    )
+        return super()._make_single_env_spec(spec)
 
     def _reset(
         self,
@@ -921,8 +936,8 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 torch.Size(spec.shape) for spec in self._child_specs
             ]
             specs = torch.stack(list(self._child_specs))
-            output_spec = specs["output_spec"]
-            input_spec = specs["input_spec"]
+            output_spec = specs["output_spec"].clone()
+            input_spec = specs["input_spec"].clone()
             if self.exchange in ("shm", "auto"):
                 for worker_index, env_indices in enumerate(self._worker_env_indices):
                     self.input_queue[worker_index].put(

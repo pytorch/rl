@@ -6640,6 +6640,10 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
                 spec.assert_is_in(v)
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
+    def __contains__(self, key: NestedKey) -> bool:
+        key = unravel_key(key)
+        return key in self.keys(include_nested=isinstance(key, tuple))
+
     def __len__(self):
         return self.shape[0]
 

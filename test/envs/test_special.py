@@ -8,6 +8,7 @@ import contextlib
 import multiprocessing
 import os
 import pickle
+import sys
 import threading
 import warnings
 from functools import partial
@@ -81,6 +82,38 @@ class _DelayedCountingEnv(CountingEnv):
     def _step(self, tensordict):
         threading.Event().wait(self.delay)
         return super()._step(tensordict)
+
+
+class _DifferentSpecCountingEnv(CountingEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observation_spec = Composite(
+            observation=Unbounded(
+                (*self.batch_size, 5),
+                dtype=torch.int32,
+                device=self.device,
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
+
+
+class _NestedSpecCountingEnv(CountingEnv):
+    def __init__(self, *args, obs_dim: int = 5, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observation_spec = Composite(
+            nested=Composite(
+                observation=Unbounded(
+                    (*self.batch_size, obs_dim),
+                    dtype=torch.int32,
+                    device=self.device,
+                ),
+                shape=self.batch_size,
+                device=self.device,
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
 
 
 def _round_robin_affinity(env_index, *, cpus):
@@ -923,8 +956,50 @@ class TestAsyncEnvPool:
             s = env.rand_step(r)
             assert s.shape == env.shape
             env.check_env_specs(break_when_any_done="both")
+            sample_child = make_envs[0]()
+            assert env.observation_spec_unbatched == sample_child.observation_spec
+            assert env.action_spec_unbatched == sample_child.action_spec
         finally:
             env._maybe_shutdown()
+
+    @pytest.mark.parametrize("backend", ["threading", "multiprocessing"])
+    def test_heterogeneous_child_specs_unbatched_raises(self, backend):
+        env = AsyncEnvPool(
+            [partial(CountingEnv), partial(_DifferentSpecCountingEnv)],
+            backend=backend,
+        )
+        try:
+            with pytest.raises(
+                ValueError,
+                match="Cannot compute a single unbatched spec because child environment 1",
+            ):
+                _ = env.observation_spec_unbatched
+
+            with pytest.raises(
+                ValueError,
+                match="Cannot compute a single unbatched spec because child environment 1",
+            ):
+                _ = env.full_observation_spec_unbatched
+        finally:
+            env._maybe_shutdown()
+
+        nested_env = AsyncEnvPool(
+            [
+                partial(_NestedSpecCountingEnv, obs_dim=5),
+                partial(_NestedSpecCountingEnv, obs_dim=1),
+            ],
+            backend=backend,
+        )
+        try:
+            assert ("nested", "observation") in nested_env.observation_spec
+            assert ("nested", "missing") not in nested_env.observation_spec
+            with pytest.raises(
+                ValueError,
+                match="Cannot compute a single unbatched spec because child environment 1",
+            ):
+                _ = nested_env.observation_spec_unbatched
+        finally:
+            nested_env._maybe_shutdown()
 
     @pytest.mark.skipif(
         not hasattr(os, "sched_setaffinity"),
@@ -1793,3 +1868,7 @@ class TestMPSSubEnvs:
             assert rollout.device.type == "mps"
         finally:
             env.close(raise_if_closed=False)
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, *sys.argv[1:]]))
