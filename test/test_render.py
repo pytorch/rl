@@ -1060,6 +1060,7 @@ class TestSotaCheckpointFactories:
             env.close()
         assert result.trajectories[0].shape[0] > 0
 
+        pytest.importorskip("tqdm")
         monkeypatch.syspath_prepend(str(dqn_dir))
         save_checkpoint = import_from_string(
             f"{dqn_dir / 'dqn_cartpole.py'}:_save_checkpoint"
@@ -1244,6 +1245,7 @@ class TestSotaCheckpointFactories:
         assert qpos.shape[-1] == 2
         assert result.metadata["trajectories"][0]["num_steps"] > 0
 
+        pytest.importorskip("tqdm")
         monkeypatch.syspath_prepend(str(ppo_dir))
         save_checkpoint = import_from_string(
             f"{ppo_dir / 'ppo_mujoco.py'}:_save_checkpoint"
@@ -1505,6 +1507,7 @@ class TestSotaCheckpointFactories:
         assert calls[0][1]["batch_mode"] == "parallel"
         assert proof_env.is_closed is True
 
+        pytest.importorskip("tqdm")
         monkeypatch.syspath_prepend(str(ppo_dir))
         make_eval_env_kwargs = import_from_string(
             f"{ppo_dir / 'ppo_mujoco.py'}:_make_eval_env_kwargs"

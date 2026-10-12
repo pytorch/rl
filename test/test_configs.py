@@ -3363,6 +3363,7 @@ class TestTrainerConfigs:
             loss_module=torch.nn.Module(),
             optimizer=None,
             save_trainer_file=None,
+            progress_bar=False,
         )
         hook.register(trainer)
         # Round-trip the state dict to verify state_dict/load_state_dict are
@@ -3500,6 +3501,7 @@ class TestTrainerConfigs:
                 optimizer=partial(torch.optim.Adam, lr=1e-3),
                 logger=None,
                 clip_norm=None,
+                progress_bar=False,
                 replay_buffer=None,
                 save_trainer_file=None,
                 seed=0,

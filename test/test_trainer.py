@@ -24,8 +24,6 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
-from hydra.core.config_store import ConfigStore
-from hydra.utils import instantiate
 from torch import nn
 
 _has_tb = importlib.util.find_spec("tensorboard") is not None
@@ -86,7 +84,6 @@ from torchrl.trainers import EvaluatorHook, LogValidationReward, Trainer
 from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms import FQLTrainer
 from torchrl.trainers.algorithms.a2c import A2CTrainer
-from torchrl.trainers.algorithms.configs import FQLLossConfig, FQLTrainerConfig
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
@@ -122,6 +119,7 @@ from torchrl.trainers.trainers import (
 )
 
 _has_ale = importlib.util.find_spec("ale_py") is not None
+_has_hydra = importlib.util.find_spec("hydra") is not None
 
 
 def _fun_checker(fun, checker):
@@ -3716,6 +3714,7 @@ def _make_tdmpc2_loss_for_stepper():
     return TdMpc2Loss(world_model, policy_prior, q_ensemble, horizon=3)
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 class TestTdMpc2OptimizationStepper:
     def test_step(self):
         loss = _make_tdmpc2_loss_for_stepper()
@@ -3991,8 +3990,13 @@ def test_fql_shutdown_on_failure():
     assert stopped == [True]
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("critic_list", [False, True])
 def test_fql_hydra_configs(critic_list):
+    from hydra.core.config_store import ConfigStore
+    from hydra.utils import instantiate
+    from torchrl.trainers.algorithms.configs import FQLLossConfig, FQLTrainerConfig
+
     original = make_fql_loss()
     loss = instantiate(
         FQLLossConfig(gamma=0.95, alpha=4),
@@ -4219,8 +4223,11 @@ def test_fql_logger_checkpoint(tmp_path):
     )
 
 
+@pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 def test_fql_config_constructor_parity():
     from dataclasses import fields
+
+    from torchrl.trainers.algorithms.configs import FQLTrainerConfig
 
     config = {field.name: field for field in fields(FQLTrainerConfig)}
     for name, parameter in inspect.signature(FQLTrainer).parameters.items():

@@ -227,7 +227,18 @@ def test_timeit():
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.usefixtures("clear_hydra")
-@pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
+@pytest.mark.parametrize(
+    "from_pixels",
+    [
+        (),
+        pytest.param(
+            ("from_pixels=True", "catframes=4"),
+            marks=pytest.mark.skipif(
+                not _has_tv, reason="No torchvision library found"
+            ),
+        ),
+    ],
+)
 def test_transformed_env_constructor_with_state_dict(from_pixels):
     compose, initialize, ConfigStore, _ = _get_hydra_deps()
     config_fields = [
