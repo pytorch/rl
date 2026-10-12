@@ -7,9 +7,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+print("starting imports", flush=True)
 import torch
+print("torch imported OK", flush=True)
 import torchrl._torchrl as ext
+print("torchrl._torchrl imported OK", flush=True)
 from torchrl.data import PrioritizedReplayBuffer
+print("torchrl.data imported OK", flush=True)
 
 
 def test_imports():
