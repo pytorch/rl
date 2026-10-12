@@ -2410,6 +2410,40 @@ class TestLossConfigs:
         assert module.average_gae is False
         assert module.average_gae is gae.average_gae
 
+    def test_gae_rejected_keys_round_trip_through_set_keys(self):
+        from tensordict.nn import TensorDictModule
+
+        from torchrl.trainers.algorithms.configs.objectives import _make_gae
+
+        # set_keys(value=...) requires the key to be one of the critic out_keys.
+        critic = TensorDictModule(
+            torch.nn.Linear(3, 1),
+            in_keys=["observation"],
+            out_keys=["v"],
+        )
+        gae = _make_gae(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=critic,
+            advantage_key="adv",
+            value_target_key="vt",
+            value_key="v",
+        )
+        assert gae.tensor_keys.advantage == "adv"
+        assert gae.tensor_keys.value_target == "vt"
+        assert gae.tensor_keys.value == "v"
+        assert gae.average_gae is False
+
+        default_critic = TensorDictModule(
+            torch.nn.Linear(3, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        default_gae = _make_gae(gamma=0.99, lmbda=0.95, value_network=default_critic)
+        assert default_gae.tensor_keys.advantage == "advantage"
+        assert default_gae.tensor_keys.value_target == "value_target"
+        assert default_gae.tensor_keys.value == "state_value"
+
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tdmpc2_loss_config(self):
         from hydra.core.config_store import ConfigStore
@@ -2503,6 +2537,66 @@ class TestLossConfigs:
             assert isinstance(loss, ClipPPOLoss)
         elif loss_type == "kl":
             assert isinstance(loss, KLPENPPOLoss)
+
+    @pytest.mark.parametrize("loss_type", ["ppo", "clip"])
+    def test_ppo_rejected_keys_round_trip_through_set_keys(self, loss_type):
+        from tensordict.nn import (
+            NormalParamExtractor,
+            ProbabilisticTensorDictModule,
+            ProbabilisticTensorDictSequential,
+            TensorDictModule,
+        )
+        from torchrl.modules.distributions.continuous import TanhNormal
+        from torchrl.trainers.algorithms.configs.objectives import _make_ppo_loss
+
+        def _actor_and_critic():
+            actor = ProbabilisticTensorDictSequential(
+                TensorDictModule(
+                    torch.nn.Linear(3, 4),
+                    in_keys=["observation"],
+                    out_keys=["params"],
+                ),
+                TensorDictModule(
+                    NormalParamExtractor(),
+                    in_keys=["params"],
+                    out_keys=["loc", "scale"],
+                ),
+                ProbabilisticTensorDictModule(
+                    in_keys=["loc", "scale"],
+                    out_keys=["action"],
+                    distribution_class=TanhNormal,
+                    return_log_prob=True,
+                ),
+            )
+            critic = TensorDictModule(
+                torch.nn.Linear(3, 1),
+                in_keys=["observation"],
+                out_keys=["state_value"],
+            )
+            return actor, critic
+
+        actor, critic = _actor_and_critic()
+        loss = _make_ppo_loss(
+            actor_network=actor,
+            critic_network=critic,
+            loss_type=loss_type,
+            advantage_key="adv",
+            value_target_key="vt",
+            value_key="sv",
+        )
+        assert loss.tensor_keys.advantage == "adv"
+        assert loss.tensor_keys.value_target == "vt"
+        assert loss.tensor_keys.value == "sv"
+
+        actor, critic = _actor_and_critic()
+        default_loss = _make_ppo_loss(
+            actor_network=actor,
+            critic_network=critic,
+            loss_type=loss_type,
+        )
+        assert default_loss.tensor_keys.advantage == "advantage"
+        assert default_loss.tensor_keys.value_target == "value_target"
+        assert default_loss.tensor_keys.value == "state_value"
 
     @pytest.mark.parametrize("loss_type", ["clip", "kl"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
