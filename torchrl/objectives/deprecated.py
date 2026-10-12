@@ -71,7 +71,7 @@ class REDQLoss_deprecated(LossModule):
             stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
-            for data collection. Default is ``False``.
+            for data collection. Default is ``True``.
         gSDE (bool, optional): Knowing if gSDE is used is necessary to create
             random noise variables.
             Default is ``False``.
