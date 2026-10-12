@@ -62,10 +62,28 @@ be avoided).
 Modifications of the specs such as `env.observation_spec = new_spec` are allowed: under the hood, TorchRL will erase
 the cache, unlock the specs, make the modification and relock the specs if the env was previously locked.
 
-Importantly, the environment spec shapes should contain the batch size, e.g.
-an environment with :attr:`env.batch_size` ``== torch.Size([4])`` should have
-an :attr:`env.action_spec` with shape :class:`torch.Size` ``([4, action_size])``.
-This is helpful when preallocation tensors, checking shape consistency etc.
+Importantly, the environment spec shapes should contain the batch size.
+
+.. _Environment-spec-shapes:
+
+The composite spec has the shape of the environment batch size (it can be
+empty) and the leaves have that size plus their feature size. Feature
+dimensions (an image, a board, a vector) belong on the leaf, not on the
+composite.
+
+* Unbatched env (``env.batch_size == torch.Size([])``): the composite
+  (``observation_spec``, ``full_observation_spec``, ...) has shape ``[]``.
+  An image leaf has the feature shape, for example ``[3, 64, 64]``.
+* Batched env (``env.batch_size == torch.Size([N])``, as with
+  :class:`~torchrl.envs.ParallelEnv`): *all* specs have a leading shape of
+  ``[N, *]``. The composite has shape ``[N]`` and the image leaf has shape
+  ``[N, 3, 64, 64]``. An :attr:`env.action_spec` has shape
+  :class:`torch.Size` ``([N, action_size])``.
+
+This is helpful when preallocating tensors, checking shape consistency, and
+writing custom :class:`~torchrl.envs.EnvBase` subclasses. Worked examples
+(including nested MARL groups) are in :ref:`env_spec_shapes`; the spec
+classes themselves are documented in :ref:`ref_specs`.
 
 .. _Environment-policy-arg:
 
