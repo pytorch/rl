@@ -892,6 +892,63 @@ class TestRenameTransform(TransformBase):
             assert "action" not in env.action_keys
             assert "action" not in r
 
+    def test_nested_key_tuple_is_one_key(self, create_copy):
+        obs = torch.tensor([1.0, 2.0])
+        transform = RenameTransform(
+            ("agent", "obs"),
+            ("agent", "obs_new"),
+            create_copy=create_copy,
+        )
+        td = TensorDict({("agent", "obs"): obs}, [])
+        transform(td)
+        torch.testing.assert_close(td.get(("agent", "obs_new")), obs)
+        if create_copy:
+            torch.testing.assert_close(td.get(("agent", "obs")), obs)
+        else:
+            assert ("agent", "obs") not in td.keys(True, True)
+
+        listed = RenameTransform(
+            [("agent", "obs")],
+            [("agent", "obs_new")],
+            create_copy=create_copy,
+        )
+        td = TensorDict({("agent", "obs"): obs.clone()}, [])
+        listed(td)
+        torch.testing.assert_close(td.get(("agent", "obs_new")), obs)
+        if create_copy:
+            torch.testing.assert_close(td.get(("agent", "obs")), obs)
+        else:
+            assert ("agent", "obs") not in td.keys(True, True)
+
+        with pytest.raises(ValueError, match="matching in and out_keys"):
+            RenameTransform(("agent", "obs"), ("agent", "obs"))
+        with pytest.raises(ValueError, match="matching in and out_keys"):
+            RenameTransform(["obs", "other"], ["new", "obs"])
+
+        inverse = RenameTransform(
+            ["obs"],
+            ["obs_new"],
+            in_keys_inv=("agent", "action"),
+            out_keys_inv=("agent", "command"),
+            create_copy=create_copy,
+        )
+        action = torch.tensor([3.0])
+        inv_td = TensorDict({("agent", "command"): action}, [])
+        inverse.inv(inv_td)
+        torch.testing.assert_close(inv_td.get(("agent", "action")), action)
+        if create_copy:
+            torch.testing.assert_close(inv_td.get(("agent", "command")), action)
+        else:
+            assert ("agent", "command") not in inv_td.keys(True, True)
+
+        with pytest.raises(ValueError, match="matching in_keys_inv and out_keys_inv"):
+            RenameTransform(
+                ["obs"],
+                ["obs_new"],
+                in_keys_inv=("agent", "action"),
+                out_keys_inv=("agent", "action"),
+            )
+
 
 class TestRemoveEmptySpecs(TransformBase):
     class DummyEnv(EnvBase):
