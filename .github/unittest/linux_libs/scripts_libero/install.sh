@@ -31,7 +31,7 @@ uv_pip_install \
   "hydra-core<1.4" \
   hypothesis \
   importlib_metadata \
-  orjson \
+  'orjson; python_version < "3.13"' \
   packaging \
   psutil \
   "pyvers>=0.2.3,<0.3.0" \

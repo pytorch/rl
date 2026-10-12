@@ -74,7 +74,7 @@ nvidia-nvjitlink-cu12==12.9.86
 nvidia-nvshmem-cu12==3.4.5
 nvidia-nvtx-cu12==12.6.77
 omegaconf==2.3.1
-orjson==3.11.9
+orjson==3.11.9; python_version < "3.13"
 packaging==26.2
 pandas==2.3.3
 pillow==12.3.0
