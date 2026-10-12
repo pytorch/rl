@@ -1552,6 +1552,31 @@ class TestRewardNorm:
         RewardNormalizer.state_dict = RewardNormalizer_state_dict
         RewardNormalizer.load_state_dict = RewardNormalizer_load_state_dict
 
+    @pytest.mark.filterwarnings(
+        "error:TensorDict.load_memmap is loading a pickled:FutureWarning"
+    )
+    def test_reward_norm_save_memmap_pickled_state(self, tmp_path, monkeypatch):
+        # The reward stats are a dict of tensors and floats, which is not
+        # JSON-serializable, so the memmap backend pickles them.
+        monkeypatch.setenv("CKPT_BACKEND", "memmap")
+        torch.manual_seed(0)
+        file = tmp_path / "ckpt"
+        trainer = mocking_trainer(str(file))
+        reward_normalizer = RewardNormalizer()
+        reward_normalizer.register(trainer)
+        td = TensorDict({REWARD_KEY: torch.randn(10, 1)}, [10])
+        trainer._process_batch_hook(td)
+        trainer._process_optim_batch_hook(td)
+        trainer.save_trainer(True)
+
+        trainer2 = mocking_trainer()
+        reward_normalizer2 = RewardNormalizer()
+        reward_normalizer2.register(trainer2)
+        trainer2.load_from_file(file)
+        torch.testing.assert_close(
+            reward_normalizer2.state_dict(), reward_normalizer.state_dict()
+        )
+
 
 def test_masking():
     torch.manual_seed(0)
