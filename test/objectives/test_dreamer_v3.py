@@ -3213,6 +3213,7 @@ def test_dreamer_v3_behavior_policy_weights_match_served_policy(
         example_dir / "train.py", run_name="dreamer_v3_serving_layout"
     )
     cfg = OmegaConf.load(example_dir / "config.yaml")
+    cfg.env.name = PENDULUM_VERSIONED()
     cfg.optimization.device = "cpu"
     cfg.optimization.compile = "off"
     cfg.optimization.separate_policy_rng = separate_policy_rng

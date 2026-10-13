@@ -59,6 +59,9 @@ fi
 # smoke test
 python -c "import tensordict; print(f'tensordict: {tensordict.__version__}')"
 
+printf "* Installing hoptorch\n"
+python -m pip install "hoptorch>=0.1.4"
+
 printf "* Installing torchrl\n"
 python -m pip install -e . --no-build-isolation --no-deps
 python -c "import torchrl"

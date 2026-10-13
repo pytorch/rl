@@ -20,5 +20,6 @@ dependencies:
     - scipy
     - hydra-core<1.4
     - jumanji
+    - setuptools<82
     - gymnasium<1.0.0
     - requests
