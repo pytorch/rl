@@ -18,12 +18,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict import (
+    is_leaf_nontensor,
     is_tensor_collection,
     LazyStackedTensorDict,
     TensorDictBase,
     unravel_key,
 )
-from tensordict.base import _is_leaf_nontensor, NO_DEFAULT
+from tensordict.base import NO_DEFAULT
 from tensordict.utils import expand_as_right, is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
@@ -811,7 +812,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict2,
             named=True,
             nested_keys=True,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=is_leaf_nontensor,
         )
         input_spec = Composite(input_spec_stack, batch_size=batch_size)
         if not self.batch_locked and batch_size != self.batch_size:
@@ -829,7 +830,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nexts_1,
             named=True,
             nested_keys=True,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=is_leaf_nontensor,
         )
 
         output_spec = Composite(output_spec_stack, batch_size=batch_size)
@@ -2333,7 +2334,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             device=self.device,
             default=None,
             filter_empty=True,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=is_leaf_nontensor,
             named=True,
             nested_keys=True,
         )
@@ -2416,7 +2417,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         filter_empty=True,
                         default=None,
                         batch_size=result.batch_size,
-                        is_leaf=_is_leaf_nontensor,
+                        is_leaf=is_leaf_nontensor,
                     )
                 )
             if partial_steps.any():

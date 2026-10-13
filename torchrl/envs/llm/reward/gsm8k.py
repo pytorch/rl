@@ -9,7 +9,7 @@ from typing import Literal
 
 import torch
 from tensordict import lazy_stack, NestedKey, TensorDict, TensorDictBase
-from tensordict.utils import _zip_strict, is_non_tensor
+from tensordict.utils import is_non_tensor
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
@@ -183,7 +183,7 @@ class GSM8KRewardParser(Transform):
         answers = next_tensordict[self.in_keys[1]]
 
         tds = []
-        for answer, compl in _zip_strict(answers, text_completion):
+        for answer, compl in zip(answers, text_completion, strict=True):
             if compl.endswith("<|im_end|>"):
                 compl = compl.removesuffix("<|im_end|>")
             cot, potential_answer = self.extract_tags(compl)

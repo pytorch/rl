@@ -12,8 +12,7 @@ from copy import deepcopy
 import pytest
 import torch
 from packaging import version
-from tensordict import assert_allclose_td, TensorDictBase
-from tensordict._C import unravel_keys
+from tensordict import assert_allclose_td, TensorDictBase, unravel_key
 from tensordict.nn import (
     CompositeDistribution,
     ProbabilisticTensorDictModule,
@@ -149,7 +148,7 @@ class LossModuleTestBase:
 
     def _flatten_in_keys(self, in_keys):
         return [
-            in_key if isinstance(in_key, str) else "_".join(list(unravel_keys(in_key)))
+            in_key if isinstance(in_key, str) else "_".join(list(unravel_key(in_key)))
             for in_key in in_keys
         ]
 

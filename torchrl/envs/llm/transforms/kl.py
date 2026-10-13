@@ -13,7 +13,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
-from tensordict.utils import _zip_strict, is_seq_of_nested_key, logger as torchrl_logger
+from tensordict.utils import is_seq_of_nested_key, logger as torchrl_logger
 from torch.nn.utils.rnn import pad_sequence
 from torchrl._utils import _RayServiceMetaClass
 from torchrl.data import Composite, Unbounded
@@ -821,7 +821,7 @@ class RetrieveLogProb(Transform):
             log_probs = td.get(lp_key, as_list=True)  # type: ignore[misc]
             log_probs = [
                 torch.masked_fill(lp, ~mask, 0.0)
-                for lp, mask in _zip_strict(log_probs, assistant_masks)
+                for lp, mask in zip(log_probs, assistant_masks, strict=True)
             ]
             if self.model.pad_output:
                 log_probs = pad_sequence(
@@ -1546,7 +1546,9 @@ class KLComputation(Transform):
             )
 
         # Check individual sequence lengths
-        for i, (gen_lp, ref_lp) in enumerate(_zip_strict(gen_log_probs, ref_log_probs)):
+        for i, (gen_lp, ref_lp) in enumerate(
+            zip(gen_log_probs, ref_log_probs, strict=True)
+        ):
             if gen_lp.shape != ref_lp.shape:
                 raise ValueError(
                     f"Sample {i} has different shapes: gen_log_probs[{i}].shape={gen_lp.shape}, ref_log_probs[{i}].shape={ref_lp.shape}"
@@ -1556,7 +1558,7 @@ class KLComputation(Transform):
         # Here gen_log_probs = log p, ref_log_probs = log q.
         # NaN is an alignment pad (no score). Real +/-inf log-probs stay.
         kl = []
-        for gen_lp, ref_lp in _zip_strict(gen_log_probs, ref_log_probs):
+        for gen_lp, ref_lp in zip(gen_log_probs, ref_log_probs, strict=True):
             missing = torch.isnan(gen_lp) | torch.isnan(ref_lp)
             diff = gen_lp - ref_lp
             kl.append(torch.where(missing, torch.zeros_like(diff), diff))
@@ -1577,7 +1579,7 @@ class KLComputation(Transform):
                         )
                     reward = [
                         r - self.coeff * k.unsqueeze(-1)
-                        for r, k in _zip_strict(reward, kl)
+                        for r, k in zip(reward, kl, strict=True)
                     ]
                     next_tensordict.set(
                         "reward",

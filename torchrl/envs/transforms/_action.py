@@ -18,7 +18,7 @@ import torch
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import _zip_strict, expand_as_right, NestedKey, unravel_key
+from tensordict.utils import expand_as_right, NestedKey, unravel_key
 from torch import nn
 
 from torchrl._utils import _replace_last
@@ -2871,7 +2871,7 @@ class LastAction(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             action = tensordict.get(in_key, default=None)
             if action is None:
                 if not self.missing_tolerance:
@@ -2890,7 +2890,7 @@ class LastAction(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         _reset = _get_reset(self.reset_key, tensordict)
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             fill = self._make_default(in_key, tensordict_reset.batch_size)
             existing = tensordict.get(out_key, default=None)
             if existing is None:
@@ -2916,7 +2916,7 @@ class LastAction(Transform):
                 observation=observation_spec, shape=parent.batch_size
             )
         action_spec = parent.full_action_spec
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             try:
                 spec = action_spec[in_key]
             except KeyError:

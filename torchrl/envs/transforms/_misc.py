@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase, unravel_key
-from tensordict.utils import _zip_strict, expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, NestedKey
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.common import EnvBase
@@ -228,7 +228,7 @@ class TimeMaxPool(Transform):
 
     def _call(self, next_tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             # Lazy init of buffers
             buffer_name = self._buffer_name(in_key)
             buffer = getattr(self, buffer_name)

@@ -15,7 +15,6 @@ import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
-from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp, nn
 from torchrl import logger as torchrl_logger
 from torchrl._utils import (
@@ -779,8 +778,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self._fallback_policy = None  # Policy to use for weight extraction fallback
 
         if not any(policy_factory):
-            for policy_device, env_maker, env_maker_kwargs in _zip_strict(
-                self.policy_device, self.create_env_fn, self.create_env_kwargs
+            for policy_device, env_maker, env_maker_kwargs in zip(
+                self.policy_device,
+                self.create_env_fn,
+                self.create_env_kwargs,
+                strict=True,
             ):
                 policy_new_device, get_weights_fn = self._get_policy_and_device(
                     policy=policy,

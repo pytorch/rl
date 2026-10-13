@@ -21,7 +21,6 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
 
 from torchrl._utils import _replace_last
@@ -531,7 +530,7 @@ class LLMEnv(EnvBase):
                 observation = NonTensorStack(
                     *[
                         self._check_obs_act_and_cat(_obs, _action, device=self.device)
-                        for (_obs, _action) in _zip_strict(obs, action)
+                        for (_obs, _action) in zip(obs, action, strict=True)
                     ]
                 )
             return nex_td.set(self.str_key, observation)
@@ -543,8 +542,8 @@ class LLMEnv(EnvBase):
                     observation = torch.nested.as_nested_tensor(
                         [
                             torch.cat([_obs, _action], -1)
-                            for _obs, _action in _zip_strict(
-                                obs.unbind(0), action.unbind(0)
+                            for _obs, _action in zip(
+                                obs.unbind(0), action.unbind(0), strict=True
                             )
                         ],
                         layout=obs.layout,

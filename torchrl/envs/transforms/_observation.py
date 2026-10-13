@@ -13,7 +13,7 @@ from typing import Any, Literal, TYPE_CHECKING
 import torch
 
 from tensordict import set_lazy_legacy, TensorDictBase, unravel_key
-from tensordict.utils import _zip_strict, expand_right, NestedKey
+from tensordict.utils import expand_right, NestedKey
 
 from torchrl.data.tensor_specs import ContinuousBox, TensorSpec
 from torchrl.envs.transforms import functional as F
@@ -1220,7 +1220,7 @@ class CatFrames(ObservationTransform):
                 "per-window validity masks."
             )
         _just_reset = _reset is not None
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
             data = next_tensordict.get(in_key)
@@ -1341,12 +1341,12 @@ class CatFrames(ObservationTransform):
         # first sort the in_keys with strings and non-strings
         keys = [
             (in_key, out_key)
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys)
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True)
             if isinstance(in_key, str)
         ]
         keys += [
             (in_key, out_key)
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys)
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True)
             if not isinstance(in_key, str)
         ]
 
@@ -1421,7 +1421,7 @@ class CatFrames(ObservationTransform):
             first_val = None
             if isinstance(in_key, tuple) and in_key[0] == "next":
                 # let's get the out_key we have already processed
-                prev_out_key = dict(_zip_strict(self.in_keys, self.out_keys)).get(
+                prev_out_key = dict(zip(self.in_keys, self.out_keys, strict=True)).get(
                     in_key[1], None
                 )
                 if prev_out_key is not None:
