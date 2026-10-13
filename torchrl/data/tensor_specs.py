@@ -4132,7 +4132,7 @@ class Categorical(TensorSpec):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
-        return torch.nn.functional.one_hot(val, self.space.n).bool()
+        return torch.nn.functional.one_hot(val.to(torch.long), self.space.n).bool()
 
     def to_categorical(
         self, val: torch.Tensor, safe: bool | None = None
