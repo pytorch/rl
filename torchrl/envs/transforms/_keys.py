@@ -15,7 +15,7 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import NestedKey
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.envs.transforms.utils import _set_missing_tolerance
@@ -327,7 +327,7 @@ class RenameTransform(Transform):
             out = next_tensordict.select(
                 *self.in_keys, strict=not self._missing_tolerance
             )
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
                 try:
                     out.rename_key_(in_key, out_key)
                 except KeyError:
@@ -335,7 +335,7 @@ class RenameTransform(Transform):
                         raise
             next_tensordict = next_tensordict.update(out)
         else:
-            for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
                 try:
                     next_tensordict.rename_key_(in_key, out_key)
                 except KeyError:
@@ -357,7 +357,9 @@ class RenameTransform(Transform):
             out = tensordict.select(
                 *self.out_keys_inv, strict=not self._missing_tolerance
             )
-            for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+            for in_key, out_key in zip(
+                self.in_keys_inv, self.out_keys_inv, strict=True
+            ):
                 try:
                     out.rename_key_(out_key, in_key)
                 except KeyError:
@@ -366,7 +368,9 @@ class RenameTransform(Transform):
 
             tensordict = tensordict.update(out)
         else:
-            for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+            for in_key, out_key in zip(
+                self.in_keys_inv, self.out_keys_inv, strict=True
+            ):
                 try:
                     tensordict.rename_key_(out_key, in_key)
                 except KeyError:

@@ -19,6 +19,8 @@ from typing import Any, Literal
 import torch
 
 from tensordict import (
+    default_is_leaf,
+    is_leaf_nontensor,
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
@@ -27,7 +29,6 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.base import _default_is_leaf, _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
     interaction_type as exploration_type,
@@ -177,7 +178,7 @@ class _StepMDP:
 
             actual = {
                 key
-                for key in tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+                for key in tensordict.keys(True, True, is_leaf=is_leaf_nontensor)
                 if not _is_reset(key)
             }
             expected = set(expected)
@@ -264,7 +265,7 @@ class _StepMDP:
                 cls._exclude(nested_key_dict, td, td_out)
             return out
         has_set = False
-        for key, value in data_in.items(is_leaf=_is_leaf_nontensor):
+        for key, value in data_in.items(is_leaf=is_leaf_nontensor):
             subdict = nested_key_dict.get(key, NO_DEFAULT)
             if subdict is NO_DEFAULT:
                 value = value.copy() if is_tensor_collection(value) else value
@@ -782,23 +783,23 @@ def check_env_specs(
     fake_tensordict_select = fake_tensordict.select(
         *[
             k
-            for k in fake_tensordict.keys(True, True, is_leaf=_default_is_leaf)
+            for k in fake_tensordict.keys(True, True, is_leaf=default_is_leaf)
             if k not in state_spec_next_keys
         ]
     )
     real_tensordict_select = real_tensordict.select(
         *[
             k
-            for k in real_tensordict.keys(True, True, is_leaf=_default_is_leaf)
+            for k in real_tensordict.keys(True, True, is_leaf=default_is_leaf)
             if k not in state_spec_next_keys
         ]
     )
     # check keys
     fake_tensordict_keys = set(
-        fake_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+        fake_tensordict.keys(True, True, is_leaf=is_leaf_nontensor)
     )
     real_tensordict_keys = set(
-        real_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
+        real_tensordict.keys(True, True, is_leaf=is_leaf_nontensor)
     )
     fake_tensordict_keys -= state_spec_next_keys
     real_tensordict_keys -= state_spec_next_keys

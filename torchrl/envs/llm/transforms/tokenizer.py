@@ -12,7 +12,7 @@ from typing import Any, TYPE_CHECKING
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorDictBase, unravel_key
 from tensordict.nn import dispatch
-from tensordict.utils import _zip_strict, NestedKey
+from tensordict.utils import NestedKey
 from torch import Tensor
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
@@ -120,7 +120,7 @@ class Tokenizer(UnaryTransform):
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         # Specialized for attention mask
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             value = next_tensordict.get(in_key, default=None)
             if value is not None:
                 observation = self._apply_transform(value)
@@ -152,7 +152,7 @@ class Tokenizer(UnaryTransform):
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             data = tensordict.get(in_key, None)
             if data is not None:
                 data = self._apply_transform(data)
@@ -220,7 +220,7 @@ class Tokenizer(UnaryTransform):
         # Override _inv_call to account for ragged dims
         if not self.in_keys_inv:
             return tensordict
-        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
             data = tensordict.get(out_key, None, as_padded_tensor=True)
             if data is not None:
                 item = self._inv_apply_transform(data)
@@ -267,7 +267,7 @@ class Tokenizer(UnaryTransform):
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
         # We need to cap the spec to generate valid random strings
-        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
             if in_key in input_spec["full_state_spec"].keys(True, True):
                 spec = input_spec["full_state_spec"]
             elif in_key in input_spec["full_action_spec"].keys(False, True):
@@ -301,7 +301,7 @@ class Tokenizer(UnaryTransform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         attention_mask_keys = set()
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             new_shape = observation_spec.shape + torch.Size((-1,))
             try:
                 in_spec = observation_spec[in_key]

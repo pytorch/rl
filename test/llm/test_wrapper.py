@@ -23,7 +23,6 @@ import torch
 
 import torchrl.modules.llm as llm_mod
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
-from tensordict.utils import _zip_strict
 from torch.nn.utils.rnn import pad_sequence
 from torchrl import logger as torchrl_logger
 from torchrl.data import ListStorage, ReplayBuffer
@@ -2405,7 +2404,7 @@ class TestLogProbsComparison:
             generated_texts = vllm_gen_result["text"].response
             new_chats = []
             assert history is not None  # Type assertion for linter
-            for chat, gen_text in _zip_strict(history.unbind(0), generated_texts):
+            for chat, gen_text in zip(history.unbind(0), generated_texts, strict=True):
                 new_chat = chat.copy().append(
                     History(role="assistant", content=gen_text)
                 )

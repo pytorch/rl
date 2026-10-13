@@ -12,12 +12,7 @@ from typing import Any, TYPE_CHECKING
 import torch
 
 from tensordict import TensorDict, TensorDictBase, unravel_key
-from tensordict.utils import (
-    _unravel_key_to_tuple,
-    _zip_strict,
-    expand_as_right,
-    NestedKey,
-)
+from tensordict.utils import _unravel_key_to_tuple, expand_as_right, NestedKey
 from torch import Tensor
 
 from torchrl._utils import _replace_last
@@ -198,7 +193,7 @@ class TargetReturn(Transform):
         return self._reset(tensordict, tensordict_reset)
 
     def _call(self, next_tensordict: TensorDict) -> TensorDict:
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             val_in = next_tensordict.get(in_key, None)
             val_out = next_tensordict.get(out_key, None)
             if val_in is not None:
@@ -240,7 +235,7 @@ class TargetReturn(Transform):
         )
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             if in_key in self.parent.full_observation_spec.keys(True):
                 target = self.parent.full_observation_spec[in_key]
             elif in_key in self.parent.full_reward_spec.keys(True):
@@ -489,7 +484,7 @@ class RewardSum(Transform):
 
             def _check_match(reset_keys, in_keys):
                 # if this is called, the length of reset_keys and in_keys must match
-                for reset_key, in_key in _zip_strict(reset_keys, in_keys):
+                for reset_key, in_key in zip(reset_keys, in_keys, strict=True):
                     # having _reset at the root and the reward_key ("agent", "reward") is allowed
                     # but having ("agent", "_reset") and "reward" isn't
                     if isinstance(reset_key, tuple) and isinstance(in_key, str):
@@ -533,8 +528,8 @@ class RewardSum(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         """Resets episode rewards."""
-        for in_key, reset_key, out_key in _zip_strict(
-            self.in_keys, self.reset_keys, self.out_keys
+        for in_key, reset_key, out_key in zip(
+            self.in_keys, self.reset_keys, self.out_keys, strict=True
         ):
             _reset = _get_reset(reset_key, tensordict)
             value = tensordict.get(out_key, default=None)
@@ -555,7 +550,7 @@ class RewardSum(Transform):
     ) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
         # Update episode rewards
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             if in_key in next_tensordict.keys(include_nested=True):
                 reward = next_tensordict.get(in_key)
                 prev_reward = tensordict.get(out_key, 0.0)
@@ -577,7 +572,7 @@ class RewardSum(Transform):
         reward_spec = self.parent.full_reward_spec
         reward_spec_keys = self.parent.reward_keys
         # Define episode specs for all out_keys
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             if (
                 in_key in reward_spec_keys
             ):  # if this out_key has a corresponding key in reward_spec
@@ -627,7 +622,7 @@ class RewardSum(Transform):
                 "At least one dimension of the tensordict must be named 'time' in offline mode"
             )
         time_dim = time_dim[0] - 1
-        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys, strict=True):
             reward = tensordict[in_key]
             cumsum = reward.cumsum(time_dim)
             tensordict.set(out_key, cumsum)
@@ -775,7 +770,7 @@ class Reward2GoTransform(Transform):
                 "No episode ends found to calculate the reward to go. Make sure that the number of frames_per_batch is larger than number of steps per episode."
             )
         found = False
-        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv, strict=True):
             if in_key in tensordict.keys(include_nested=True):
                 found = True
                 item = self._inv_apply_transform(tensordict.get(in_key), done)

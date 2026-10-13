@@ -15,6 +15,7 @@ import torch
 from pyvers import implement_for
 
 from tensordict import (
+    is_leaf_nontensor,
     NestedKey,
     NonTensorData,
     NonTensorStack,
@@ -23,7 +24,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS
+from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.utils import Buffer
 from torch import multiprocessing as mp, nn as nn
 from torch.nn import Parameter
@@ -800,7 +801,7 @@ def _traj_emit(
         # repeating the last element (the mask marks validity anyway)
         non_tensor_keys = [
             key
-            for key in traj.keys(True, True, is_leaf=_is_leaf_nontensor)
+            for key in traj.keys(True, True, is_leaf=is_leaf_nontensor)
             if isinstance(traj.get(key), (NonTensorData, NonTensorStack))
         ]
         if non_tensor_keys:

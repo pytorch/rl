@@ -18,6 +18,7 @@ from typing import Literal, TypeVar
 
 import torch
 from tensordict import (
+    is_leaf_nontensor,
     is_tensor_collection,
     lazy_stack,
     NestedKey,
@@ -25,7 +26,6 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import (
     CompositeDistribution,
     ProbabilisticTensorDictModule,
@@ -1362,8 +1362,8 @@ class MCAdvantage(Transform):
         # contiguous() can silently turn stacked NonTensorData entries (e.g.
         # string prompts) into empty TensorDicts. Keep the lazy input whenever
         # materialization would lose entries.
-        lazy_keys = set(tensordict.keys(True, True, is_leaf=_is_leaf_nontensor))
-        concrete_keys = set(out.keys(True, True, is_leaf=_is_leaf_nontensor))
+        lazy_keys = set(tensordict.keys(True, True, is_leaf=is_leaf_nontensor))
+        concrete_keys = set(out.keys(True, True, is_leaf=is_leaf_nontensor))
         if lazy_keys - concrete_keys:
             torchrl_logger.debug(
                 "MCAdvantage: keeping lazy tensordict; contiguous() dropped "

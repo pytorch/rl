@@ -16,7 +16,6 @@ import numpy as np
 import tensordict
 import torch
 from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
-from tensordict.utils import _zip_strict
 from torch.utils._pytree import tree_map
 
 from torchrl.data.replay_buffers.checkpointers import (
@@ -103,7 +102,7 @@ class ListStorage(Storage):
                     np.ndarray,
                 ),
             ):
-                for _cursor, _data in _zip_strict(cursor, data):
+                for _cursor, _data in zip(cursor, data, strict=True):
                     self.set(_cursor, _data, set_cursor=set_cursor)
             else:
                 raise TypeError(

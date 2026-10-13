@@ -26,7 +26,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict, expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, NestedKey
 
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec
@@ -1017,7 +1017,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         record_action: bool,
     ) -> None:
         requests = [[] for _ in range(self.num_workers)]
-        for env_index, local_td in _zip_strict(env_idx, local_tds):
+        for env_index, local_td in zip(env_idx, local_tds, strict=True):
             data = self._prepare_worker_data(
                 env_index, local_td, record_action=record_action
             )

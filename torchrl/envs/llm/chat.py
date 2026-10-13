@@ -10,7 +10,6 @@ from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import lazy_stack, NonTensorData, NonTensorStack, TensorDictBase
-from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
 from torchrl.data import Composite, NonTensor
 from torchrl.data.llm.history import History
@@ -628,7 +627,7 @@ class ChatEnv(EnvBase, metaclass=_ChatEnvMeta):
             **self.template_kwargs,
         )
         tokens_obj = Tokens._from_tensordict(tensordict.empty().to_lazystack(0))
-        for to, tok in _zip_strict(tokens_obj.unbind(0), tokens["input_ids"]):
+        for to, tok in zip(tokens_obj.unbind(0), tokens["input_ids"], strict=True):
             to.prompt = tok
         result = tensordict.empty(device=self.device).set("tokens", tokens_obj)
         return result
