@@ -96,10 +96,24 @@ Supported objects:
 
 - Dataclasses through `from_dataclass()` (dataclasses will be converted to TensorDict instances, not tensorclasses).
 - Namedtuples through `from_namedtuple()`.
-- Dictionaries through `from_dict()`.
-- Tuples through `from_tuple()`.
+- Dictionaries through [`from_dict()`](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult.from_dict).
+- Tuples through `from_tuple()`. This includes the results of
+`torch.return_types` (`max`, `sort`, `topk`, ...), which get
+the keys `"0"`, `"1"`, ... and a `FutureWarning`.
+Starting with TensorDict 0.17, the default will change to their
+field names (`"values"`, `"indices"`, ...), as
+`from_namedtuple()` gives.
 - NumPy's structured arrays through `from_struct_array()`.
 - HDF5 objects through `from_h5()`.
+
+from_consolidated()
+
+Reconstructs a tensordict from a file written by `consolidate()`.
+
+The batch sizes and names are as they were when the file was written.
+To write later changes into the file, call
+`consolidate(filename=filename)` again on the consolidated tensordict.
+See `from_consolidated()`.
 
 from_csv(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, ***kwargs*) → Self
 
@@ -292,6 +306,53 @@ Examples
 ... td_lines = TensorDict.from_json(path_lines, lines=True)
 >>> td.batch_size, td_lines.batch_size
 (torch.Size([3]), torch.Size([3]))
+```
+
+from_list(***, *auto_batch_size: bool | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_dims: int | None = None*, *names: list[str] | None = None*, *lazy: bool | None = None*) → Self
+
+Builds a tensordict by stacking a list of dicts or tensor collections.
+
+Each dict is converted with `from_dict()` and the results are
+stacked along a new leading dimension.
+
+Parameters:
+
+**input** (*list*) - the dicts or tensor collections to stack.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - if `True`, the batch size of
+each element is computed automatically. See `from_dict()`.
+- **batch_size** (*iterable**of**int**,**optional*) - the batch size of the
+result, with the length of the list first. Each element gets
+`batch_size[1:]`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**compatible type**,**optional*) - a device for
+the result.
+- **batch_dims** (*int**,**optional*) - the maximum number of batch dimensions
+of the result, the list dimension included. Exclusive with
+`batch_size`.
+- **names** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**str**,**optional*) - the dimension names of the result,
+one per batch dimension, with the name of the list dimension
+first.
+- **lazy** (*bool**,**optional*) - if `True`, the result is a lazy stack;
+if `False`, a dense stack. Defaults to `None`, which builds
+a dense stack when the elements have the same shape and a lazy
+stack otherwise.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict.from_list(
+... [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}],
+... batch_size=[2, 3],
+... names=["x", "y"],
+... )
+>>> td.batch_size
+torch.Size([2, 3])
+>>> td.names
+['x', 'y']
 ```
 
 from_module(*as_module: bool = False*, *lock: bool = False*, *use_state_dict: bool = False*, *filter_empty: bool = True*)
@@ -620,7 +681,11 @@ This method is designed to keep the pytree nested structure as much as possible.
 Additional non-tensor keys are added to keep track of each level's identity, providing
 a built-in pytree-to-tensordict bijective transform API.
 
-Accepted classes currently include lists, tuples, named tuples and dict.
+Accepted classes currently include lists, tuples, named tuples and dict,
+and subclasses of these such as `collections.OrderedDict`,
+`collections.defaultdict` and the results of `torch.max` and
+the other `torch.return_types`. A `defaultdict` is rebuilt without
+its `default_factory`.
 
 Note
 

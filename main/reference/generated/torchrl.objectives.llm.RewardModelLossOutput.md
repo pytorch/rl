@@ -152,9 +152,23 @@ Supported objects:
 - Dataclasses through `from_dataclass()` (dataclasses will be converted to TensorDict instances, not tensorclasses).
 - Namedtuples through `from_namedtuple()`.
 - Dictionaries through `from_dict()`.
-- Tuples through `from_tuple()`.
+- Tuples through `from_tuple()`. This includes the results of
+`torch.return_types` (`max`, `sort`, `topk`, ...), which get
+the keys `"0"`, `"1"`, ... and a `FutureWarning`.
+Starting with TensorDict 0.17, the default will change to their
+field names (`"values"`, `"indices"`, ...), as
+`from_namedtuple()` gives.
 - NumPy's structured arrays through `from_struct_array()`.
 - HDF5 objects through `from_h5()`.
+
+from_consolidated()
+
+Reconstructs a tensordict from a file written by `consolidate()`.
+
+The batch sizes and names are as they were when the file was written.
+To write later changes into the file, call
+`consolidate(filename=filename)` again on the consolidated tensordict.
+See `from_consolidated()`.
 
 from_csv(***, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *separator: str | None = None*, *dtype: [torch.dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, ***kwargs*) → Self
 
@@ -248,6 +262,28 @@ Note
 - Each key in the resulting TensorDict is initialized using the cls.from_any method.
 - The auto_batch_size option allows for automatic batch size determination and application to the
 resulting TensorDict.
+
+*classmethod*from_dict(*input_dict*, ***, *auto_batch_size: bool | None = None*, *batch_size=None*, *device=None*, *batch_dims=None*)
+
+Builds an instance of the tensorclass from a dictionary of its fields.
+
+The fields that `input_dict` misses are set to `None`, also those that
+declare a default or a default factory. Starting with TensorDict 0.17, the
+default will change to filling these fields with their defaults, as the
+constructor does. Until then, a call that misses such a field warns with a
+`FutureWarning`.
+
+Parameters:
+
+**input_dict** (*dict*) - the values of the fields. Nested dictionaries become
+tensordicts, or tensorclasses for the fields annotated with one.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - whether to infer the batch size.
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device.
+- **batch_dims** (*int**,**optional*) - the number of batch dimensions to infer.
 
 from_h5(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
 
@@ -347,6 +383,53 @@ Examples
 ... td_lines = TensorDict.from_json(path_lines, lines=True)
 >>> td.batch_size, td_lines.batch_size
 (torch.Size([3]), torch.Size([3]))
+```
+
+from_list(***, *auto_batch_size: bool | None = None*, *batch_size: [torch.Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *batch_dims: int | None = None*, *names: list[str] | None = None*, *lazy: bool | None = None*) → Self
+
+Builds a tensordict by stacking a list of dicts or tensor collections.
+
+Each dict is converted with `from_dict()` and the results are
+stacked along a new leading dimension.
+
+Parameters:
+
+**input** (*list*) - the dicts or tensor collections to stack.
+
+Keyword Arguments:
+
+- **auto_batch_size** (*bool**,**optional*) - if `True`, the batch size of
+each element is computed automatically. See `from_dict()`.
+- **batch_size** (*iterable**of**int**,**optional*) - the batch size of the
+result, with the length of the list first. Each element gets
+`batch_size[1:]`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**compatible type**,**optional*) - a device for
+the result.
+- **batch_dims** (*int**,**optional*) - the maximum number of batch dimensions
+of the result, the list dimension included. Exclusive with
+`batch_size`.
+- **names** ([*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**str**,**optional*) - the dimension names of the result,
+one per batch dimension, with the name of the list dimension
+first.
+- **lazy** (*bool**,**optional*) - if `True`, the result is a lazy stack;
+if `False`, a dense stack. Defaults to `None`, which builds
+a dense stack when the elements have the same shape and a lazy
+stack otherwise.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict.from_list(
+... [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}],
+... batch_size=[2, 3],
+... names=["x", "y"],
+... )
+>>> td.batch_size
+torch.Size([2, 3])
+>>> td.names
+['x', 'y']
 ```
 
 from_module(*as_module: bool = False*, *lock: bool = False*, *use_state_dict: bool = False*, *filter_empty: bool = True*)
@@ -675,7 +758,11 @@ This method is designed to keep the pytree nested structure as much as possible.
 Additional non-tensor keys are added to keep track of each level's identity, providing
 a built-in pytree-to-tensordict bijective transform API.
 
-Accepted classes currently include lists, tuples, named tuples and dict.
+Accepted classes currently include lists, tuples, named tuples and dict,
+and subclasses of these such as `collections.OrderedDict`,
+`collections.defaultdict` and the results of `torch.max` and
+the other `torch.return_types`. A `defaultdict` is rebuilt without
+its `default_factory`.
 
 Note
 
@@ -1342,12 +1429,21 @@ Note
 Serialising in this fashion might be slow with deeply nested tensordicts, so
 it is not recommended to call this method inside a training loop.
 
+Note
+
+A [`PersistentTensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), a
+`TensorDictStore` or a
+`LazyStackedTensorDictStore` (or one of its
+elements) cannot be memory-mapped in-place: this method raises a
+`RuntimeError`. Use [`memmap()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap) to
+build a memory-mapped copy instead.
+
 memmap_like(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *existsok: bool = True*, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*) → Self
 
 Creates a memory-mapped tensordict with the same keys, shapes and dtypes, without copying the values.
 
 The files are filled with zeros. Write the values into the result
-afterwards, for example with [`update_()`](torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.update_) or indexing.
+afterwards, for example with `update_()` or indexing.
 
 Parameters:
 
@@ -1572,3 +1668,25 @@ unbind(*dim: int*)
 Returns a tuple of indexed tensorclass instances unbound along the indicated dimension.
 
 Resulting tensorclass instances will share the storage of the initial tensorclass instance.
+
+update_(*input_dict_or_td: dict[str, CompatibleType] | T | None = None*, *clone: bool = False*, *inplace: bool = False*, ***, *keys_to_update: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[NestedKey] | None = None*, *non_blocking: bool = False*, ***kwargs*)
+
+Writes the entries of a dictionary, a tensordict or a tensorclass into the existing entries.
+
+See [`update_()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.update_). A tensorclass or dict
+source ignores `keys_to_update`: the entries that it leaves out are
+written too, and the call warns. Starting with TensorDict 0.17, the default
+will change to writing only the entries in `keys_to_update`, as for a
+TensorDict source.
+
+update_at_(*input_dict_or_td: dict[str, CompatibleType] | T*, *index: IndexType*, *clone: bool = False*, ***, *keys_to_update: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[NestedKey] | None = None*, *non_blocking: bool = False*)
+
+Writes the entries of a dictionary, a tensordict or a tensorclass in place at an index.
+
+See [`update_at_()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.update_at_). A tensorclass or dict
+source that `update()` accepts, such as one with the batch size of
+the tensorclass, goes to `update()` instead: its entries replace
+those of the tensorclass whatever the index, and the call warns. Starting
+with TensorDict 0.17, the default will change to writing such a source in
+place at the index, as [`update_at_()`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.update_at_)
+does.
