@@ -1005,7 +1005,7 @@ class DiscreteSACLoss(LossModule):
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-target_entropy_weight * log(1 / num_actions)`.
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
-            for data collection. Default is ``False``.
+            for data collection. Default is ``True``.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Key where to write the priority value for prioritized replay buffers.
             Default is `"td_error"`.
