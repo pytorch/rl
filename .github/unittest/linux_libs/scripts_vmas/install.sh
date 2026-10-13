@@ -46,7 +46,7 @@ fi
 # install tensordict
 pip3 install cloudpickle packaging importlib_metadata numpy 'orjson; python_version < "3.13"' "pyvers>=0.2.3,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install --no-deps git+https://github.com/pytorch/tensordict.git@$(cat .github/ci_commit_pins/tensordict.txt)
+  pip3 install --no-deps git+https://github.com/pytorch/tensordict.git
 else
   pip3 install --no-deps tensordict
 fi
