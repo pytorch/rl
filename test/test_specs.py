@@ -496,9 +496,7 @@ class TestRanges:
         assert small_categorical.dtype is torch.int32
         small_sample = torch.tensor(2, dtype=small_categorical.dtype)
         small_expected = torch.tensor([False, False, True])
-        assert torch.equal(
-            small_categorical.to_one_hot(small_sample), small_expected
-        )
+        assert torch.equal(small_categorical.to_one_hot(small_sample), small_expected)
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
