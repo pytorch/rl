@@ -39,7 +39,7 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     python -m pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cpu
 else
-    python -m pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu130
+    python -m pip install torch==2.13.0 torchvision==0.28.0 --index-url "https://download.pytorch.org/whl/${CU_VERSION}"
 fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
