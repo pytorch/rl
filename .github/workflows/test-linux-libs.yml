@@ -391,12 +391,11 @@ jobs:
         python_version: ["3.11"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/isaaclab') }}
-    uses: vmoens/test-infra/.github/workflows/isaac_linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
     with:
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
+      runner: "mt-l-x86aavx2-11-41-a10g"
       docker-image: "nvcr.io/nvidia/isaac-lab:2.3.0"
-      test-infra-repository: vmoens/test-infra
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
       timeout: 120

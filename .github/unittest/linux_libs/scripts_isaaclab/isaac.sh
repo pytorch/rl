@@ -15,6 +15,12 @@ export TF_CPP_MIN_LOG_LEVEL=0
 export BATCHED_PIPE_TIMEOUT=60
 export TD_GET_DEFAULTS_TO_NONE=1
 export OMNI_KIT_ACCEPT_EULA=yes
+export ACCEPT_EULA=Y
+export PRIVACY_CONSENT=Y
+# linux_job_v3 runs this script under `uv run`, which makes Ray start its workers
+# with `uv run` too. uv picks its own interpreter rather than Isaac Sim's bundled
+# Python, and the workers die with "SRE module mismatch".
+export RAY_ENABLE_UV_RUN_RUNTIME_ENV=0
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 export PYTHONNOUSERSITE=1
 
