@@ -445,6 +445,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`FQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig)(loss_module, optimizer, ...) | Hydra configuration for [`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer). |
 | [`CQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer). |
 | [`TD3TrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer). |
+| [`TdMpc2TrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig)(collector, total_frames) | Hydra configuration for [`TdMpc2Trainer`](generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer). |
 
 ### Trainer Hook Configurations
 

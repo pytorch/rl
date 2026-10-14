@@ -3765,6 +3765,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`FQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.FQLTrainerConfig)(loss_module, optimizer, ...) | Hydra configuration for [`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer). |
 | [`CQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer). |
 | [`TD3TrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer). |
+| [`TdMpc2TrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig)(collector, total_frames) | Hydra configuration for [`TdMpc2Trainer`](generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer). |
 
 ### Trainer Hook Configurations
 
@@ -103813,11 +103814,11 @@ RENDER_BACKGROUND*: ClassVar[tuple[float, float, float] | None]**= None*
 Background color for the `mujoco-torch` ray-cast renderer.
 Subclasses (e.g. satellite) override to a deep-space tone.
 
-REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'heading_std': 0.5, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
+REWARD_PARAMS*: ClassVar[dict[str, float]]**= {'air_time_max': 0.3, 'air_time_min': 0.125, 'drift_speed_scale': 0.3, 'gait_progress_floor': 0.5, 'head_level_std': 0.3, 'head_pitch_target': 0.0, 'hop_velocity_amplitude': 0.1, 'jump_target_height': 0.005, 'launch_velocity_scale': 0.5, 'pose_std': 0.5, 'swing_target_height': 0.02, 'tracking_off_axis_std': 0.05, 'tracking_std': 0.1, 'turn_rate': 0.0, 'turn_rate_std': 0.5, 'upright_std': 0.22360679774997896, 'yaw_rate_std': 0.7071067811865476}*
 
 Default value of every term parameter a [`MicroDuckTask`](torchrl.envs.MicroDuckTask.html#torchrl.envs.MicroDuckTask) carries.
 
-REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'heading': _RegisteredTerm(fn=<function heading>, weight=0.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
+REWARD_TERMS*: ClassVar[dict[str, _RegisteredTerm]]**= {'action_rate': _RegisteredTerm(fn=<function _action_rate>, weight=-0.1, per_second=True), 'air_time': _RegisteredTerm(fn=<function _air_time>, weight=3.0, per_second=True), 'ang_vel_xy': _RegisteredTerm(fn=<function _ang_vel_xy>, weight=-0.05, per_second=True), 'double_support': _RegisteredTerm(fn=<function _double_support>, weight=-1.0, per_second=True), 'drift': _RegisteredTerm(fn=<function _drift>, weight=0.0, per_second=True), 'head_level': _RegisteredTerm(fn=<function _head_level>, weight=1.0, per_second=True), 'hop_rhythm': _RegisteredTerm(fn=<function _hop_rhythm>, weight=0.0, per_second=True), 'joint_velocity': _RegisteredTerm(fn=<function _joint_velocity>, weight=-0.001, per_second=True), 'jump': _RegisteredTerm(fn=<function _jump>, weight=0.0, per_second=True), 'launch': _RegisteredTerm(fn=<function _launch>, weight=0.0, per_second=True), 'lin_vel_z': _RegisteredTerm(fn=<function _lin_vel_z>, weight=-2.0, per_second=True), 'phase_contact': _RegisteredTerm(fn=<function _phase_contact>, weight=3.0, per_second=True), 'pose': _RegisteredTerm(fn=<function _pose>, weight=1.0, per_second=True), 'progress': _RegisteredTerm(fn=<function _progress>, weight=2.0, per_second=True), 'swing_height': _RegisteredTerm(fn=<function _swing_height>, weight=2.0, per_second=True), 'termination': _RegisteredTerm(fn=<function _termination>, weight=-4.0, per_second=False), 'tracking': _RegisteredTerm(fn=<function _tracking>, weight=2.0, per_second=True), 'turn': _RegisteredTerm(fn=<function _turn>, weight=0.0, per_second=True), 'upright': _RegisteredTerm(fn=<function _upright>, weight=2.0, per_second=True), 'yaw_rate': _RegisteredTerm(fn=<function _yaw_rate>, weight=1.0, per_second=True)}*
 
 Registered reward terms by name, in weight-vector order.
 
@@ -256303,13 +256304,6 @@ TensorDict with key "loss_bc".
 
 The keys that the module reads from the input tensordict.
 
-*property*out_keys
-
-The keys that the module writes to the output tensordict.
-
-After `select_out_keys()`, only the selected keys. The full list
-is in `out_keys_source`.
-
 set_keys(***kwargs*) → None[[source]](../../_modules/torchrl/objectives/bc.html#BCLoss.set_keys)
 
 Set tensordict key names.
@@ -257476,13 +257470,6 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 >>> ppo_loss.make_value_estimator(gae)
 ```
 
-*property*out_keys
-
-The keys that the module writes to the output tensordict.
-
-After `select_out_keys()`, only the selected keys. The full list
-is in `out_keys_source`.
-
 ---
 
 # DQNLoss
@@ -257676,13 +257663,6 @@ Using a [`ValueEstimatorBase`](torchrl.objectives.value.ValueEstimatorBase.html#
 >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=value_net)
 >>> ppo_loss.make_value_estimator(gae)
 ```
-
-*property*out_keys
-
-The keys that the module writes to the output tensordict.
-
-After `select_out_keys()`, only the selected keys. The full list
-is in `out_keys_source`.
 
 ---
 
@@ -296509,11 +296489,10 @@ Examples
 
 Execute the two-phase TD-MPC2 learner update.
 
-The model optimizer updates the world model and online Q-functions first;
-the actor optimizer then updates the policy objective on the detached
-imagined latent sequence captured by that model update. The policy update
-uses the model/Q parameters after the first optimizer step. The target
-Q-functions are soft-updated last.
+Each step performs the model and Q-function update first, then evaluates
+the policy objective on the detached imagined latent sequence captured by
+that model update. The policy update uses the model/Q parameters after the
+first optimizer step. The target Q-functions are soft-updated last.
 
 Parameters:
 
@@ -296543,11 +296522,132 @@ Return optimizer state and completed-update count.
 
 step(*trainer: [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)*, *sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/trainers/algorithms/tdmpc2.html#TdMpc2OptimizationStepper.step)
 
-Run model, actor, and target-Q updates and return detached metrics.
+Run one model, actor, and target-Q update and return detached metrics.
 
 *property*update_count*: int*
 
 Number of completed TD-MPC2 updates.
+
+---
+
+# TdMpc2Trainer
+
+*class*torchrl.trainers.algorithms.TdMpc2Trainer(**args*, ***kwargs*)[[source]](../../_modules/torchrl/trainers/algorithms/tdmpc2.html#TdMpc2Trainer)
+
+A trainer class for the TD-MPC2 algorithm.
+
+See also `TdMpc2TrainerConfig` for the
+Hydra configuration counterpart.
+
+This trainer implements TD-MPC2, a scalable and robust model-based reinforcement
+learning algorithm for continuous control. TD-MPC2 learns a latent world model,
+including transition, reward, value, and policy components, and uses model
+predictive control with MPPI-style planning to select actions.
+
+The trainer handles:
+- Sequence-based replay buffer sampling for model learning
+- Joint optimization of the latent world model and policy prior
+- Model-predictive action planning through a TD-MPC2 planner
+- Synchronization of planner weights with the data collector
+- Logging and checkpointing of training metrics
+
+Parameters:
+
+- **collector** ([*BaseCollector*](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector)) - The data collector used to gather environment interactions.
+- **total_frames** (*int*) - Total number of frames to collect during training.
+- **loss_module** ([*TdMpc2Loss*](torchrl.objectives.TdMpc2Loss.html#torchrl.objectives.TdMpc2Loss)) - The TD-MPC2 loss module.
+- **planner** ([*TdMpc2Planner*](torchrl.modules.TdMpc2Planner.html#torchrl.modules.TdMpc2Planner)) - The planner used for model-predictive action selection.
+- **optimizer_model** (*optim.Optimizer*) - Optimizer for the world model and value functions.
+- **optimizer_actor** (*optim.Optimizer*) - Optimizer for the policy prior.
+- **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)) - Replay buffer containing training trajectories.
+- **batch_size** (*int**,**optional*) - Number of trajectory sequences sampled per update.
+- **optim_steps_per_batch** (*int**,**optional*) - Number of optimization steps per collected batch.
+- **logger** (*Logger**,**optional*) - Logger for recording training metrics.
+- **progress_bar** (*bool**,**optional*) - Whether to show a progress bar during training.
+- **seed** (*int**,**optional*) - Random seed for reproducibility.
+
+*property*checkpoint_step*: int*
+
+Progress used for checkpoint intervals and rotation filenames.
+
+compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
+
+Evaluate the configured loss through the active execution boundary.
+
+load_from_file(*file: str | Path*, ***kwargs*) → [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)
+
+Loads a file and its state-dict in the trainer.
+
+Keyword arguments are passed to the [`load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load) function for
+legacy torch checkpoints and unified components explicitly saved with
+the torch state-dict payload format. Unified checkpoints additionally
+accept `strict` to control missing or incompatible components.
+Arguments are ignored when `CKPT_BACKEND=memmap`.
+
+Note
+
+Unified state-dict components use TensorDict storage by default and
+do not invoke the pickle loader. For explicit torch payloads and
+`CKPT_BACKEND=torch` checkpoints, `weights_only=True` is the
+default for safer deserialization. Pass `weights_only=False`
+explicitly only if the state dict contains custom objects. On
+torch < 2.4 the default is `weights_only=False` because the
+weights-only unpickler of those versions cannot deserialize the
+`torch.device` instances contained in TensorDict state-dicts.
+
+Note
+
+Explicit torch payloads and `CKPT_BACKEND=torch` checkpoints use
+`mmap=True` by default. Pass `mmap=False` for legacy pre-zipfile
+`torch.save` files or file-like objects. On Windows the default
+is `mmap=False` because a mapped checkpoint keeps the file locked,
+preventing deletion or re-save.
+
+Note
+
+Unified checkpoint tensors are mapped to CPU by default. Pass an
+explicit `map_location` to select another device mapping.
+
+Note
+
+After restoring an independently registered policy component, the
+trainer synchronizes the collector once so local policy copies and
+remote workers observe the restored learner weights.
+
+Note
+
+`file` may also be a [`CheckpointRotation`](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)
+directory, in which case its newest checkpoint is restored.
+
+optim_steps(*batch: ~tensordict.base.TensorDictBase*, ***, *optim_steps_per_batch: int | None | object = <object object>*, *num_epochs: int | object = <object object>*) → None[[source]](../../_modules/torchrl/trainers/algorithms/tdmpc2.html#TdMpc2Trainer.optim_steps)
+
+Run seed-data pretraining once, then use the normal cadence.
+
+request_stop(*reason: str | None = None*) → None
+
+Signal that training should stop at the next loop boundary.
+
+stop_on_signal(*signals: Collection[int] = (Signals.SIGINT, Signals.SIGTERM)*)
+
+Stop training cleanly when the process receives a termination signal.
+
+Wrap `train()` in this context. The first signal calls
+`request_stop()`, so the loop finishes the current batch, writes a
+final checkpoint when a save destination is configured, shuts the
+collector down and returns. A second signal raises
+`KeyboardInterrupt`. Previous handlers are restored on exit.
+
+Parameters:
+
+**signals** (*Collection**[**int**]**,**optional*) - signal numbers to handle.
+Defaults to `SIGINT` and `SIGTERM`.
+
+Examples
+
+```
+>>> with trainer.stop_on_signal(): 
+... trainer.train()
+```
 
 ---
 
@@ -296820,7 +296920,7 @@ Configuration for sampling without replacement.
 
 # torchrl.trainers.algorithms.configs.data.SliceSamplerConfig
 
-*class*torchrl.trainers.algorithms.configs.data.SliceSamplerConfig(*_target_: str = 'torchrl.data.replay_buffers.SliceSampler'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *step_key: Any = 'step_count'*, *fragmented: bool = False*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *pad_output: bool = False*, *output_layout: str = 'flat'*, *slice_end_key: Any = ('collector', 'slice_end')*, *time_dim_name: str | None = 'time'*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerConfig)
+*class*torchrl.trainers.algorithms.configs.data.SliceSamplerConfig(*_target_: str = 'torchrl.trainers.algorithms.configs.data._make_slice_sampler'*, *num_slices: int | None = None*, *slice_len: int | None = None*, *end_key: Any = None*, *end_keys: Any = None*, *traj_key: Any = None*, *step_key: Any = 'step_count'*, *fragmented: bool = False*, *ends: Any = None*, *trajectories: Any = None*, *cache_values: bool = False*, *truncated_key: Any = ('next', 'truncated')*, *init_key: Any = 'is_init'*, *strict_length: bool = True*, *pad_output: bool = False*, *output_layout: str = 'flat'*, *slice_end_key: Any = ('collector', 'slice_end')*, *time_dim_name: str | None = 'time'*, *compile: Any = False*, *span: Any = False*, *use_gpu: Any = False*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/data.html#SliceSamplerConfig)
 
 Hydra configuration for `SliceSampler`.
 
@@ -297132,7 +297232,7 @@ Base configuration class for trainer hooks.
 
 # torchrl.trainers.algorithms.configs.hooks.LogScalarConfig
 
-*class*torchrl.trainers.algorithms.configs.hooks.LogScalarConfig(*key: Any = ('next', 'reward')*, *logname: str | None = None*, *log_pbar: bool = False*, *include_std: bool = True*, *reduction: str = 'mean'*, *_target_: str = 'torchrl.trainers.trainers.LogScalar'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#LogScalarConfig)
+*class*torchrl.trainers.algorithms.configs.hooks.LogScalarConfig(*key: Any = ('next', 'reward')*, *logname: str | None = None*, *log_pbar: bool = False*, *include_std: bool = True*, *reduction: str = 'mean'*, *_target_: str = 'torchrl.trainers.algorithms.configs.hooks._make_log_scalar'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/hooks.html#LogScalarConfig)
 
 Configuration for the [`LogScalar`](torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar) hook.
 
@@ -298160,6 +298260,18 @@ Every kwarg accepted by `SACTrainer.__init__` is exposed as a field here.
 Hydra configuration for [`TD3Trainer`](torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer).
 
 Every kwarg accepted by `TD3Trainer.__init__` is exposed as a field here.
+
+---
+
+# torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig
+
+*class*torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig(*collector: Any*, *total_frames: int | None*, *loss_module: Any = None*, *world_model: Any = None*, *policy_prior: Any = None*, *q_ensemble: Any = None*, *planner: Any = None*, *optimizer_model: Any | None = None*, *optimizer_actor: Any | None = None*, *optimization_stepper: Any | None = None*, *replay_buffer: Any = None*, *batch_size: int | None = None*, *logger: Any = None*, *save_trainer_file: Any = None*, *optim_steps_per_batch: int = 1*, *frame_skip: int = 1*, *seed_pretrain_steps: int = 0*, *clip_grad_norm: bool = True*, *clip_norm: float | None = 20.0*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *num_epochs: int = 1*, *async_collection: bool = False*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *learner_backend: str = 'local'*, *learner_backend_options: dict[str, Any] | None = None*, *learner_poll_interval: float = 0.05*, *lr: float = 0.0003*, *encoder_lr_scale: float = 0.3*, *actor_eps: float = 1e-05*, *weight_decay: float = 0.0*, *capturable: bool | None = None*, *target_tau: float = 0.01*, *zero_grad_set_to_none: bool = True*, *hooks: list[Any] | None = None*, *checkpoint: Any = None*, *checkpoint_rotation: Any = None*, *checkpoint_metadata: Any = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_tdmpc2_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#TdMpc2TrainerConfig)
+
+Hydra configuration for [`TdMpc2Trainer`](torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer).
+
+See also
+
+[`TdMpc2Trainer`](torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer)
 
 ---
 
@@ -308424,6 +308536,7 @@ minimal mode.
 | [`FQLTrainer`](generated/torchrl.trainers.algorithms.FQLTrainer.html#torchrl.trainers.algorithms.FQLTrainer)(*args, **kwargs) | Train FQL with shared offline-to-online replay and Trainer lifecycle hooks. |
 | [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer)(*args, **kwargs) | A trainer class for Conservative Q-Learning (CQL) algorithm. |
 | [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer)(*args, **kwargs) | A trainer class for Twin Delayed DDPG (TD3) algorithm. |
+| [`TdMpc2Trainer`](generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer)(*args, **kwargs) | A trainer class for the TD-MPC2 algorithm. |
 | [`GRPOTrainer`](generated/torchrl.trainers.algorithms.GRPOTrainer.html#torchrl.trainers.algorithms.GRPOTrainer)(*args, **kwargs) | A trainer for LLM alignment using GRPO (or compatible) objectives. |
 | [`TdMpc2OptimizationStepper`](generated/torchrl.trainers.algorithms.TdMpc2OptimizationStepper.html#torchrl.trainers.algorithms.TdMpc2OptimizationStepper)(loss_module, ...) | Execute the two-phase TD-MPC2 learner update. |
 

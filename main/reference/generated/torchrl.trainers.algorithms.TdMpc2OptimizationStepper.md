@@ -4,11 +4,10 @@
 
 Execute the two-phase TD-MPC2 learner update.
 
-The model optimizer updates the world model and online Q-functions first;
-the actor optimizer then updates the policy objective on the detached
-imagined latent sequence captured by that model update. The policy update
-uses the model/Q parameters after the first optimizer step. The target
-Q-functions are soft-updated last.
+Each step performs the model and Q-function update first, then evaluates
+the policy objective on the detached imagined latent sequence captured by
+that model update. The policy update uses the model/Q parameters after the
+first optimizer step. The target Q-functions are soft-updated last.
 
 Parameters:
 
@@ -38,7 +37,7 @@ Return optimizer state and completed-update count.
 
 step(*trainer: [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)*, *sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/trainers/algorithms/tdmpc2.html#TdMpc2OptimizationStepper.step)
 
-Run model, actor, and target-Q updates and return detached metrics.
+Run one model, actor, and target-Q update and return detached metrics.
 
 *property*update_count*: int*
 

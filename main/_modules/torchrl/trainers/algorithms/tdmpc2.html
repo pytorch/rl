@@ -1550,20 +1550,68 @@ document.write(`
                 <article class="bd-article">
                   
   <h1>Source code for torchrl.trainers.algorithms.tdmpc2</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;TD-MPC2 trainer optimization components.&quot;&quot;&quot;</span>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
 <span class="kn">from</span> <span class="nn">numbers</span> <span class="kn">import</span> <span class="n">Real</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Literal</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.samplers</span> <span class="kn">import</span> <span class="n">PrioritizedSampler</span><span class="p">,</span> <span class="n">SliceSampler</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">TdMpc2Planner</span>
 <span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">TdMpc2Loss</span>
-<span class="kn">from</span> <span class="nn">torchrl.trainers.trainers</span> <span class="kn">import</span> <span class="n">OptimizationStepper</span><span class="p">,</span> <span class="n">Trainer</span>
+<span class="kn">from</span> <span class="nn">torchrl.trainers.trainers</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_OPTIM_STEPS_UNSET</span><span class="p">,</span>
+    <span class="n">OptimizationStepper</span><span class="p">,</span>
+    <span class="n">ReplayBufferTrainer</span><span class="p">,</span>
+    <span class="n">Trainer</span><span class="p">,</span>
+    <span class="n">UpdateWeights</span><span class="p">,</span>
+<span class="p">)</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;TdMpc2OptimizationStepper&quot;</span><span class="p">]</span>
+
+<span class="k">def</span> <span class="nf">_validate_tdmpc2_planner</span><span class="p">(</span>
+    <span class="n">planner</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span><span class="p">,</span>
+    <span class="n">loss_module</span><span class="p">,</span>
+    <span class="n">collector</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TdMpc2Planner</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate planner/loss/collector identity invariants.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">planner</span><span class="p">,</span> <span class="n">TdMpc2Planner</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;TD-MPC2 planner must be a TdMpc2Planner, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">planner</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">planner</span><span class="o">.</span><span class="n">world_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">loss_module</span><span class="o">.</span><span class="n">world_model</span>
+        <span class="ow">or</span> <span class="n">planner</span><span class="o">.</span><span class="n">policy_prior</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">loss_module</span><span class="o">.</span><span class="n">policy_prior</span>
+        <span class="ow">or</span> <span class="n">planner</span><span class="o">.</span><span class="n">q_ensemble</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">loss_module</span><span class="o">.</span><span class="n">q_ensemble</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;TD-MPC2 planner must reference the world_model, policy_prior, and &quot;</span>
+            <span class="s2">&quot;q_ensemble owned by loss_module.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">planner</span><span class="o">.</span><span class="n">horizon</span> <span class="o">!=</span> <span class="n">loss_module</span><span class="o">.</span><span class="n">horizon</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;TD-MPC2 planner horizon must match loss_module.horizon, got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">planner</span><span class="o">.</span><span class="n">horizon</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">loss_module</span><span class="o">.</span><span class="n">horizon</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">planner</span><span class="o">.</span><span class="n">discount</span><span class="p">,</span> <span class="n">loss_module</span><span class="o">.</span><span class="n">discount</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">rel_tol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;TD-MPC2 planner discount must match loss_module.discount.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">collector_policy</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">collector</span><span class="p">,</span> <span class="s2">&quot;policy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">collector_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">collector_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">planner</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The collector policy must be the same TdMpc2Planner validated &quot;</span>
+                <span class="s2">&quot;against loss_module.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">planner</span>
 
 
 <div class="viewcode-block" id="TdMpc2OptimizationStepper">
@@ -1571,11 +1619,10 @@ document.write(`
 <span class="k">class</span> <span class="nc">TdMpc2OptimizationStepper</span><span class="p">(</span><span class="n">OptimizationStepper</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Execute the two-phase TD-MPC2 learner update.</span>
 
-<span class="sd">    The model optimizer updates the world model and online Q-functions first;</span>
-<span class="sd">    the actor optimizer then updates the policy objective on the detached</span>
-<span class="sd">    imagined latent sequence captured by that model update. The policy update</span>
-<span class="sd">    uses the model/Q parameters after the first optimizer step. The target</span>
-<span class="sd">    Q-functions are soft-updated last.</span>
+<span class="sd">    Each step performs the model and Q-function update first, then evaluates</span>
+<span class="sd">    the policy objective on the detached imagined latent sequence captured by</span>
+<span class="sd">    that model update. The policy update uses the model/Q parameters after the</span>
+<span class="sd">    first optimizer step. The target Q-functions are soft-updated last.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        loss_module: TD-MPC2 loss providing model and actor objectives.</span>
@@ -1628,6 +1675,7 @@ document.write(`
     <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;optimization_stepper&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Register the stepper and validate exclusive trainer ownership.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="s2">&quot;learner_backend&quot;</span><span class="p">,</span> <span class="s2">&quot;local&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+            <span class="c1"># TODO: Investigate whether this could be supported.</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Distributed TD-MPC2 updates are not supported.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="s2">&quot;optimizer&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1708,10 +1756,11 @@ document.write(`
 <div class="viewcode-block" id="TdMpc2OptimizationStepper.step">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.algorithms.TdMpc2OptimizationStepper.html#torchrl.trainers.algorithms.TdMpc2OptimizationStepper.step">[docs]</a>
     <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">sub_batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run model, actor, and target-Q updates and return detached metrics.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run one model, actor, and target-Q update and return detached metrics.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">trainer</span><span class="o">.</span><span class="n">loss_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The trainer and stepper must share the same loss module.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="s2">&quot;process_group&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># TODO: Investigate whether this can be supported.</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Distributed TD-MPC2 updates are not supported.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="s2">&quot;target_net_updater&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1771,6 +1820,311 @@ document.write(`
             <span class="n">batch_size</span><span class="o">=</span><span class="p">[],</span>
         <span class="p">)</span></div>
 </div>
+
+
+
+<div class="viewcode-block" id="TdMpc2Trainer">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer">[docs]</a>
+<span class="k">class</span> <span class="nc">TdMpc2Trainer</span><span class="p">(</span><span class="n">Trainer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A trainer class for the TD-MPC2 algorithm.</span>
+
+<span class="sd">    See also :class:`~torchrl.trainers.algorithms.configs.TdMpc2TrainerConfig` for the</span>
+<span class="sd">    Hydra configuration counterpart.</span>
+
+<span class="sd">    This trainer implements TD-MPC2, a scalable and robust model-based reinforcement</span>
+<span class="sd">    learning algorithm for continuous control. TD-MPC2 learns a latent world model,</span>
+<span class="sd">    including transition, reward, value, and policy components, and uses model</span>
+<span class="sd">    predictive control with MPPI-style planning to select actions.</span>
+
+<span class="sd">    The trainer handles:</span>
+<span class="sd">    - Sequence-based replay buffer sampling for model learning</span>
+<span class="sd">    - Joint optimization of the latent world model and policy prior</span>
+<span class="sd">    - Model-predictive action planning through a TD-MPC2 planner</span>
+<span class="sd">    - Synchronization of planner weights with the data collector</span>
+<span class="sd">    - Logging and checkpointing of training metrics</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        collector (BaseCollector): The data collector used to gather environment interactions.</span>
+<span class="sd">        total_frames (int): Total number of frames to collect during training.</span>
+<span class="sd">        loss_module (TdMpc2Loss): The TD-MPC2 loss module.</span>
+<span class="sd">        planner (TdMpc2Planner): The planner used for model-predictive action selection.</span>
+<span class="sd">        optimizer_model (optim.Optimizer): Optimizer for the world model and value functions.</span>
+<span class="sd">        optimizer_actor (optim.Optimizer): Optimizer for the policy prior.</span>
+<span class="sd">        replay_buffer (ReplayBuffer): Replay buffer containing training trajectories.</span>
+<span class="sd">        batch_size (int, optional): Number of trajectory sequences sampled per update.</span>
+<span class="sd">        optim_steps_per_batch (int, optional): Number of optimization steps per collected batch.</span>
+<span class="sd">        logger (Logger, optional): Logger for recording training metrics.</span>
+<span class="sd">        progress_bar (bool, optional): Whether to show a progress bar during training.</span>
+<span class="sd">        seed (int, optional): Random seed for reproducibility.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">collector</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">loss_module</span><span class="p">:</span> <span class="n">TdMpc2Loss</span><span class="p">,</span>
+        <span class="n">planner</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimizer_model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimizer_actor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">optimization_stepper</span><span class="p">:</span> <span class="n">TdMpc2OptimizationStepper</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">replay_buffer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">frame_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">optim_steps_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">seed_pretrain_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">clip_grad_norm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">clip_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">20.0</span><span class="p">,</span>
+        <span class="n">progress_bar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">save_trainer_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
+        <span class="n">log_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
+        <span class="n">save_trainer_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">checkpoint</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">checkpoint_rotation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">checkpoint_metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">learner_backend</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;local&quot;</span><span class="p">,</span> <span class="s2">&quot;ray&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;local&quot;</span><span class="p">,</span>
+        <span class="n">learner_backend_options</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">learner_poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">learner_backend</span> <span class="o">!=</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+            <span class="c1"># TODO: Investigate whether this can be supported.</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;The TD-MPC2 trainer supports local optimization only.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">async_collection</span><span class="p">:</span>
+            <span class="c1"># TODO: Investigate supporting this.</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;The TD-MPC2 trainer supports synchronous collection only.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">total_frames</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">total_frames</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">total_frames</span>
+            <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;total_frames must be provided when the collector does not &quot;</span>
+                    <span class="s2">&quot;expose a total_frames attribute.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+        <span class="k">if</span> <span class="n">planner</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;planner is required for TD-MPC2 training.&quot;</span><span class="p">)</span>
+        <span class="n">_validate_tdmpc2_planner</span><span class="p">(</span><span class="n">planner</span><span class="p">,</span> <span class="n">loss_module</span><span class="p">,</span> <span class="n">collector</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;replay_buffer is required for TD-MPC2 training.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seed_pretrain_steps</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="n">seed_pretrain_steps</span><span class="p">,</span> <span class="nb">int</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;seed_pretrain_steps must be an integer.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">seed_pretrain_steps</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;seed_pretrain_steps must be non-negative.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;batch_size must be an integer or None.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">batch_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;batch_size must be positive.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="s2">&quot;sampler&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sampler</span><span class="p">,</span> <span class="n">PrioritizedSampler</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="s2">&quot;Prioritized replay is not supported by the TD-MPC2 trainer.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sampler</span><span class="p">,</span> <span class="n">SliceSampler</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;replay_buffer must use a SliceSampler to preserve TD-MPC2 &quot;</span>
+                    <span class="s2">&quot;sequence continuity.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">sampler</span><span class="o">.</span><span class="n">slice_len</span> <span class="o">!=</span> <span class="n">loss_module</span><span class="o">.</span><span class="n">horizon</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The replay SliceSampler slice_len must equal &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;loss_module.horizon=</span><span class="si">{</span><span class="n">loss_module</span><span class="o">.</span><span class="n">horizon</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">sampler</span><span class="o">.</span><span class="n">num_slices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The TD-MPC2 replay SliceSampler must configure slice_len, &quot;</span>
+                    <span class="s2">&quot;not num_slices.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">sampler</span><span class="o">.</span><span class="n">output_layout</span> <span class="o">!=</span> <span class="s2">&quot;batch_time&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The TD-MPC2 replay SliceSampler must use &quot;</span>
+                    <span class="s2">&quot;output_layout=&#39;batch_time&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">sampler</span><span class="o">.</span><span class="n">strict_length</span> <span class="ow">or</span> <span class="n">sampler</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The TD-MPC2 replay SliceSampler must use strict_length=True &quot;</span>
+                    <span class="s2">&quot;without padding.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">sampler</span><span class="o">.</span><span class="n">traj_key</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="n">sampler</span><span class="o">.</span><span class="n">end_key</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">and</span> <span class="n">sampler</span><span class="o">.</span><span class="n">end_keys</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The replay SliceSampler must define traj_key, end_key, or &quot;</span>
+                    <span class="s2">&quot;end_keys to preserve episode continuity.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">optimization_stepper</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">optimizer_model</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">optimizer_actor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;optimizer_model and optimizer_actor are required when &quot;</span>
+                    <span class="s2">&quot;optimization_stepper is not provided.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">optimization_stepper</span> <span class="o">=</span> <span class="n">TdMpc2OptimizationStepper</span><span class="p">(</span>
+                <span class="n">loss_module</span><span class="p">,</span>
+                <span class="n">optimizer_model</span><span class="p">,</span>
+                <span class="n">optimizer_actor</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">optimizer_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">optimizer_actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Pass optimizers directly or provide optimization_stepper, not both.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">optimization_stepper</span><span class="o">.</span><span class="n">loss_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">loss_module</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;optimization_stepper must reference the trainer&#39;s loss_module.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">planner</span> <span class="o">=</span> <span class="n">planner</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
+            <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+            <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
+            <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="n">optim_steps_per_batch</span><span class="p">,</span>
+            <span class="n">loss_module</span><span class="o">=</span><span class="n">loss_module</span><span class="p">,</span>
+            <span class="n">optimizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">optimization_stepper</span><span class="o">=</span><span class="n">optimization_stepper</span><span class="p">,</span>
+            <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay_buffer</span><span class="p">,</span>
+            <span class="n">target_net_updater</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">learner_backend</span><span class="o">=</span><span class="n">learner_backend</span><span class="p">,</span>
+            <span class="n">learner_backend_options</span><span class="o">=</span><span class="n">learner_backend_options</span><span class="p">,</span>
+            <span class="n">learner_poll_interval</span><span class="o">=</span><span class="n">learner_poll_interval</span><span class="p">,</span>
+            <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+            <span class="n">clip_grad_norm</span><span class="o">=</span><span class="n">clip_grad_norm</span><span class="p">,</span>
+            <span class="n">clip_norm</span><span class="o">=</span><span class="n">clip_norm</span><span class="p">,</span>
+            <span class="n">progress_bar</span><span class="o">=</span><span class="n">progress_bar</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+            <span class="n">save_trainer_interval</span><span class="o">=</span><span class="n">save_trainer_interval</span><span class="p">,</span>
+            <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
+            <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
+            <span class="n">checkpoint</span><span class="o">=</span><span class="n">checkpoint</span><span class="p">,</span>
+            <span class="n">checkpoint_rotation</span><span class="o">=</span><span class="n">checkpoint_rotation</span><span class="p">,</span>
+            <span class="n">checkpoint_metadata</span><span class="o">=</span><span class="n">checkpoint_metadata</span><span class="p">,</span>
+            <span class="n">num_epochs</span><span class="o">=</span><span class="n">num_epochs</span><span class="p">,</span>
+            <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
+            <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
+            <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seed_pretrain_steps</span> <span class="o">=</span> <span class="n">seed_pretrain_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tdmpc2_replay_buffer</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">replay_batch_size</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="kc">None</span> <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">loss_module</span><span class="o">.</span><span class="n">horizon</span>
+            <span class="p">)</span>
+            <span class="n">replay_hook</span> <span class="o">=</span> <span class="n">ReplayBufferTrainer</span><span class="p">(</span>
+                <span class="n">replay_buffer</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">replay_batch_size</span><span class="p">,</span>
+                <span class="c1"># TD-MPC2 flattens collector batches explicitly below.  The</span>
+                <span class="c1"># generic flattening fallback also rewrites the final</span>
+                <span class="c1"># ``truncated`` entry, which is not valid for already padded</span>
+                <span class="c1"># or mask-free collector batches.</span>
+                <span class="n">flatten_tensordicts</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">memmap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;batch_process&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extend_replay_batch</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;process_optim_batch&quot;</span><span class="p">,</span> <span class="n">replay_hook</span><span class="o">.</span><span class="n">sample</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_module</span><span class="p">(</span><span class="s2">&quot;replay_buffer&quot;</span><span class="p">,</span> <span class="n">replay_hook</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_tdmpc2_replay_buffer</span> <span class="o">=</span> <span class="n">replay_hook</span>
+
+        <span class="k">if</span> <span class="n">planner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">update_weights</span> <span class="o">=</span> <span class="n">UpdateWeights</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span>
+                <span class="mi">1</span><span class="p">,</span>
+                <span class="n">policy_weights_getter</span><span class="o">=</span><span class="n">partial</span><span class="p">(</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">,</span> <span class="n">planner</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_steps&quot;</span><span class="p">,</span> <span class="n">update_weights</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_seed_pretraining_pending</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether the one-time seed-data optimization burst is pending.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">seed_pretrain_steps</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span>
+            <span class="o">&gt;=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span> <span class="s2">&quot;init_random_frames&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span><span class="o">.</span><span class="n">update_count</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed_pretrain_steps</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="TdMpc2Trainer.optim_steps">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer.optim_steps">[docs]</a>
+    <span class="k">def</span> <span class="nf">optim_steps</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">optim_steps_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">|</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">_OPTIM_STEPS_UNSET</span><span class="p">,</span>
+        <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">object</span> <span class="o">=</span> <span class="n">_OPTIM_STEPS_UNSET</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run seed-data pretraining once, then use the normal cadence.&quot;&quot;&quot;</span>
+        <span class="n">warmup_frames</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span> <span class="s2">&quot;init_random_frames&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">seed_pretrain_steps</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span><span class="o">.</span><span class="n">update_count</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="n">warmup_frames</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;TD-MPC2 seed pretraining cannot start before &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;collector.init_random_frames (</span><span class="si">{</span><span class="n">warmup_frames</span><span class="si">}</span><span class="s2">) is reached.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">optim_steps_per_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_OPTIM_STEPS_UNSET</span>
+            <span class="ow">or</span> <span class="n">num_epochs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_OPTIM_STEPS_UNSET</span>
+        <span class="p">):</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">optim_steps</span><span class="p">(</span>
+                <span class="n">batch</span><span class="p">,</span>
+                <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="n">optim_steps_per_batch</span><span class="p">,</span>
+                <span class="n">num_epochs</span><span class="o">=</span><span class="n">num_epochs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seed_pretraining_pending</span><span class="p">():</span>
+            <span class="n">completed_before</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span><span class="o">.</span><span class="n">update_count</span>
+            <span class="n">remaining_steps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed_pretrain_steps</span> <span class="o">-</span> <span class="n">completed_before</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">optim_steps</span><span class="p">(</span>
+                <span class="n">batch</span><span class="p">,</span>
+                <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="n">remaining_steps</span><span class="p">,</span>
+                <span class="n">num_epochs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">completed_after</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimization_stepper</span><span class="o">.</span><span class="n">update_count</span>
+            <span class="k">if</span> <span class="n">completed_after</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed_pretrain_steps</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;TD-MPC2 seed pretraining stopped before completing the &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;requested </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">seed_pretrain_steps</span><span class="si">}</span><span class="s2"> updates: completed &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">completed_after</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">optim_steps</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_checkpoint_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the configured execution policy for trainer checkpoints.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">planner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">planner</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_checkpoint_policy</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_extend_replay_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Flatten canonical collector transitions for flat replay storage.&quot;&quot;&quot;</span>
+        <span class="n">replay_hook</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tdmpc2_replay_buffer</span>
+        <span class="k">if</span> <span class="n">replay_hook</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;TD-MPC2 replay buffer hook is not initialized.&quot;</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">replay_hook</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span></div>
 
 </pre></div>
 
@@ -2034,7 +2388,7 @@ document.write(`
        "headline": "torchrl.trainers.algorithms.tdmpc2",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/trainers/algorithms/tdmpc2.html",
-       "articleBody": "Source code for torchrl.trainers.algorithms.tdmpc2 \"\"\"TD-MPC2 trainer optimization components.\"\"\" from __future__ import annotations import math from collections.abc import Sequence from numbers import Real import torch from tensordict import TensorDict, TensorDictBase from torchrl.objectives import TdMpc2Loss from torchrl.trainers.trainers import OptimizationStepper, Trainer __all__ = [\"TdMpc2OptimizationStepper\"] [docs] class TdMpc2OptimizationStepper(OptimizationStepper): \"\"\"Execute the two-phase TD-MPC2 learner update. The model optimizer updates the world model and online Q-functions first; the actor optimizer then updates the policy objective on the detached imagined latent sequence captured by that model update. The policy update uses the model/Q parameters after the first optimizer step. The target Q-functions are soft-updated last. Args: loss_module: TD-MPC2 loss providing model and actor objectives. optimizer_model: Optimizer for the world model and online Q-functions. optimizer_actor: Optimizer for the policy prior. target_tau: Target-Q Polyak averaging factor. Defaults to ``0.01``. zero_grad_set_to_none: Whether optimizer ``zero_grad`` calls set gradients to ``None``. Defaults to ``True``. .. seealso:: :class:`~torchrl.trainers.algorithms.configs.TdMpc2OptimizationStepperConfig`, `TD-MPC2: Scalable, Robust World Models for Continuous Control \u003chttps://arxiv.org/abs/2310.16828\u003e`_. \"\"\" def __init__( self, loss_module: TdMpc2Loss, optimizer_model: torch.optim.Optimizer, optimizer_actor: torch.optim.Optimizer, *, target_tau: float = 0.01, zero_grad_set_to_none: bool = True, ) -\u003e None: if not isinstance(target_tau, Real) or not math.isfinite(target_tau): raise ValueError(f\"target_tau must be finite, got {target_tau!r}.\") if not 0 \u003c= target_tau \u003c= 1: raise ValueError(f\"target_tau must be in [0, 1], got {target_tau!r}.\") self.loss_module = loss_module self.optimizer_model = optimizer_model self.optimizer_actor = optimizer_actor self.target_tau = float(target_tau) self.zero_grad_set_to_none = bool(zero_grad_set_to_none) self._update_count = 0 self._validate_parameter_ownership() @property def update_count(self) -\u003e int: \"\"\"Number of completed TD-MPC2 updates.\"\"\" return self._update_count @staticmethod def _optimizer_parameters(optimizer: torch.optim.Optimizer): for group in optimizer.param_groups: yield from group[\"params\"] [docs] def register(self, trainer: Trainer, name: str = \"optimization_stepper\") -\u003e None: \"\"\"Register the stepper and validate exclusive trainer ownership.\"\"\" if getattr(trainer, \"learner_backend\", \"local\") != \"local\": raise NotImplementedError(\"Distributed TD-MPC2 updates are not supported.\") if getattr(trainer, \"optimizer\", None) is not None: raise ValueError( \"TdMpc2OptimizationStepper owns its optimizers; pass \" \"optimizer=None to Trainer.\" ) if getattr(trainer, \"target_net_updater\", None) is not None: raise ValueError( \"TdMpc2OptimizationStepper owns target-Q updates; pass \" \"target_net_updater=None to Trainer.\" ) super().register(trainer, name=name) def _validate_parameter_ownership(self) -\u003e None: model_optimizer_parameters = { id(parameter) for parameter in self._optimizer_parameters(self.optimizer_model) } actor_optimizer_parameters = { id(parameter) for parameter in self._optimizer_parameters(self.optimizer_actor) } if model_optimizer_parameters \u0026 actor_optimizer_parameters: raise ValueError( \"optimizer_model and optimizer_actor must not share parameters.\" ) @staticmethod def _gradient_norm(parameters: Sequence[torch.Tensor]) -\u003e torch.Tensor: gradients = [ parameter.grad.detach() for parameter in parameters if parameter.grad is not None ] if not gradients: raise RuntimeError(\"TD-MPC2 update produced no parameter gradients.\") return ( torch.stack([gradient.float().pow(2).sum() for gradient in gradients]) .sum() .sqrt() ) def _clip_gradients( self, optimizer: torch.optim.Optimizer, trainer: Trainer, ) -\u003e torch.Tensor: parameters = list(self._optimizer_parameters(optimizer)) norm = self._gradient_norm(parameters) clip_norm = trainer.clip_norm if trainer.clip_grad_norm and clip_norm is not None: torch.nn.utils.clip_grad_norm_(parameters, clip_norm) elif clip_norm is not None: torch.nn.utils.clip_grad_value_(parameters, clip_norm) return norm [docs] def state_dict(self) -\u003e dict: \"\"\"Return optimizer state and completed-update count.\"\"\" return { \"update_count\": self._update_count, \"optimizer_model\": self.optimizer_model.state_dict(), \"optimizer_actor\": self.optimizer_actor.state_dict(), } [docs] def load_state_dict(self, state_dict: dict) -\u003e None: \"\"\"Restore optimizer state and completed-update count.\"\"\" self._update_count = int(state_dict.get(\"update_count\", 0)) self.optimizer_model.load_state_dict(state_dict[\"optimizer_model\"]) self.optimizer_actor.load_state_dict(state_dict[\"optimizer_actor\"]) [docs] def step(self, trainer: Trainer, sub_batch: TensorDictBase) -\u003e TensorDictBase: \"\"\"Run model, actor, and target-Q updates and return detached metrics.\"\"\" if trainer.loss_module is not self.loss_module: raise ValueError(\"The trainer and stepper must share the same loss module.\") if getattr(trainer, \"process_group\", None) is not None: raise NotImplementedError(\"Distributed TD-MPC2 updates are not supported.\") if getattr(trainer, \"target_net_updater\", None) is not None: raise ValueError( \"TD-MPC2 target Q-functions are updated by the optimization \" \"stepper; do not also configure trainer.target_net_updater.\" ) was_training = self.loss_module.training self.loss_module.train() self.optimizer_model.zero_grad(set_to_none=self.zero_grad_set_to_none) self.optimizer_actor.zero_grad(set_to_none=self.zero_grad_set_to_none) model_loss, model_metadata = self.loss_module.model_loss(sub_batch) model_loss.backward() model_grad_norm = self._clip_gradients(self.optimizer_model, trainer) self.optimizer_model.step() self.optimizer_model.zero_grad(set_to_none=self.zero_grad_set_to_none) actor_loss, actor_metadata = self.loss_module.actor_loss_from_latents( model_metadata[\"actor_latents\"] ) actor_loss.backward() actor_grad_norm = self._clip_gradients(self.optimizer_actor, trainer) self.optimizer_actor.step() self.optimizer_actor.zero_grad(set_to_none=self.zero_grad_set_to_none) self.loss_module.q_ensemble.soft_update_target(self.target_tau) self.loss_module.train(was_training) self._update_count += 1 detached_model_loss = model_loss.detach() return TensorDict( { \"loss_model\": detached_model_loss, \"loss_actor\": actor_loss.detach(), \"loss_consistency\": ( self.loss_module.consistency_coef * model_metadata[\"loss_consistency\"] ).detach(), \"loss_reward\": ( self.loss_module.reward_coef * model_metadata[\"loss_reward\"] ).detach(), \"loss_value\": ( self.loss_module.value_coef * model_metadata[\"loss_value\"] ).detach(), \"pi_entropy\": actor_metadata[\"pi_entropy\"].mean(), \"pi_scaled_entropy\": actor_metadata[\"pi_scaled_entropy\"].mean(), \"pi_scale\": actor_metadata[\"pi_scale\"], \"model_grad_norm\": model_grad_norm.to( device=detached_model_loss.device, dtype=detached_model_loss.dtype, ), \"actor_grad_norm\": actor_grad_norm.to( device=detached_model_loss.device, dtype=detached_model_loss.dtype, ), }, batch_size=[], )",
+       "articleBody": "Source code for torchrl.trainers.algorithms.tdmpc2 # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import math from collections.abc import Sequence from functools import partial from numbers import Real from typing import Literal import torch from tensordict import TensorDict, TensorDictBase from tensordict.nn import TensorDictModuleBase from torchrl.data.replay_buffers.samplers import PrioritizedSampler, SliceSampler from torchrl.modules import TdMpc2Planner from torchrl.objectives import TdMpc2Loss from torchrl.trainers.trainers import ( _OPTIM_STEPS_UNSET, OptimizationStepper, ReplayBufferTrainer, Trainer, UpdateWeights, ) def _validate_tdmpc2_planner( planner: TensorDictModuleBase, loss_module, collector=None, ) -\u003e TdMpc2Planner: \"\"\"Validate planner/loss/collector identity invariants.\"\"\" if not isinstance(planner, TdMpc2Planner): raise TypeError( f\"TD-MPC2 planner must be a TdMpc2Planner, got {type(planner).__name__}.\" ) if ( planner.world_model is not loss_module.world_model or planner.policy_prior is not loss_module.policy_prior or planner.q_ensemble is not loss_module.q_ensemble ): raise ValueError( \"TD-MPC2 planner must reference the world_model, policy_prior, and \" \"q_ensemble owned by loss_module.\" ) if planner.horizon != loss_module.horizon: raise ValueError( \"TD-MPC2 planner horizon must match loss_module.horizon, got \" f\"{planner.horizon} and {loss_module.horizon}.\" ) if not math.isclose(planner.discount, loss_module.discount.item(), rel_tol=1e-6): raise ValueError(\"TD-MPC2 planner discount must match loss_module.discount.\") if collector is not None: collector_policy = getattr(collector, \"policy\", None) if collector_policy is not None and collector_policy is not planner: raise ValueError( \"The collector policy must be the same TdMpc2Planner validated \" \"against loss_module.\" ) return planner [docs] class TdMpc2OptimizationStepper(OptimizationStepper): \"\"\"Execute the two-phase TD-MPC2 learner update. Each step performs the model and Q-function update first, then evaluates the policy objective on the detached imagined latent sequence captured by that model update. The policy update uses the model/Q parameters after the first optimizer step. The target Q-functions are soft-updated last. Args: loss_module: TD-MPC2 loss providing model and actor objectives. optimizer_model: Optimizer for the world model and online Q-functions. optimizer_actor: Optimizer for the policy prior. target_tau: Target-Q Polyak averaging factor. Defaults to ``0.01``. zero_grad_set_to_none: Whether optimizer ``zero_grad`` calls set gradients to ``None``. Defaults to ``True``. .. seealso:: :class:`~torchrl.trainers.algorithms.configs.TdMpc2OptimizationStepperConfig`, `TD-MPC2: Scalable, Robust World Models for Continuous Control \u003chttps://arxiv.org/abs/2310.16828\u003e`_. \"\"\" def __init__( self, loss_module: TdMpc2Loss, optimizer_model: torch.optim.Optimizer, optimizer_actor: torch.optim.Optimizer, *, target_tau: float = 0.01, zero_grad_set_to_none: bool = True, ) -\u003e None: if not isinstance(target_tau, Real) or not math.isfinite(target_tau): raise ValueError(f\"target_tau must be finite, got {target_tau!r}.\") if not 0 \u003c= target_tau \u003c= 1: raise ValueError(f\"target_tau must be in [0, 1], got {target_tau!r}.\") self.loss_module = loss_module self.optimizer_model = optimizer_model self.optimizer_actor = optimizer_actor self.target_tau = float(target_tau) self.zero_grad_set_to_none = bool(zero_grad_set_to_none) self._update_count = 0 self._validate_parameter_ownership() @property def update_count(self) -\u003e int: \"\"\"Number of completed TD-MPC2 updates.\"\"\" return self._update_count @staticmethod def _optimizer_parameters(optimizer: torch.optim.Optimizer): for group in optimizer.param_groups: yield from group[\"params\"] [docs] def register(self, trainer: Trainer, name: str = \"optimization_stepper\") -\u003e None: \"\"\"Register the stepper and validate exclusive trainer ownership.\"\"\" if getattr(trainer, \"learner_backend\", \"local\") != \"local\": # TODO: Investigate whether this could be supported. raise NotImplementedError(\"Distributed TD-MPC2 updates are not supported.\") if getattr(trainer, \"optimizer\", None) is not None: raise ValueError( \"TdMpc2OptimizationStepper owns its optimizers; pass \" \"optimizer=None to Trainer.\" ) if getattr(trainer, \"target_net_updater\", None) is not None: raise ValueError( \"TdMpc2OptimizationStepper owns target-Q updates; pass \" \"target_net_updater=None to Trainer.\" ) super().register(trainer, name=name) def _validate_parameter_ownership(self) -\u003e None: model_optimizer_parameters = { id(parameter) for parameter in self._optimizer_parameters(self.optimizer_model) } actor_optimizer_parameters = { id(parameter) for parameter in self._optimizer_parameters(self.optimizer_actor) } if model_optimizer_parameters \u0026 actor_optimizer_parameters: raise ValueError( \"optimizer_model and optimizer_actor must not share parameters.\" ) @staticmethod def _gradient_norm(parameters: Sequence[torch.Tensor]) -\u003e torch.Tensor: gradients = [ parameter.grad.detach() for parameter in parameters if parameter.grad is not None ] if not gradients: raise RuntimeError(\"TD-MPC2 update produced no parameter gradients.\") return ( torch.stack([gradient.float().pow(2).sum() for gradient in gradients]) .sum() .sqrt() ) def _clip_gradients( self, optimizer: torch.optim.Optimizer, trainer: Trainer, ) -\u003e torch.Tensor: parameters = list(self._optimizer_parameters(optimizer)) norm = self._gradient_norm(parameters) clip_norm = trainer.clip_norm if trainer.clip_grad_norm and clip_norm is not None: torch.nn.utils.clip_grad_norm_(parameters, clip_norm) elif clip_norm is not None: torch.nn.utils.clip_grad_value_(parameters, clip_norm) return norm [docs] def state_dict(self) -\u003e dict: \"\"\"Return optimizer state and completed-update count.\"\"\" return { \"update_count\": self._update_count, \"optimizer_model\": self.optimizer_model.state_dict(), \"optimizer_actor\": self.optimizer_actor.state_dict(), } [docs] def load_state_dict(self, state_dict: dict) -\u003e None: \"\"\"Restore optimizer state and completed-update count.\"\"\" self._update_count = int(state_dict.get(\"update_count\", 0)) self.optimizer_model.load_state_dict(state_dict[\"optimizer_model\"]) self.optimizer_actor.load_state_dict(state_dict[\"optimizer_actor\"]) [docs] def step(self, trainer: Trainer, sub_batch: TensorDictBase) -\u003e TensorDictBase: \"\"\"Run one model, actor, and target-Q update and return detached metrics.\"\"\" if trainer.loss_module is not self.loss_module: raise ValueError(\"The trainer and stepper must share the same loss module.\") if getattr(trainer, \"process_group\", None) is not None: # TODO: Investigate whether this can be supported. raise NotImplementedError(\"Distributed TD-MPC2 updates are not supported.\") if getattr(trainer, \"target_net_updater\", None) is not None: raise ValueError( \"TD-MPC2 target Q-functions are updated by the optimization \" \"stepper; do not also configure trainer.target_net_updater.\" ) was_training = self.loss_module.training self.loss_module.train() self.optimizer_model.zero_grad(set_to_none=self.zero_grad_set_to_none) self.optimizer_actor.zero_grad(set_to_none=self.zero_grad_set_to_none) model_loss, model_metadata = self.loss_module.model_loss(sub_batch) model_loss.backward() model_grad_norm = self._clip_gradients(self.optimizer_model, trainer) self.optimizer_model.step() self.optimizer_model.zero_grad(set_to_none=self.zero_grad_set_to_none) actor_loss, actor_metadata = self.loss_module.actor_loss_from_latents( model_metadata[\"actor_latents\"] ) actor_loss.backward() actor_grad_norm = self._clip_gradients(self.optimizer_actor, trainer) self.optimizer_actor.step() self.optimizer_actor.zero_grad(set_to_none=self.zero_grad_set_to_none) self.loss_module.q_ensemble.soft_update_target(self.target_tau) self.loss_module.train(was_training) self._update_count += 1 detached_model_loss = model_loss.detach() return TensorDict( { \"loss_model\": detached_model_loss, \"loss_actor\": actor_loss.detach(), \"loss_consistency\": ( self.loss_module.consistency_coef * model_metadata[\"loss_consistency\"] ).detach(), \"loss_reward\": ( self.loss_module.reward_coef * model_metadata[\"loss_reward\"] ).detach(), \"loss_value\": ( self.loss_module.value_coef * model_metadata[\"loss_value\"] ).detach(), \"pi_entropy\": actor_metadata[\"pi_entropy\"].mean(), \"pi_scaled_entropy\": actor_metadata[\"pi_scaled_entropy\"].mean(), \"pi_scale\": actor_metadata[\"pi_scale\"], \"model_grad_norm\": model_grad_norm.to( device=detached_model_loss.device, dtype=detached_model_loss.dtype, ), \"actor_grad_norm\": actor_grad_norm.to( device=detached_model_loss.device, dtype=detached_model_loss.dtype, ), }, batch_size=[], ) [docs] class TdMpc2Trainer(Trainer): \"\"\"A trainer class for the TD-MPC2 algorithm. See also :class:`~torchrl.trainers.algorithms.configs.TdMpc2TrainerConfig` for the Hydra configuration counterpart. This trainer implements TD-MPC2, a scalable and robust model-based reinforcement learning algorithm for continuous control. TD-MPC2 learns a latent world model, including transition, reward, value, and policy components, and uses model predictive control with MPPI-style planning to select actions. The trainer handles: - Sequence-based replay buffer sampling for model learning - Joint optimization of the latent world model and policy prior - Model-predictive action planning through a TD-MPC2 planner - Synchronization of planner weights with the data collector - Logging and checkpointing of training metrics Args: collector (BaseCollector): The data collector used to gather environment interactions. total_frames (int): Total number of frames to collect during training. loss_module (TdMpc2Loss): The TD-MPC2 loss module. planner (TdMpc2Planner): The planner used for model-predictive action selection. optimizer_model (optim.Optimizer): Optimizer for the world model and value functions. optimizer_actor (optim.Optimizer): Optimizer for the policy prior. replay_buffer (ReplayBuffer): Replay buffer containing training trajectories. batch_size (int, optional): Number of trajectory sequences sampled per update. optim_steps_per_batch (int, optional): Number of optimization steps per collected batch. logger (Logger, optional): Logger for recording training metrics. progress_bar (bool, optional): Whether to show a progress bar during training. seed (int, optional): Random seed for reproducibility. \"\"\" def __init__( self, *, collector, total_frames: int | None, loss_module: TdMpc2Loss, planner: TensorDictModuleBase | None = None, optimizer_model: torch.optim.Optimizer | None = None, optimizer_actor: torch.optim.Optimizer | None = None, optimization_stepper: TdMpc2OptimizationStepper | None = None, replay_buffer=None, batch_size: int | None = None, frame_skip: int = 1, optim_steps_per_batch: int = 1, seed_pretrain_steps: int = 0, logger=None, clip_grad_norm: bool = True, clip_norm: float | None = 20.0, progress_bar: bool = True, seed: int | None = None, save_trainer_interval: int = 10000, log_interval: int = 10000, save_trainer_file=None, checkpoint=None, checkpoint_rotation=None, checkpoint_metadata=None, num_epochs: int = 1, async_collection: bool = False, log_timings: bool = False, auto_log_optim_steps: bool = True, learner_backend: Literal[\"local\", \"ray\"] = \"local\", learner_backend_options: dict | None = None, learner_poll_interval: float = 0.05, ) -\u003e None: if learner_backend != \"local\": # TODO: Investigate whether this can be supported. raise NotImplementedError( \"The TD-MPC2 trainer supports local optimization only.\" ) if async_collection: # TODO: Investigate supporting this. raise NotImplementedError( \"The TD-MPC2 trainer supports synchronous collection only.\" ) if total_frames is None: try: total_frames = collector.total_frames except AttributeError as err: raise TypeError( \"total_frames must be provided when the collector does not \" \"expose a total_frames attribute.\" ) from err if planner is None: raise ValueError(\"planner is required for TD-MPC2 training.\") _validate_tdmpc2_planner(planner, loss_module, collector) if replay_buffer is None: raise ValueError(\"replay_buffer is required for TD-MPC2 training.\") if isinstance(seed_pretrain_steps, bool) or not isinstance( seed_pretrain_steps, int ): raise TypeError(\"seed_pretrain_steps must be an integer.\") if seed_pretrain_steps \u003c 0: raise ValueError(\"seed_pretrain_steps must be non-negative.\") if batch_size is not None and ( isinstance(batch_size, bool) or not isinstance(batch_size, int) ): raise TypeError(\"batch_size must be an integer or None.\") if batch_size is not None and batch_size \u003c= 0: raise ValueError(\"batch_size must be positive.\") if replay_buffer is not None: sampler = getattr(replay_buffer, \"sampler\", None) if isinstance(sampler, PrioritizedSampler): raise NotImplementedError( \"Prioritized replay is not supported by the TD-MPC2 trainer.\" ) if not isinstance(sampler, SliceSampler): raise TypeError( \"replay_buffer must use a SliceSampler to preserve TD-MPC2 \" \"sequence continuity.\" ) if sampler.slice_len != loss_module.horizon: raise ValueError( \"The replay SliceSampler slice_len must equal \" f\"loss_module.horizon={loss_module.horizon}.\" ) if sampler.num_slices is not None: raise ValueError( \"The TD-MPC2 replay SliceSampler must configure slice_len, \" \"not num_slices.\" ) if sampler.output_layout != \"batch_time\": raise ValueError( \"The TD-MPC2 replay SliceSampler must use \" \"output_layout=\u0027batch_time\u0027.\" ) if not sampler.strict_length or sampler.pad_output: raise ValueError( \"The TD-MPC2 replay SliceSampler must use strict_length=True \" \"without padding.\" ) if ( sampler.traj_key is None and sampler.end_key is None and sampler.end_keys is None ): raise ValueError( \"The replay SliceSampler must define traj_key, end_key, or \" \"end_keys to preserve episode continuity.\" ) if optimization_stepper is None: if optimizer_model is None or optimizer_actor is None: raise TypeError( \"optimizer_model and optimizer_actor are required when \" \"optimization_stepper is not provided.\" ) optimization_stepper = TdMpc2OptimizationStepper( loss_module, optimizer_model, optimizer_actor, ) elif optimizer_model is not None or optimizer_actor is not None: raise ValueError( \"Pass optimizers directly or provide optimization_stepper, not both.\" ) elif optimization_stepper.loss_module is not loss_module: raise ValueError( \"optimization_stepper must reference the trainer\u0027s loss_module.\" ) self.planner = planner super().__init__( collector=collector, total_frames=total_frames, frame_skip=frame_skip, optim_steps_per_batch=optim_steps_per_batch, loss_module=loss_module, optimizer=None, optimization_stepper=optimization_stepper, replay_buffer=replay_buffer, target_net_updater=None, batch_size=batch_size, learner_backend=learner_backend, learner_backend_options=learner_backend_options, learner_poll_interval=learner_poll_interval, logger=logger, clip_grad_norm=clip_grad_norm, clip_norm=clip_norm, progress_bar=progress_bar, seed=seed, save_trainer_interval=save_trainer_interval, log_interval=log_interval, save_trainer_file=save_trainer_file, checkpoint=checkpoint, checkpoint_rotation=checkpoint_rotation, checkpoint_metadata=checkpoint_metadata, num_epochs=num_epochs, async_collection=async_collection, log_timings=log_timings, auto_log_optim_steps=auto_log_optim_steps, ) self.seed_pretrain_steps = seed_pretrain_steps self._tdmpc2_replay_buffer = None if replay_buffer is not None: replay_batch_size = ( None if batch_size is None else batch_size * loss_module.horizon ) replay_hook = ReplayBufferTrainer( replay_buffer, batch_size=replay_batch_size, # TD-MPC2 flattens collector batches explicitly below. The # generic flattening fallback also rewrites the final # ``truncated`` entry, which is not valid for already padded # or mask-free collector batches. flatten_tensordicts=False, memmap=False, device=getattr(replay_buffer.storage, \"device\", \"cpu\"), ) self.register_op(\"batch_process\", self._extend_replay_batch) self.register_op(\"process_optim_batch\", replay_hook.sample) self.register_module(\"replay_buffer\", replay_hook) self._tdmpc2_replay_buffer = replay_hook if planner is not None: update_weights = UpdateWeights( self.collector, 1, policy_weights_getter=partial(TensorDict.from_module, planner), ) self.register_op(\"post_steps\", update_weights) def _seed_pretraining_pending(self) -\u003e bool: \"\"\"Return whether the one-time seed-data optimization burst is pending.\"\"\" return ( self.seed_pretrain_steps \u003e 0 and self.collected_frames \u003e= getattr(self.collector, \"init_random_frames\", 0) and self.optimization_stepper.update_count \u003c self.seed_pretrain_steps ) [docs] def optim_steps( self, batch: TensorDictBase, *, optim_steps_per_batch: int | None | object = _OPTIM_STEPS_UNSET, num_epochs: int | object = _OPTIM_STEPS_UNSET, ) -\u003e None: \"\"\"Run seed-data pretraining once, then use the normal cadence.\"\"\" warmup_frames = getattr(self.collector, \"init_random_frames\", 0) if ( self.seed_pretrain_steps \u003e self.optimization_stepper.update_count and self.collected_frames \u003c warmup_frames ): raise RuntimeError( \"TD-MPC2 seed pretraining cannot start before \" f\"collector.init_random_frames ({warmup_frames}) is reached.\" ) if ( optim_steps_per_batch is not _OPTIM_STEPS_UNSET or num_epochs is not _OPTIM_STEPS_UNSET ): super().optim_steps( batch, optim_steps_per_batch=optim_steps_per_batch, num_epochs=num_epochs, ) return if self._seed_pretraining_pending(): completed_before = self.optimization_stepper.update_count remaining_steps = self.seed_pretrain_steps - completed_before super().optim_steps( batch, optim_steps_per_batch=remaining_steps, num_epochs=1, ) completed_after = self.optimization_stepper.update_count if completed_after != self.seed_pretrain_steps: raise RuntimeError( \"TD-MPC2 seed pretraining stopped before completing the \" f\"requested {self.seed_pretrain_steps} updates: completed \" f\"{completed_after}.\" ) return super().optim_steps(batch) def _checkpoint_policy(self) -\u003e TensorDictModuleBase | None: \"\"\"Return the configured execution policy for trainer checkpoints.\"\"\" if self.planner is not None: return self.planner return super()._checkpoint_policy() def _extend_replay_batch(self, batch: TensorDictBase) -\u003e TensorDictBase: \"\"\"Flatten canonical collector transitions for flat replay storage.\"\"\" replay_hook = self._tdmpc2_replay_buffer if replay_hook is None: raise RuntimeError(\"TD-MPC2 replay buffer hook is not initialized.\") mask = batch.get((\"collector\", \"mask\"), default=None) if mask is not None: batch = batch[mask] else: batch = batch.reshape(-1) return replay_hook.extend(batch)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -3913,6 +3913,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.checkpoint_step">(torchrl.trainers.algorithms.TD3Trainer property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer.checkpoint_step">(torchrl.trainers.algorithms.TdMpc2Trainer property)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.checkpoint_step">(torchrl.trainers.Trainer property)</a>
 </li>
       </ul></li>
@@ -4696,6 +4698,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer.compute_loss">(torchrl.trainers.algorithms.SACTrainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.compute_loss">(torchrl.trainers.algorithms.TD3Trainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer.compute_loss">(torchrl.trainers.algorithms.TdMpc2Trainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.compute_loss">(torchrl.trainers.Trainer method)</a>
 </li>
@@ -12745,6 +12749,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.load_from_file">(torchrl.trainers.algorithms.TD3Trainer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer.load_from_file">(torchrl.trainers.algorithms.TdMpc2Trainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file">(torchrl.trainers.Trainer method)</a>
 </li>
       </ul></li>
@@ -15342,10 +15348,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor">OnlineDTActor (class in torchrl.modules)</a>
 </li>
-      <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
+</li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer">OnPolicyTrainer (class in torchrl.trainers.algorithms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig">OnPolicyTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
@@ -15395,6 +15401,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.optim_steps">(torchrl.trainers.algorithms.TD3Trainer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer.optim_steps">(torchrl.trainers.algorithms.TdMpc2Trainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.optim_steps">(torchrl.trainers.Trainer method)</a>
 </li>
       </ul></li>
@@ -15435,19 +15443,13 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.objectives.ACTLoss.html#torchrl.objectives.ACTLoss.out_keys">(torchrl.objectives.ACTLoss property)</a>
 </li>
-        <li><a href="reference/generated/torchrl.objectives.BCLoss.html#torchrl.objectives.BCLoss.out_keys">(torchrl.objectives.BCLoss property)</a>
-</li>
         <li><a href="reference/generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss.out_keys">(torchrl.objectives.ClipPPOLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss.out_keys">(torchrl.objectives.CQLLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.out_keys">(torchrl.objectives.CrossQLoss property)</a>
 </li>
-        <li><a href="reference/generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss.out_keys">(torchrl.objectives.DDPGLoss property)</a>
-</li>
         <li><a href="reference/generated/torchrl.objectives.DiffusionBCLoss.html#torchrl.objectives.DiffusionBCLoss.out_keys">(torchrl.objectives.DiffusionBCLoss property)</a>
-</li>
-        <li><a href="reference/generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss.out_keys">(torchrl.objectives.DQNLoss property)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.DTLoss.html#torchrl.objectives.DTLoss.out_keys">(torchrl.objectives.DTLoss property)</a>
 </li>
@@ -18940,6 +18942,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer.request_stop">(torchrl.trainers.algorithms.SACTrainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.request_stop">(torchrl.trainers.algorithms.TD3Trainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer.request_stop">(torchrl.trainers.algorithms.TdMpc2Trainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.request_stop">(torchrl.trainers.Trainer method)</a>
 </li>
@@ -22599,6 +22603,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.stop_on_signal">(torchrl.trainers.algorithms.TD3Trainer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer.stop_on_signal">(torchrl.trainers.algorithms.TdMpc2Trainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.stop_on_signal">(torchrl.trainers.Trainer method)</a>
 </li>
       </ul></li>
@@ -22843,6 +22849,10 @@ document.write(`
       <li><a href="reference/generated/torchrl.modules.TdMpc2QEnsemble.html#torchrl.modules.TdMpc2QEnsemble">TdMpc2QEnsemble (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.modules.TdMpc2QEnsembleConfig.html#torchrl.trainers.algorithms.configs.modules.TdMpc2QEnsembleConfig">TdMpc2QEnsembleConfig (class in torchrl.trainers.algorithms.configs.modules)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.TdMpc2Trainer.html#torchrl.trainers.algorithms.TdMpc2Trainer">TdMpc2Trainer (class in torchrl.trainers.algorithms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TdMpc2TrainerConfig">TdMpc2TrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.modules.TdMpc2WorldModelConfig.html#torchrl.trainers.algorithms.configs.modules.TdMpc2WorldModelConfig">TdMpc2WorldModelConfig (class in torchrl.trainers.algorithms.configs.modules)</a>
 </li>
