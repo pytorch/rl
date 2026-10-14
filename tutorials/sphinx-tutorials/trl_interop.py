@@ -4,7 +4,7 @@
 TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
 ==========================================================================
 
-**Author**: `Jay Prajapati <https://github.com/coder-jayp>`_
+**Author**: `Jay Prajapati <https://github.com/coder-jayp>`_, `Vincent Moens <https://github.com/vmoens>`_
 
 This tutorial demonstrates how to bridge TorchRL and Hugging Face ``trl``
 using the adapter classes documented in :ref:`trl_interop_section`:
