@@ -1100,16 +1100,25 @@ class TestResetSetState:
             out = env.reset(td)
         assert (out["observation"] == 0).all()
 
-    def test_async_pool_kwargs_forwarding(self):
-        # Regression test: verify that kwargs (like set_state=True) are properly
-        # forwarded across the AsyncEnvPool boundary to the sub-environments.
-        # _KwargOnlySetStateEnv is explicitly hardcoded to raise a RuntimeError
-        # if set_state=True reaches its _reset method.
-        env = AsyncEnvPool([_KwargOnlySetStateEnv, _KwargOnlySetStateEnv])
+    @pytest.mark.parametrize(
+        ("backend", "envs_per_worker"),
+        [("threading", 1), ("multiprocessing", 1), ("multiprocessing", 2)],
+    )
+    def test_set_state_batched_async(self, backend, envs_per_worker):
+        """Tests that set_state kwargs and deterministic state tensordicts are forwarded in AsyncEnvPool."""
+        env = AsyncEnvPool(
+            [_NestedStatelessEnv, _NestedStatelessEnv],
+            backend=backend,
+            envs_per_worker=envs_per_worker,
+        )
         try:
-            with pytest.raises(RuntimeError, match="unexpected implicit set_state"):
-                # If kwargs are silently dropped, this will NOT raise an error and the test will fail!
-                env.reset(set_state=True)
+            td = env.reset()
+            td["nested", "x"] = torch.full((2, 1), 5.0)
+            out = env.reset(td.clone(), set_state=True)
+            assert (out["nested", "x"] == 5.0).all()
+
+            out_false = env.reset(td.clone(), set_state=False)
+            assert (out_false["nested", "x"] == 0.0).all()
         finally:
             env.close()
 

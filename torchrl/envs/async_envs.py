@@ -470,7 +470,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         while env_idx_nt.batch_dims < tensordict.batch_dims:
             env_idx_nt = expand_as_right(env_idx_nt, tensordict)
         tensordict[self._env_idx_key] = env_idx_nt
-        self._async_private_reset_send(tensordict)
+        self._async_private_reset_send(tensordict, **kwargs)
         tensordict = self._async_private_reset_recv(min_get=self.num_envs)
         return tensordict
 
@@ -509,6 +509,17 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         tensordict: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
+        """Resets the asynchronous environment pool.
+
+        Args:
+            tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
+
+        Keyword Args:
+            **kwargs: additional keyword arguments to be forwarded to the sub-environments' reset methods.
+
+        Returns:
+            TensorDictBase: a tensordict carrying the stacked observations and reset information.
+        """
         if self._current_step > 0:
             raise RuntimeError("Some envs are still processing a step.")
         if tensordict is None:
@@ -677,7 +688,17 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         self,
         tensordict: TensorDictBase | None = None,
         env_index: int | list[int] | None = None,
+        **kwargs,
     ) -> None:
+        """Dispatches reset commands to child environment workers.
+
+        Args:
+            tensordict (TensorDictBase, optional): tensordict containing reset data.
+            env_index (int or list of int, optional): environment indices to reset.
+
+        Keyword Args:
+            **kwargs: additional keyword arguments to forward to child environment resets.
+        """
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -1542,7 +1563,11 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                             clock,
                         )
                     else:
-                        _, data = data[0]
+                        req = data[0]
+                        if len(req) == 3:
+                            _, data, kwargs = req
+                        else:
+                            _, data = req
                 if msg == "get_specs":
                     output_queue.put((i, env.specs))
                 elif msg == "get_fake_tensordict":
@@ -1566,7 +1591,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 elif msg == "_reset":
                     if shared_slots is not None:
                         data = shared_slots[0].select(*data, strict=True)
-                    data = env._reset(data)
+                    data = env._reset(data, **kwargs)
                     if shared_slots is None:
                         data.set(cls._env_idx_key, NonTensorData(data=i))
                         reset_queue.put(data)
@@ -1708,7 +1733,11 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         return env._step(td).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
-    def _reset_func(cls, env_td: tuple):
+    def _reset_func(
+        cls,
+        env_td: tuple[EnvBase, TensorDictBase, int]
+        | tuple[EnvBase, TensorDictBase, int, dict],
+    ):
         if len(env_td) == 4:
             env, td, idx, kwargs = env_td
         else:
@@ -1717,7 +1746,11 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         return env.reset(td, **kwargs).set(cls._env_idx_key, NonTensorData(data=idx))
 
     @classmethod
-    def _private_reset_func(cls, env_td: tuple):
+    def _private_reset_func(
+        cls,
+        env_td: tuple[EnvBase, TensorDictBase, int]
+        | tuple[EnvBase, TensorDictBase, int, dict],
+    ):
         if len(env_td) == 4:
             env, td, idx, kwargs = env_td
         else:
